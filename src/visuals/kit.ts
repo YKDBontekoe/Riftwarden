@@ -1,4 +1,4 @@
-import { type AbstractMesh, Mesh, MeshBuilder, type Scene, type StandardMaterial, TransformNode, Vector3 } from '@babylonjs/core';
+import { type AbstractMesh, type Material, Mesh, MeshBuilder, type Scene, TransformNode, Vector3 } from '@babylonjs/core';
 
 export type Shape = 'box' | 'cyl' | 'cyl6' | 'cyl8' | 'sphere' | 'ico' | 'cone' | 'torus' | 'torusThin';
 
@@ -47,7 +47,7 @@ export class Kit {
     }
   }
 
-  template(shape: Shape, mat: StandardMaterial): Mesh {
+  template(shape: Shape, mat: Material): Mesh {
     const key = `${shape}|${mat.uniqueId}`;
     let t = this.templates.get(key);
     if (!t) {
@@ -64,7 +64,7 @@ export class Kit {
   }
 
   /** Create a part. If `unique` material is given, makes a standalone clone with that material. */
-  part(shape: Shape, mat: StandardMaterial, parent: TransformNode, o: PartOpts = {}, unique?: StandardMaterial): AbstractMesh {
+  part(shape: Shape, mat: Material, parent: TransformNode, o: PartOpts = {}, unique?: Material): AbstractMesh {
     const t = this.template(shape, mat);
     let m: AbstractMesh;
     if (unique) {

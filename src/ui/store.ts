@@ -131,7 +131,8 @@ type EventMap = {
   hit: HitKind;
   damageNumber: DamageNumberEvent;
   banner: BannerEvent;
-  hurt: number; // 0..1 severity
+  /** severity 0..1; angle = source direction relative to view (radians, 0 = ahead, + = right), null if unknown. */
+  hurt: { severity: number; angle: number | null };
   coresGained: number;
 };
 

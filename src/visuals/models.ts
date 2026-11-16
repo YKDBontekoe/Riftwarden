@@ -1,13 +1,15 @@
 import {
   type AbstractMesh,
+  type Material,
   Color3,
   MeshBuilder,
+  PBRMaterial,
   type Scene,
-  StandardMaterial,
   TransformNode,
 } from '@babylonjs/core';
 import type { Kit } from './kit';
-import type { Palette } from './materials';
+import { type Palette, unlit } from './materials';
+import { canvas, fbm, flareSprite, toTexture } from './textures';
 
 export interface WalkerRig {
   root: TransformNode;
@@ -129,7 +131,7 @@ export interface TurretRig {
 }
 
 /** Sentinel turret. `unique` builds a non-instanced copy with a single material (placement ghost). */
-export function buildTurret(kit: Kit, P: Palette, unique?: StandardMaterial): TurretRig {
+export function buildTurret(kit: Kit, P: Palette, unique?: Material): TurretRig {
   const root = kit.node('turret', null);
   const u = unique;
   kit.part('cyl6', P.graphite, root, { pos: [0, 0.18, 0], scale: [2.1, 0.36, 2.1] }, u);
@@ -162,14 +164,47 @@ export function buildTurret(kit: Kit, P: Palette, unique?: StandardMaterial): Tu
 export interface ReactorRig {
   root: TransformNode;
   rings: TransformNode[];
-  coreMat: StandardMaterial;
-  beamMat: StandardMaterial;
+  coreMat: PBRMaterial;
+  beamMat: PBRMaterial;
+  /** Animate plasma flow; `integrity` 0..1. */
+  update(dt: number, integrity: number): void;
+}
+
+/** Vertical plasma streaks (tileable) used to animate the reactor core and beam. */
+function plasmaCanvas(): HTMLCanvasElement {
+  const W = 128;
+  const H = 256;
+  const { c, ctx } = canvas(W, H);
+  const img = ctx.createImageData(W, H);
+  for (let y = 0; y < H; y++)
+    for (let x = 0; x < W; x++) {
+      const n = fbm(x / W, y / H, 4, 4, 77);
+      const streak = fbm(x / W, (y / H) * 0.25, 12, 2, 13);
+      const v = Math.min(1, 0.35 + Math.pow(n, 2) * 1.2 + Math.max(0, streak - 0.55) * 2.5);
+      const i = (y * W + x) * 4;
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = v * 255;
+      img.data[i + 3] = 255;
+    }
+  ctx.putImageData(img, 0, 0);
+  return c;
+}
+
+function beamFadeCanvas(): HTMLCanvasElement {
+  const { c, ctx } = canvas(4, 256);
+  const g = ctx.createLinearGradient(0, 0, 0, 256);
+  g.addColorStop(0, 'rgba(255,255,255,0)');
+  g.addColorStop(0.55, 'rgba(255,255,255,0.35)');
+  g.addColorStop(0.92, 'rgba(255,255,255,1)');
+  g.addColorStop(1, 'rgba(255,255,255,1)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 4, 256);
+  return c;
 }
 
 /** Central energy reactor. Unique meshes; core material color communicates integrity. */
 export function buildReactor(scene: Scene, P: Palette): ReactorRig {
   const root = new TransformNode('reactor', scene);
-  const mk = <T extends AbstractMesh>(m: T, mat: StandardMaterial, pickable = true): T => {
+  const mk = <T extends AbstractMesh>(m: T, mat: Material, pickable = true): T => {
     m.material = mat;
     m.parent = root;
     m.isPickable = pickable;
@@ -180,13 +215,31 @@ export function buildReactor(scene: Scene, P: Palette): ReactorRig {
   mk(MeshBuilder.CreateCylinder('rBase2', { diameter: 7.6, height: 0.5, tessellation: 8 }, scene), P.white).position.y = 0.85;
   mk(MeshBuilder.CreateTorus('rBaseGlow', { diameter: 8.6, thickness: 0.1, tessellation: 8 }, scene), P.cyanGlow, false).position.y = 0.62;
 
-  const coreMat = new StandardMaterial('reactorCore', scene);
-  coreMat.diffuseColor = Color3.Black();
-  coreMat.specularColor = Color3.Black();
-  coreMat.emissiveColor = new Color3(0.3, 2.0, 2.4);
-  coreMat.disableLighting = true;
-  const core = mk(MeshBuilder.CreateCylinder('rCore', { diameter: 2.0, height: 6.2, tessellation: 24 }, scene), coreMat);
+  const plasmaSrc = plasmaCanvas();
+  const plasma = toTexture('reactorPlasma', plasmaSrc, scene, { aniso: 2 });
+  plasma.uScale = 2;
+  const coreMat = unlit(scene, 'reactorCore', [0.3, 2.0, 2.4], { tex: plasma });
+  const core = mk(MeshBuilder.CreateCylinder('rCore', { diameter: 2.0, height: 6.2, tessellation: 32 }, scene), coreMat);
   core.position.y = 4.2;
+  // Glass containment shell: reflective, slightly tinted, see-through.
+  const glass = new PBRMaterial('reactorGlass', scene);
+  glass.albedoColor = new Color3(0.05, 0.12, 0.14);
+  glass.metallic = 0;
+  glass.roughness = 0.04;
+  glass.alpha = 0.18;
+  glass.transparencyMode = PBRMaterial.PBRMATERIAL_ALPHABLEND;
+  glass.useRadianceOverAlpha = true;
+  glass.useSpecularOverAlpha = true;
+  glass.usePhysicalLightFalloff = false;
+  glass.backFaceCulling = false;
+  const shell = mk(MeshBuilder.CreateCylinder('rShell', { diameter: 2.9, height: 5.6, tessellation: 40 }, scene), glass, false);
+  shell.position.y = 4.4;
+  // Floor glow pool around the base.
+  const flare = flareSprite(scene);
+  const poolMat = unlit(scene, 'reactorPool', [0.1, 0.55, 0.65], { tex: flare, opacity: flare, additive: true, zOffset: -2 });
+  const pool = mk(MeshBuilder.CreateDisc('rPool', { radius: 13, tessellation: 48 }, scene), poolMat, false);
+  pool.rotation.x = Math.PI / 2;
+  pool.position.y = 0.04;
   const sleeve = mk(MeshBuilder.CreateCylinder('rSleeve', { diameter: 2.5, height: 1.0, tessellation: 24 }, scene), P.graphite);
   sleeve.position.y = 1.6;
   const cap = mk(MeshBuilder.CreateCylinder('rCap', { diameterBottom: 2.6, diameterTop: 1.4, height: 0.8, tessellation: 24 }, scene), P.white);
@@ -218,13 +271,31 @@ export function buildReactor(scene: Scene, P: Palette): ReactorRig {
     rings.push(r);
   }
 
-  const beamMat = new StandardMaterial('reactorBeam', scene);
-  beamMat.diffuseColor = Color3.Black();
-  beamMat.specularColor = Color3.Black();
-  beamMat.emissiveColor = new Color3(0.15, 0.9, 1.1);
+  const fade = toTexture('beamFade', beamFadeCanvas(), scene, { aniso: 1 });
+  fade.wrapV = 0; // clamp
+  const beamMat = unlit(scene, 'reactorBeam', [0.15, 0.9, 1.1], { tex: toTexture('beamPlasma', plasmaSrc, scene, { aniso: 2 }), opacity: fade, additive: true, twoSided: true });
   beamMat.alpha = 0.35;
-  beamMat.disableLighting = true;
-  const beam = mk(MeshBuilder.CreateCylinder('rBeam', { diameterTop: 0.3, diameterBottom: 0.9, height: 30, tessellation: 16 }, scene), beamMat, false);
-  beam.position.y = 23;
-  return { root, rings, coreMat, beamMat };
+  const beam = mk(MeshBuilder.CreateCylinder('rBeam', { diameterTop: 0.5, diameterBottom: 1.2, height: 60, tessellation: 24, cap: 0 }, scene), beamMat, false);
+  beam.position.y = 38;
+  beam.applyFog = false;
+  const beamCore = mk(MeshBuilder.CreateCylinder('rBeamCore', { diameterTop: 0.12, diameterBottom: 0.35, height: 60, tessellation: 12, cap: 0 }, scene), beamMat, false);
+  beamCore.position.y = 38;
+  beamCore.applyFog = false;
+
+  const coreTex = coreMat.emissiveTexture as unknown as { vOffset: number };
+  const beamTex = beamMat.emissiveTexture as unknown as typeof coreTex;
+  let t = 0;
+  return {
+    root,
+    rings,
+    coreMat,
+    beamMat,
+    update(dt: number, integrity: number) {
+      t += dt;
+      coreTex.vOffset -= dt * (0.25 + 0.35 * integrity);
+      beamTex.vOffset -= dt * 0.8;
+      poolMat.emissiveColor.copyFrom(coreMat.emissiveColor).scaleInPlace(0.28 + 0.04 * Math.sin(t * 3));
+      shell.rotation.y += dt * 0.1;
+    },
+  };
 }

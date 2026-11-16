@@ -1,17 +1,19 @@
 import {
   Color3,
+  type Material,
+  PBRMaterial,
   type Mesh,
   MeshBuilder,
   PointLight,
   type Scene,
-  StandardMaterial,
   TransformNode,
   Vector3,
 } from '@babylonjs/core';
 import { sfx } from '../audio/Sfx';
 import type { WeaponDef } from '../data/defs';
 import type { Player } from '../player/Player';
-import type { Palette } from '../visuals/materials';
+import { type Palette, unlit } from '../visuals/materials';
+import { starSprite } from '../visuals/textures';
 import type { CombatStats } from './stats';
 
 export interface ShotRequest {
@@ -42,8 +44,8 @@ export class Weapon {
   private kick = 0;
   private swayX = 0;
   private swayY = 0;
-  private heatMat: StandardMaterial;
-  private coilMat: StandardMaterial;
+  private heatMat: PBRMaterial;
+  private coilMat: PBRMaterial;
   private light: PointLight;
   private coils: Mesh[] = [];
   private spin = 0;
@@ -59,15 +61,14 @@ export class Weapon {
     this.vm.position.set(0.3, -0.3, 0.62);
     this.vm.scaling.setAll(0.6);
 
-    this.heatMat = new StandardMaterial('heatVent', scene);
-    this.heatMat.diffuseColor = new Color3(0.1, 0.1, 0.11);
-    this.heatMat.specularColor = new Color3(0.3, 0.3, 0.3);
-    this.coilMat = new StandardMaterial('vmCoil', scene);
-    this.coilMat.disableLighting = true;
-    this.coilMat.diffuseColor = Color3.Black();
-    this.coilMat.emissiveColor = new Color3(0.25, 1.8, 2.1);
+    this.heatMat = new PBRMaterial('heatVent', scene);
+    this.heatMat.albedoColor = new Color3(0.04, 0.04, 0.045);
+    this.heatMat.metallic = 0.8;
+    this.heatMat.roughness = 0.4;
+    this.heatMat.usePhysicalLightFalloff = false;
+    this.coilMat = unlit(scene, 'vmCoil', [0.25, 1.8, 2.1]);
 
-    const mk = (m: Mesh, mat: StandardMaterial, pos: [number, number, number], rot?: [number, number, number]): Mesh => {
+    const mk = (m: Mesh, mat: Material, pos: [number, number, number], rot?: [number, number, number]): Mesh => {
       m.material = mat;
       m.parent = this.vm;
       m.position.set(...pos);
@@ -98,13 +99,16 @@ export class Weapon {
     this.muzzle = new TransformNode('muzzle', scene);
     this.muzzle.parent = this.vm;
     this.muzzle.position.set(0, 0, 0.66);
+    // Muzzle flash: crossed additive star sprites plus a front-facing burst.
+    const star = starSprite(scene);
+    const flashMat = unlit(scene, 'vmFlashMat', [2.4, 3.6, 4.4], { tex: star, opacity: star, additive: true, twoSided: true });
     for (let i = 0; i < 2; i++) {
-      const f = mk(MeshBuilder.CreatePlane('vmFlash', { size: 0.22 }, scene), P.whiteGlow, [0, 0, 0.68], [0, i ? Math.PI / 2 : 0, i ? 0 : Math.PI / 4]);
-      f.parent = this.vm;
+      const dims = i ? { width: 0.5, height: 0.22 } : { width: 0.22, height: 0.5 };
+      const f = mk(MeshBuilder.CreatePlane('vmFlash', dims, scene), flashMat, [0, 0, 0.84], i ? [0, Math.PI / 2, 0] : [Math.PI / 2, 0, 0]);
       f.setEnabled(false);
       this.flashMeshes.push(f);
     }
-    const fc = mk(MeshBuilder.CreateDisc('vmFlashC', { radius: 0.09, tessellation: 6 }, scene), this.coilMat, [0, 0, 0.67]);
+    const fc = mk(MeshBuilder.CreatePlane('vmFlashC', { size: 0.42 }, scene), flashMat, [0, 0, 0.7]);
     fc.setEnabled(false);
     this.flashMeshes.push(fc);
     this.light = new PointLight('muzzleLight', Vector3.Zero(), scene);
@@ -124,6 +128,10 @@ export class Weapon {
     this.overheated = false;
     this.cooldown = 0;
     this.spread = this.def.spreadMin;
+  }
+
+  setVisible(v: boolean): void {
+    this.vm.setEnabled(v);
   }
 
   setHolstered(h: boolean): void {
@@ -169,9 +177,9 @@ export class Weapon {
         f.setEnabled(true);
         f.scaling.setAll(0.8 + Math.random() * 0.6);
       }
-      this.flashMeshes[0].rotation.z = Math.random() * Math.PI;
+      this.flashMeshes[2].rotation.z = Math.random() * Math.PI;
       this.light.position.copyFrom(this.tmpPos);
-      this.light.intensity = 2.2;
+      this.light.intensity = 3.2;
       sfx.play('shoot', { pitch: 1 + this.heat / 400 });
     } else {
       this.lastShot = null;

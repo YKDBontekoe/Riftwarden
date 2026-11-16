@@ -1,128 +1,186 @@
-import { Color3, DynamicTexture, type Scene, StandardMaterial, Texture } from '@babylonjs/core';
+import { type BaseTexture, Color3, Constants, FresnelParameters, type Material, PBRMaterial, type Scene, StandardMaterial, type Texture } from '@babylonjs/core';
+import { floorSet, type PbrSet, wallSet, wearSet } from './textures';
 
+/**
+ * Material palette. Surfaces are metallic/roughness PBR lit by the captured
+ * environment (see atmosphere.ts) plus scene lights; "glow" materials are unlit
+ * emissives whose values > 1 feed the HDR bloom.
+ */
 export interface Palette {
-  white: StandardMaterial;
-  panel: StandardMaterial;
-  graphite: StandardMaterial;
-  metal: StandardMaterial;
-  floor: StandardMaterial;
-  cyanGlow: StandardMaterial;
-  cyanDim: StandardMaterial;
-  orangeGlow: StandardMaterial;
-  orangeDim: StandardMaterial;
-  redGlow: StandardMaterial;
-  whiteGlow: StandardMaterial;
-  enemyArmor: StandardMaterial;
-  enemyDark: StandardMaterial;
+  white: PBRMaterial;
+  panel: PBRMaterial;
+  graphite: PBRMaterial;
+  metal: PBRMaterial;
+  floor: PBRMaterial;
+  cyanGlow: PBRMaterial;
+  cyanDim: PBRMaterial;
+  orangeGlow: PBRMaterial;
+  orangeDim: PBRMaterial;
+  redGlow: PBRMaterial;
+  whiteGlow: PBRMaterial;
+  enemyArmor: PBRMaterial;
+  enemyDark: PBRMaterial;
   shield: StandardMaterial;
   ghostOk: StandardMaterial;
   ghostBad: StandardMaterial;
   rift: StandardMaterial;
+  /** All lit PBR materials (for global tweaks such as environment intensity). */
+  lit: PBRMaterial[];
+  wear: PbrSet;
 }
 
-function solid(scene: Scene, name: string, d: [number, number, number], spec = 0.25, power = 64): StandardMaterial {
-  const m = new StandardMaterial(name, scene);
-  m.diffuseColor = new Color3(...d);
-  m.specularColor = new Color3(spec, spec, spec);
-  m.specularPower = power;
-  m.maxSimultaneousLights = 6;
+export type AnyMaterial = Material;
+
+interface PbrOpts {
+  albedo: [number, number, number];
+  metallic: number;
+  roughness: number;
+  set?: PbrSet;
+  bump?: number;
+  /** Use only the ORM/normal of the set, not its albedo. */
+  noAlbedo?: boolean;
+  clearCoat?: number;
+}
+
+function pbr(scene: Scene, name: string, o: PbrOpts): PBRMaterial {
+  const m = new PBRMaterial(name, scene);
+  m.albedoColor = new Color3(...o.albedo);
+  m.metallic = o.metallic;
+  m.roughness = o.roughness;
+  m.maxSimultaneousLights = 8;
+  // Keep the range-based falloff the scene's light intensities were tuned for.
+  m.usePhysicalLightFalloff = false;
+  m.useRadianceOverAlpha = false;
+  m.useSpecularOverAlpha = false;
+  if (o.set) {
+    if (!o.noAlbedo) m.albedoTexture = o.set.albedo;
+    m.bumpTexture = o.set.normal;
+    m.bumpTexture.level = o.bump ?? 1;
+    m.metallicTexture = o.set.orm;
+    m.useAmbientOcclusionFromMetallicTextureRed = true;
+    m.useRoughnessFromMetallicTextureGreen = true;
+    m.useMetallnessFromMetallicTextureBlue = true;
+    m.useRoughnessFromMetallicTextureAlpha = false;
+  }
+  if (o.clearCoat) {
+    m.clearCoat.isEnabled = true;
+    m.clearCoat.intensity = o.clearCoat;
+    m.clearCoat.roughness = 0.08;
+  }
+  return m;
+}
+
+export interface UnlitOpts {
+  /** Multiplied with the colour (unlike StandardMaterial, which adds it). */
+  tex?: BaseTexture;
+  opacity?: BaseTexture;
+  additive?: boolean;
+  zOffset?: number;
+  twoSided?: boolean;
+}
+
+/**
+ * Unlit HDR emissive material (PBR unlit path: colour x texture, never clamped, so
+ * values > 1 drive the bloom). Used for every glow, beam, flash and additive sprite.
+ */
+export function unlit(scene: Scene, name: string, e: [number, number, number] | Color3, o: UnlitOpts = {}): PBRMaterial {
+  const m = new PBRMaterial(name, scene);
+  m.unlit = true;
+  m.albedoColor = Color3.Black();
+  m.emissiveColor = e instanceof Color3 ? e.clone() : new Color3(...e);
+  if (o.tex) m.emissiveTexture = o.tex;
+  if (o.opacity) m.opacityTexture = o.opacity;
+  if (o.additive) {
+    m.alphaMode = Constants.ALPHA_ADD;
+    m.transparencyMode = PBRMaterial.PBRMATERIAL_ALPHABLEND;
+    m.disableDepthWrite = true;
+  }
+  if (o.zOffset) m.zOffset = o.zOffset;
+  if (o.twoSided) m.backFaceCulling = false;
   return m;
 }
 
 /** Emissive "light" material. Values > 1 feed the HDR bloom. */
-function glow(scene: Scene, name: string, e: [number, number, number]): StandardMaterial {
-  const m = new StandardMaterial(name, scene);
-  m.diffuseColor = Color3.Black();
-  m.specularColor = Color3.Black();
-  m.emissiveColor = new Color3(...e);
-  m.disableLighting = true;
-  return m;
+function glow(scene: Scene, name: string, e: [number, number, number]): PBRMaterial {
+  return unlit(scene, name, e);
 }
 
-function floorTexture(scene: Scene): DynamicTexture {
-  const size = 512;
-  const tex = new DynamicTexture('floorTex', { width: size, height: size }, scene, true);
-  const ctx = tex.getContext() as CanvasRenderingContext2D;
-  const n = 2; // panels per tile edge
-  const p = size / n;
-  ctx.fillStyle = '#b9bec4';
-  ctx.fillRect(0, 0, size, size);
-  for (let i = 0; i < n; i++) {
-    for (let j = 0; j < n; j++) {
-      const shade = 178 + ((i + j) % 2) * 9;
-      ctx.fillStyle = `rgb(${shade},${shade + 4},${shade + 9})`;
-      ctx.fillRect(i * p + 3, j * p + 3, p - 6, p - 6);
-      // inner inset line
-      ctx.strokeStyle = 'rgba(80,88,96,0.22)';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(i * p + 22, j * p + 22, p - 44, p - 44);
-      // corner fasteners
-      ctx.fillStyle = 'rgba(60,66,74,0.5)';
-      for (const [cx, cy] of [[12, 12], [p - 12, 12], [12, p - 12], [p - 12, p - 12]]) {
-        ctx.beginPath();
-        ctx.arc(i * p + cx, j * p + cy, 3.2, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-  }
-  ctx.strokeStyle = '#4a5058';
-  ctx.lineWidth = 6;
-  for (let i = 0; i <= n; i++) {
-    ctx.beginPath();
-    ctx.moveTo(i * p, 0);
-    ctx.lineTo(i * p, size);
-    ctx.moveTo(0, i * p);
-    ctx.lineTo(size, i * p);
-    ctx.stroke();
-  }
-  tex.update();
-  tex.wrapU = tex.wrapV = Texture.WRAP_ADDRESSMODE;
-  tex.anisotropicFilteringLevel = 8;
-  return tex;
+function scaled(t: Texture, u: number, v = u): Texture {
+  // Each floor texture has a single user, so scale in place (DynamicTexture clones are blank).
+  t.uScale = u;
+  t.vScale = v;
+  return t;
 }
 
 export function createPalette(scene: Scene): Palette {
-  const floor = solid(scene, 'floor', [0.78, 0.8, 0.83], 0.18, 32);
-  const ft = floorTexture(scene);
-  ft.uScale = ft.vScale = 120 / 8; // 8 m tiles across a 120 m ground
-  floor.diffuseTexture = ft;
+  const floorTex = floorSet(scene);
+  const wallTex = wallSet(scene);
+  const wear = wearSet(scene);
+
+  // Ground is a 120 m plane with 0..1 UVs: albedo/normal tile every 8 m, wetness every ~23 m.
+  const floor = pbr(scene, 'floor', { albedo: [1, 1, 1], metallic: 0.1, roughness: 1 });
+  floor.albedoTexture = scaled(floorTex.albedo, 15);
+  floor.bumpTexture = scaled(floorTex.normal, 15);
+  floor.bumpTexture.level = 0.55;
+  floor.metallicTexture = scaled(floorTex.orm, 120 / 23.3);
+  floor.useRoughnessFromMetallicTextureGreen = true;
+  floor.useMetallnessFromMetallicTextureBlue = true;
+  floor.useAmbientOcclusionFromMetallicTextureRed = true;
+  floor.useRoughnessFromMetallicTextureAlpha = false;
 
   const shield = new StandardMaterial('shield', scene);
   shield.diffuseColor = Color3.Black();
   shield.specularColor = Color3.Black();
-  shield.emissiveColor = new Color3(1.5, 0.35, 0.04);
-  shield.alpha = 0.22;
+  shield.emissiveColor = new Color3(2.2, 0.55, 0.08);
+  shield.alpha = 0.5;
   shield.disableLighting = true;
   shield.backFaceCulling = false;
+  shield.opacityFresnelParameters = new FresnelParameters({ bias: 0.08, power: 2.4, leftColor: Color3.White(), rightColor: Color3.Black() });
+  shield.emissiveFresnelParameters = new FresnelParameters({ bias: 0.25, power: 1.6, leftColor: new Color3(2.6, 0.9, 0.2), rightColor: new Color3(0.6, 0.08, 0.0) });
 
   const ghost = (name: string, c: [number, number, number]) => {
-    const m = glow(scene, name, c);
+    const m = new StandardMaterial(name, scene);
+    m.diffuseColor = Color3.Black();
+    m.specularColor = Color3.Black();
+    m.emissiveColor = new Color3(...c);
+    m.disableLighting = true;
     m.alpha = 0.38;
     m.backFaceCulling = false;
+    m.opacityFresnelParameters = new FresnelParameters({ bias: 0.25, power: 1.5, leftColor: Color3.White(), rightColor: Color3.Black() });
     return m;
   };
 
-  const rift = glow(scene, 'rift', [1.7, 0.2, 0.03]);
-  rift.alpha = 0.85;
+  const rift = new StandardMaterial('rift', scene);
+  rift.emissiveColor = new Color3(1, 0.2, 0.03);
+  rift.disableLighting = true;
   rift.backFaceCulling = false;
 
+  const panel = pbr(scene, 'panel', { albedo: [0.75, 0.8, 0.88], metallic: 0.55, roughness: 1, set: wallTex, bump: 0.8 });
+  const white = pbr(scene, 'white', { albedo: [0.62, 0.64, 0.66], metallic: 0.15, roughness: 0.55, set: wear, noAlbedo: false, bump: 0.25, clearCoat: 0.5 });
+  const graphite = pbr(scene, 'graphite', { albedo: [0.05, 0.055, 0.065], metallic: 0.7, roughness: 0.6, set: wear, bump: 0.3 });
+  const metal = pbr(scene, 'metal', { albedo: [0.62, 0.64, 0.68], metallic: 1, roughness: 0.38, set: wear, noAlbedo: true, bump: 0.15 });
+  const enemyArmor = pbr(scene, 'enemyArmor', { albedo: [0.3, 0.27, 0.25], metallic: 0.65, roughness: 0.55, set: wear, bump: 0.3 });
+  const enemyDark = pbr(scene, 'enemyDark', { albedo: [0.035, 0.03, 0.03], metallic: 0.85, roughness: 0.42, set: wear, bump: 0.3 });
+
   return {
-    white: solid(scene, 'white', [0.88, 0.9, 0.92], 0.35, 96),
-    panel: solid(scene, 'panel', [0.7, 0.73, 0.76], 0.2, 48),
-    graphite: solid(scene, 'graphite', [0.11, 0.12, 0.14], 0.35, 64),
-    metal: solid(scene, 'metal', [0.38, 0.4, 0.44], 0.7, 128),
+    white,
+    panel,
+    graphite,
+    metal,
     floor,
     cyanGlow: glow(scene, 'cyanGlow', [0.25, 1.9, 2.2]),
-    cyanDim: glow(scene, 'cyanDim', [0.04, 0.42, 0.5]),
-    orangeGlow: glow(scene, 'orangeGlow', [2.7, 0.42, 0.03]),
-    orangeDim: glow(scene, 'orangeDim', [0.62, 0.11, 0.01]),
+    cyanDim: glow(scene, 'cyanDim', [0.05, 0.55, 0.65]),
+    orangeGlow: glow(scene, 'orangeGlow', [2.9, 0.45, 0.03]),
+    orangeDim: glow(scene, 'orangeDim', [0.75, 0.13, 0.01]),
     redGlow: glow(scene, 'redGlow', [2.6, 0.28, 0.12]),
     whiteGlow: glow(scene, 'whiteGlow', [2.4, 2.6, 2.9]),
-    enemyArmor: solid(scene, 'enemyArmor', [0.5, 0.48, 0.47], 0.45, 80),
-    enemyDark: solid(scene, 'enemyDark', [0.08, 0.075, 0.075], 0.4, 64),
+    enemyArmor,
+    enemyDark,
     shield,
     ghostOk: ghost('ghostOk', [0.2, 1.4, 1.6]),
     ghostBad: ghost('ghostBad', [1.8, 0.2, 0.12]),
     rift,
+    lit: [white, panel, graphite, metal, floor, enemyArmor, enemyDark],
+    wear,
   };
 }

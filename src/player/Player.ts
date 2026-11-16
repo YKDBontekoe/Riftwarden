@@ -59,6 +59,8 @@ export class Player {
   private roll = 0;
   private fovKick = 0;
   baseFov = 1.2;
+  /** Camera shake energy (0..1); shake amplitude is trauma squared. */
+  trauma = 0;
   sensitivity = 1;
 
   hp: number = ECONOMY.playerMaxHp;
@@ -115,10 +117,15 @@ export class Player {
     this.dashT = 0;
     this.sinceHurt = 99;
     this.hurtFlash = 0;
+    this.trauma = 0;
   }
 
-  damage(amount: number): void {
+  /** Called for every hit taken; `from` is the damage source position when known. */
+  onHurt: ((amount: number, from: Vector3 | null) => void) | null = null;
+
+  damage(amount: number, from: Vector3 | null = null): void {
     if (!this.alive || amount <= 0) return;
+    this.onHurt?.(amount, from);
     this.hp -= amount;
     this.sinceHurt = 0;
     this.hurtFlash = Math.min(1, this.hurtFlash + 0.35 + amount / 40);
@@ -129,6 +136,10 @@ export class Player {
       this.respawnT = ECONOMY.playerRespawnTime;
       this.hv.setAll(0);
     }
+  }
+
+  addTrauma(amount: number): void {
+    this.trauma = Math.min(1, this.trauma + amount);
   }
 
   knockback(dir: Vector3, strength: number): void {
@@ -284,7 +295,13 @@ export class Player {
     this.camera.position.set(p.x, p.y + MOVE.eyeOffset + hover - this.landDip + deadDrop, p.z);
     const targetRoll = -strafe * 0.012 * Math.min(1, speed / MOVE.runSpeed);
     this.roll += (targetRoll - this.roll) * Math.min(1, dt * 10);
-    this.camera.rotation.set(this.pitch - this.recoil, this.yaw, this.alive ? this.roll : 0.25);
+    this.trauma = Math.max(0, this.trauma - dt * 1.4);
+    const sh = this.trauma * this.trauma;
+    const t = performance.now() * 0.001;
+    const sp = sh * 0.035 * (Math.sin(t * 37.1) + Math.sin(t * 23.7 + 1.3) * 0.6);
+    const sy = sh * 0.035 * (Math.sin(t * 31.3 + 2.1) + Math.sin(t * 19.9) * 0.6);
+    const sr = sh * 0.05 * Math.sin(t * 27.7 + 0.7);
+    this.camera.rotation.set(this.pitch - this.recoil + sp, this.yaw + sy, (this.alive ? this.roll : 0.25) + sr);
     this.fovKick *= Math.exp(-dt * 8);
     const sprintFov = this.sprinting ? 0.05 : 0;
     this.camera.fov += (this.baseFov + this.fovKick + sprintFov - this.camera.fov) * Math.min(1, dt * 12);

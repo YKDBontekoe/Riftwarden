@@ -62,6 +62,80 @@ export class Sfx {
     this.noise = ctx.createBuffer(1, len, ctx.sampleRate);
     const d = this.noise.getChannelData(0);
     for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    this.startAmbience();
+  }
+
+  /** Storm wind, low city rumble and the reactor's hum: quiet looping bed under everything. */
+  private startAmbience(): void {
+    const ctx = this.ctx!;
+    const loop = (rate: number) => {
+      const src = ctx.createBufferSource();
+      src.buffer = this.noise;
+      src.loop = true;
+      src.playbackRate.value = rate;
+      src.start();
+      return src;
+    };
+    // Gusting wind: band-passed noise with a slow LFO on frequency and level.
+    const wind = ctx.createBiquadFilter();
+    wind.type = 'bandpass';
+    wind.frequency.value = 520;
+    wind.Q.value = 0.7;
+    const windGain = ctx.createGain();
+    windGain.gain.value = 0.045;
+    loop(0.6).connect(wind).connect(windGain).connect(this.master);
+    const lfo = ctx.createOscillator();
+    lfo.frequency.value = 0.07;
+    const lfoAmt = ctx.createGain();
+    lfoAmt.gain.value = 260;
+    lfo.connect(lfoAmt).connect(wind.frequency);
+    const lfo2 = ctx.createOscillator();
+    lfo2.frequency.value = 0.11;
+    const lfo2Amt = ctx.createGain();
+    lfo2Amt.gain.value = 0.025;
+    lfo2.connect(lfo2Amt).connect(windGain.gain);
+    lfo.start();
+    lfo2.start();
+    // Distant rumble.
+    const rumble = ctx.createBiquadFilter();
+    rumble.type = 'lowpass';
+    rumble.frequency.value = 110;
+    const rumbleGain = ctx.createGain();
+    rumbleGain.gain.value = 0.09;
+    loop(0.4).connect(rumble).connect(rumbleGain).connect(this.master);
+    // Reactor hum: detuned low sines.
+    const hum = ctx.createGain();
+    hum.gain.value = 0.018;
+    for (const f of [55, 110.4, 165.3]) {
+      const o = ctx.createOscillator();
+      o.frequency.value = f;
+      o.connect(hum);
+      o.start();
+    }
+    hum.connect(this.master);
+  }
+
+  /** Rolling thunder; `delay` approximates the distance to the strike. */
+  thunder(delay = 0.6): void {
+    if (!this.ctx || this.ctx.state !== 'running') return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime + delay;
+    const src = ctx.createBufferSource();
+    src.buffer = this.noise;
+    src.loop = true;
+    src.playbackRate.value = 0.35;
+    const f = ctx.createBiquadFilter();
+    f.type = 'lowpass';
+    f.frequency.setValueAtTime(700, t);
+    f.frequency.exponentialRampToValueAtTime(90, t + 3.2);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.35, t + 0.12);
+    g.gain.exponentialRampToValueAtTime(0.12, t + 0.7);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 3.4);
+    src.connect(f).connect(g).connect(this.master);
+    src.start(t);
+    src.stop(t + 3.5);
   }
 
   setVolume(v: number): void {
@@ -158,9 +232,11 @@ export class Sfx {
         this.osc('sine', 900, 300, 0.15, 0.06 * v, out);
         break;
       case 'explosion':
-        this.noiseBurst(0.6, 0.55 * v, 1800 * p, 90, out, 'lowpass', 0.7);
-        this.osc('sine', 110 * p, 35, 0.45, 0.5 * v, out);
-        this.noiseBurst(0.12, 0.25 * v, 4000, 1200, out, 'bandpass', 1);
+        this.noiseBurst(0.9, 0.6 * v, 2200 * p, 70, out, 'lowpass', 0.7);
+        this.osc('sine', 120 * p, 30, 0.55, 0.6 * v, out);
+        this.noiseBurst(0.12, 0.3 * v, 4500, 1200, out, 'bandpass', 1);
+        // debris crackle
+        for (let i = 0; i < 4; i++) this.noiseBurst(0.05, 0.08 * v, 6000, 2500, out, 'highpass', 1, 0.12 + Math.random() * 0.5);
         break;
       case 'build':
         this.osc('triangle', 300, 900, 0.25, 0.15 * v, out);

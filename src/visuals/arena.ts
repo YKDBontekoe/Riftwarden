@@ -7,13 +7,14 @@ import {
   PhysicsShapeContainer,
   Quaternion,
   type Scene,
-  type StandardMaterial,
+  type Material,
   TransformNode,
   Vector3,
 } from '@babylonjs/core';
 import type { ArenaLayout, Box, Ramp, Vec2 } from '../world/layout';
 import { PHYS_ENV } from '../world/physicsGroups';
 import type { Palette } from './materials';
+import { boxProjectUVs } from './uv';
 
 /**
  * Builds the research facility from layout data:
@@ -22,16 +23,18 @@ import type { Palette } from './materials';
  * Pickable meshes carry `metadata.surface` so picking can classify hits.
  */
 export class ArenaBuilder {
-  private parts = new Map<string, { mat: StandardMaterial; surface: string | null; meshes: Mesh[] }>();
+  private parts = new Map<string, { mat: Material; surface: string | null; meshes: Mesh[] }>();
   private physicsShape: PhysicsShapeContainer;
   readonly animated: { node: TransformNode | Mesh; spin: Vector3 }[] = [];
   readonly shadowCasters: Mesh[] = [];
+  /** Every static render mesh (for environment capture). */
+  readonly meshes: Mesh[] = [];
 
   constructor(private scene: Scene, private pal: Palette, private layout: ArenaLayout) {
     this.physicsShape = new PhysicsShapeContainer(scene);
   }
 
-  private add(mesh: Mesh, mat: StandardMaterial, surface: string | null): void {
+  private add(mesh: Mesh, mat: Material, surface: string | null): void {
     const key = `${mat.name}|${surface ?? '-'}`;
     let g = this.parts.get(key);
     if (!g) {
@@ -41,7 +44,7 @@ export class ArenaBuilder {
     g.meshes.push(mesh);
   }
 
-  private box(x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, mat: StandardMaterial, surface: string | null): Mesh {
+  private box(x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, mat: Material, surface: string | null): Mesh {
     const m = MeshBuilder.CreateBox('b', { width: x1 - x0, height: y1 - y0, depth: z1 - z0 }, this.scene);
     m.position.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
     this.add(m, mat, surface);
@@ -62,6 +65,7 @@ export class ArenaBuilder {
     ground.receiveShadows = true;
     ground.metadata = { surface: 'floor' };
     ground.freezeWorldMatrix();
+    this.meshes.push(ground);
     this.collider(new Vector3(0, -0.5, 0), new Vector3(120, 1, 120));
 
     for (const b of L.boxes) {
@@ -268,7 +272,7 @@ export class ArenaBuilder {
       const root = new TransformNode('gate', this.scene);
       root.position.copyFrom(f.pos);
       root.rotation.y = f.yaw;
-      const mk = (w: number, h: number, d: number, x: number, y: number, z: number, mat: StandardMaterial) => {
+      const mk = (w: number, h: number, d: number, x: number, y: number, z: number, mat: Material) => {
         const m = MeshBuilder.CreateBox('gatePart', { width: w, height: h, depth: d }, this.scene);
         root.computeWorldMatrix(true);
         m.rotation.y = f.yaw;
@@ -328,6 +332,10 @@ export class ArenaBuilder {
       if (!merged) continue;
       merged.name = `arena:${key}`;
       merged.material = g.mat;
+      // World-scale texturing: panels tile every 4 m, worn metal every 2 m.
+      if (g.mat === this.pal.panel) boxProjectUVs(merged, 4);
+      else if (g.mat === this.pal.white || g.mat === this.pal.graphite || g.mat === this.pal.metal) boxProjectUVs(merged, 2.5);
+      this.meshes.push(merged);
       merged.isPickable = g.surface !== null;
       merged.metadata = g.surface ? { surface: g.surface } : null;
       merged.receiveShadows = g.surface === 'platform' || g.surface === 'ramp';

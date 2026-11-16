@@ -51,6 +51,8 @@ export class Enemy implements Health {
   remaining = 0;
   shieldFlash = 0;
   shieldRegenT = 0;
+  /** performance.now() of the last damage taken (drives the HUD health bar). */
+  lastHit = 0;
   readonly hitboxes: Mesh[] = [];
 
   constructor(
@@ -124,6 +126,7 @@ export class EnemyManager {
     e.stuckT = 0;
     e.bestDist = Infinity;
     e.shieldFlash = 0;
+    e.lastHit = 0;
     // Offset lane so groups spread out instead of single-file.
     const lateral = (Math.random() * 2 - 1) * (kind === 'bulwark' ? 0.6 : 1.3);
     e.path = offsetPath(layout.routes[gate].points, lateral);
@@ -150,6 +153,7 @@ export class EnemyManager {
     const res = applyDamage(e, amount, type);
     e.flinch = Math.min(1, e.flinch + (res.toHp > 0 ? 0.5 : 0.2));
     e.shieldRegenT = 4;
+    e.lastHit = performance.now();
     if (res.toShield > 0) {
       e.shieldFlash = 1;
       fx.burst('shield', hitPoint, 6);
@@ -168,10 +172,7 @@ export class EnemyManager {
     e.alive = false;
     const c = e.center(TMP);
     const big = e.kind === 'bulwark' ? 1.6 : e.kind === 'rusher' ? 0.8 : 1;
-    fx.burst('explosion', c, Math.round(26 * big), undefined, big);
-    fx.burst('smoke', c, Math.round(8 * big), undefined, big);
-    fx.debrisBurst(c, e.kind === 'rusher' ? 6 : 12, 7 * big, big);
-    fx.flashLight(c, detonated ? 5 : 3, 0.3);
+    fx.explode(c, { scale: detonated ? big * 1.25 : big, debris: e.kind === 'rusher' ? 6 : e.kind === 'bulwark' ? 18 : 12 });
     const a = ctx.panFor(c);
     sfx.play('explosion', { volume: a.volume * (detonated ? 1 : 0.8), pan: a.pan, pitch: e.kind === 'rusher' ? 1.4 : e.kind === 'bulwark' ? 0.75 : 1 });
     this.release(e);
@@ -274,7 +275,7 @@ export class EnemyManager {
         if (e.kind === 'rusher' && player.alive) {
           const c = e.center(TMP);
           if (Vector3.DistanceSquared(c, ppos) < 2.3 * 2.3) {
-            player.damage(def.playerDamage * e.damageMult);
+            player.damage(def.playerDamage * e.damageMult, e.pos);
             TMP2.copyFrom(ppos).subtractInPlace(c).normalize();
             player.knockback(TMP2, 9);
             this.kill(e, ctx.effects, ctx, true);

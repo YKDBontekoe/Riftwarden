@@ -1,14 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Game } from '../core/Game';
+import { ARENA } from '../world/layout';
 import { type BannerEvent, type HitKind, uiEvents, useHud } from './store';
 
 export function Hud({ game }: { game: Game }) {
   return (
     <div className="hud">
       <Overlays />
+      <HealthBars game={game} />
+      <DamageNumbers game={game} />
+      <DamageDirection />
       <Crosshair />
       <Hitmarker />
-      <DamageNumbers game={game} />
+      <Radar game={game} />
       <TopCenter />
       <Cores />
       <PlayerPanel />
@@ -22,31 +26,50 @@ export function Hud({ game }: { game: Game }) {
   );
 }
 
-function Bar({ value, tone, marker }: { value: number; tone: string; marker?: number }) {
+// ---------------------------------------------------------------- primitives
+
+/** Segmented bar with a delayed "damage trail" that drains after the real value. */
+function SegBar({ value, tone, segments = 20, marker, className = '' }: { value: number; tone: string; segments?: number; marker?: number; className?: string }) {
+  const v = Math.max(0, Math.min(1, value));
+  const [trail, setTrail] = useState(v);
+  useEffect(() => {
+    if (v >= trail) {
+      setTrail(v);
+      return;
+    }
+    const t = setTimeout(() => setTrail(v), 450);
+    return () => clearTimeout(t);
+  }, [v, trail]);
   return (
-    <div className="bar">
-      <div className={`fill ${tone}`} style={{ transform: `scaleX(${Math.max(0, Math.min(1, value))})` }} />
-      {marker !== undefined && <div className="tick" style={{ left: `${marker * 100}%` }} />}
+    <div className={`segbar ${tone} ${className}`} style={{ ['--segs' as string]: segments }}>
+      <div className="trail" style={{ transform: `scaleX(${trail})` }} />
+      <div className="fill" style={{ transform: `scaleX(${v})` }} />
+      <div className="grid" />
+      {marker !== undefined && <div className="marker" style={{ left: `${marker * 100}%` }} />}
     </div>
   );
 }
 
+function Key({ k }: { k: string }) {
+  return <kbd>{k}</kbd>;
+}
+
+// ---------------------------------------------------------------- overlays
+
 function Overlays() {
   const tactical = useHud((s) => s.tacticalActive);
-  const [hurt, setHurt] = useState(0);
   const hp = useHud((s) => s.playerHp / s.playerMax);
+  const alive = useHud((s) => s.respawnIn <= 0);
+  const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     let raf = 0;
     let level = 0;
     const off = uiEvents.on('hurt', (v) => {
-      level = Math.min(1, level + 0.4 + v);
-      setHurt(level);
+      level = Math.min(1, level + 0.35 + v.severity * 0.8);
     });
     const tick = () => {
-      if (level > 0) {
-        level = Math.max(0, level - 0.03);
-        setHurt(level);
-      }
+      if (level > 0) level = Math.max(0, level - 0.025);
+      if (ref.current) ref.current.style.setProperty('--hurt', level.toFixed(3));
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
@@ -55,12 +78,16 @@ function Overlays() {
       cancelAnimationFrame(raf);
     };
   }, []);
-  const low = hp < 0.35 ? (0.35 - hp) * 1.6 : 0;
+  const low = hp < 0.35 && alive ? (0.35 - hp) / 0.35 : 0;
   return (
-    <>
-      <div className={`tactical-tint ${tactical ? 'on' : ''}`} />
-      <div className="damage-vignette" style={{ opacity: Math.min(1, hurt + low) }} />
-    </>
+    <div ref={ref} className="overlays" style={{ ['--low' as string]: low.toFixed(3) }}>
+      <div className={`tactical-tint ${tactical ? 'on' : ''}`}>
+        <div className="tac-frame" />
+      </div>
+      <div className="damage-vignette" />
+      <div className={`lowhp ${low > 0 ? 'on' : ''}`} />
+      <div className="scanlines" />
+    </div>
   );
 }
 
@@ -68,14 +95,27 @@ function Crosshair() {
   const spread = useHud((s) => s.spread);
   const build = useHud((s) => s.buildMode);
   const overheated = useHud((s) => s.overheated);
+  const heat = useHud((s) => s.heat);
   const g = Math.round(spread);
+  // Heat arc hugging the right of the reticle.
+  const r = 26;
+  const arc = Math.PI * 0.5;
+  const a0 = -arc / 2;
+  const a1 = a0 + arc * Math.max(0.001, heat);
+  const p = (a: number) => `${(Math.cos(a) * r).toFixed(2)} ${(Math.sin(a) * r).toFixed(2)}`;
   return (
     <div className={`crosshair ${build ? 'build' : ''} ${overheated ? 'hot' : ''}`}>
-      <span className="ch" style={{ transform: `translate(-50%, ${-g - 8}px)` }} />
-      <span className="ch" style={{ transform: `translate(-50%, ${g}px)` }} />
-      <span className="ch h" style={{ transform: `translate(${-g - 8}px, -50%)` }} />
-      <span className="ch h" style={{ transform: `translate(${g}px, -50%)` }} />
+      <span className="ch" style={{ transform: `translate(-50%, ${-g - 9}px)` }} />
+      <span className="ch" style={{ transform: `translate(-50%, ${g + 1}px)` }} />
+      <span className="ch h" style={{ transform: `translate(${-g - 9}px, -50%)` }} />
+      <span className="ch h" style={{ transform: `translate(${g + 1}px, -50%)` }} />
       <span className="dot" />
+      {!build && heat > 0.02 && (
+        <svg className="heat-arc" viewBox="-40 -40 80 80" width="80" height="80">
+          <path d={`M ${p(a0)} A ${r} ${r} 0 0 1 ${p(a0 + arc)}`} className="bg" />
+          <path d={`M ${p(a0)} A ${r} ${r} 0 0 1 ${p(a1)}`} className={`fg ${heat > 0.7 ? 'warm' : ''} ${overheated ? 'over' : ''}`} />
+        </svg>
+      )}
     </div>
   );
 }
@@ -89,7 +129,7 @@ function Hitmarker() {
       id++;
       setState({ kind, id });
       clearTimeout(timer);
-      timer = setTimeout(() => setState(null), kind === 'kill' ? 260 : 140);
+      timer = setTimeout(() => setState(null), kind === 'kill' ? 320 : 160);
     });
     return () => {
       off();
@@ -103,9 +143,35 @@ function Hitmarker() {
       <span />
       <span />
       <span />
+      {state.kind === 'kill' && <i className="kill-ring" />}
     </div>
   );
 }
+
+/** Red arcs around the reticle pointing toward whatever just hit the player. */
+function DamageDirection() {
+  const [marks, setMarks] = useState<{ id: number; angle: number; sev: number }[]>([]);
+  useEffect(() => {
+    let id = 0;
+    return uiEvents.on('hurt', (e) => {
+      if (e.angle === null) return;
+      const my = ++id;
+      setMarks((m) => [...m.slice(-4), { id: my, angle: e.angle!, sev: e.severity }]);
+      setTimeout(() => setMarks((m) => m.filter((x) => x.id !== my)), 1100);
+    });
+  }, []);
+  return (
+    <div className="dmg-dir">
+      {marks.map((m) => (
+        <div key={m.id} className="arc" style={{ transform: `rotate(${m.angle}rad)`, ['--sev' as string]: 0.5 + m.sev * 0.5 }}>
+          <i />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- world-anchored UI
 
 interface Num {
   el: HTMLDivElement;
@@ -135,7 +201,7 @@ function DamageNumbers({ game }: { game: Game }) {
       el.textContent = String(e.amount);
       el.style.display = 'block';
       if (!el.parentElement) host.current.appendChild(el);
-      live.push({ el, x: e.x, y: e.y, z: e.z, t: 0, dx: (Math.random() - 0.5) * 30 });
+      live.push({ el, x: e.x, y: e.y, z: e.z, t: 0, dx: (Math.random() - 0.5) * 40 });
     });
     let raf = 0;
     let last = performance.now();
@@ -145,19 +211,19 @@ function DamageNumbers({ game }: { game: Game }) {
       for (let i = live.length - 1; i >= 0; i--) {
         const n = live[i];
         n.t += dt;
-        const life = 0.75;
+        const life = 0.8;
         if (n.t >= life) {
           n.el.style.display = 'none';
           pool.push(n.el);
           live.splice(i, 1);
           continue;
         }
-        const p = game.project(n.x, n.y + 0.4 + n.t * 1.2, n.z);
+        const p = game.project(n.x, n.y + 0.4 + n.t * 1.1, n.z);
         if (!p) {
           n.el.style.opacity = '0';
           continue;
         }
-        const pop = n.t < 0.08 ? 1 + (0.08 - n.t) * 6 : 1;
+        const pop = n.t < 0.1 ? 1 + (0.1 - n.t) * 7 : 1;
         n.el.style.opacity = String(Math.min(1, (life - n.t) * 4));
         n.el.style.transform = `translate(${p.x + n.dx * n.t}px, ${p.y}px) translate(-50%, -50%) scale(${pop})`;
       }
@@ -172,6 +238,216 @@ function DamageNumbers({ game }: { game: Game }) {
   return <div className="dmg-host" ref={host} />;
 }
 
+/** Health/shield bars over recently damaged hostiles. Imperative DOM pool. */
+function HealthBars({ game }: { game: Game }) {
+  const host = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const els = new Map<number, HTMLDivElement>();
+    let raf = 0;
+    const tick = () => {
+      const now = performance.now();
+      const seen = new Set<number>();
+      const pp = game.player.position;
+      for (const e of game.enemies.active) {
+        if (!e.alive || !e.lastHit || now - e.lastHit > 2600) continue;
+        const dx = e.pos.x - pp.x;
+        const dz = e.pos.z - pp.z;
+        if (dx * dx + dz * dz > 70 * 70) continue;
+        const top = e.kind === 'rusher' ? 2.1 : e.kind === 'bulwark' ? 4.6 : 3.5;
+        const p = game.project(e.pos.x, e.pos.y + top, e.pos.z);
+        if (!p) continue;
+        seen.add(e.id);
+        let el = els.get(e.id);
+        if (!el) {
+          el = document.createElement('div');
+          el.className = 'ehp';
+          el.innerHTML = '<div class="hp"><i></i></div><div class="sh"><i></i></div>';
+          host.current?.appendChild(el);
+          els.set(e.id, el);
+        }
+        const fade = Math.min(1, (2600 - (now - e.lastHit)) / 400);
+        el.style.opacity = String(fade);
+        el.style.transform = `translate(${p.x}px, ${p.y}px) translate(-50%, -100%)`;
+        (el.children[0].firstChild as HTMLElement).style.transform = `scaleX(${Math.max(0, e.hp / e.maxHp)})`;
+        const sh = el.children[1] as HTMLElement;
+        sh.style.display = e.maxShield > 0 ? 'block' : 'none';
+        if (e.maxShield > 0) (sh.firstChild as HTMLElement).style.transform = `scaleX(${Math.max(0, e.shield / e.maxShield)})`;
+      }
+      for (const [id, el] of els) {
+        if (!seen.has(id)) {
+          el.remove();
+          els.delete(id);
+        }
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => {
+      cancelAnimationFrame(raf);
+      for (const el of els.values()) el.remove();
+    };
+  }, [game]);
+  return <div className="ehp-host" ref={host} />;
+}
+
+// ---------------------------------------------------------------- radar
+
+const RADAR_PX = 184;
+const RADAR_RANGE = 57; // metres from center to edge (arena + gate tunnels)
+
+/** North-up tactical map: static layout cached once, dynamic blips at ~20 Hz. */
+function Radar({ game }: { game: Game }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const cv = ref.current;
+    if (!cv) return;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const S = RADAR_PX * dpr;
+    cv.width = cv.height = S;
+    const ctx = cv.getContext('2d')!;
+    const k = (S / 2 - 6 * dpr) / RADAR_RANGE;
+    const X = (x: number) => S / 2 + x * k;
+    const Y = (z: number) => S / 2 - z * k;
+
+    // Static layer
+    const base = document.createElement('canvas');
+    base.width = base.height = S;
+    const b = base.getContext('2d')!;
+    b.fillStyle = 'rgba(4,12,18,0.72)';
+    b.fillRect(0, 0, S, S);
+    b.strokeStyle = 'rgba(80,220,240,0.06)';
+    b.lineWidth = 1;
+    for (let g = -48; g <= 48; g += 8) {
+      b.beginPath();
+      b.moveTo(X(g), 0);
+      b.lineTo(X(g), S);
+      b.moveTo(0, Y(g));
+      b.lineTo(S, Y(g));
+      b.stroke();
+    }
+    for (const box of ARENA.boxes) {
+      const [x0, , z0] = box.min;
+      const [x1, , z1] = box.max;
+      const fill = box.kind === 'platform' ? 'rgba(120,170,190,0.22)' : box.kind === 'wall' || box.kind === 'gate' ? 'rgba(150,200,215,0.42)' : 'rgba(120,150,165,0.32)';
+      b.fillStyle = fill;
+      b.fillRect(X(x0), Y(z1), (x1 - x0) * k, (z1 - z0) * k);
+    }
+    b.lineWidth = 2.2 * dpr;
+    b.strokeStyle = 'rgba(255,130,40,0.38)';
+    b.setLineDash([4 * dpr, 3 * dpr]);
+    for (const r of Object.values(ARENA.routes)) {
+      b.beginPath();
+      r.points.forEach((p, i) => (i ? b.lineTo(X(p.x), Y(p.z)) : b.moveTo(X(p.x), Y(p.z))));
+      b.stroke();
+    }
+    b.setLineDash([]);
+    // Gates
+    for (const r of Object.values(ARENA.routes)) {
+      const p = r.points[0];
+      b.fillStyle = 'rgba(255,110,30,0.9)';
+      b.beginPath();
+      b.arc(X(p.x), Y(p.z), 3.2 * dpr, 0, Math.PI * 2);
+      b.fill();
+    }
+    // Reactor
+    b.strokeStyle = 'rgba(80,230,245,0.9)';
+    b.lineWidth = 1.5 * dpr;
+    b.beginPath();
+    b.arc(X(ARENA.reactor.x), Y(ARENA.reactor.z), ARENA.reactor.radius * k, 0, Math.PI * 2);
+    b.stroke();
+    b.fillStyle = 'rgba(80,230,245,0.35)';
+    b.fill();
+
+    let raf = 0;
+    let last = 0;
+    const draw = (now: number) => {
+      raf = requestAnimationFrame(draw);
+      if (now - last < 50) return;
+      last = now;
+      ctx.clearRect(0, 0, S, S);
+      ctx.drawImage(base, 0, 0);
+      const pulse = 0.5 + 0.5 * Math.sin(now * 0.008);
+      // Turrets: cyan diamonds with range hint
+      ctx.fillStyle = '#5ff0ff';
+      for (const t of game.turrets.turrets) {
+        const x = X(t.pos.x);
+        const y = Y(t.pos.z);
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(Math.PI / 4);
+        ctx.fillRect(-2.6 * dpr, -2.6 * dpr, 5.2 * dpr, 5.2 * dpr);
+        ctx.restore();
+      }
+      // Hostiles
+      for (const e of game.enemies.active) {
+        if (!e.alive) continue;
+        const x = X(e.pos.x);
+        const y = Y(e.pos.z);
+        const r = (e.kind === 'bulwark' ? 4 : e.kind === 'rusher' ? 2.2 : 3) * dpr;
+        ctx.fillStyle = e.kind === 'rusher' ? '#ffcf4a' : '#ff5a2a';
+        ctx.globalAlpha = 0.25 + 0.25 * pulse;
+        ctx.beginPath();
+        ctx.arc(x, y, r * 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      // Player: view cone + arrow
+      const pp = game.player.position;
+      const yaw = game.player.yaw;
+      const px = X(pp.x);
+      const py = Y(pp.z);
+      ctx.save();
+      ctx.translate(px, py);
+      ctx.rotate(yaw);
+      const cone = ctx.createRadialGradient(0, 0, 0, 0, 0, 42 * dpr);
+      cone.addColorStop(0, 'rgba(230,250,255,0.28)');
+      cone.addColorStop(1, 'rgba(230,250,255,0)');
+      ctx.fillStyle = cone;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.arc(0, 0, 42 * dpr, -Math.PI / 2 - 0.6, -Math.PI / 2 + 0.6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.moveTo(0, -6 * dpr);
+      ctx.lineTo(4.2 * dpr, 4.5 * dpr);
+      ctx.lineTo(0, 2.4 * dpr);
+      ctx.lineTo(-4.2 * dpr, 4.5 * dpr);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    };
+    raf = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(raf);
+  }, [game]);
+  const hostiles = useHud((s) => s.enemiesLeft);
+  const phase = useHud((s) => s.phase);
+  return (
+    <div className="radar panel-frame">
+      <div className="radar-head">
+        <span>TACTICAL MAP</span>
+        <span className={phase === 'combat' ? 'hot' : ''}>{phase === 'combat' ? `${hostiles} CONTACTS` : 'SECTOR CLEAR'}</span>
+      </div>
+      <div className="radar-body">
+        <canvas ref={ref} style={{ width: RADAR_PX, height: RADAR_PX }} />
+        <span className="north">N</span>
+        <div className="sweep" />
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- panels
+
+function fmtClock(s: number): string {
+  const m = Math.floor(s / 60);
+  return `${m}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+}
+
 function TopCenter() {
   const wave = useHud((s) => s.wave);
   const phase = useHud((s) => s.phase);
@@ -179,18 +455,28 @@ function TopCenter() {
   const left = useHud((s) => s.enemiesLeft);
   const reactor = useHud((s) => s.reactorHp / s.reactorMax);
   const hit = useHud((s) => s.reactorUnderAttack);
-  const phaseText = phase === 'prep' ? `PREPARATION · ${timer}s` : phase === 'combat' ? `${left} HOSTILES` : 'WAVE CLEARED';
+  const phaseText = phase === 'prep' ? 'PREPARATION' : phase === 'combat' ? 'ENGAGED' : 'SECURED';
+  const tone = reactor < 0.3 ? 'red' : reactor < 0.6 ? 'amber' : 'cyan';
   return (
-    <div className="top-center">
-      <div className="wave">
-        WAVE <b>{wave}</b>
-      </div>
-      <div className={`phase ${phase}`}>{phaseText}</div>
-      <div className={`reactor ${hit ? 'hit' : ''} ${reactor < 0.3 ? 'critical' : ''}`}>
-        <div className="label">
-          REACTOR <span>{Math.ceil(reactor * 100)}%</span>
+    <div className={`top-center ${hit ? 'hit' : ''} ${reactor < 0.3 ? 'critical' : ''}`}>
+      <div className="wave-row">
+        <div className="wave-tag">
+          <span>WAVE</span>
+          <b>{String(wave).padStart(2, '0')}</b>
         </div>
-        <Bar value={reactor} tone={reactor < 0.3 ? 'red' : reactor < 0.6 ? 'amber' : 'cyan'} />
+        <div className={`phase-pill ${phase}`}>
+          <i />
+          {phaseText}
+          <em>{phase === 'prep' ? fmtClock(timer) : phase === 'combat' ? `${left} HOSTILE${left === 1 ? '' : 'S'}` : '—'}</em>
+        </div>
+      </div>
+      <div className="reactor">
+        <div className="reactor-label">
+          <span>REACTOR INTEGRITY</span>
+          {hit && <span className="alert">▲ UNDER ATTACK</span>}
+          <b>{Math.ceil(reactor * 100)}%</b>
+        </div>
+        <SegBar value={reactor} tone={tone} segments={30} className="big" />
       </div>
     </div>
   );
@@ -199,26 +485,35 @@ function TopCenter() {
 function Cores() {
   const cores = useHud((s) => s.cores);
   const [gains, setGains] = useState<{ id: number; v: number }[]>([]);
+  const [bump, setBump] = useState(0);
   useEffect(() => {
     let id = 0;
     return uiEvents.on('coresGained', (v) => {
       const my = ++id;
+      setBump(my);
       setGains((g) => [...g.slice(-3), { id: my, v }]);
-      setTimeout(() => setGains((g) => g.filter((x) => x.id !== my)), 900);
+      setTimeout(() => setGains((g) => g.filter((x) => x.id !== my)), 1000);
     });
   }, []);
   return (
-    <div className="cores">
-      <div className="value">
-        <span className="gem">◆</span>
-        {Math.floor(cores)}
-      </div>
-      <div className="label">CORES</div>
-      {gains.map((g) => (
-        <div key={g.id} className="gain">
-          +{g.v}
+    <div className="cores panel-frame">
+      <svg className="gem" viewBox="0 0 24 24" width="26" height="26">
+        <path d="M12 2 L21 9 L12 22 L3 9 Z" />
+        <path d="M3 9 H21 M12 2 L8 9 L12 22 L16 9 Z" className="facet" />
+      </svg>
+      <div className="cores-text">
+        <div key={bump} className="value">
+          {Math.floor(cores)}
         </div>
-      ))}
+        <div className="label">CORES</div>
+      </div>
+      <div className="gains">
+        {gains.map((g) => (
+          <div key={g.id} className="gain">
+            +{g.v}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -229,19 +524,30 @@ function PlayerPanel() {
   const charges = useHud((s) => s.dashCharges);
   const dashMax = useHud((s) => s.dashMax);
   const rech = useHud((s) => s.dashRecharge);
+  const f = hp / max;
   return (
-    <div className="bottom-left">
-      <div className="label">
-        INTEGRITY <b>{Math.ceil(hp)}</b>
+    <div className={`bottom-left panel-frame ${f < 0.35 ? 'low' : ''}`}>
+      <div className="vitals">
+        <div className="hp-num">
+          <b>{Math.ceil(hp)}</b>
+          <span>/{Math.round(max)}</span>
+        </div>
+        <div className="vitals-right">
+          <div className="label">DRONE INTEGRITY</div>
+          <SegBar value={f} tone={f < 0.35 ? 'red' : 'white'} segments={10} className="big" />
+        </div>
       </div>
-      <Bar value={hp / max} tone={hp / max < 0.35 ? 'red' : 'white'} />
-      <div className="pips">
-        <span className="label">DASH</span>
-        {Array.from({ length: dashMax }, (_, i) => (
-          <span key={i} className={`pip ${i < charges ? 'full' : ''}`}>
-            {i === charges && <i style={{ transform: `scaleX(${rech})` }} />}
-          </span>
-        ))}
+      <div className="dash">
+        <span className="label">
+          DASH <Key k="SHIFT" />
+        </span>
+        <div className="chevrons">
+          {Array.from({ length: dashMax }, (_, i) => (
+            <span key={i} className={`chev ${i < charges ? 'full' : ''}`}>
+              {i === charges && <i style={{ transform: `scaleX(${rech})` }} />}
+            </span>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -260,33 +566,54 @@ function CenterPanel() {
   return (
     <div className="bottom-center">
       {build && (
-        <div className={`build-panel ${valid ? 'ok' : 'bad'}`}>
-          <div className="title">
-            SENTINEL TURRET <span className={cores >= cost ? 'cost' : 'cost bad'}>◆ {cost}</span>
+        <div className={`build-panel panel-frame ${valid ? 'ok' : 'bad'}`}>
+          <div className="bp-head">
+            <span className="bp-icon">◈</span>
+            <span className="bp-title">SENTINEL TURRET</span>
+            <span className={cores >= cost ? 'cost' : 'cost bad'}>◆ {cost}</span>
           </div>
-          <div className="status">{msg}</div>
+          <div className="status">
+            <i />
+            {msg}
+          </div>
           <div className="keys">
-            <b>LMB</b> place <b>RMB</b> cancel {active ? <>· rapid placement active</> : <><b>Q</b> tactical</>}
+            <Key k="LMB" /> place <Key k="RMB" /> cancel {active ? <span className="rapid">RAPID PLACEMENT</span> : <><Key k="Q" /> tactical</>}
           </div>
         </div>
       )}
       {!build && inspect && (
-        <div className="inspect-panel">
-          <div className="title">{inspect.name}</div>
-          <div className="row">
-            {inspect.kills} kills · {inspect.damage} damage
+        <div className="inspect-panel panel-frame">
+          <div className="bp-head">
+            <span className="bp-icon">◈</span>
+            <span className="bp-title">{inspect.name}</span>
+          </div>
+          <div className="stat-row">
+            <div>
+              <b>{inspect.kills}</b>
+              <span>KILLS</span>
+            </div>
+            <div>
+              <b>{inspect.damage}</b>
+              <span>DAMAGE</span>
+            </div>
+            <div>
+              <b>◆{inspect.refund}</b>
+              <span>REFUND</span>
+            </div>
           </div>
           <div className="keys">
-            Hold <b>X</b> to recycle (+◆{inspect.refund})
+            Hold <Key k="X" /> to recycle
           </div>
-          {inspect.recycle > 0 && <Bar value={inspect.recycle} tone="amber" />}
+          {inspect.recycle > 0 && <SegBar value={inspect.recycle} tone="amber" segments={12} />}
         </div>
       )}
       <div className={`tactical ${active ? 'active' : ''} ${tac < min && !active ? 'low' : ''}`}>
-        <div className="label">
-          TACTICAL <b>Q</b> {active ? '· TIME DILATED' : tac < min ? '· RECHARGING' : ''}
+        <div className="tac-label">
+          <Key k="Q" />
+          <span>TACTICAL</span>
+          <em>{active ? 'TIME DILATED' : tac < min ? 'RECHARGING' : 'READY'}</em>
         </div>
-        <Bar value={tac} tone="violet" marker={min} />
+        <SegBar value={tac} tone="violet" segments={24} marker={min} />
       </div>
     </div>
   );
@@ -299,15 +626,20 @@ function WeaponPanel() {
   const build = useHud((s) => s.buildMode);
   return (
     <div className={`bottom-right ${build ? 'stowed' : ''}`}>
-      <div className="weapon">{name}</div>
-      <Bar value={heat} tone={hot ? 'red' : heat > 0.7 ? 'amber' : 'heat'} />
-      <div className={`label ${hot ? 'warn' : ''}`}>{hot ? 'OVERHEATED · VENTING' : 'HEAT'}</div>
+      <div className="weapon-card panel-frame">
+        <div className="wc-head">
+          <span className="weapon">{name}</span>
+          <span className="ammo">∞</span>
+        </div>
+        <SegBar value={heat} tone={hot ? 'red' : heat > 0.7 ? 'amber' : 'heat'} segments={20} />
+        <div className={`label heat-label ${hot ? 'warn' : ''}`}>{hot ? 'OVERHEATED · VENTING' : `HEAT ${Math.round(heat * 100)}%`}</div>
+      </div>
       <div className="slots">
         <span className={!build ? 'on' : ''}>
-          <b>1</b> REPEATER
+          <Key k="1" /> REPEATER
         </span>
         <span className={build ? 'on' : ''}>
-          <b>2</b> SENTINEL
+          <Key k="2" /> SENTINEL
         </span>
       </div>
     </div>
@@ -322,7 +654,7 @@ function Banner() {
     const off = uiEvents.on('banner', (e) => {
       setB({ ...e, id: ++id });
       clearTimeout(timer);
-      timer = setTimeout(() => setB(null), 2600);
+      timer = setTimeout(() => setB(null), 3000);
     });
     return () => {
       off();
@@ -332,15 +664,24 @@ function Banner() {
   if (!b) return null;
   return (
     <div key={b.id} className={`banner ${b.tone}`}>
-      <div className="t">{b.title}</div>
+      <div className="rule" />
+      <div className="t" data-text={b.title}>
+        {b.title}
+      </div>
       {b.sub && <div className="s">{b.sub}</div>}
+      <div className="rule" />
     </div>
   );
 }
 
 function Hint() {
   const hint = useHud((s) => s.hint);
-  return hint ? <div className="hint">{hint}</div> : null;
+  return hint ? (
+    <div key={hint} className="hint">
+      <span className="hint-tag">INTEL</span>
+      {hint}
+    </div>
+  ) : null;
 }
 
 function Respawn() {
@@ -348,8 +689,13 @@ function Respawn() {
   if (t <= 0) return null;
   return (
     <div className="respawn">
-      DRONE DISABLED
-      <small>Rebooting in {t.toFixed(1)}s · turrets still active</small>
+      <div className="glitch" data-text="DRONE DISABLED">
+        DRONE DISABLED
+      </div>
+      <div className="reboot">
+        REBOOTING <b>{t.toFixed(1)}s</b>
+      </div>
+      <small>Turrets remain online</small>
     </div>
   );
 }

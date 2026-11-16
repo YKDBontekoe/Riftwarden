@@ -2,13 +2,9 @@ import {
   type AbstractMesh,
   Color3,
   Color4,
-  ColorCurves,
-  DefaultRenderingPipeline,
   DirectionalLight,
   type Engine,
   HavokPlugin,
-  HemisphericLight,
-  ImageProcessingConfiguration,
   Matrix,
   type PhysicsEngineV2,
   PhysicsRaycastResult,
@@ -31,6 +27,8 @@ import { Effects } from '../fx/Effects';
 import { Player } from '../player/Player';
 import { type HitKind, hudStore, type Screen, uiEvents } from '../ui/store';
 import { ArenaBuilder } from '../visuals/arena';
+import { Atmosphere } from '../visuals/atmosphere';
+import { PostFx } from '../visuals/postfx';
 import { Kit } from '../visuals/kit';
 import { createPalette, type Palette } from '../visuals/materials';
 import { buildReactor, type ReactorRig } from '../visuals/models';
@@ -63,7 +61,11 @@ export class Game {
   reactorHp: number = ECONOMY.reactorMaxHp;
   private reactorHitT = 0;
   private reactorSfxT = 0;
-  private pipeline: DefaultRenderingPipeline;
+  private post: PostFx;
+  private atmosphere: Atmosphere;
+  private moon: DirectionalLight;
+  private hurtFx = 0;
+  private lastFlash = 0;
   private animated: { node: { rotation: Vector3 }; spin: Vector3 }[] = [];
 
   /** Modifier list; future equipment and run upgrades push into this. */
@@ -90,38 +92,41 @@ export class Game {
   constructor(private engine: Engine, private canvas: HTMLCanvasElement, havok: unknown, public settings: Settings) {
     const scene = new Scene(engine);
     this.scene = scene;
-    scene.clearColor = new Color4(0.025, 0.035, 0.05, 1);
-    scene.ambientColor = new Color3(0.22, 0.24, 0.27);
-    scene.fogMode = Scene.FOGMODE_EXP2;
-    scene.fogDensity = 0.0065;
-    scene.fogColor = new Color3(0.03, 0.045, 0.065);
+    scene.clearColor = new Color4(0.02, 0.025, 0.035, 1);
+    scene.ambientColor = new Color3(0.04, 0.045, 0.05);
     scene.skipPointerMovePicking = true;
     scene.enablePhysics(new Vector3(0, -26, 0), new HavokPlugin(true, havok));
 
     this.input = new Input(canvas);
     this.pal = createPalette(scene);
     this.kit = new Kit(scene);
+    const high = settings.quality === 'high';
 
-    // Lighting: cool sky fill, warm key light, cyan reactor glow.
-    const hemi = new HemisphericLight('hemi', new Vector3(0.2, 1, 0.1), scene);
-    hemi.intensity = 0.85;
-    hemi.diffuse = new Color3(0.82, 0.88, 1);
-    hemi.groundColor = new Color3(0.1, 0.12, 0.16);
-    hemi.specular = new Color3(0.2, 0.2, 0.22);
-    const sun = new DirectionalLight('sun', new Vector3(-0.45, -1, 0.35), scene);
-    sun.position = new Vector3(45, 90, -35);
-    sun.intensity = 1.55;
-    sun.diffuse = new Color3(1, 0.95, 0.88);
+    // Night-time storm: sky, haze, lamps, embers. PBR ambient comes from the captured environment.
+    this.atmosphere = new Atmosphere(scene, this.pal, ARENA);
+    this.atmosphere.setQuality(high);
+    scene.fogMode = Scene.FOGMODE_EXP2;
+    scene.fogDensity = 0.0078;
+    scene.fogColor = this.atmosphere.fogColor;
+
+    // Lighting: cold moonlight key through the storm, cyan reactor glow, orange rift light at the gates.
+    const moon = new DirectionalLight('moon', new Vector3(-0.45, -1, 0.35), scene);
+    moon.position = new Vector3(45, 90, -35);
+    moon.intensity = 1.5;
+    moon.diffuse = new Color3(0.62, 0.74, 1);
+    moon.specular = new Color3(0.7, 0.8, 1);
+    this.moon = moon;
     this.reactorLight = new PointLight('reactorLight', new Vector3(0, 5, 0), scene);
     this.reactorLight.diffuse = new Color3(0.3, 0.9, 1);
-    this.reactorLight.specular = new Color3(0.2, 0.6, 0.7);
-    this.reactorLight.intensity = 1.6;
-    this.reactorLight.range = 30;
+    this.reactorLight.specular = new Color3(0.3, 0.9, 1);
+    this.reactorLight.intensity = 2.2;
+    this.reactorLight.range = 34;
 
     // Arena
     const arena = new ArenaBuilder(scene, this.pal, ARENA);
     arena.build();
     this.animated.push(...arena.animated);
+    this.atmosphere.adoptPortals();
     this.reactor = buildReactor(scene, this.pal);
 
     this.player = new Player(scene, ARENA.playerSpawn);
@@ -130,15 +135,23 @@ export class Game {
     scene.setRenderingAutoClearDepthStencil(1, true, true, true);
 
     this.fx = new Effects(scene, this.kit, this.pal);
+    this.fx.onShake = (pos, strength) => {
+      const d = Vector3.Distance(pos, this.player.position);
+      const k = strength * Math.max(0, 1 - d / 38);
+      if (k <= 0.01) return;
+      this.player.addTrauma(k * 0.7);
+      this.post.kick(k * 0.8);
+    };
     // Shadows (high quality only); enemies & turrets register as casters via the kit.
-    if (settings.quality === 'high') {
-      const sg = new ShadowGenerator(2048, sun);
+    if (high) {
+      const sg = new ShadowGenerator(2048, moon);
       sg.usePercentageCloserFiltering = true;
-      sg.filteringQuality = ShadowGenerator.QUALITY_LOW;
+      sg.filteringQuality = ShadowGenerator.QUALITY_MEDIUM;
       sg.bias = 0.0015;
       sg.normalBias = 0.02;
-      sun.shadowMinZ = 1;
-      sun.shadowMaxZ = 220;
+      sg.darkness = 0.15;
+      moon.shadowMinZ = 1;
+      moon.shadowMaxZ = 220;
       for (const m of arena.shadowCasters) sg.addShadowCaster(m);
       for (const m of this.reactor.root.getChildMeshes()) sg.addShadowCaster(m);
       this.kit.shadowSink = (m) => sg.addShadowCaster(m);
@@ -147,19 +160,10 @@ export class Game {
     this.turrets = new TurretManager(scene, this.kit, this.pal);
     this.construction = new Construction(scene, this.kit, this.pal, ARENA);
 
-    // Post-processing: HDR bloom for emissive accents, ACES tone mapping, vignette.
-    this.pipeline = new DefaultRenderingPipeline('pipe', true, scene, [this.player.camera]);
-    this.applyQuality();
-    const ip = this.pipeline.imageProcessing;
-    ip.toneMappingEnabled = true;
-    ip.toneMappingType = ImageProcessingConfiguration.TONEMAPPING_ACES;
-    ip.exposure = 1.15;
-    ip.contrast = 1.18;
-    ip.vignetteEnabled = true;
-    ip.vignetteWeight = 1.6;
-    ip.vignetteColor = new Color4(0, 0.02, 0.04, 1);
-    ip.colorCurvesEnabled = true;
-    ip.colorCurves = new ColorCurves();
+    // Reflections/ambient: capture the finished static scene once into a prefiltered cube map.
+    this.atmosphere.captureEnvironment([...arena.meshes, ...this.reactor.root.getChildMeshes()], this.pal.lit);
+
+    this.post = new PostFx(scene, engine, this.player.camera, high);
 
     this.enemyCtx = {
       player: this.player,
@@ -195,6 +199,15 @@ export class Game {
       onPrepStart: () => {},
     });
 
+    this.player.onHurt = (amount, from) => {
+      let angle: number | null = null;
+      if (from) {
+        const pp = this.player.position;
+        angle = Math.atan2(from.x - pp.x, from.z - pp.z) - this.player.yaw;
+      }
+      uiEvents.emit('hurt', { severity: Math.min(1, amount / 30), angle });
+      this.post.kick(Math.min(0.6, amount / 40));
+    };
     this.input.onLockChange = (locked) => {
       if (!locked && this.screen === 'playing') this.setScreen('paused');
     };
@@ -207,6 +220,7 @@ export class Game {
 
   setScreen(s: Screen): void {
     this.screen = s;
+    this.weapon.setVisible(s !== 'menu' && s !== 'loading');
     hudStore.set({ screen: s });
   }
 
@@ -218,19 +232,6 @@ export class Game {
     this.player.baseFov = 2 * Math.atan(Math.tan(h / 2) / (16 / 9));
     sfx.setVolume(s.volume);
     saveSettings(s);
-  }
-
-  private applyQuality(): void {
-    const high = this.settings.quality === 'high';
-    const p = this.pipeline;
-    p.samples = high ? 4 : 1;
-    p.fxaaEnabled = !high;
-    p.bloomEnabled = true;
-    p.bloomThreshold = 0.85;
-    p.bloomWeight = high ? 0.55 : 0.4;
-    p.bloomKernel = high ? 64 : 32;
-    p.bloomScale = 0.5;
-    this.engine.setHardwareScalingLevel(high ? 1 / Math.min(window.devicePixelRatio, 1.5) : 1);
   }
 
   recomputeStats(): void {
@@ -298,14 +299,17 @@ export class Game {
   }
 
   private idleAnimate(dt: number): void {
+    const flash = this.updateSky(dt);
+    this.post.update(dt, 0, 0, flash);
+    this.updateReactor(dt, false);
     for (const a of this.animated) a.node.rotation.addInPlace(a.spin.scale(dt));
-    for (let i = 0; i < this.reactor.rings.length; i++) this.reactor.rings[i].rotation.y += dt * (0.4 + i * 0.3) * (i % 2 ? -1 : 1);
     if (this.screen === 'menu') {
-      // Slow cinematic orbit behind the menu
-      const t = performance.now() * 0.00005;
+      // Slow cinematic orbit behind the menu, low over the deck so reflections read.
+      const t = performance.now() * 0.00006;
+      const a = 2.45 + Math.sin(t) * 0.35;
       const cam = this.player.camera;
-      cam.position.set(Math.sin(t) * 30, 11, Math.cos(t) * 30 - 2);
-      cam.setTarget(new Vector3(0, 3, 0));
+      cam.position.set(Math.sin(a) * 21, 3.4 + Math.sin(t * 1.7) * 0.5, Math.cos(a) * 21);
+      cam.setTarget(new Vector3(-6, 5.5, 4));
       cam.fov = 0.9;
     }
   }
@@ -358,12 +362,13 @@ export class Game {
     this.turrets.update(dt, this.turretCtx);
     this.updateProjectiles(hdt);
     this.fx.update(dt);
-    this.updateReactor(dt);
+    this.updateReactor(dt, true);
 
-    // tactical look: desaturate + cool tint
+    // Atmosphere and grade: tactical desaturates/cools, damage punches the lens.
     const k = (1 - this.tactical.hostileScale) / (1 - TacticalEnergy.HOSTILE_SCALE);
-    const cc = this.pipeline.imageProcessing.colorCurves!;
-    cc.globalSaturation = -60 * k;
+    const flash = this.updateSky(dt);
+    this.hurtFx = Math.max(this.player.hurtFlash, this.player.alive ? 0 : 0.8);
+    this.post.update(dt, k, this.hurtFx, flash);
 
     for (const a of this.animated) a.node.rotation.addInPlace(a.spin.scale(hdt));
 
@@ -377,6 +382,15 @@ export class Game {
       this.hudT = 1 / 20;
       this.publishHud();
     }
+  }
+
+  /** Storm: sky lightning brightens the moonlight and rolls thunder. */
+  private updateSky(dt: number): number {
+    const flash = this.atmosphere.update(dt, this.player.camera.position);
+    if (flash > 0.9 && this.lastFlash < 0.5) sfx.thunder(0.4 + Math.random() * 1.2);
+    this.lastFlash = flash;
+    this.moon.intensity = 1.5 + flash * 1.6;
+    return flash;
   }
 
   togglePerf(on = !this.perfOn): void {
@@ -478,7 +492,7 @@ export class Game {
       this.damageEnemy('player', meta.enemy, r.damage, point, weak);
     } else {
       const n = first.getNormal(true, true) ?? Vector3.Up();
-      this.fx.burst('impact', point.add(n.scale(0.05)), 6, n);
+      this.fx.impact(point.add(n.scale(0.03)), n);
     }
     return { point };
   };
@@ -532,10 +546,9 @@ export class Game {
     this.tactical.deactivate();
     this.setBuildMode(false);
     const c = new Vector3(0, 4, 0);
-    this.fx.burst('explosion', c, 200, undefined, 4);
-    this.fx.burst('smoke', c, 60, undefined, 3);
-    this.fx.debrisBurst(c, 30, 14, 2);
-    this.fx.flashLight(c, 12, 1.5, new Color3(0.4, 0.9, 1));
+    this.fx.explode(c, { scale: 4, color: new Color3(0.6, 1.6, 2.2), debris: 30 });
+    this.fx.burst('explosion', c, 160, undefined, 3);
+    this.fx.flashLight(c, 14, 1.8, new Color3(0.4, 0.9, 1));
     sfx.play('explosion', { volume: 1, pitch: 0.5 });
     hudStore.set({ stats: { kills: this.kills, time: this.runTime, wave: this.waves.number, coresEarned: this.wallet.earned, turretsBuilt: this.turretsBuilt } });
   }
@@ -551,8 +564,7 @@ export class Game {
       const next = TMP.copyFrom(p.vel).scaleInPlace(hdt).addInPlace(p.pos);
       // Player (segment vs sphere)
       if (player.alive && segmentSphere(p.pos, next, pc, 0.8)) {
-        player.damage(p.damage);
-        uiEvents.emit('hurt', p.damage / 30);
+        player.damage(p.damage, p.pos.subtract(p.vel));
         this.fx.burst('enemySpark', next, 10);
         this.fx.killProjectile(p);
         continue;
@@ -572,11 +584,12 @@ export class Game {
     }
   }
 
-  private updateReactor(dt: number): void {
+  private updateReactor(dt: number, live: boolean): void {
     this.reactorHitT = Math.max(0, this.reactorHitT - dt * 2.5);
     this.reactorSfxT -= dt;
-    const f = this.reactorHp / ECONOMY.reactorMaxHp;
+    const f = live ? this.reactorHp / ECONOMY.reactorMaxHp : 1;
     for (let i = 0; i < this.reactor.rings.length; i++) this.reactor.rings[i].rotation.y += dt * (0.4 + i * 0.3) * (i % 2 ? -1 : 1) * (0.5 + f);
+    this.reactor.update(dt, f);
     // Integrity colour: cyan -> amber -> red, flashing white-orange when struck.
     const danger = 1 - f;
     const flicker = f < 0.3 ? 0.75 + 0.25 * Math.sin(performance.now() * 0.02) : 1;
@@ -588,7 +601,7 @@ export class Game {
       (2.4 - danger * 2.3) * flicker,
     );
     this.reactorLight.diffuse.set(0.3 + danger * 0.7, 0.9 - danger * 0.5, 1 - danger * 0.8);
-    this.reactorLight.intensity = (1.6 + h * 1.5) * flicker;
+    this.reactorLight.intensity = (2.2 + h * 2 + Math.sin(performance.now() * 0.004) * 0.15) * flicker;
     this.reactor.beamMat.alpha = 0.18 + 0.2 * f;
   }
 
@@ -695,6 +708,16 @@ export class Game {
       advance: (seconds: number) => {
         const n = Math.round(seconds * 60);
         for (let i = 0; i < n; i++) this.step(1 / 60);
+      },
+      /** Stop the free-running render loop (screenshots in slow software GL). */
+      stopLoop: () => {
+        this.engine.stopRenderLoop();
+        // Particles/animations advance a fixed 1/60 s per rendered frame (deterministic captures).
+        this.scene.useConstantAnimationDeltaTime = true;
+      },
+      /** Render `frames` frames without advancing the simulation. */
+      render: (frames = 1) => {
+        for (let i = 0; i < frames; i++) this.scene.render();
       },
       look: (yaw: number, pitch: number) => {
         this.player.yaw = yaw;
