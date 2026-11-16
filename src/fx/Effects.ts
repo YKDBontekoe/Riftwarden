@@ -82,7 +82,7 @@ const BURSTS: Record<BurstKind, BurstConfig> = {
   flash: { tex: 'star', capacity: 8, colors: [[0, c4(6, 4.4, 3, 1)], [1, c4(2, 0.6, 0.1, 0)]], minSize: 3, maxSize: 4.2, minLife: 0.07, maxLife: 0.13, minPower: 0, maxPower: 0, gravity: 0, blend: ADD, spread: 0, spin: 0 },
   fire: {
     tex: 'smoke', capacity: 120,
-    colors: [[0, c4(5, 3.4, 1.8, 1)], [0.15, c4(4, 1.5, 0.35, 1)], [0.5, c4(1.3, 0.28, 0.05, 0.75)], [1, c4(0, 0, 0, 0)]],
+    colors: [[0, c4(5, 3.4, 1.8, 1)], [0.15, c4(4, 1.6, 0.4, 1)], [0.4, c4(1.6, 0.55, 0.15, 0.7)], [0.7, c4(0.18, 0.12, 0.08, 0.35)], [1, c4(0, 0, 0, 0)]],
     sizes: [[0, 0.7], [0.25, 1.8], [1, 2.6]],
     minSize: 1, maxSize: 1, minLife: 0.35, maxLife: 0.85, minPower: 1.5, maxPower: 5.5, gravity: 2.2, blend: ADD, spread: 1, drag: 3.2, spin: 1.5, emitRadius: 0.35,
   },
