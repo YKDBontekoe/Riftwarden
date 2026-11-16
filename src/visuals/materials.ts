@@ -118,7 +118,7 @@ export function createPalette(scene: Scene): Palette {
   const wear = wearSet(scene);
 
   // Ground is a 120 m plane with 0..1 UVs: albedo/normal tile every 8 m, wetness every ~23 m.
-  const floor = pbr(scene, 'floor', { albedo: [0.92, 0.94, 0.97], metallic: 0.35, roughness: 1 });
+  const floor = pbr(scene, 'floor', { albedo: [1, 1, 1], metallic: 0.08, roughness: 1 });
   floor.albedoTexture = scaled(floorTex.albedo, 15);
   floor.bumpTexture = scaled(floorTex.normal, 15);
   floor.bumpTexture.level = 0.55;
@@ -162,6 +162,9 @@ export function createPalette(scene: Scene): Palette {
   const metal = pbr(scene, 'metal', { albedo: [0.82, 0.83, 0.86], metallic: 1, roughness: 0.32, set: wear, noAlbedo: true, bump: 0.1 });
   const enemyArmor = pbr(scene, 'enemyArmor', { albedo: [0.55, 0.22, 0.12], metallic: 0.35, roughness: 0.5, set: wear, bump: 0.15, clearCoat: 0.4 });
   const enemyDark = pbr(scene, 'enemyDark', { albedo: [0.07, 0.065, 0.07], metallic: 0.85, roughness: 0.38, set: wear, bump: 0.15 });
+
+  // Generous sky fill so shadowed areas stay readable (daylight bounce).
+  for (const m of [white, panel, graphite, metal, floor, enemyArmor, enemyDark]) m.environmentIntensity = 1.45;
 
   return {
     white,

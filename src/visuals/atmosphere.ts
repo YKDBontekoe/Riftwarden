@@ -223,7 +223,7 @@ export class Atmosphere {
   /** Golden-hour haze. */
   readonly fogColor = new Color3(0.6, 0.58, 0.56);
   /** Direction *towards* the sun (low, behind the south-east wall). */
-  readonly sunDir = new Vector3(0.48, 0.3, -0.82).normalize();
+  readonly sunDir = new Vector3(0.45, 0.52, -0.72).normalize();
 
   constructor(private scene: Scene, private P: Palette, private layout: ArenaLayout) {
     const sky = new ShaderMaterial('sky', scene, 'rwSky', {
