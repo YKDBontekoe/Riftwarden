@@ -118,7 +118,7 @@ export function createPalette(scene: Scene): Palette {
   const wear = wearSet(scene);
 
   // Ground is a 120 m plane with 0..1 UVs: albedo/normal tile every 8 m, wetness every ~23 m.
-  const floor = pbr(scene, 'floor', { albedo: [1, 1, 1], metallic: 0.1, roughness: 1 });
+  const floor = pbr(scene, 'floor', { albedo: [0.92, 0.94, 0.97], metallic: 0.35, roughness: 1 });
   floor.albedoTexture = scaled(floorTex.albedo, 15);
   floor.bumpTexture = scaled(floorTex.normal, 15);
   floor.bumpTexture.level = 0.55;
@@ -155,12 +155,13 @@ export function createPalette(scene: Scene): Palette {
   rift.disableLighting = true;
   rift.backFaceCulling = false;
 
-  const panel = pbr(scene, 'panel', { albedo: [0.75, 0.8, 0.88], metallic: 0.55, roughness: 1, set: wallTex, bump: 0.8 });
-  const white = pbr(scene, 'white', { albedo: [0.62, 0.64, 0.66], metallic: 0.15, roughness: 0.55, set: wear, noAlbedo: false, bump: 0.25, clearCoat: 0.5 });
-  const graphite = pbr(scene, 'graphite', { albedo: [0.05, 0.055, 0.065], metallic: 0.7, roughness: 0.6, set: wear, bump: 0.3 });
-  const metal = pbr(scene, 'metal', { albedo: [0.62, 0.64, 0.68], metallic: 1, roughness: 0.38, set: wear, noAlbedo: true, bump: 0.15 });
-  const enemyArmor = pbr(scene, 'enemyArmor', { albedo: [0.3, 0.27, 0.25], metallic: 0.65, roughness: 0.55, set: wear, bump: 0.3 });
-  const enemyDark = pbr(scene, 'enemyDark', { albedo: [0.035, 0.03, 0.03], metallic: 0.85, roughness: 0.42, set: wear, bump: 0.3 });
+  // Clean hard-surface set: off-white composite panels, dark gunmetal trims, bright machined metal.
+  const panel = pbr(scene, 'panel', { albedo: [0.86, 0.88, 0.9], metallic: 0.12, roughness: 1, set: wallTex, bump: 0.6, clearCoat: 0.3 });
+  const white = pbr(scene, 'white', { albedo: [0.88, 0.89, 0.9], metallic: 0.05, roughness: 0.45, set: wear, bump: 0.1, clearCoat: 0.7 });
+  const graphite = pbr(scene, 'graphite', { albedo: [0.13, 0.14, 0.16], metallic: 0.75, roughness: 0.5, set: wear, bump: 0.1 });
+  const metal = pbr(scene, 'metal', { albedo: [0.82, 0.83, 0.86], metallic: 1, roughness: 0.32, set: wear, noAlbedo: true, bump: 0.1 });
+  const enemyArmor = pbr(scene, 'enemyArmor', { albedo: [0.55, 0.22, 0.12], metallic: 0.35, roughness: 0.5, set: wear, bump: 0.15, clearCoat: 0.4 });
+  const enemyDark = pbr(scene, 'enemyDark', { albedo: [0.07, 0.065, 0.07], metallic: 0.85, roughness: 0.38, set: wear, bump: 0.15 });
 
   return {
     white,

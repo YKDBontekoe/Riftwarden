@@ -136,7 +136,7 @@ export function floorSet(scene: Scene): PbrSet {
   const d = img.data;
   const r = rng(7);
   const tint: number[] = [];
-  for (let i = 0; i < n * n; i++) tint.push(0.85 + r() * 0.3);
+  for (let i = 0; i < n * n; i++) tint.push(0.93 + r() * 0.12);
   for (let y = 0; y < S; y++) {
     for (let x = 0; x < S; x++) {
       const u = x / S;
@@ -148,14 +148,14 @@ export function floorSet(scene: Scene): PbrSet {
       const grain = fbm(u, v, 32, 4, 3);
       const blotch = fbm(u, v, 4, 3, 11);
       let h = 0.6 + (grain - 0.5) * 0.06;
-      let alb = (0.2 + (grain - 0.5) * 0.06 + (blotch - 0.5) * 0.08) * tint[panel];
+      let alb = (0.46 + (grain - 0.5) * 0.05 + (blotch - 0.5) * 0.05) * tint[panel];
       // seams: recessed groove with a bevel
       if (edge < 4) {
         h = 0.05 + edge * 0.08;
-        alb *= 0.35;
+        alb *= 0.3;
       } else if (edge < 10) {
         h = 0.6 - (10 - edge) * 0.015;
-        alb *= 1.15; // worn bevel edge catches light
+        alb *= 1.06;
       }
       // inner inset frame line
       const inner = Math.abs(edge - 46);
@@ -179,11 +179,11 @@ export function floorSet(scene: Scene): PbrSet {
       for (const [cx, cy] of [[22, 22], [P - 22, 22], [22, P - 22], [P - 22, P - 22]]) {
         const bx = i * P + cx;
         const by = j * P + cy;
-        a.fillStyle = '#3b4046';
+        a.fillStyle = '#6b7279';
         a.beginPath();
         a.arc(bx, by, 7, 0, Math.PI * 2);
         a.fill();
-        a.fillStyle = '#20242a';
+        a.fillStyle = '#3a4048';
         a.fillRect(bx - 4, by - 1, 8, 2);
         for (let yy = -8; yy <= 8; yy++)
           for (let xx = -8; xx <= 8; xx++) {
@@ -193,7 +193,7 @@ export function floorSet(scene: Scene): PbrSet {
       }
   // scuffs and tire-like streaks
   a.globalCompositeOperation = 'lighter';
-  for (let i = 0; i < 220; i++) {
+  for (let i = 0; i < 70; i++) {
     const x = r() * S;
     const y = r() * S;
     const ang = r() * Math.PI;
@@ -206,12 +206,12 @@ export function floorSet(scene: Scene): PbrSet {
     a.stroke();
   }
   a.globalCompositeOperation = 'multiply';
-  for (let i = 0; i < 14; i++) {
+  for (let i = 0; i < 5; i++) {
     const x = r() * S;
     const y = r() * S;
     const rad = 30 + r() * 110;
     const g = a.createRadialGradient(x, y, 0, x, y, rad);
-    g.addColorStop(0, 'rgba(60,58,56,0.55)');
+    g.addColorStop(0, 'rgba(150,148,146,0.35)');
     g.addColorStop(1, 'rgba(255,255,255,0)');
     a.fillStyle = g;
     a.fillRect(x - rad, y - rad, rad * 2, rad * 2);
@@ -229,7 +229,7 @@ export function floorSet(scene: Scene): PbrSet {
       const wet = fbm(u, v, 3, 5, 21);
       const micro = fbm(u, v, 48, 2, 5);
       const puddle = Math.min(1, Math.max(0, (wet - 0.5) * 6));
-      const rough = 0.42 + (micro - 0.5) * 0.25 - puddle * 0.36;
+      const rough = 0.34 + (micro - 0.5) * 0.14 - puddle * 0.28;
       ormPixel(oimg.data, (y * O + x) * 4, 1, rough, 1);
     }
   }
@@ -266,22 +266,22 @@ export function wallSet(scene: Scene): PbrSet {
       const streak = fbm(u * 1, v * 0.08, 24, 3, 9); // vertical streaks
       const grime = fbm(u, v, 8, 4, 2);
       let h = 0.6;
-      let alb = 0.2 + (grime - 0.5) * 0.06 - Math.max(0, streak - 0.5) * 0.18;
-      let rough = 0.48 + (grime - 0.5) * 0.3 + Math.max(0, streak - 0.55) * 0.5;
+      let alb = 0.7 + (grime - 0.5) * 0.04 - Math.max(0, streak - 0.55) * 0.08;
+      let rough = 0.42 + (grime - 0.5) * 0.12 + Math.max(0, streak - 0.6) * 0.2;
       if (edge < 3) {
         h = 0.1;
-        alb *= 0.3;
-        rough = 0.8;
+        alb *= 0.35;
+        rough = 0.7;
       } else if (edge < 7) {
         h = 0.62;
-        alb *= 1.25;
-        rough -= 0.12;
+        rough -= 0.1;
       }
       // horizontal stiffener ribs
       const rib = Math.abs(py - PH * 0.5);
       if (rib < 6) {
         h = 0.75 - rib * 0.02;
-        alb *= 0.85;
+        alb *= 0.55; // dark accent band
+        rough = 0.3;
       }
       // vent slots on lower panels
       if (Math.floor(y / PH) === 1 && px > PW * 0.2 && px < PW * 0.8 && py > PH * 0.62 && py < PH * 0.86 && py % 12 < 5) {
@@ -301,7 +301,7 @@ export function wallSet(scene: Scene): PbrSet {
   a.putImageData(img, 0, 0);
   o.putImageData(oimg, 0, 0);
   // rivets
-  a.fillStyle = 'rgba(30,34,40,0.9)';
+  a.fillStyle = 'rgba(90,96,104,0.9)';
   for (let cx = 0; cx < cols; cx++)
     for (let cy = 0; cy < rows; cy++)
       for (let k = 0; k < 8; k++) {
@@ -335,19 +335,19 @@ export function wearSet(scene: Scene): PbrSet {
       const v = y / S;
       const g = fbm(u, v, 6, 5, 31);
       const speck = vnoise(u * 96, v * 96, 96, 4);
-      const alb = 0.86 + (g - 0.5) * 0.25 - (speck > 0.86 ? 0.25 : 0);
+      const alb = 0.95 + (g - 0.5) * 0.08 - (speck > 0.9 ? 0.06 : 0);
       const i = (y * S + x) * 4;
       img.data[i] = img.data[i + 1] = img.data[i + 2] = Math.min(1, alb) * 255;
       img.data[i + 3] = 255;
-      ormPixel(oimg.data, i, 1, 0.75 + (g - 0.5) * 0.6 + (speck > 0.86 ? 0.2 : 0), 1);
-      height[y * S + x] = g * 0.5 + (speck > 0.86 ? -0.1 : 0);
+      ormPixel(oimg.data, i, 1, 0.8 + (g - 0.5) * 0.3, 1);
+      height[y * S + x] = g * 0.15;
     }
   }
   a.putImageData(img, 0, 0);
   o.putImageData(oimg, 0, 0);
   const r = rng(99);
   o.globalCompositeOperation = 'source-over';
-  for (let i = 0; i < 90; i++) {
+  for (let i = 0; i < 25; i++) {
     const x = r() * S;
     const y = r() * S;
     const ang = r() * Math.PI;

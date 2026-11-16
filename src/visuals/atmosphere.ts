@@ -52,45 +52,49 @@ varying vec3 vDir;
 uniform float time;
 uniform float flash;
 uniform vec3 riftDir;
+uniform vec3 sunDir;
 uniform vec3 horizonColor;
 ${NOISE_GLSL}
 void main(){
   vec3 d = normalize(vDir);
   float h = d.y;
-  vec3 zenith = vec3(0.003, 0.005, 0.011);
-  vec3 col = mix(horizonColor, zenith, smoothstep(-0.02, 0.6, h));
-  col = mix(col, horizonColor * 0.6, smoothstep(0.0, -0.25, h));
+  float sd = max(dot(d, normalize(sunDir)), 0.0);
 
-  // Storm clouds projected on a dome.
-  vec2 uv = d.xz / max(h + 0.15, 0.06);
-  float t = time * 0.012;
-  float c1 = fbm3(vec3(uv * 0.55 + vec2(t, t * 0.35), t * 0.6));
-  float c2 = fbm3(vec3(uv * 1.9 - vec2(t * 1.6, 0.0), 3.0 + t));
-  float clouds = smoothstep(0.42, 0.82, c1 * 0.78 + c2 * 0.34);
-  float cloudAmt = clouds * smoothstep(-0.04, 0.14, h);
+  // Rayleigh-ish gradient: deep blue zenith, warm hazy horizon, brighter toward the sun.
+  vec3 zenith = vec3(0.10, 0.24, 0.55);
+  float t = pow(1.0 - clamp(h, 0.0, 1.0), 5.0);
+  vec3 col = mix(zenith, horizonColor * 1.25, t);
+  col += vec3(1.1, 0.55, 0.22) * pow(sd, 5.0) * 0.75 * (0.35 + t);
+  col = mix(col, horizonColor * 0.9, smoothstep(0.0, -0.25, h));
 
-  // The rift: a jagged burning tear along a great-circle arc.
+  // Clouds on a dome, lit by the low sun (silver lining when backlit).
+  vec2 uv = d.xz / max(h + 0.14, 0.06);
+  float tt = time * 0.006;
+  float c1 = fbm3(vec3(uv * 0.45 + vec2(tt, tt * 0.4), tt));
+  float c2 = fbm3(vec3(uv * 1.6 - vec2(tt * 1.4, 0.0), 2.0 + tt));
+  float dens = smoothstep(0.48, 0.82, c1 * 0.8 + c2 * 0.32);
+  float cover = dens * smoothstep(-0.02, 0.18, h);
+  vec3 shade = mix(vec3(0.42, 0.45, 0.55), vec3(1.0, 0.92, 0.82), 0.45 + 0.55 * c2);
+  vec3 lit = shade + vec3(1.6, 1.0, 0.55) * pow(sd, 4.0) * (1.0 - dens) * 1.4;
+  col = mix(col, lit, cover * 0.9);
+
+  // Sun disc and bloom halo.
+  col += vec3(40.0, 32.0, 22.0) * smoothstep(0.99955, 0.99985, sd) * (1.0 - cover * 0.8);
+  col += vec3(1.8, 1.3, 0.8) * pow(sd, 90.0) + vec3(0.5, 0.32, 0.15) * pow(sd, 10.0) * 0.6;
+
+  // The rift: a thin burning tear high in the sky away from the sun.
   vec3 rd = normalize(riftDir);
   vec3 n = normalize(cross(rd, normalize(vec3(0.35, 1.0, 0.1))));
   float along = dot(d, rd);
-  float distort = (fbm3(d * 5.0 + vec3(0.0, t * 3.0, 0.0)) - 0.5) * 0.11 + (vnoise3(d * 40.0) - 0.5) * 0.008;
+  float distort = (fbm3(d * 5.0 + vec3(0.0, time * 0.03, 0.0)) - 0.5) * 0.1;
   float w = abs(dot(d, n) + distort);
-  float mask = smoothstep(-0.15, 0.55, along) * smoothstep(-0.12, 0.08, h);
-  float core = exp(-w * w * 14000.0) * mask;
-  float inner = exp(-w * w * 900.0) * mask;
-  float glowR = exp(-w * w * 120.0) * mask;
-  float halo = exp(-w * w * 14.0) * mask;
+  float mask = smoothstep(0.2, 0.75, along) * smoothstep(0.05, 0.3, h);
+  float core = exp(-w * w * 16000.0) * mask;
+  float glowR = exp(-w * w * 500.0) * mask;
   float pulse = 0.85 + 0.15 * sin(time * 1.3 + along * 9.0);
-  vec3 rift = vec3(5.0, 2.2, 1.0) * core * 3.0 + vec3(3.0, 0.7, 0.12) * inner * 1.4 * pulse + vec3(0.9, 0.15, 0.05) * glowR + vec3(0.12, 0.02, 0.035) * halo;
+  col += (vec3(6.0, 2.6, 1.2) * core * 2.5 + vec3(1.6, 0.35, 0.25) * glowR * 0.6) * pulse * (1.0 + flash * 2.0);
+  col += vec3(1.0, 0.5, 0.45) * flash * glowR * cover;
 
-  vec3 cloudLit = mix(vec3(0.016, 0.022, 0.032), vec3(0.34, 0.085, 0.05), clamp(halo * 1.8 + glowR, 0.0, 1.0));
-  cloudLit += vec3(0.03, 0.05, 0.065) * smoothstep(0.35, 0.0, h);
-  cloudLit += vec3(1.2, 0.55, 0.45) * flash * (halo + 0.25) * (0.5 + c2);
-  col = mix(col + rift, cloudLit + rift * 0.2, cloudAmt * 0.88);
-
-  float s = pow(hash13(floor(d * 700.0)), 70.0) * smoothstep(0.05, 0.45, h) * (1.0 - cloudAmt);
-  col += vec3(s) * 2.0;
-  col += vec3(0.09, 0.06, 0.045) * exp(-abs(h) * 22.0); // sodium glow of the city at the horizon
   gl_FragColor = vec4(col, 1.0);
 }`;
 
@@ -216,17 +220,21 @@ export class Atmosphere {
   readonly gateLights: PointLight[] = [];
   /** Static meshes that should appear in environment reflections. */
   readonly envMeshes: AbstractMesh[] = [];
-  readonly fogColor = new Color3(0.04, 0.05, 0.064);
+  /** Golden-hour haze. */
+  readonly fogColor = new Color3(0.6, 0.58, 0.56);
+  /** Direction *towards* the sun (low, behind the south-east wall). */
+  readonly sunDir = new Vector3(0.48, 0.3, -0.82).normalize();
 
   constructor(private scene: Scene, private P: Palette, private layout: ArenaLayout) {
     const sky = new ShaderMaterial('sky', scene, 'rwSky', {
       attributes: ['position'],
-      uniforms: ['worldViewProjection', 'time', 'flash', 'riftDir', 'horizonColor'],
+      uniforms: ['worldViewProjection', 'time', 'flash', 'riftDir', 'sunDir', 'horizonColor'],
     });
     sky.backFaceCulling = false;
     sky.disableDepthWrite = true;
-    sky.setVector3('riftDir', new Vector3(0.35, 0.42, 1).normalize());
-    sky.setColor3('horizonColor', this.fogColor.scale(1.05));
+    sky.setVector3('riftDir', new Vector3(-0.25, 0.6, 1).normalize());
+    sky.setVector3('sunDir', this.sunDir);
+    sky.setColor3('horizonColor', new Color3(0.86, 0.72, 0.58));
     sky.setFloat('time', 0);
     sky.setFloat('flash', 0);
     this.sky = sky;
@@ -309,11 +317,12 @@ export class Atmosphere {
     city.name = 'skyline';
     boxProjectUVs(city, 26);
     const mat = new PBRMaterial('skylineMat', this.scene);
-    mat.albedoColor = new Color3(0.02, 0.022, 0.028);
-    mat.metallic = 0.3;
-    mat.roughness = 0.7;
+    // Daylight towers: glassy facades that pick up sky and sun, faint interior lights.
+    mat.albedoColor = new Color3(0.32, 0.36, 0.42);
+    mat.metallic = 0.55;
+    mat.roughness = 0.32;
     mat.emissiveTexture = windowsTexture(this.scene);
-    mat.emissiveColor = new Color3(2.2, 1.9, 1.7);
+    mat.emissiveColor = new Color3(0.35, 0.3, 0.26);
     mat.usePhysicalLightFalloff = false;
     city.material = mat;
     city.isPickable = false;
@@ -352,11 +361,12 @@ export class Atmosphere {
     beam.isPickable = false;
     beam.applyFog = false;
     beam.name = 'lampBeams';
+    beam.setEnabled(false); // light shafts only read at night
     const housing = Mesh.MergeMeshes(housings, true, true)!;
     housing.material = this.P.graphite;
     housing.isPickable = false;
     const lens = Mesh.MergeMeshes(lenses, true, true)!;
-    lens.material = unlit(this.scene, 'lampLens', [6, 5.2, 4]);
+    lens.material = unlit(this.scene, 'lampLens', [2.2, 2.0, 1.7]);
     lens.isPickable = false;
     // Fake light pools on the deck: additive soft discs.
     const flare = flareSprite(this.scene);
@@ -364,6 +374,7 @@ export class Atmosphere {
     const pool = Mesh.MergeMeshes(pools, true, true)!;
     pool.material = poolMat;
     pool.isPickable = false;
+    pool.setEnabled(false);
     for (const m of [beam, housing, lens, pool]) m.freezeWorldMatrix();
     this.envMeshes.push(housing, lens);
   }
@@ -401,12 +412,13 @@ export class Atmosphere {
     hs.material = this.P.graphite;
     hs.isPickable = false;
     const ln = Mesh.MergeMeshes(lenses, true, true)!;
-    ln.material = unlit(this.scene, 'sconceLens', [5, 3.6, 2.2]);
+    ln.material = unlit(this.scene, 'sconceLens', [2.6, 2.1, 1.5]);
     ln.isPickable = false;
     const sp = Mesh.MergeMeshes(splashes, true, true)!;
     const cone = splashTexture(this.scene);
     sp.material = unlit(this.scene, 'sconceSplash', [0.5, 0.36, 0.22], { tex: cone, opacity: cone, additive: true, zOffset: -2 });
     sp.isPickable = false;
+    sp.setEnabled(false); // splashes only read at night
     for (const m of [hs, ln, sp]) m.freezeWorldMatrix();
     this.envMeshes.push(hs, ln);
   }
@@ -464,8 +476,8 @@ export class Atmosphere {
     ps.emitRate = 55;
     ps.gravity = new Vector3(0, -0.02, 0);
     ps.addColorGradient(0, new Color4(0, 0, 0, 0));
-    ps.addColorGradient(0.2, new Color4(0.55, 0.55, 0.6, 0.45));
-    ps.addColorGradient(0.8, new Color4(0.5, 0.5, 0.55, 0.4));
+    ps.addColorGradient(0.2, new Color4(0.9, 0.8, 0.62, 0.35));
+    ps.addColorGradient(0.8, new Color4(0.85, 0.76, 0.6, 0.3));
     ps.addColorGradient(1, new Color4(0, 0, 0, 0));
     ps.blendMode = ParticleSystem.BLENDMODE_ADD;
     ps.preWarmCycles = 120;
@@ -507,7 +519,7 @@ export class Atmosphere {
     this.nextFlash -= dt;
     if (this.nextFlash <= 0) {
       this.flash = 1;
-      this.nextFlash = 5 + Math.random() * 12;
+      this.nextFlash = 9 + Math.random() * 16;
     }
     // double-strike flicker
     const f = this.flash;
@@ -520,7 +532,7 @@ export class Atmosphere {
     (this.dust.emitter as Vector3).copyFrom(camPos);
     for (let i = 0; i < this.gateLights.length; i++) {
       const l = this.gateLights[i];
-      l.intensity = 1.5 + 0.35 * Math.sin(this.time * 7.3 + i * 2) * Math.sin(this.time * 3.1 + i) + flick * 0.6;
+      l.intensity = 2.0 + 0.4 * Math.sin(this.time * 7.3 + i * 2) * Math.sin(this.time * 3.1 + i) + flick * 0.6;
     }
     return flick;
   }
@@ -530,8 +542,8 @@ export class Atmosphere {
   }
 
   setQuality(high: boolean): void {
-    this.dust.emitRate = high ? 55 : 20;
-    this.embers.emitRate = high ? 26 : 10;
+    this.dust.emitRate = high ? 45 : 18;
+    this.embers.emitRate = high ? 8 : 3;
   }
 
   /**

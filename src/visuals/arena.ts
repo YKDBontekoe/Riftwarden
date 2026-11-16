@@ -15,6 +15,7 @@ import type { ArenaLayout, Box, Ramp, Vec2 } from '../world/layout';
 import { PHYS_ENV } from '../world/physicsGroups';
 import type { Palette } from './materials';
 import { boxProjectUVs } from './uv';
+import { createBeveledBox } from './bevel';
 
 /**
  * Builds the research facility from layout data:
@@ -45,7 +46,12 @@ export class ArenaBuilder {
   }
 
   private box(x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, mat: Material, surface: string | null): Mesh {
-    const m = MeshBuilder.CreateBox('b', { width: x1 - x0, height: y1 - y0, depth: z1 - z0 }, this.scene);
+    const w = x1 - x0;
+    const h = y1 - y0;
+    const d = z1 - z0;
+    // Chamfered edges catch highlights; thin trims get proportionally small bevels.
+    const bevel = Math.min(0.09, Math.min(w, h, d) * 0.22);
+    const m = createBeveledBox('b', w, h, d, bevel, this.scene);
     m.position.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
     this.add(m, mat, surface);
     return m;
@@ -338,7 +344,7 @@ export class ArenaBuilder {
       this.meshes.push(merged);
       merged.isPickable = g.surface !== null;
       merged.metadata = g.surface ? { surface: g.surface } : null;
-      merged.receiveShadows = g.surface === 'platform' || g.surface === 'ramp';
+      merged.receiveShadows = g.surface !== null;
       merged.freezeWorldMatrix();
       merged.doNotSyncBoundingInfo = true;
       if (g.surface === 'wall' || g.surface === 'platform') this.shadowCasters.push(merged);

@@ -23,15 +23,15 @@ export class PostFx {
   private ssao: SSAO2RenderingPipeline | null = null;
   private ssr: SSRRenderingPipeline | null = null;
   private aberration = 0;
-  private baseExposure = 1.2;
+  private baseExposure = 0.95;
 
   constructor(scene: Scene, private engine: Engine, camera: Camera, high: boolean) {
     const supportsGBuffer = engine.getCaps().drawBuffersExtension && engine.webGLVersion >= 2;
     if (high && supportsGBuffer) {
       try {
         const ssao = new SSAO2RenderingPipeline('ssao', scene, { ssaoRatio: 0.5, blurRatio: 1 }, [camera], true, Constants.TEXTURETYPE_HALF_FLOAT);
-        ssao.radius = 1.6;
-        ssao.totalStrength = 1.25;
+        ssao.radius = 1.4;
+        ssao.totalStrength = 1.4;
         ssao.base = 0.12;
         ssao.samples = 12;
         ssao.maxZ = 120;
@@ -75,39 +75,39 @@ export class PostFx {
     p.samples = high ? 4 : 1;
     p.fxaaEnabled = !high;
     p.bloomEnabled = true;
-    p.bloomThreshold = 0.75;
-    p.bloomWeight = high ? 0.62 : 0.45;
+    p.bloomThreshold = 1.0;
+    p.bloomWeight = high ? 0.32 : 0.25;
     p.bloomKernel = high ? 96 : 48;
     p.bloomScale = 0.5;
     p.sharpenEnabled = high;
-    p.sharpen.edgeAmount = 0.22;
+    p.sharpen.edgeAmount = 0.15;
     p.chromaticAberrationEnabled = true;
-    p.chromaticAberration.aberrationAmount = 6;
+    p.chromaticAberration.aberrationAmount = 1;
     p.chromaticAberration.radialIntensity = 1.2;
     p.grainEnabled = true;
-    p.grain.intensity = 7;
+    p.grain.intensity = 2.5;
     p.grain.animated = true;
 
     const ip = p.imageProcessing;
     ip.toneMappingEnabled = true;
     ip.toneMappingType = ImageProcessingConfiguration.TONEMAPPING_ACES;
     ip.exposure = this.baseExposure;
-    ip.contrast = 1.32;
+    ip.contrast = 1.12;
     ip.vignetteEnabled = true;
-    ip.vignetteWeight = 2.2;
+    ip.vignetteWeight = 1.1;
     ip.vignetteStretch = 0.4;
     ip.vignetteColor = new Color4(0.0, 0.01, 0.02, 1);
     ip.vignetteCameraFov = 0.8;
     ip.colorCurvesEnabled = true;
     const cc = new ColorCurves();
     // Teal shadows, warm highlights: classic sci-fi grade.
-    cc.shadowsHue = 195;
-    cc.shadowsDensity = 35;
-    cc.shadowsSaturation = 25;
-    cc.highlightsHue = 30;
-    cc.highlightsDensity = 22;
-    cc.highlightsSaturation = 15;
-    cc.globalSaturation = 8;
+    cc.shadowsHue = 205;
+    cc.shadowsDensity = 14;
+    cc.shadowsSaturation = 10;
+    cc.highlightsHue = 35;
+    cc.highlightsDensity = 10;
+    cc.highlightsSaturation = 8;
+    cc.globalSaturation = 10;
     ip.colorCurves = cc;
 
     engine.setHardwareScalingLevel(high ? 1 / Math.min(window.devicePixelRatio, 1.5) : 1);
@@ -127,12 +127,12 @@ export class PostFx {
     this.aberration = Math.max(0, this.aberration - dt * 2.5);
     const p = this.pipeline;
     const cc = p.imageProcessing.colorCurves!;
-    cc.globalSaturation = 8 - 70 * tactical - 20 * hurt;
+    cc.globalSaturation = 10 - 70 * tactical - 20 * hurt;
     cc.globalHue = 220;
     cc.globalDensity = 18 * tactical;
-    p.chromaticAberration.aberrationAmount = 5 + 40 * this.aberration + 7 * tactical + 18 * hurt;
-    p.imageProcessing.exposure = this.baseExposure + lightning * 0.12;
-    p.grain.intensity = 7 + tactical * 8;
+    p.chromaticAberration.aberrationAmount = 1 + 30 * this.aberration + 6 * tactical + 14 * hurt;
+    p.imageProcessing.exposure = this.baseExposure + lightning * 0.05;
+    p.grain.intensity = 2.5 + tactical * 6;
     void this.engine;
   }
 

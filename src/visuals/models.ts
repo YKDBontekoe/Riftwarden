@@ -9,6 +9,7 @@ import {
 } from '@babylonjs/core';
 import type { Kit } from './kit';
 import { type Palette, unlit } from './materials';
+import { createBeveledBox } from './bevel';
 import { canvas, fbm, flareSprite, toTexture } from './textures';
 
 export interface WalkerRig {
@@ -251,11 +252,11 @@ export function buildReactor(scene: Scene, P: Palette): ReactorRig {
     const pyl = new TransformNode('pylon', scene);
     pyl.parent = root;
     pyl.rotation.y = a;
-    const p1 = mk(MeshBuilder.CreateBox('py1', { width: 0.6, height: 5.5, depth: 0.9 }, scene), P.white);
+    const p1 = mk(createBeveledBox('py1', 0.6, 5.5, 0.9, 0.06, scene), P.white);
     p1.parent = pyl;
     p1.position.set(0, 3.4, 3.1);
     p1.rotation.x = -0.18;
-    const p2 = mk(MeshBuilder.CreateBox('py2', { width: 0.5, height: 0.5, depth: 2.4 }, scene), P.graphite);
+    const p2 = mk(createBeveledBox('py2', 0.5, 0.5, 2.4, 0.05, scene), P.graphite);
     p2.parent = pyl;
     p2.position.set(0, 6.3, 2.0);
     const strip = mk(MeshBuilder.CreateBox('pyS', { width: 0.12, height: 4.5, depth: 0.05 }, scene), P.cyanGlow, false);

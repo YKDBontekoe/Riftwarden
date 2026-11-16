@@ -8,6 +8,7 @@ import {
   Matrix,
   type PhysicsEngineV2,
   PhysicsRaycastResult,
+  CascadedShadowGenerator,
   PointLight,
   Ray,
   Scene,
@@ -40,6 +41,8 @@ import { type Settings, saveSettings } from './settings';
 import { TacticalEnergy, Wallet } from './tactical';
 
 const TMP = new Vector3();
+/** Sun intensity (directional, range-free). */
+const SUN = 3.4;
 const TMP2 = new Vector3();
 
 export class Game {
@@ -92,7 +95,7 @@ export class Game {
   constructor(private engine: Engine, private canvas: HTMLCanvasElement, havok: unknown, public settings: Settings) {
     const scene = new Scene(engine);
     this.scene = scene;
-    scene.clearColor = new Color4(0.02, 0.025, 0.035, 1);
+    scene.clearColor = new Color4(0.55, 0.55, 0.56, 1);
     scene.ambientColor = new Color3(0.04, 0.045, 0.05);
     scene.skipPointerMovePicking = true;
     scene.enablePhysics(new Vector3(0, -26, 0), new HavokPlugin(true, havok));
@@ -106,21 +109,21 @@ export class Game {
     this.atmosphere = new Atmosphere(scene, this.pal, ARENA);
     this.atmosphere.setQuality(high);
     scene.fogMode = Scene.FOGMODE_EXP2;
-    scene.fogDensity = 0.0078;
+    scene.fogDensity = 0.0042;
     scene.fogColor = this.atmosphere.fogColor;
 
-    // Lighting: cold moonlight key through the storm, cyan reactor glow, orange rift light at the gates.
-    const moon = new DirectionalLight('moon', new Vector3(-0.45, -1, 0.35), scene);
-    moon.position = new Vector3(45, 90, -35);
-    moon.intensity = 1.5;
-    moon.diffuse = new Color3(0.62, 0.74, 1);
-    moon.specular = new Color3(0.7, 0.8, 1);
+    // Lighting: low golden-hour sun (key), sky IBL (fill), cyan reactor glow, orange rift light at the gates.
+    const moon = new DirectionalLight('sun', this.atmosphere.sunDir.scale(-1), scene);
+    moon.position = this.atmosphere.sunDir.scale(120);
+    moon.intensity = SUN;
+    moon.diffuse = new Color3(1, 0.84, 0.66);
+    moon.specular = new Color3(1, 0.9, 0.75);
     this.moon = moon;
     this.reactorLight = new PointLight('reactorLight', new Vector3(0, 5, 0), scene);
     this.reactorLight.diffuse = new Color3(0.3, 0.9, 1);
     this.reactorLight.specular = new Color3(0.3, 0.9, 1);
-    this.reactorLight.intensity = 2.2;
-    this.reactorLight.range = 34;
+    this.reactorLight.intensity = 3;
+    this.reactorLight.range = 30;
 
     // Arena
     const arena = new ArenaBuilder(scene, this.pal, ARENA);
@@ -134,7 +137,7 @@ export class Game {
     this.weapon = new Weapon(scene, this.pal, PLASMA_REPEATER, this.player);
     scene.setRenderingAutoClearDepthStencil(1, true, true, true);
 
-    this.fx = new Effects(scene, this.kit, this.pal);
+    this.fx = new Effects(scene, this.kit, this.pal, ARENA);
     this.fx.onShake = (pos, strength) => {
       const d = Vector3.Distance(pos, this.player.position);
       const k = strength * Math.max(0, 1 - d / 38);
@@ -143,15 +146,25 @@ export class Game {
       this.post.kick(k * 0.8);
     };
     // Shadows (high quality only); enemies & turrets register as casters via the kit.
-    if (high) {
-      const sg = new ShadowGenerator(2048, moon);
+    {
+      // Cascaded shadows: crisp contact shadows near the player, coverage across the arena.
+      const sg = high ? new CascadedShadowGenerator(2048, moon) : new ShadowGenerator(1024, moon);
+      if (sg instanceof CascadedShadowGenerator) {
+        sg.numCascades = 4;
+        sg.lambda = 0.82;
+        sg.stabilizeCascades = true;
+        sg.shadowMaxZ = 140;
+        sg.cascadeBlendPercentage = 0.08;
+        sg.autoCalcDepthBounds = false;
+      } else {
+        moon.shadowMinZ = 1;
+        moon.shadowMaxZ = 260;
+      }
       sg.usePercentageCloserFiltering = true;
-      sg.filteringQuality = ShadowGenerator.QUALITY_MEDIUM;
-      sg.bias = 0.0015;
-      sg.normalBias = 0.02;
-      sg.darkness = 0.15;
-      moon.shadowMinZ = 1;
-      moon.shadowMaxZ = 220;
+      sg.filteringQuality = high ? ShadowGenerator.QUALITY_HIGH : ShadowGenerator.QUALITY_LOW;
+      sg.bias = 0.004;
+      sg.normalBias = 0.025;
+      sg.darkness = 0;
       for (const m of arena.shadowCasters) sg.addShadowCaster(m);
       for (const m of this.reactor.root.getChildMeshes()) sg.addShadowCaster(m);
       this.kit.shadowSink = (m) => sg.addShadowCaster(m);
@@ -389,7 +402,7 @@ export class Game {
     const flash = this.atmosphere.update(dt, this.player.camera.position);
     if (flash > 0.9 && this.lastFlash < 0.5) sfx.thunder(0.4 + Math.random() * 1.2);
     this.lastFlash = flash;
-    this.moon.intensity = 1.5 + flash * 1.6;
+    this.moon.intensity = SUN + flash * 0.4;
     return flash;
   }
 
@@ -601,7 +614,7 @@ export class Game {
       (2.4 - danger * 2.3) * flicker,
     );
     this.reactorLight.diffuse.set(0.3 + danger * 0.7, 0.9 - danger * 0.5, 1 - danger * 0.8);
-    this.reactorLight.intensity = (2.2 + h * 2 + Math.sin(performance.now() * 0.004) * 0.15) * flicker;
+    this.reactorLight.intensity = (3 + h * 2.5 + Math.sin(performance.now() * 0.004) * 0.2) * flicker;
     this.reactor.beamMat.alpha = 0.18 + 0.2 * f;
   }
 

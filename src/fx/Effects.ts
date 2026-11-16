@@ -13,6 +13,8 @@ import {
   Vector3,
 } from '@babylonjs/core';
 import type { Kit } from '../visuals/kit';
+import type { ArenaLayout } from '../world/layout';
+import { BounceSparks, CollisionBoxes } from './sparks';
 import { type Palette, unlit } from '../visuals/materials';
 import { flareSprite, ringSprite, scorchSprite, smokeSprite, sparkSprite, starSprite } from '../visuals/textures';
 
@@ -247,13 +249,19 @@ export class Effects {
   /** Camera shake request: world position and strength (0..1 at the source). */
   onShake: ((pos: Vector3, strength: number) => void) | null = null;
 
-  constructor(private scene: Scene, kit: Kit, P: Palette) {
+  private world: CollisionBoxes;
+  private hotSparks: BounceSparks;
+
+  constructor(private scene: Scene, kit: Kit, P: Palette, layout: ArenaLayout) {
     const tex: Record<TexKey, DynamicTexture> = {
       flare: flareSprite(scene),
       smoke: smokeSprite(scene),
       spark: sparkSprite(scene),
       star: starSprite(scene),
     };
+
+    this.world = new CollisionBoxes(layout);
+    this.hotSparks = new BounceSparks(scene, tex.spark, this.world);
 
     const poolSizes: Record<BurstKind, number> = { spark: 10, crit: 6, enemySpark: 8, impact: 10, explosion: 6, smoke: 8, shield: 5, build: 3, flash: 6, fire: 8, sparks: 8, embers: 6, puff: 8 };
     for (const k of Object.keys(BURSTS) as BurstKind[]) this.bursts.set(k, new BurstPool(scene, tex[BURSTS[k].tex], BURSTS[k], poolSizes[k]));
@@ -386,7 +394,7 @@ export class Effects {
   get particleCount(): number {
     let n = 0;
     for (const p of this.bursts.values()) n += p.active;
-    return n + this.trail.getActiveCount() + this.plasmaTrail.getActiveCount();
+    return n + this.trail.getActiveCount() + this.plasmaTrail.getActiveCount() + this.hotSparks.ps.getActiveCount();
   }
 
   burst(kind: BurstKind, pos: Vector3, count: number, normal?: Vector3, scale = 1): void {
@@ -405,7 +413,9 @@ export class Effects {
     const k = over ? 0.4 : 1;
     this.burst('flash', pos, 2, undefined, s);
     this.burst('fire', pos, Math.round(16 * s * k), undefined, s);
-    this.burst('sparks', pos, Math.round(26 * s * k), undefined, Math.sqrt(s));
+    this.burst('sparks', pos, Math.round(10 * s * k), undefined, Math.sqrt(s));
+    // Molten sparks that rain down, bounce and skid across the arena.
+    this.hotSparks.emit(pos, Vector3.UpReadOnly, Math.round(55 * s * k), 13 * Math.sqrt(s), 1.1);
     this.burst('embers', pos, Math.round(16 * s * k), undefined, Math.sqrt(s));
     this.burst('smoke', TMP.copyFrom(pos).addInPlaceFromFloats(0, 0.3 * s, 0), Math.round(10 * s * k), undefined, s);
     if (pos.y < 3.5) this.ring(pos, 8 * s, 0.5, o.color ?? new Color3(3, 1.3, 0.4), true);
@@ -418,8 +428,9 @@ export class Effects {
 
   /** Shot hitting level geometry: sparks, a small dust puff and a burn mark. */
   impact(pos: Vector3, normal: Vector3): void {
-    this.burst('impact', pos, 7, normal);
+    this.burst('impact', pos, 5, normal);
     this.burst('puff', pos, 2, normal);
+    this.hotSparks.emit(pos, normal, 5, 6, 0.65);
     const h = this.holes[this.holeNext];
     this.holeNext = (this.holeNext + 1) % this.holes.length;
     h.setEnabled(true);
@@ -545,13 +556,9 @@ export class Effects {
       }
       d.vel.y -= 22 * dt;
       d.mesh.position.addInPlace(d.vel.scaleToRef(dt, TMP));
-      if (d.mesh.position.y < d.size * 0.5) {
-        d.mesh.position.y = d.size * 0.5;
-        d.vel.y *= -0.35;
-        d.vel.x *= 0.6;
-        d.vel.z *= 0.6;
-        d.spin.scaleInPlace(0.5);
-        d.hot *= 0.6;
+      if (this.world.collide(d.mesh.position, d.vel, d.size * 0.5, 0.35, 0.6)) {
+        d.spin.scaleInPlace(0.6);
+        d.hot *= 0.7;
       }
       d.mesh.rotation.addInPlace(d.spin.scaleToRef(dt, TMP));
       if (d.life < 0.4) d.mesh.scaling.scaleInPlace(Math.max(0.01, 1 - dt / Math.max(0.01, d.life)));
@@ -618,5 +625,6 @@ export class Effects {
     }
     this.trail.reset();
     this.plasmaTrail.reset();
+    this.hotSparks.reset();
   }
 }

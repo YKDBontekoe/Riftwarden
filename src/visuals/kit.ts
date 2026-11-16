@@ -1,3 +1,4 @@
+import { beveledBoxData } from './bevel';
 import { type AbstractMesh, type Material, Mesh, MeshBuilder, type Scene, TransformNode, Vector3 } from '@babylonjs/core';
 
 export type Shape = 'box' | 'cyl' | 'cyl6' | 'cyl8' | 'sphere' | 'ico' | 'cone' | 'torus' | 'torusThin';
@@ -26,8 +27,11 @@ export class Kit {
   private makeShape(shape: Shape): Mesh {
     const s = this.scene;
     switch (shape) {
-      case 'box':
-        return MeshBuilder.CreateBox('k_box', { size: 1 }, s);
+      case 'box': {
+        const m = new Mesh('k_box', s);
+        beveledBoxData(1, 1, 1, 0.08).applyToMesh(m);
+        return m;
+      }
       case 'cyl':
         return MeshBuilder.CreateCylinder('k_cyl', { diameter: 1, height: 1, tessellation: 20 }, s);
       case 'cyl6':
@@ -58,6 +62,7 @@ export class Kit {
       t.isVisible = false;
       t.position.y = -500;
       t.alwaysSelectAsActiveMesh = false;
+      t.receiveShadows = true;
       this.templates.set(key, t);
     }
     return t;
