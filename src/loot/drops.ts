@@ -54,6 +54,25 @@ export const DROP_SOURCES = {
   wave: { id: 'wave', label: 'Wave cleared', chance: 0.4, rolls: 1, levelBonus: 1, luck: 1.25, categories: ALL, guaranteedThroughWave: 1 },
   checkpoint: { id: 'checkpoint', label: 'Checkpoint cache', chance: 1, rolls: 2, levelBonus: 3, luck: 1.6, minRarity: 'rare', categories: ALL },
   boss: { id: 'boss', label: 'Boss', chance: 1, rolls: 3, levelBonus: 5, luck: 2.6, minRarity: 'epic', categories: ALL },
+  // ---- M6 archetypes: each favours different categories (soft target farming)
+  enforcer: { id: 'enforcer', label: 'Shielded Enforcer', chance: 0.2, rolls: 1, levelBonus: 1, luck: 1.3, categories: { armor: 4, shield: 4, reactor: 1.5, weapon: 1, processor: 1, accessory: 1, module: 1 } },
+  artillery: { id: 'artillery', label: 'Artillery Drone', chance: 0.18, rolls: 1, levelBonus: 1, luck: 1.25, categories: { weapon: 4, processor: 3, module: 2.5, accessory: 1, reactor: 1, armor: 0.5, shield: 0.5 } },
+  engineer: { id: 'engineer', label: 'Support Engineer', chance: 0.22, rolls: 1, levelBonus: 1, luck: 1.35, categories: { reactor: 4, accessory: 3, module: 3, processor: 1.5, shield: 1, weapon: 0.6, armor: 0.6 } },
+  /** Elite modifiers improve drops (luck/chance are raised per modifier in Game.eliteSource). */
+  elite: { id: 'elite', label: 'Elite', chance: 0.3, rolls: 1, levelBonus: 2, luck: 1.7, minRarity: 'uncommon', categories: ALL },
+  eliteCache: { id: 'eliteCache', label: 'Elite assault cache', chance: 1, rolls: 2, levelBonus: 3, luck: 2.1, minRarity: 'rare', categories: ALL },
+  /** High-value target: categories are re-weighted toward the announced signal at runtime. */
+  hvt: { id: 'hvt', label: 'Vault Courier', chance: 1, rolls: 2, levelBonus: 4, luck: 2.4, minRarity: 'rare', categories: ALL },
+  colossus: {
+    id: 'colossus', label: 'Siege Colossus', chance: 1, rolls: 3, levelBonus: 5, luck: 2.6, minRarity: 'epic',
+    categories: { armor: 4, weapon: 3, module: 3, shield: 2, reactor: 1.5, processor: 1, accessory: 1 },
+    exclusive: [{ baseId: 'colossus_plating', category: 'armor', chance: 0.55 }, { baseId: 'siege_module', category: 'module', chance: 0.6 }],
+  },
+  overseer: {
+    id: 'overseer', label: 'Overseer Core', chance: 1, rolls: 3, levelBonus: 5, luck: 2.6, minRarity: 'epic',
+    categories: { processor: 4, module: 3, weapon: 3, reactor: 2, shield: 1.5, accessory: 1.5, armor: 1 },
+    exclusive: [{ baseId: 'overseer_logic', category: 'processor', chance: 0.55 }, { baseId: 'prism_module', category: 'module', chance: 0.6 }],
+  },
 } as const satisfies Record<string, DropSource>;
 
 export type DropSourceId = keyof typeof DROP_SOURCES;

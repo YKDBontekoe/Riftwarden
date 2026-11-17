@@ -68,7 +68,7 @@ export const RECIPES: readonly Recipe[] = [
   item('s_reactor', 'Reactor', 'systems', { kind: 'item', category: 'reactor' }, 1, 'Drone power plant: cooling, heat efficiency, tactical recharge.'),
   item('s_processor', 'Processor', 'systems', { kind: 'item', category: 'processor' }, 1, 'Combat or tactical co-processor.'),
   item('s_accessory', 'Accessory', 'systems', { kind: 'item', category: 'accessory' }, 0.9, 'Servo, uplink or optics accessory.'),
-  ...basesFor('module').filter((b) => b.weight > 0).map((b) => item(`m_${b.module!.type}`, b.name, 'modules', { kind: 'item', category: 'module', moduleBase: b.id }, 0.85, b.blurb)),
+  ...basesFor('module').filter((b) => b.weight > 0 && !b.exclusive).map((b) => item(`m_${b.module!.type}`, b.name, 'modules', { kind: 'item', category: 'module', moduleBase: b.id }, 0.85, b.blurb)),
   {
     id: 'x_refine',
     name: 'Refine components',

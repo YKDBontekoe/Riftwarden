@@ -61,6 +61,20 @@ export class Turret {
   private wasEmpowered = false;
   refundRatio = 0.75;
   buildTime = 0.8;
+  /** M6: seconds the tower stays offline (artillery hits, enforcer slams, EMP). Never destroyed. */
+  disabledT = 0;
+  /** M6: total seconds spent suppressed (statistics). */
+  suppressedFor = 0;
+
+  /** Knock the tower offline for `seconds` (longest wins; does not stack). */
+  disable(seconds: number): void {
+    if (!(seconds > 0) || this.building) return;
+    this.disabledT = Math.max(this.disabledT, seconds);
+    this.target = null;
+  }
+  get disabled(): boolean {
+    return this.disabledT > 0;
+  }
 
   constructor(public config: TowerConfig, public rig: TurretRig, readonly pos: Vector3, scene: Scene, ctx: TurretContext, private rebuildRig: (cfg: TowerConfig, level: number) => TurretRig) {
     this.paid = configCost(config);
@@ -161,7 +175,7 @@ export class Turret {
 
   /** Fire immediately regardless of cooldown/aim (network discharge, conductor link). */
   forceFire(ctx: TurretContext, mult = 1): boolean {
-    if (this.building) return false;
+    if (this.building || this.disabledT > 0) return false;
     if (this.st.archetype === 'cryo') {
       if (!this.anyInRange(this.st.range, ctx)) return false;
       ctx.attack(this, null, mult);
@@ -193,6 +207,20 @@ export class Turret {
       return;
     }
     if (this.empowerT > 0) this.empowerT = Math.max(0, this.empowerT - dt);
+    if (this.disabledT > 0) {
+      // Offline: head slumps, sparks; no targeting or firing until it reboots.
+      this.disabledT = Math.max(0, this.disabledT - dt);
+      this.suppressedFor += dt;
+      this.pitch += (0.55 - this.pitch) * Math.min(1, dt * 6);
+      r.pitch.rotation.x = this.pitch;
+      r.coreGlow.scaling.setAll(0.05 + (Math.random() < 0.2 ? 0.25 : 0));
+      if (Math.random() < dt * 6) ctx.effects.burst('zap', this.head, 2, undefined, 0.6);
+      if (this.disabledT === 0) {
+        ctx.effects.burst('build', this.head, 12);
+        this.cooldown = 0.4;
+      }
+      return;
+    }
     if (this.seenVersion !== ctx.statsVersion || this.wasEmpowered !== this.empowerT > 0) this.recompose(ctx);
     const st = this.st;
     const range = st.range;

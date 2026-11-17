@@ -32,6 +32,9 @@ export const MODULE_TYPES: readonly ModuleTypeDef[] = [
   { type: 'arc', name: 'Arc Conductor', socket: 'barrel', families: ALL, visual: 'coil', blurb: 'Hits can arc to another enemy within 12 m for part of the damage. Slightly more heat.' },
   { type: 'thermal', name: 'Thermal Converter', socket: 'power', families: ALL, visual: 'exchanger', blurb: 'Converts heat into damage: the hotter the weapon, the harder it hits. Slower cooling.' },
   { type: 'stabilizer', name: 'Precision Stabilizer', socket: 'barrel', families: ALL, visual: 'gyro', blurb: 'Less spread and recoil, faster charge/ramp; slightly slower fire rate.' },
+  // M6 boss components (target farming: only the named boss drops them)
+  { type: 'siege', name: 'Siege Capacitor', socket: 'power', families: ALL, visual: 'capacitor', blurb: 'Colossus cell: much more damage against elites and bosses.' },
+  { type: 'prism', name: 'Overseer Prism Lens', socket: 'system', families: ALL, visual: 'chip', blurb: 'Overseer lens: stronger elemental effects and arcing hits.' },
   // M2 modules (still installable; their stored affixes apply as rolled)
   { type: 'barrel', name: 'Barrel Insert', socket: 'barrel', families: ALL, visual: 'collar', blurb: 'Early barrel insert: its rolled affixes apply.', legacy: true },
   { type: 'coolant', name: 'Coolant Insert', socket: 'system', families: ALL, visual: 'fins', blurb: 'Early thermal insert: its rolled affixes apply.', legacy: true },

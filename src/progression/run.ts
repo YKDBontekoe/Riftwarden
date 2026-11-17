@@ -20,6 +20,28 @@ export interface Rewards {
 
 export type RunOutcome = 'returned' | 'defeat' | 'abandoned';
 
+/** M6 survival statistics, measured from gameplay events during the run. */
+export interface SurvivalStats {
+  elitesKilled: number;
+  bossesKilled: number;
+  /** Boss names in kill order (with encounter index), e.g. "Siege Colossus I". */
+  bosses: string[];
+  deaths: number;
+  reactorDamage: number;
+  playerDamage: number;
+  towerDamage: number;
+  /** Events encountered (ids, in order). */
+  events: string[];
+  hvtKilled: number;
+  hvtEscaped: number;
+  /** Milestone ids reached this run (see survival/records.ts). */
+  milestones: string[];
+  /** Development tools were used: not eligible for records or permanent rewards. */
+  dev: boolean;
+}
+
+export const emptySurvival = (): SurvivalStats => ({ elitesKilled: 0, bossesKilled: 0, bosses: [], deaths: 0, reactorDamage: 0, playerDamage: 0, towerDamage: 0, events: [], hvtKilled: 0, hvtEscaped: 0, milestones: [], dev: false });
+
 export interface RunResult {
   id: string;
   tier: number;
@@ -45,6 +67,11 @@ export interface RunResult {
   endedAt: number;
   /** Filled by the profile when the run is recorded. */
   newRecord?: boolean;
+  /** M6 */
+  itemsCollected?: number;
+  survival?: SurvivalStats;
+  /** M6: personal records broken by this run (labels), filled when recorded. */
+  records?: string[];
 }
 
 export interface ItemBrief {
@@ -68,6 +95,8 @@ export class RunLedger {
   lastBankedWave = 0;
   unsecured: Rewards = emptyRewards();
   secured: Rewards = emptyRewards();
+  /** M6 survival statistics (mutated by the arena; frozen into the result). */
+  survival: SurvivalStats = emptySurvival();
   private result: RunResult | null = null;
 
   constructor(
@@ -182,6 +211,8 @@ export class RunLedger {
       securedItems: this.secured.items.slice(0, 12).map(brief),
       checkpoints: this.checkpoints,
       endedAt: now,
+      itemsCollected: this.itemsCollected,
+      survival: { ...this.survival, bosses: [...this.survival.bosses], events: [...this.survival.events], milestones: [...this.survival.milestones] },
     };
     // Unsecured rewards are gone for good.
     this.unsecured = emptyRewards();

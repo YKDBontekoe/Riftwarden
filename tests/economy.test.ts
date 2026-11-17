@@ -722,6 +722,6 @@ describe('run income and transaction persistence', () => {
 
   it('module bases used by merchants and recipes all exist', () => {
     for (const r of RECIPES) if (r.output.kind === 'item' && r.output.moduleBase) expect(baseDef(r.output.moduleBase)?.category).toBe('module');
-    expect(BASES.filter((b) => b.category === 'module' && b.weight > 0).length).toBe(RECIPES.filter((r) => r.group === 'modules').length);
+    expect(BASES.filter((b) => b.category === 'module' && b.weight > 0 && !b.exclusive).length).toBe(RECIPES.filter((r) => r.group === 'modules').length);
   });
 });

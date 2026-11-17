@@ -4,7 +4,7 @@ import type { GateId } from '../world/layout';
 
 const cell = 256;
 const size = cell * 4;
-const gateCells: Record<GateId, number> = { north: 4, east: 5, west: 6 };
+const gateCells: Record<GateId, number> = { north: 4, east: 5, west: 6, south: 7 };
 
 export class ArenaDecals {
   private material: PBRMaterial;
@@ -13,7 +13,7 @@ export class ArenaDecals {
   constructor(private scene: Scene) {
     const { c, ctx } = canvas(size);
     const random = rng(201);
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < 8; i++) {
       ctx.save();
       ctx.translate((i % 4) * cell, Math.floor(i / 4) * cell);
       ctx.beginPath();
@@ -42,7 +42,7 @@ export class ArenaDecals {
           ctx.fill();
         }
       } else {
-        const direction = ['NORTH', 'EAST', 'WEST'][i - 4];
+        const direction = ['NORTH', 'EAST', 'WEST', 'SOUTH'][i - 4];
         ctx.fillStyle = '#28313b';
         ctx.fillRect(12, 20, 232, 216);
         ctx.strokeStyle = '#94754a';

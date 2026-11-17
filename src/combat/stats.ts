@@ -61,6 +61,8 @@ export interface CombatStats {
   coreIncomeMult: number;
   /** M5: multiplies all elemental damage and status magnitudes. */
   elementalPower: number;
+  /** M6: multiplies all damage dealt to elites and bosses (boss loot). */
+  eliteDamageMult: number;
 }
 
 export type StatKey = keyof CombatStats;
@@ -111,6 +113,7 @@ export const STAT_DEFS: Readonly<Record<StatKey, StatDef>> = {
   rangeMult: { key: 'rangeMult', label: 'Weapon range', base: 1, min: 0.5, max: 2, kind: 'ratio', better: 'higher', group: 'offense' },
   coreIncomeMult: { key: 'coreIncomeMult', label: 'Core income', base: 1, min: 0.5, max: 10, kind: 'ratio', better: 'higher', group: 'utility' },
   elementalPower: { key: 'elementalPower', label: 'Elemental power', base: 1, min: 0.25, max: 20, kind: 'ratio', better: 'higher', group: 'offense' },
+  eliteDamageMult: { key: 'eliteDamageMult', label: 'Damage vs elites & bosses', base: 1, min: 0.25, max: 20, kind: 'ratio', better: 'higher', group: 'offense' },
 };
 
 export const STAT_KEYS = Object.keys(STAT_DEFS) as StatKey[];

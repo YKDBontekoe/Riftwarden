@@ -48,6 +48,8 @@ export interface DamageReq {
   noStatus?: boolean;
   /** Suppress damage numbers. */
   quiet?: boolean;
+  /** M6: attacker position (directional shields). */
+  from?: Vector3;
 }
 
 export interface HitResult {
@@ -91,6 +93,8 @@ export class Director {
   reactions: Record<ReactionKind, number> = { thermalShock: 0, overload: 0, superconduct: 0 };
   statusApplied = { burn: 0, shock: 0, chill: 0, freeze: 0 };
   kills = 0;
+  /** M6: damage dealt by origin (run statistics). */
+  dealt = { player: 0, tower: 0, environment: 0 };
   lightning = 0;
   explosions = 0;
   discharges = 0;
@@ -122,6 +126,7 @@ export class Director {
     this.reactions = { thermalShock: 0, overload: 0, superconduct: 0 };
     this.statusApplied = { burn: 0, shock: 0, chill: 0, freeze: 0 };
     this.kills = this.lightning = this.explosions = this.discharges = 0;
+    this.dealt = { player: 0, tower: 0, environment: 0 };
     this.rebuildEffects();
   }
 
@@ -168,7 +173,7 @@ export class Director {
     const inf = this.build.count('t_infuse');
     return {
       damageMult: s.turretDamageMult,
-      fireRateMult: s.turretFireRateMult,
+      fireRateMult: s.turretFireRateMult * this.g.towerFireBoost(t),
       rangeMult: s.turretRangeMult,
       extraTargets: par ? UP.parallel.extra(par) : 0,
       extraChain: par ? UP.parallel.extra(par) : 0,
@@ -237,6 +242,8 @@ export class Director {
     const gen = e.gen;
     let amount = r.amount * vulnerability(e.status);
     if (r.element !== 'none') amount *= this.g.stats.elementalPower;
+    // M6: boss loot amplifies damage against elites, bosses and high-value targets.
+    if (e.mods.length || e.def.role === 'boss' || e.def.role === 'hvt') amount *= this.g.stats.eliteDamageMult;
     // Snapshot the target's state before damage (reactions/kill events need it).
     const st = e.status;
     const burning = isBurning(st);
@@ -244,10 +251,14 @@ export class Director {
     const burnStacks = st.burnStacks;
     const chilled = isChilled(st, 1);
 
-    const res = this.g.enemies.damage(e, amount, DMG_TYPE[r.element], r.point, this.g.fx);
+    const res = this.g.enemies.damage(e, amount, DMG_TYPE[r.element], r.point, this.g.fx, { weak: r.weak, from: r.from ?? null, dot: r.dot });
     if (!res) return none;
     const dealt = res.toHp + res.toShield;
     this.damageBy[r.source.kind] += dealt;
+    // M6 run statistics: who dealt it (towers incl. tower-caused reactions; hazards are the environment).
+    if (r.source.towerId !== undefined || r.source.kind === 'tower') this.dealt.tower += dealt;
+    else if (r.source.id === 'hazard') this.dealt.environment += dealt;
+    else this.dealt.player += dealt;
     this.dpsAcc[r.source.kind] += dealt;
     if (r.source.towerId !== undefined) {
       const t = this.g.turrets.byId(r.source.towerId);
@@ -406,7 +417,7 @@ export class Director {
       this.arcFx(pos, c);
       visited.push(next);
       this.lightning++;
-      this.deal({ target: next, amount: amt, base: o.amount, element: 'electric', source: o.source, chain: o.chain, point: c, apply, crit: o.crit });
+      this.deal({ target: next, amount: amt, base: o.amount, element: 'electric', source: o.source, chain: o.chain, point: c, apply, crit: o.crit, from: pos.clone() });
       hits++;
       pos.copyFrom(c);
       amt *= o.falloff;
@@ -518,7 +529,7 @@ export class Director {
       const isCrit = Math.random() < st.critChance;
       const amount = isCrit ? dmg * crit : dmg;
       const apply: StatusPayload | undefined = st.burnFrac > 0 || st.chill > 0 ? { burn: st.burnFrac > 0 ? dmg * st.burnFrac : undefined, chill: st.chill > 0 ? st.chill : undefined } : undefined;
-      const res = this.deal({ target: e, amount, base: dmg, crit: isCrit, element: st.element, source: src, chain, point: p, apply, family: 'ballistic' });
+      const res = this.deal({ target: e, amount, base: dmg, crit: isCrit, element: st.element, source: src, chain, point: p, apply, family: 'ballistic', from });
       if (st.splash > 0) {
         this.blast(p, st.splash, amount * 0.5, st.element, src, chain, { falloff: 0.3, noReact: true, noStatus: true, exclude: e, family: 'splash' });
         this.g.fx.burst('fire', p, 3, undefined, 0.5);

@@ -36,7 +36,15 @@ export type SfxName =
   | 'press'
   | 'fabricate'
   | 'enhance'
-  | 'reroll';
+  | 'reroll'
+  | 'alarm'
+  | 'charge'
+  | 'slam'
+  | 'heal'
+  | 'bossRoar'
+  | 'grind'
+  | 'beep'
+  | 'mortar';
 
 interface PlayOpts {
   volume?: number;
@@ -388,6 +396,41 @@ export class Sfx {
         this.osc('sine', 110 * p, 38, 0.45, 0.55 * v, out);
         this.osc('square', 2400 * p * j, 300, 0.22, 0.07 * v, out);
         this.noiseBurst(0.5, 0.16 * v, 3200, 400, out, 'bandpass', 1.4, 0.03);
+        break;
+      case 'alarm':
+        for (let i = 0; i < 3; i++) {
+          this.osc('square', 620, 620, 0.16, 0.07 * v, out, i * 0.36);
+          this.osc('square', 465, 465, 0.16, 0.07 * v, out, i * 0.36 + 0.18);
+        }
+        break;
+      case 'charge':
+        this.osc('sawtooth', 140 * p, 1200 * p, 1.2 / p, 0.06 * v, out);
+        this.osc('sine', 280 * p, 2400 * p, 1.2 / p, 0.04 * v, out);
+        break;
+      case 'slam':
+        this.osc('sine', 70 * p, 24, 0.7, 0.75 * v, out);
+        this.noiseBurst(0.6, 0.5 * v, 1400 * p, 60, out, 'lowpass', 0.8);
+        for (let i = 0; i < 3; i++) this.noiseBurst(0.06, 0.1 * v, 5000, 2000, out, 'highpass', 1, 0.08 + i * 0.1);
+        break;
+      case 'heal':
+        this.osc('sine', 740 * p, 1110 * p, 0.25, 0.05 * v, out);
+        this.osc('triangle', 1110 * p, 1480 * p, 0.3, 0.03 * v, out, 0.08);
+        break;
+      case 'bossRoar':
+        this.osc('sawtooth', 55 * p, 38, 1.6, 0.3 * v, out);
+        this.osc('square', 82 * p, 41, 1.4, 0.12 * v, out, 0.1);
+        this.noiseBurst(1.5, 0.25 * v, 600, 80, out, 'lowpass', 1.2);
+        break;
+      case 'grind':
+        this.noiseBurst(2.2, 0.22 * v, 300, 900, out, 'bandpass', 3);
+        this.osc('sawtooth', 48, 62, 2.2, 0.12 * v, out);
+        break;
+      case 'beep':
+        this.osc('square', 1500 * p, 1500 * p, 0.06, 0.05 * v, out);
+        break;
+      case 'mortar':
+        this.osc('sine', 160 * p, 40, 0.4, 0.4 * v, out);
+        this.noiseBurst(0.3, 0.3 * v, 3000, 300, out, 'lowpass', 0.9);
         break;
       case 'vent':
         this.noiseBurst(0.45, 0.14 * v, 2500, 9000, out, 'bandpass', 0.9);

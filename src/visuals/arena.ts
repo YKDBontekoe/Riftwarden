@@ -43,6 +43,8 @@ export class ArenaBuilder {
   private physicsShape: PhysicsShapeContainer;
   private gates = new Map<GateId, GateVisual>();
   private armed = new Set<GateId>();
+  /** M6: gates sealed until an arena evolution opens them (lane shown as a dim reserved corridor). */
+  private sealed = new Set<GateId>();
   private conduits: ReturnType<typeof createPathLight>[] = [];
   readonly shadowCasters: Mesh[] = [];
   /** Every static render mesh (for environment capture). */
@@ -101,7 +103,7 @@ export class ArenaBuilder {
     // Reactor collider (slightly inside the visual)
     this.collider(new Vector3(0, L.reactor.height / 2, 0), new Vector3(5.2, L.reactor.height, 5.2));
     // Invisible ceiling-height caps above gate tunnels so the player cannot leave via the tunnels
-    for (const g of [[0, 50.5, 9, 13], [50.5, 0, 13, 9], [-50.5, 0, 13, 9]]) {
+    for (const g of [[0, 50.5, 9, 13], [50.5, 0, 13, 9], [-50.5, 0, 13, 9], [0, -50.5, 9, 13]]) {
       this.collider(new Vector3(g[0], 4, g[1]), new Vector3(g[2], 8, g[3]));
     }
 
@@ -258,9 +260,18 @@ export class ArenaBuilder {
     return this.gates.get(gate)?.charge ?? 0;
   }
 
+  /** Seal / open a gate (M6 arena evolution). Sealed lanes render as a dim grey reserved corridor. */
+  setSealed(gate: GateId, sealed: boolean): void {
+    const v = this.gates.get(gate);
+    if (!v) return;
+    if (sealed) this.sealed.add(gate);
+    else this.sealed.delete(gate);
+    v.lane.setColor(sealed ? new Color3(0.32, 0.36, 0.4) : new Color3(2.7, 0.65, 0.11));
+  }
+
   update(dt: number, hostileDt: number, warning: number): void {
     for (const [id, gate] of this.gates) {
-      const target = this.armed.has(id) ? 0.13 + 0.87 * warning : 0.12;
+      const target = this.sealed.has(id) ? 0.02 : this.armed.has(id) ? 0.13 + 0.87 * warning : 0.12;
       gate.charge += (target - gate.charge) * (1 - Math.exp(-dt * 4));
       gate.flash *= Math.exp(-hostileDt * 3.4);
       gate.lane.update(hostileDt, gate.charge, gate.flash);
@@ -276,7 +287,7 @@ export class ArenaBuilder {
   private buildConduits(): void {
     const P = this.pal;
     const lines: [number, number, number, number][] = [
-      [0, -38, 0, -4.5],
+      [-5, -36, -1.6, -4.5],
       [-20, -22, -4, -3],
       [20, -22, 4, -3],
     ];
@@ -297,6 +308,7 @@ export class ArenaBuilder {
       { id: 'north', pos: new Vector3(0, 0, H), yaw: 0 },
       { id: 'east', pos: new Vector3(H, 0, 0), yaw: Math.PI / 2 },
       { id: 'west', pos: new Vector3(-H, 0, 0), yaw: -Math.PI / 2 },
+      { id: 'south', pos: new Vector3(0, 0, -H), yaw: Math.PI },
     ];
     for (const f of frames) {
       const lights = unlit(this.scene, `gateSignal:${f.id}`, [1.35, 0.36, 0.08], { twoSided: true });

@@ -112,7 +112,7 @@ describe('modules: generation and effects', () => {
         expect(m.base.length + m.affixes.length).toBeGreaterThan(0);
       }
     }
-    expect(MODULE_TYPES.filter((t) => !t.legacy).length).toBe(8);
+    expect(MODULE_TYPES.filter((t) => !t.legacy).length).toBe(10); // 8 general + 2 boss components (M6)
   });
 
   it('splitter adds exactly one projectile with weaker bolts; trade-offs are real', () => {

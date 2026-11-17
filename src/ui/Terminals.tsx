@@ -26,7 +26,7 @@ import {
   storedItems,
   unequipToStorage,
 } from '../progression/save';
-import { CHECKPOINT_INTERVAL, THREAT_TIERS, type ThreatTier } from '../progression/tiers';
+import { CHECKPOINT_INTERVAL, THREAT_TIERS, type ThreatTier, unlockText } from '../progression/tiers';
 import { fmtTime, useSave } from './App';
 import { Shell } from './shell';
 import { ResourceBar, useTx, TxMessage, CostLine } from './economy';
@@ -111,7 +111,7 @@ function TierCard({ tier, save, selected, onSelect }: { tier: ThreatTier; save: 
         <span className="tc-name">{tier.name}</span>
         <span className="tc-rec">{locked ? 'LOCKED' : rec ? `BEST WAVE ${rec.bestWave} · ${rec.runs} RUN${rec.runs === 1 ? '' : 'S'}` : 'NO RECORD'}</span>
       </div>
-      <div className="tc-blurb">{locked ? `Secure a wave-${CHECKPOINT_INTERVAL} checkpoint on Tier ${THREAT_TIERS[tier.id - 2]?.roman} to unlock.` : tier.blurb}</div>
+      <div className="tc-blurb">{locked ? unlockText(tier.id) : tier.blurb}</div>
       <div className="tc-mods">
         <span>
           HP <b>{pct(tier.hpMult)}</b>

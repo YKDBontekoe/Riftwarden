@@ -73,7 +73,7 @@ export function createPathLight(
   halfWidth: number,
   color: Color3,
   warning = false,
-): { update(dt: number, activity: number, flash?: number): void } {
+): { mesh: Mesh; setColor(c: Color3): void; update(dt: number, activity: number, flash?: number): void } {
   const positions: number[] = [];
   const uvs: number[] = [];
   const indices: number[] = [];
@@ -130,6 +130,10 @@ export function createPathLight(
 
   let travel = 0;
   return {
+    mesh,
+    setColor(c: Color3) {
+      material.setColor3('signalColor', c);
+    },
     update(dt, activity, flash = 0) {
       travel = (travel + dt * (2.3 + activity * 4.2)) % 18;
       material.setFloat('travel', travel);

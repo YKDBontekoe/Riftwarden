@@ -436,7 +436,7 @@ export class Atmosphere {
   private buildGateLights(): void {
     const H = this.layout.half;
     const filament = sparkSprite(this.scene);
-    for (const [x, z] of [[0, H - 1.5], [H - 1.5, 0], [-H + 1.5, 0]]) {
+    for (const [x, z] of [[0, H - 1.5], [H - 1.5, 0], [-H + 1.5, 0], [0, -H + 1.5]]) {
       const l = new PointLight('gateLight', new Vector3(x, 4, z), this.scene);
       l.diffuse = new Color3(1, 0.42, 0.12);
       l.specular = new Color3(1, 0.5, 0.2);
@@ -559,6 +559,15 @@ export class Atmosphere {
     this.dust.emitRate = high ? 45 : 18;
     this.embers.emitRate = high ? 8 : 3;
     for (const particles of this.gateEmbers) particles.emitRate = high ? 30 : 14;
+  }
+
+  /** M6: gate index 3 (south) is sealed until the secondary access route opens. */
+  setGateOpen(index: number, open: boolean): void {
+    this.gateLights[index]?.setEnabled(open);
+    const ps = this.gateEmbers[index];
+    if (!ps) return;
+    if (open) ps.start();
+    else ps.stop();
   }
 
   /**

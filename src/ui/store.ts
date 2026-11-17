@@ -70,6 +70,35 @@ export interface M5Hud {
   templateCost: number;
 }
 
+/** M6 boss health bar. */
+export interface BossHud {
+  name: string;
+  title: string;
+  hp: number;
+  max: number;
+  phase: number;
+  /** Phase thresholds as HP fractions (bar ticks). */
+  ticks: number[];
+  /** Short state line ("SHIELDED BY 3 EMITTERS", "CORE EXPOSED"...). */
+  state: string;
+  immune: boolean;
+  /** Current telegraphed attack name (empty when idle). */
+  attack: string;
+  encounter: number;
+}
+
+/** M6 survival director state for the HUD. */
+export interface SurvivalHud {
+  theme: string;
+  event: { id: string; name: string; blurb: string } | null;
+  /** Prep: what the coming wave holds (boss / event). */
+  upcoming: string;
+  evolved: string[];
+  boss: BossHud | null;
+  hvt: { hp: number; shield: number; escapeIn: number; signal: string } | null;
+  elites: number;
+}
+
 /** The pickup currently targeted in the arena (interaction prompt). */
 export interface LootTargetInfo {
   uid: string;
@@ -132,8 +161,9 @@ export interface HudState {
   hint: string;
   spread: number; // crosshair gap in px
   stats: { kills: number; time: number; wave: number; coresEarned: number; turretsBuilt: number };
-  perf: { fps: number; enemies: number; draws: number; particles: number; towers?: number; projectiles?: number; pending?: number; statuses?: number; triggers?: number; dpsPlayer?: number; dpsTower?: number; effects?: number; dropped?: number } | null;
+  perf: { fps: number; enemies: number; draws: number; particles: number; towers?: number; projectiles?: number; pending?: number; statuses?: number; triggers?: number; dpsPlayer?: number; dpsTower?: number; effects?: number; dropped?: number; frameMs?: number; aiMs?: number; telegraphs?: number; ordnance?: number; wave?: number; tier?: number; event?: string; boss?: string; budget?: number; hpMult?: number; dmgMult?: number; spawnQueue?: number; elites?: number; dev?: boolean } | null;
   m5: M5Hud | null;
+  m6: SurvivalHud | null;
 }
 
 export const initialHud: HudState = {
@@ -182,6 +212,7 @@ export const initialHud: HudState = {
   stats: { kills: 0, time: 0, wave: 0, coresEarned: 0, turretsBuilt: 0 },
   perf: null,
   m5: null,
+  m6: null,
 };
 
 type Listener = () => void;
@@ -252,6 +283,8 @@ type EventMap = {
   econ: { station: string; kind: string; delta: Partial<Record<'credits' | 'salvage' | 'components', number>> };
   /** Loot feed: drops landing, pickups, full cargo, expiry. */
   loot: LootEvent;
+  /** M6: short tactical warning line (events, bosses, evolutions, milestones). */
+  alert: { text: string; tone: 'red' | 'orange' | 'blue' | 'white' };
 };
 
 export interface LootEvent {

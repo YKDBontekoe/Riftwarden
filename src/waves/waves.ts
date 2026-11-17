@@ -2,11 +2,20 @@ import { mulberry32 } from '../combat/damage';
 import type { EnemyKind } from '../data/defs';
 import type { GateId } from '../world/layout';
 import { NO_SCALING, type WaveScaling } from '../progression/tiers';
+import type { EliteModId } from '../survival/elites';
 
 export interface SpawnEntry {
   time: number; // seconds after combat starts (hostile time)
   kind: EnemyKind;
   gate: GateId;
+  /** M6: elite modifiers. */
+  mods?: EliteModId[];
+  /** M6: role in the encounter (boss, event target, elite squad, swarm). */
+  tag?: 'boss' | 'hvt' | 'squad' | 'swarm';
+  /** M6: extra health multiplier for this spawn (swarm, elites, budget overflow). */
+  hpMult?: number;
+  /** M6: boss encounter index (repeat variations). */
+  encounter?: number;
 }
 
 export interface WaveDef {
@@ -17,9 +26,11 @@ export interface WaveDef {
   speedMult: number;
   prepTime: number;
   clearReward: number;
+  /** M6: director plan for this wave (theme, event, boss, evolution). Absent for legacy getWave(). */
+  plan?: import('../survival/plan').WavePlan;
 }
 
-interface Group {
+export interface Group {
   kind: EnemyKind;
   count: number;
   gate: GateId;
@@ -27,7 +38,7 @@ interface Group {
   interval: number;
 }
 
-function expand(groups: Group[], countMult = 1): SpawnEntry[] {
+export function expand(groups: Group[], countMult = 1): SpawnEntry[] {
   const out: SpawnEntry[] = [];
   for (const g of groups) {
     const count = Math.max(1, Math.round(g.count * countMult));
@@ -40,7 +51,7 @@ function expand(groups: Group[], countMult = 1): SpawnEntry[] {
 }
 
 /** Hand-designed opening waves teach lanes, then rush drones, then multiple fronts. */
-const HAND_WAVES: Group[][] = [
+export const HAND_WAVES: Group[][] = [
   [
     { kind: 'walker', count: 5, gate: 'north', start: 1, interval: 2.4 },
     { kind: 'walker', count: 4, gate: 'east', start: 10, interval: 2.4 },
@@ -141,6 +152,6 @@ export function getWave(n: number, scaling: WaveScaling = NO_SCALING): WaveDef {
 
 /** Rough threat estimate used by tests to verify monotonic escalation. */
 export function waveThreat(w: WaveDef): number {
-  const base: Record<EnemyKind, number> = { walker: 70, rusher: 26 + 25, bulwark: 270 };
-  return w.spawns.reduce((s, e) => s + base[e.kind], 0) * w.hpMult;
+  const base: Partial<Record<EnemyKind, number>> = { walker: 70, rusher: 26 + 25, bulwark: 270, enforcer: 330, artillery: 200, engineer: 220, courier: 800, colossus: 5000, overseer: 4400 };
+  return w.spawns.reduce((s, e) => s + (base[e.kind] ?? 100) * (e.hpMult ?? 1), 0) * w.hpMult;
 }

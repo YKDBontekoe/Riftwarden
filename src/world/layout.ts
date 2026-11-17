@@ -30,7 +30,7 @@ export interface Vec2 {
   z: number;
 }
 
-export type GateId = 'north' | 'east' | 'west';
+export type GateId = 'north' | 'east' | 'west' | 'south';
 
 export interface Route {
   gate: GateId;
@@ -46,6 +46,16 @@ export interface ArenaLayout {
   reactor: { x: number; z: number; radius: number; height: number };
   playerSpawn: { x: number; z: number; yaw: number };
   laneHalfWidth: number;
+  /** M6: gates open at the start of a run; the others are sealed until an arena evolution opens them. */
+  initialGates: GateId[];
+  /** M6: sealed blast door filling the south gate opening (removed by evolution A). */
+  southDoor: Box;
+  /** M6: footprints reserved for facility machinery (no tower construction, ever). */
+  reserved: { x0: number; z0: number; x1: number; z1: number; label: string }[];
+  /** M6: containment bulkheads raised by evolution B (cover / chokepoints). Footprints are reserved. */
+  barriers: Box[];
+  /** M6: plasma vents opened by evolution B: on the lanes, erupt periodically. */
+  vents: { x: number; z: number; r: number }[];
 }
 
 const HALF = 44;
@@ -58,6 +68,8 @@ type Rot = (p: Vec2) => Vec2;
 const rotN: Rot = (p) => ({ x: p.x, z: p.z });
 const rotE: Rot = (p) => ({ x: p.z, z: -p.x });
 const rotW: Rot = (p) => ({ x: -p.z, z: p.x });
+/** South mirrors the north lane in z only, so the bend keeps east of the player spawn. */
+const rotS: Rot = (p) => ({ x: p.x, z: -p.z });
 
 function rotBox(rot: Rot, x0: number, z0: number, x1: number, z1: number, y0: number, y1: number, kind: SolidKind): Box {
   const a = rot({ x: x0, z: z0 });
@@ -76,8 +88,9 @@ function buildLayout(): ArenaLayout {
   // Outer perimeter with gate openings on N, E, W. South wall is solid.
   const g = GATE_HALF;
   const H = HALF;
-  // South wall
-  boxes.push({ min: [-H - WALL_T, 0, -H - WALL_T], max: [H + WALL_T, WALL_H, -H], kind: 'wall' });
+  // South wall (two halves around the sealed south gate)
+  boxes.push({ min: [-H - WALL_T, 0, -H - WALL_T], max: [-g, WALL_H, -H], kind: 'wall' });
+  boxes.push({ min: [g, 0, -H - WALL_T], max: [H + WALL_T, WALL_H, -H], kind: 'wall' });
   // North wall (two halves around the gate)
   boxes.push({ min: [-H - WALL_T, 0, H], max: [-g, WALL_H, H + WALL_T], kind: 'wall' });
   boxes.push({ min: [g, 0, H], max: [H + WALL_T, WALL_H, H + WALL_T], kind: 'wall' });
@@ -89,7 +102,7 @@ function buildLayout(): ArenaLayout {
   boxes.push({ min: [-H - WALL_T, 0, g], max: [-H, WALL_H, H + WALL_T], kind: 'wall' });
 
   // Gate tunnels (side walls + back wall), generated for N and rotated for E/W.
-  for (const rot of [rotN, rotE, rotW]) {
+  for (const rot of [rotN, rotE, rotW, rotS]) {
     boxes.push(rotBox(rot, -g - WALL_T, H, -g, H + TUNNEL_LEN, 0, WALL_H, 'gate'));
     boxes.push(rotBox(rot, g, H, g + WALL_T, H + TUNNEL_LEN, 0, WALL_H, 'gate'));
     boxes.push(rotBox(rot, -g - WALL_T, H + TUNNEL_LEN, g + WALL_T, H + TUNNEL_LEN + WALL_T, 0, WALL_H, 'gate'));
@@ -111,7 +124,7 @@ function buildLayout(): ArenaLayout {
   // Machinery banks against walls (cover + visual interest)
   boxes.push({ min: [-43, 0, -14], max: [-38, 3.2, -6], kind: 'machine' });
   boxes.push({ min: [38, 0, 6], max: [43, 3.2, 14], kind: 'machine' });
-  boxes.push({ min: [-6, 0, -43], max: [6, 2.4, -39], kind: 'machine' });
+  boxes.push({ min: [-22, 0, -43], max: [-12, 2.4, -39], kind: 'machine' });
   // Cover pillars
   boxes.push({ min: [-15, 0, -16], max: [-12.5, 6, -13.5], kind: 'block' });
   boxes.push({ min: [12.5, 0, -16], max: [15, 6, -13.5], kind: 'block' });
@@ -134,7 +147,13 @@ function buildLayout(): ArenaLayout {
     north: { gate: 'north', points: northPts.map(rotN) },
     east: { gate: 'east', points: northPts.map(rotE) },
     west: { gate: 'west', points: northPts.map(rotW) },
+    south: { gate: 'south', points: northPts.map(rotS) },
   };
+  const barriers: Box[] = [
+    { min: [-12.2, 0, -6.5], max: [-10.6, 3.4, 2.5], kind: 'block' },
+    { min: [10.6, 0, -2.5], max: [12.2, 3.4, 6.5], kind: 'block' },
+  ];
+  const reserved = barriers.map((b) => ({ x0: b.min[0] - 0.4, z0: b.min[2] - 0.4, x1: b.max[0] + 0.4, z1: b.max[2] + 0.4, label: 'Reserved: containment bulkhead' }));
 
   return {
     half: HALF,
@@ -145,8 +164,18 @@ function buildLayout(): ArenaLayout {
     reactor,
     playerSpawn: { x: 0, z: -20, yaw: 0 },
     laneHalfWidth: 2.8,
+    initialGates: ['north', 'east', 'west'],
+    southDoor: { min: [-g, 0, -H - WALL_T], max: [g, WALL_H, -H], kind: 'gate' },
+    reserved,
+    barriers,
+    vents: [
+      { x: 10, z: 20, r: 3.2 },
+      { x: 20, z: -10, r: 3.2 },
+      { x: -20, z: 10, r: 3.2 },
+      { x: 10, z: -20, r: 3.2 },
+    ],
   };
 }
 
 export const ARENA: ArenaLayout = buildLayout();
-export const GATES: GateId[] = ['north', 'east', 'west'];
+export const GATES: GateId[] = ['north', 'east', 'west', 'south'];

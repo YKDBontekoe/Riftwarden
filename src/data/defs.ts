@@ -108,7 +108,9 @@ export const BEAM_EMITTER: WeaponDef = {
   rampTime: 1.6,
 };
 
-export type EnemyKind = 'walker' | 'rusher' | 'bulwark';
+export type EnemyKind = 'walker' | 'rusher' | 'bulwark' | 'enforcer' | 'artillery' | 'engineer' | 'courier' | 'colossus' | 'overseer';
+/** Targeting role: reactor attackers march on the objective, hunters pressure the drone, support buffs allies. */
+export type EnemyRole = 'reactor' | 'hunter' | 'support' | 'ranged' | 'hvt' | 'boss';
 
 export interface EnemyDef {
   kind: EnemyKind;
@@ -133,6 +135,14 @@ export interface EnemyDef {
   /** Persistent salvage collected on kill (unsecured until banked). */
   salvage: number;
   scale: number;
+  /** M6 */
+  role: EnemyRole;
+  /** Display name height above the root for health bars / markers (m). */
+  topY: number;
+  /** Chill/freeze meter gain multiplier (bosses resist crowd control). */
+  statusResist: number;
+  /** Credits per kill (before tier). */
+  credits: number;
 }
 
 export const ENEMIES: Record<EnemyKind, EnemyDef> = {
@@ -156,6 +166,10 @@ export const ENEMIES: Record<EnemyKind, EnemyDef> = {
     reward: 7,
     salvage: 2,
     scale: 1,
+    role: 'reactor',
+    topY: 3.5,
+    statusResist: 1,
+    credits: 1,
   },
   rusher: {
     kind: 'rusher',
@@ -177,6 +191,10 @@ export const ENEMIES: Record<EnemyKind, EnemyDef> = {
     reward: 4,
     salvage: 1,
     scale: 1,
+    role: 'hunter',
+    topY: 2.1,
+    statusResist: 1,
+    credits: 0,
   },
   bulwark: {
     kind: 'bulwark',
@@ -198,6 +216,167 @@ export const ENEMIES: Record<EnemyKind, EnemyDef> = {
     reward: 20,
     salvage: 8,
     scale: 1.32,
+    role: 'reactor',
+    topY: 4.6,
+    statusResist: 0.85,
+    credits: 6,
+  },
+  /** Heavy chassis with a frontal energy shield; lowers it to slam. Breaks tower lines on its lane. */
+  enforcer: {
+    kind: 'enforcer',
+    name: 'Shielded Enforcer',
+    hp: 300,
+    shield: 0,
+    speed: 2.5,
+    radius: 1.2,
+    bodyY: 1.75,
+    bodyR: 1.15,
+    // Weakpoint = rear shield generator (also the chest vent while slamming, see EnemyManager).
+    weakY: 2.25,
+    weakR: 0.42,
+    weakForward: -0.85,
+    reactorDamage: 16,
+    attackInterval: 2.6,
+    playerDamage: 20,
+    playerShotInterval: 0,
+    playerShotRange: 0,
+    reward: 16,
+    salvage: 6,
+    scale: 1.2,
+    role: 'reactor',
+    topY: 4.4,
+    statusResist: 0.8,
+    credits: 5,
+  },
+  /** Hover mortar platform: stops at range, charges telegraphed shells at the reactor or exposed towers. */
+  artillery: {
+    kind: 'artillery',
+    name: 'Artillery Drone',
+    hp: 120,
+    shield: 45,
+    speed: 3.4,
+    radius: 1.0,
+    bodyY: 3.3,
+    bodyR: 1.0,
+    weakY: 3.05,
+    weakR: 0.36,
+    weakForward: 0.75,
+    reactorDamage: 34,
+    attackInterval: 6.5,
+    playerDamage: 26,
+    playerShotInterval: 0,
+    playerShotRange: 0,
+    reward: 12,
+    salvage: 5,
+    scale: 1,
+    role: 'ranged',
+    topY: 4.8,
+    statusResist: 1,
+    credits: 4,
+  },
+  /** Support unit: repairs, restores shields and empowers allies from behind the front line. */
+  engineer: {
+    kind: 'engineer',
+    name: 'Support Engineer',
+    hp: 150,
+    shield: 30,
+    speed: 3.3,
+    radius: 0.9,
+    bodyY: 1.6,
+    bodyR: 0.85,
+    weakY: 2.35,
+    weakR: 0.38,
+    weakForward: 0.1,
+    reactorDamage: 5,
+    attackInterval: 2,
+    playerDamage: 0,
+    playerShotInterval: 0,
+    playerShotRange: 0,
+    reward: 14,
+    salvage: 6,
+    scale: 1,
+    role: 'support',
+    topY: 3.7,
+    statusResist: 1,
+    credits: 5,
+  },
+  /** High-value target: circles the facility, phase-shields and escapes if not destroyed in time. */
+  courier: {
+    kind: 'courier',
+    name: 'Vault Courier',
+    hp: 520,
+    shield: 260,
+    speed: 7,
+    radius: 1.3,
+    bodyY: 6.8,
+    bodyR: 1.25,
+    weakY: 6.35,
+    weakR: 0.45,
+    weakForward: 1.05,
+    reactorDamage: 0,
+    attackInterval: 3.4,
+    playerDamage: 18,
+    playerShotInterval: 0,
+    playerShotRange: 0,
+    reward: 60,
+    salvage: 30,
+    scale: 1,
+    role: 'hvt',
+    topY: 8.6,
+    statusResist: 0.5,
+    credits: 40,
+  },
+  /** Boss: multi-legged siege platform. Numbers are the base for encounter 1 (see survival/bosses.ts). */
+  colossus: {
+    kind: 'colossus',
+    name: 'Siege Colossus',
+    hp: 5200,
+    shield: 0,
+    speed: 1.9,
+    radius: 3.4,
+    bodyY: 4.6,
+    bodyR: 3.0,
+    weakY: 3.5,
+    weakR: 0.9,
+    weakForward: -3.2,
+    reactorDamage: 40,
+    attackInterval: 3,
+    playerDamage: 30,
+    playerShotInterval: 0,
+    playerShotRange: 0,
+    reward: 250,
+    salvage: 120,
+    scale: 1,
+    role: 'boss',
+    topY: 9.5,
+    statusResist: 0.3,
+    credits: 160,
+  },
+  /** Boss: floating command core behind shield emitters. */
+  overseer: {
+    kind: 'overseer',
+    name: 'Overseer Core',
+    hp: 4400,
+    shield: 0,
+    speed: 6,
+    radius: 3,
+    bodyY: 0,
+    bodyR: 2.1,
+    weakY: 0,
+    weakR: 0.9,
+    weakForward: 1.6,
+    reactorDamage: 30,
+    attackInterval: 3,
+    playerDamage: 24,
+    playerShotInterval: 0,
+    playerShotRange: 0,
+    reward: 250,
+    salvage: 120,
+    scale: 1,
+    role: 'boss',
+    topY: 4,
+    statusResist: 0.3,
+    credits: 160,
   },
 };
 

@@ -1,7 +1,7 @@
 import { beveledBoxData } from './bevel';
-import { type AbstractMesh, type Material, Mesh, MeshBuilder, type Scene, TransformNode, Vector3 } from '@babylonjs/core';
+import { type AbstractMesh, type Material, Matrix, Mesh, MeshBuilder, type Scene, TransformNode, Vector3 } from '@babylonjs/core';
 
-export type Shape = 'box' | 'cyl' | 'cyl6' | 'cyl8' | 'sphere' | 'ico' | 'cone' | 'torus' | 'torusThin';
+export type Shape = 'box' | 'cyl' | 'cyl6' | 'cyl8' | 'sphere' | 'ico' | 'cone' | 'torus' | 'torusThin' | 'arc' | 'cone4';
 
 export interface PartOpts {
   pos?: [number, number, number];
@@ -50,6 +50,16 @@ export class Kit {
         return MeshBuilder.CreateTorus('k_tor', { diameter: 1, thickness: 0.12, tessellation: 32 }, s);
       case 'torusThin':
         return MeshBuilder.CreateTorus('k_tor2', { diameter: 1, thickness: 0.05, tessellation: 32 }, s);
+      case 'cone4':
+        return MeshBuilder.CreateCylinder('k_cone4', { diameterTop: 0, diameterBottom: 1, height: 1, tessellation: 4 }, s);
+      case 'arc': {
+        // 120-degree curved shield panel centred on +Z, double sided, unit radius 0.5, height 1.
+        const m = MeshBuilder.CreateCylinder('k_arc', { diameter: 1, height: 1, tessellation: 36, arc: 1 / 3, enclose: false, cap: Mesh.NO_CAP, sideOrientation: Mesh.DOUBLESIDE }, s);
+        m.refreshBoundingInfo();
+        const c = m.getBoundingInfo().boundingBox.center;
+        m.bakeTransformIntoVertices(Matrix.RotationY(-Math.atan2(c.x, c.z)));
+        return m;
+      }
     }
   }
 

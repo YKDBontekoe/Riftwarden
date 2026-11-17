@@ -180,6 +180,21 @@ export const BASES: readonly BaseDef[] = [
     ],
     icon: 'plate',
   },
+  {
+    id: 'colossus_plating',
+    category: 'armor',
+    name: 'Colossus Siege Plating',
+    blurb: 'Cut from a destroyed Siege Colossus. Siege-grade armor and hull with damage resistance; heavy but well balanced.',
+    weight: 3,
+    exclusive: true,
+    implicit: [
+      { stat: 'armor', op: 'add', range: [34, 44], scaling: 'flat' },
+      { stat: 'maxHealthBonus', op: 'add', range: [20, 28], scaling: 'flat' },
+      { stat: 'damageResist', op: 'add', range: [0.03, 0.05], scaling: 'none' },
+      { stat: 'moveSpeedMult', op: 'pct', range: [-0.03, -0.02], scaling: 'none' },
+    ],
+    icon: 'plate',
+  },
   // ---------------------------------------------------------------- shields
   {
     id: 'shield_matrix',
@@ -230,6 +245,20 @@ export const BASES: readonly BaseDef[] = [
       { stat: 'shieldCapacity', op: 'add', range: [6, 10], scaling: 'flat' },
     ],
     icon: 'core',
+  },
+  {
+    id: 'overseer_logic',
+    category: 'processor',
+    name: 'Overseer Logic Core',
+    blurb: 'Command processor salvaged from an Overseer Core. Sharpens targeting against elite and boss machines.',
+    weight: 3,
+    exclusive: true,
+    implicit: [
+      { stat: 'eliteDamageMult', op: 'pct', range: [0.12, 0.2], scaling: 'none' },
+      { stat: 'critChance', op: 'add', range: [0.03, 0.05], scaling: 'none' },
+      { stat: 'elementalPower', op: 'pct', range: [0.06, 0.12], scaling: 'none' },
+    ],
+    icon: 'chip',
   },
   // ---------------------------------------------------------------- processors
   {
@@ -292,6 +321,23 @@ export const BASES: readonly BaseDef[] = [
   },
   // ---------------------------------------------------------------- weapon upgrade modules (M3)
   // Trade-off ranges are ordered worst -> best roll, so a better roll means a smaller penalty.
+  {
+    id: 'siege_module', category: 'module', name: 'Siege Capacitor', blurb: 'Colossus power cell (power socket): heavy bonus damage against elites and bosses.', weight: 3, exclusive: true,
+    implicit: [
+      { stat: 'eliteDamageMult', op: 'pct', range: [0.22, 0.36], scaling: 'none' },
+      { stat: 'weaponDamageMult', op: 'pct', range: [0.04, 0.08], scaling: 'pct' },
+    ],
+    module: { type: 'siege', compatible: ['weapon'], socketCost: 1 }, affixes: ['dmg', 'critdmg', 'crit'], icon: 'cube',
+  },
+  {
+    id: 'prism_module', category: 'module', name: 'Overseer Prism Lens', blurb: 'Overseer focusing lens (system socket): stronger elements and arcing hits.', weight: 3, exclusive: true,
+    implicit: [
+      { stat: 'elementalPower', op: 'pct', range: [0.18, 0.3], scaling: 'none' },
+      { stat: 'arcChance', op: 'add', range: [0.08, 0.14], scaling: 'none' },
+      { stat: 'arcDamage', op: 'add', range: [0.3, 0.45], scaling: 'none' },
+    ],
+    module: { type: 'prism', compatible: ['weapon'], socketCost: 1 }, affixes: ['dmg', 'crit', 'rate'], icon: 'cube',
+  },
   {
     id: 'amp_module', category: 'module', name: 'Damage Amplifier', blurb: 'Power-socket amplifier: raises weapon damage.', weight: 10,
     implicit: [{ stat: 'weaponDamageMult', op: 'pct', range: [0.1, 0.18], scaling: 'pct' }],

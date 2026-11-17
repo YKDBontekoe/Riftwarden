@@ -27,12 +27,38 @@ export class WaveManager {
   private cursor = 0;
   spawnedTotal = 0;
 
-  constructor(private hooks: WaveHooks, public scaling: WaveScaling = NO_SCALING) {}
+  /** M6: the survival director composes waves when provided (legacy generator otherwise). */
+  compose: ((n: number) => WaveDef) | null = null;
+
+  constructor(private hooks: WaveHooks, public scaling: WaveScaling = NO_SCALING, compose?: (n: number) => WaveDef) {
+    if (compose) {
+      this.compose = compose;
+      this.wave = compose(1);
+    }
+  }
+
+  private make(n: number): WaveDef {
+    return this.compose ? this.compose(n) : getWave(n, this.scaling);
+  }
 
   reset(): void {
     this.number = 1;
-    this.wave = getWave(1, this.scaling);
+    this.wave = this.make(1);
     this.enterPrep();
+  }
+
+  /** Development tools: jump to the preparation phase of wave n (current enemies are the caller's problem). */
+  jumpTo(n: number): void {
+    this.number = Math.max(1, Math.floor(n));
+    this.wave = this.make(this.number);
+    this.cursor = 0;
+    this.elapsed = 0;
+    this.enterPrep();
+  }
+
+  /** Re-compose the upcoming wave during preparation (plan changed by an event/debug force). */
+  recompose(): void {
+    if (this.phase === 'prep') this.wave = this.make(this.number);
   }
 
   private enterPrep(): void {
@@ -87,7 +113,7 @@ export class WaveManager {
         this.timer -= realDt;
         if (this.timer <= 0) {
           this.number++;
-          this.wave = getWave(this.number, this.scaling);
+          this.wave = this.make(this.number);
           this.enterPrep();
         }
         break;

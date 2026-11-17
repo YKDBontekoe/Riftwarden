@@ -13,7 +13,7 @@ import * as TX from '../economy/transactions';
 import type { SaveData } from '../progression/save';
 import { equipFromStorage, uninstallModule } from '../progression/save';
 import { applyLoadout, bankRewards, beginRun, deployBlocker, equippedItem, recordRun, selectTier } from '../progression/save';
-import { getTier } from '../progression/tiers';
+import { getTier, THREAT_TIERS } from '../progression/tiers';
 import { hudStore, type Location, uiEvents } from '../ui/store';
 import { Game } from './Game';
 import { Input } from './Input';
@@ -158,7 +158,7 @@ export class Flow {
   async deploy(tierId = this.profile.save.threat.selected): Promise<boolean> {
     if (this.busy || (this.run && !this.run.ended)) return false;
     const save = this.profile.save;
-    if (tierId < 1 || tierId > save.threat.unlocked) return false;
+    if (tierId < 1 || (tierId > save.threat.unlocked && !this.devNext) || tierId > THREAT_TIERS.length) return false;
     if (deployBlocker(save)) return false;
     // The arena gets its own copies: run-side changes can never touch profile objects.
     const loadout = Object.fromEntries(SLOT_IDS.map((slot) => [slot, structuredClone(equippedItem(save, slot))]));
@@ -169,7 +169,7 @@ export class Flow {
     const tier = getTier(tierId);
     const runId = newUid('run');
     this.profile.mutate((d) => {
-      selectTier(d, tierId);
+      if (!this.devNext) selectTier(d, tierId);
       beginRun(d, runId, tierId);
     });
     await this.transition(`DEPLOYING · THREAT TIER ${tier.roman}`, `Sector 07 reactor · ${tier.name}`, () => {
@@ -185,12 +185,14 @@ export class Flow {
         towerTech: [...save.towers.unlocked],
         hooks: {
           // Reported as secured only once the write succeeded.
-          bank: (wave, rewards) => this.profile.mutate((d) => bankRewards(d, run.id, wave, rewards)) && this.profile.lastWriteOk,
+          // Development sessions (M6 dev tools used) never commit permanent rewards.
+          bank: (wave, rewards) => !run.survival.dev && this.profile.mutate((d) => bankRewards(d, run.id, wave, rewards, { bosses: run.survival.bossesKilled })) && this.profile.lastWriteOk,
           checkpoint: () => {},
           defeat: () => this.endRun('defeat'),
         },
       });
       this.arena.skipUpgrades = this.skipUpgrades || !!(globalThis as { __skipUpgrades?: boolean }).__skipUpgrades;
+      if (this.devNext) run.survival.dev = true;
       this.location = 'arena';
       return this.arena.scene;
     });
@@ -216,6 +218,14 @@ export class Flow {
     hudStore.set({ lastRun: { ...result } });
     return result;
   }
+
+  /** Development: deploy on any tier, marked as a development session (no records, no banking, unlocks untouched). */
+  devDeploy(tierId: number): Promise<boolean> {
+    if (tierId < 1 || tierId > THREAT_TIERS.length) return Promise.resolve(false);
+    this.devNext = true;
+    return this.deploy(tierId).finally(() => (this.devNext = false));
+  }
+  private devNext = false;
 
   /** Checkpoint extraction: secured rewards are already in the save. */
   async returnHome(): Promise<boolean> {
@@ -407,6 +417,17 @@ export class Flow {
         if (!a || !a.inventory.collect(item)) return false;
         a.inventoryVersion++;
         return true;
+      },
+      V3: Vector3,
+      /** M6 development tools (every call marks the run as non-record-eligible). */
+      dev: {
+        jump: (n: number) => flow.arena?.devJump(n),
+        spawn: (kind: Parameters<Game['devSpawn']>[0], mods: Parameters<Game['devSpawn']>[1] = [], gate: Parameters<Game['devSpawn']>[2] = 'north') => flow.arena?.devSpawn(kind, mods, gate) ?? null,
+        force: (o: Parameters<Game['devForce']>[0]) => flow.arena?.devForce(o),
+        evolve: (id: Parameters<Game['devEvolve']>[0]) => flow.arena?.devEvolve(id),
+        reset: () => flow.arena?.devReset(),
+        /** Deploy on any tier (ignores unlocks) as a development session. */
+        deploy: (tier: number) => flow.devDeploy(tier),
       },
       /** Damage the reactor through the real path (defeat when it reaches 0). */
       damageReactor: (amount: number) => flow.arena?.debugDamageReactor(amount),

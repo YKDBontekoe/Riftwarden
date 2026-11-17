@@ -12,6 +12,7 @@ export type PlacementReason =
   | 'obstructed'
   | 'out-of-bounds'
   | 'too-far'
+  | 'reserved'
   | 'insufficient-cores';
 
 export const PLACEMENT_MESSAGES: Record<PlacementReason, string> = {
@@ -25,6 +26,7 @@ export const PLACEMENT_MESSAGES: Record<PlacementReason, string> = {
   obstructed: 'Obstructed by geometry',
   'out-of-bounds': 'Outside the facility',
   'too-far': 'Out of build range',
+  reserved: 'Reserved for facility machinery',
   'insufficient-cores': 'Not enough cores',
 };
 
@@ -80,6 +82,10 @@ export function validatePlacement(layout: ArenaLayout, q: PlacementQuery): Place
     for (const route of Object.values(layout.routes)) {
       if (distToPolyline(q.x, q.z, route.points) < layout.laneHalfWidth + q.radius) return 'blocks-route';
     }
+  }
+
+  for (const z of layout.reserved ?? []) {
+    if (q.x + q.radius > z.x0 && q.x - q.radius < z.x1 && q.z + q.radius > z.z0 && q.z - q.radius < z.z1) return 'reserved';
   }
 
   for (const t of q.towers) {

@@ -9,7 +9,7 @@ import { isRarity, rarity } from '../loot/rarity';
 import { CATEGORIES, type Category, type RolledAffix, type RolledStat } from '../loot/types';
 import { fitsSlot, getSlot, type ItemInstance, isSlotId, newUid, SLOT_IDS, type SlotId, slotsFor } from './items';
 import type { Rewards, RunOutcome, RunResult } from './run';
-import { CHECKPOINT_INTERVAL, THREAT_TIERS } from './tiers';
+import { CHECKPOINT_INTERVAL, THREAT_TIERS, unlocksNextTier } from './tiers';
 import { defaultBuild, FAMILIES, isValidBuild, socketKinds, type Finish, type SocketKind, type WeaponBuild } from '../weapons/build';
 import { canInstall, removalCost } from '../weapons/modules';
 import type { WeaponFamily } from '../data/defs';
@@ -885,7 +885,7 @@ export function beginRun(data: SaveData, runId: string, tier: number, now = Date
  * applied twice (repeated calls, double clicks, re-entrant events). Also unlocks the
  * next threat tier at the first checkpoint of the current one.
  */
-export function bankRewards(data: SaveData, runId: string, wave: number, rewards: Pick<Rewards, 'salvage' | 'items'> & Partial<Rewards>): boolean {
+export function bankRewards(data: SaveData, runId: string, wave: number, rewards: Pick<Rewards, 'salvage' | 'items'> & Partial<Rewards>, opts: { bosses?: number } = {}): boolean {
   const a = data.activeRun;
   if (!a || a.id !== runId || wave <= a.bankedThroughWave || wave % CHECKPOINT_INTERVAL !== 0) return false;
   // Validate everything first, then apply in one step (application-level atomicity).
@@ -918,7 +918,7 @@ export function bankRewards(data: SaveData, runId: string, wave: number, rewards
   const rec = record(data, a.tier);
   rec.checkpoints++;
   rec.salvageSecured += s;
-  if (a.tier < THREAT_TIERS.length && data.threat.unlocked < a.tier + 1) data.threat.unlocked = a.tier + 1;
+  if (unlocksNextTier(a.tier, wave, opts.bosses ?? 0) && data.threat.unlocked < a.tier + 1) data.threat.unlocked = a.tier + 1;
   return true;
 }
 
