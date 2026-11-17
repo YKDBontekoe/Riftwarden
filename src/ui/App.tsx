@@ -139,11 +139,11 @@ function SettingsPanel({ flow, compact }: { flow: Flow; compact?: boolean }) {
           <div className="seg">
             <button className={s.quality === 'high' ? 'on' : ''} onClick={() => update({ quality: 'high' })}>
               CINEMATIC
-              <small>Reflections · AO · shadows</small>
+              <small>HiDPI · reflections · ambient occlusion</small>
             </button>
             <button className={s.quality === 'low' ? 'on' : ''} onClick={() => update({ quality: 'low' })}>
               PERFORMANCE
-              <small>Bloom only</small>
+              <small>Lighter effects · limited resolution</small>
             </button>
           </div>
         </div>
@@ -155,7 +155,7 @@ function SettingsPanel({ flow, compact }: { flow: Flow; compact?: boolean }) {
 const CONTROLS: [string, string][] = [
   ['WASD', 'Move'],
   ['MOUSE', 'Aim · LMB fire'],
-  ['SPACE', 'Jump · again to boost'],
+  ['SPACE', 'Jump · again for a directional air boost'],
   ['SHIFT', 'Dash · hold to sprint'],
   ['E', 'Use terminal (HQ) · pick up loot'],
   ['I / TAB', 'Drone cargo / inventory'],

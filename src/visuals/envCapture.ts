@@ -1,8 +1,8 @@
-import { type AbstractMesh, BaseTexture, Constants, HDRFiltering, ReflectionProbe, RenderTargetTexture, type Scene, type Vector3 } from '@babylonjs/core';
+import { type AbstractMesh, Constants, CubeTexture, HDRFiltering, ReflectionProbe, RenderTargetTexture, type Scene, type Vector3 } from '@babylonjs/core';
 
 /**
  * Render the finished static scene once into a reflection probe, wrap the cube in a
- * plain BaseTexture, prefilter it and use it as the scene's IBL environment.
+ * non-rendering cube texture, prefilter it and use it as the scene's IBL environment.
  * Never reference the probe's RTT from a material (it would re-render while sampled).
  * The probe and filter are disposed with the scene.
  */
@@ -12,32 +12,32 @@ export function captureEnvironment(scene: Scene, meshes: AbstractMesh[], lit: { 
     const probe = new ReflectionProbe('envProbe', size, scene, false, true, true);
     probe.position.copyFrom(at);
     probe.refreshRate = RenderTargetTexture.REFRESHRATE_RENDER_ONCE;
-    const list = probe.renderList!;
-    for (const m of meshes) if (!list.includes(m)) list.push(m);
+    probe.renderList = [...new Set(meshes)];
     const rtt = probe.cubeTexture;
-    // Probes only render when referenced; force a single capture as a custom target.
     scene.customRenderTargets.push(rtt);
-    let faces = 0;
-    const obs = rtt.onAfterRenderObservable.add(() => {
-      if (++faces < 6) return;
-      rtt.onAfterRenderObservable.remove(obs);
+    rtt.onAfterUnbindObservable.addOnce(() => {
       scene.onAfterRenderObservable.addOnce(() => {
-        const i = scene.customRenderTargets.indexOf(rtt);
-        if (i >= 0) scene.customRenderTargets.splice(i, 1);
-        const env = new BaseTexture(scene, rtt.getInternalTexture());
+        const index = scene.customRenderTargets.indexOf(rtt);
+        if (index !== -1) scene.customRenderTargets.splice(index, 1);
+        const captured = rtt.getInternalTexture();
+        if (!captured) return;
+        captured.incrementReferences();
+        const env = new CubeTexture('', scene);
+        env._texture = captured;
         env.gammaSpace = false;
+        env.invertZ = rtt.invertZ;
         env.name = 'capturedEnvironment';
-        const filter = new HDRFiltering(scene.getEngine(), { quality: Constants.TEXTURE_FILTERING_QUALITY_HIGH, hdrScale: 1 });
-        filter
-          .prefilter(env)
-          .then(() => {
-            if (!scene.isDisposed) scene.environmentTexture = env;
-          })
-          .catch((e) => {
-            console.warn('Environment prefilter failed, using realtime filtering', e);
-            for (const m of lit) m.realTimeFiltering = true;
-            if (!scene.isDisposed) scene.environmentTexture = env;
-          });
+        const filter = new HDRFiltering(scene.getEngine(), {
+          quality: size >= 256 ? Constants.TEXTURE_FILTERING_QUALITY_HIGH : Constants.TEXTURE_FILTERING_QUALITY_MEDIUM,
+        });
+        filter.prefilter(env).then(() => {
+          if (!scene.isDisposed) scene.environmentTexture = env;
+        }).catch((error) => {
+          if (scene.isDisposed) return;
+          console.warn('Environment prefilter failed, using realtime filtering', error);
+          for (const material of lit) material.realTimeFiltering = true;
+          scene.environmentTexture = env;
+        });
       });
     });
   });

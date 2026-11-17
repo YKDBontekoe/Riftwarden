@@ -250,6 +250,41 @@ const M = (p, fn, arg) => p.evaluate(fn, arg);
   console.log('\n[A] weapon families');
   await deploy(p, 1);
   await helpers(p);
+  const stability = await M(p, () => {
+    const g = window.__rift.game;
+    const weapon = g.weapon;
+    const params = { lookDx: 0, lookDy: 0, speed: 0, grounded: true, sprinting: false, dashing: false, verticalSpeed: 0, heat: 0, overheated: false, charge: 0, active: 0, holster: 0 };
+    const sample = (overrides, hz = 60) => {
+      const animator = new weapon.anim.constructor(weapon.rig);
+      const heights = [];
+      for (let frame = 0; frame < hz * 2; frame++) {
+        animator.update({ ...params, ...overrides, dt: 1 / hz });
+        if (frame >= hz) heights.push(animator.pose.y);
+      }
+      return { travel: Math.max(...heights) - Math.min(...heights), sway: animator.pose.x };
+    };
+    const cam = g.player.camera;
+    const baseFov = cam.fov;
+    const muzzleOnScreen = (fov) => {
+      cam.fov = fov;
+      weapon.update(0, false, g.stats, () => { throw new Error('Unexpected shot in viewmodel test'); });
+      const world = weapon.muzzleWorld();
+      const p = world.constructor.TransformCoordinates(world, cam.getViewMatrix());
+      const depth = p.z * Math.tan(fov / 2);
+      return [p.x / depth, p.y / depth];
+    };
+    const before = muzzleOnScreen(baseFov);
+    const after = muzzleOnScreen(baseFov + 0.16);
+    muzzleOnScreen(baseFov);
+    return {
+      chargedTravel: sample({ charge: 1 }).travel,
+      sprintTravel: sample({ speed: 22, sprinting: true }).travel,
+      swayDelta: Math.abs(sample({ lookDx: 0.6 / 30 }, 30).sway - sample({ lookDx: 0.6 / 120 }, 120).sway),
+      fovDrift: Math.hypot(after[0] - before[0], after[1] - before[1]),
+    };
+  });
+  check('A0 viewmodel is steady at idle charge and smooth at sprint speed', stability.chargedTravel < 1e-6 && stability.sprintTravel < 0.004, JSON.stringify(stability));
+  check('A0 viewmodel keeps the same turn sway and projection across frame rates and FOV kicks', stability.swayDelta < 1e-5 && stability.fovDrift < 1e-5, JSON.stringify(stability));
   const fam = {};
   for (const [baseId, seed] of [['plasma_repeater', 11], ['rail_lancer', 3], ['beam_prism', 5]]) {
     const eq = await M(p, ([b, s]) => window.__m3.equipNew({ seed: s, rarity: 'rare', baseId: b, level: 3 }), [baseId, seed]);

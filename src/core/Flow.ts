@@ -71,6 +71,7 @@ export class Flow {
   nextUpgradeSeed: number | null = null;
   /** Automation: legacy suites skip the mandatory upgrade screen. */
   skipUpgrades = false;
+  private renderQuality: Settings['quality'];
 
   constructor(
     readonly engine: Engine,
@@ -78,12 +79,23 @@ export class Flow {
     private havok: unknown,
     public settings: Settings,
   ) {
+    this.renderQuality = settings.quality;
     this.input = new Input(canvas);
     this.profile = new Profile();
   }
 
   get world(): World | null {
     return this.arena ?? this.home;
+  }
+
+  resize(): void {
+    const cinematic = this.renderQuality === 'high';
+    const { clientWidth, clientHeight } = this.canvas;
+    const pixels = Math.max(1, clientWidth * clientHeight);
+    // Keep HiDPI output sharp while bounding the cost of the full-resolution G-buffer and HDR passes.
+    const pixelBudget = cinematic ? 2560 * 1440 : 1920 * 1080;
+    const scale = Math.min(cinematic ? Math.min(window.devicePixelRatio || 1, 2) : 1, Math.sqrt(pixelBudget / pixels));
+    this.engine.setHardwareScalingLevel(1 / scale);
   }
 
   /** Build the HQ behind the title screen. */
@@ -163,6 +175,8 @@ export class Flow {
     await this.transition(`DEPLOYING · THREAT TIER ${tier.roman}`, `Sector 07 reactor · ${tier.name}`, () => {
       const run = new RunLedger(runId, tierId, Date.now());
       this.run = run;
+      this.renderQuality = this.settings.quality;
+      this.resize();
       this.arena = new Game(this.engine, this.canvas, this.havok, this.settings, this.input, {
         tier,
         loadout,
@@ -259,6 +273,8 @@ export class Flow {
 
   private buildHome(skipDispose = false): void {
     if (!skipDispose) this.disposeWorld();
+    this.renderQuality = this.settings.quality;
+    this.resize();
     this.home = new HomeBase(this.engine, this.canvas, this.havok, this.settings, this.input, this.profile, {
       deploy: () => void this.deploy(),
     });

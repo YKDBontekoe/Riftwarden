@@ -19,42 +19,53 @@ export interface WeaponMaterials {
 }
 
 interface Micro {
+  albedo: Texture;
   orm: Texture;
   normal: Texture;
 }
 
 const LIBS = new WeakMap<Scene, WeaponMaterials>();
 
-/** Fine micro-surface: roughness breakup + faint brushing (tileable, metre-scaled UVs). */
+/** Brushed and lightly worn finish shared by the viewmodel and the workshop preview. */
 function micro(scene: Scene): Micro {
-  const S = 256;
-  const { c: oc, ctx: o } = canvas(S);
-  const img = o.createImageData(S, S);
-  const height = new Float32Array(S * S);
-  for (let y = 0; y < S; y++) {
-    for (let x = 0; x < S; x++) {
-      const u = x / S;
-      const v = y / S;
-      const g = fbm(u, v, 8, 4, 77);
-      const brush = vnoise(u * 2, v * 128, 128, 12);
-      const i = (y * S + x) * 4;
-      img.data[i] = 255; // AO
-      img.data[i + 1] = Math.max(0.05, Math.min(1, 0.86 + (g - 0.5) * 0.28 + (brush - 0.5) * 0.12)) * 255;
-      img.data[i + 2] = 255;
-      img.data[i + 3] = 255;
-      height[y * S + x] = g * 0.08 + brush * 0.025;
+  const size = 256;
+  const { c: ac, ctx: a } = canvas(size);
+  const { c: oc, ctx: o } = canvas(size);
+  const albedo = a.createImageData(size, size);
+  const orm = o.createImageData(size, size);
+  const height = new Float32Array(size * size);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const u = x / size;
+      const v = y / size;
+      const grain = fbm(u, v, 8, 3, 77) - 0.5;
+      const brush = vnoise((u + v) * 5, v * 112, 5, 12, 112) - 0.5;
+      const rub = Math.max(0, fbm(u, v, 5, 3, 40) - 0.55);
+      const i = (y * size + x) * 4;
+      const tint = 0.91 + grain * 0.11 + brush * 0.14 + rub * 0.32;
+      albedo.data[i] = albedo.data[i + 1] = albedo.data[i + 2] = tint * 255;
+      albedo.data[i + 3] = 255;
+      orm.data[i] = 255;
+      orm.data[i + 1] = (0.89 + grain * 0.19 + brush * 0.15 - rub * 0.52) * 255;
+      orm.data[i + 2] = orm.data[i + 3] = 255;
+      height[y * size + x] = grain * 0.09 + brush * 0.11;
     }
   }
-  o.putImageData(img, 0, 0);
+  a.putImageData(albedo, 0, 0);
+  o.putImageData(orm, 0, 0);
+  const normal = toTexture('wpnMicroNrm', heightToNormal(height, size, 2.2), scene, { srgb: false });
+  normal.level = 0.48;
   return {
-    orm: toTexture('wpnMicroOrm', oc, scene, { srgb: false, aniso: 8 }),
-    normal: toTexture('wpnMicroNrm', heightToNormal(height, S, 1.2), scene, { srgb: false, aniso: 8 }),
+    albedo: toTexture('wpnMicroAlb', ac, scene),
+    orm: toTexture('wpnMicroOrm', oc, scene, { srgb: false }),
+    normal,
   };
 }
 
-function surface(scene: Scene, m: Micro, name: string, albedo: [number, number, number], metallic: number, roughness: number, opts: { clearCoat?: number; bump?: number } = {}): PBRMaterial {
+function surface(scene: Scene, m: Micro, name: string, albedo: [number, number, number], metallic: number, roughness: number, clearCoat = 0): PBRMaterial {
   const mat = new PBRMaterial(name, scene);
   mat.albedoColor = new Color3(...albedo);
+  mat.albedoTexture = m.albedo;
   mat.metallic = metallic;
   mat.roughness = roughness;
   mat.usePhysicalLightFalloff = false;
@@ -65,11 +76,10 @@ function surface(scene: Scene, m: Micro, name: string, albedo: [number, number, 
   mat.useMetallnessFromMetallicTextureBlue = true;
   mat.useRoughnessFromMetallicTextureAlpha = false;
   mat.bumpTexture = m.normal;
-  mat.bumpTexture.level = opts.bump ?? 0.35;
   mat.environmentIntensity = 1.3;
-  if (opts.clearCoat) {
+  if (clearCoat) {
     mat.clearCoat.isEnabled = true;
-    mat.clearCoat.intensity = opts.clearCoat;
+    mat.clearCoat.intensity = clearCoat;
     mat.clearCoat.roughness = 0.12;
   }
   return mat;
@@ -111,16 +121,16 @@ export function weaponMaterials(scene: Scene): WeaponMaterials {
   glass.useSpecularOverAlpha = true;
   glass.backFaceCulling = true;
   const lib: WeaponMaterials = {
-    graphite: surface(scene, m, 'wpnGraphite', [0.045, 0.048, 0.054], 0.35, 0.58, { bump: 0.5 }),
-    satin: surface(scene, m, 'wpnSatin', [0.66, 0.67, 0.7], 1, 0.3, { bump: 0.25 }),
+    graphite: surface(scene, m, 'wpnGraphite', [0.045, 0.048, 0.054], 0.35, 0.58),
+    satin: surface(scene, m, 'wpnSatin', [0.66, 0.67, 0.7], 1, 0.3),
     dark: surface(scene, m, 'wpnDark', [0.03, 0.031, 0.035], 0.85, 0.4),
-    polymer: surface(scene, m, 'wpnPolymer', [0.028, 0.028, 0.03], 0, 0.82, { bump: 0.8 }),
+    polymer: surface(scene, m, 'wpnPolymer', [0.028, 0.028, 0.03], 0, 0.82),
     glass,
     shell(f) {
       let mat = shells.get(f);
       if (!mat) {
         const [a, met, r, cc] = SHELL[f];
-        mat = surface(scene, m, `wpnShell_${f}`, a, met, r, { clearCoat: cc, bump: 0.2 });
+        mat = surface(scene, m, `wpnShell_${f}`, a, met, r, cc);
         if (f === 'iridescent') {
           mat.iridescence.isEnabled = true;
           mat.iridescence.intensity = 1;
@@ -136,7 +146,7 @@ export function weaponMaterials(scene: Scene): WeaponMaterials {
       let mat = trims.get(f);
       if (!mat) {
         const [a, met, r] = TRIM[f];
-        mat = surface(scene, m, `wpnTrim_${f}`, a, met, r, { bump: 0.15 });
+        mat = surface(scene, m, `wpnTrim_${f}`, a, met, r);
         trims.set(f, mat);
       }
       return mat;

@@ -15,7 +15,7 @@ import {
 } from '@babylonjs/core';
 import type { ArenaLayout } from '../world/layout';
 import { type Palette, unlit } from './materials';
-import { canvas, flareSprite, rng, toTexture, windowsTexture } from './textures';
+import { canvas, flareSprite, rng, sparkSprite, toTexture, windowsTexture } from './textures';
 import { boxProjectUVs } from './uv';
 import { captureEnvironment } from './envCapture';
 
@@ -58,20 +58,20 @@ void main(){
   float sd = max(dot(d, normalize(sunDir)), 0.0);
 
   // Rayleigh-ish gradient: deep blue zenith, warm hazy horizon, brighter toward the sun.
-  vec3 zenith = vec3(0.10, 0.24, 0.55);
+  vec3 zenith = vec3(0.055, 0.13, 0.31);
   float t = pow(1.0 - clamp(h, 0.0, 1.0), 5.0);
   vec3 col = mix(zenith, horizonColor * 1.25, t);
   col += vec3(1.1, 0.55, 0.22) * pow(sd, 5.0) * 0.75 * (0.35 + t);
-  col = mix(col, horizonColor * 0.9, smoothstep(0.0, -0.25, h));
+  col = mix(col, horizonColor * 0.9, (1.0 - smoothstep(-0.25, 0.0, h)));
 
   // Clouds on a dome, lit by the low sun (silver lining when backlit).
   vec2 uv = d.xz / max(h + 0.14, 0.06);
   float tt = time * 0.006;
   float c1 = fbm3(vec3(uv * 0.45 + vec2(tt, tt * 0.4), tt));
   float c2 = fbm3(vec3(uv * 1.6 - vec2(tt * 1.4, 0.0), 2.0 + tt));
-  float dens = smoothstep(0.48, 0.82, c1 * 0.8 + c2 * 0.32);
+  float dens = smoothstep(0.36, 0.66, c1 * 0.8 + c2 * 0.32);
   float cover = dens * smoothstep(-0.02, 0.18, h);
-  vec3 shade = mix(vec3(0.42, 0.45, 0.55), vec3(1.0, 0.92, 0.82), 0.45 + 0.55 * c2);
+  vec3 shade = mix(vec3(0.13, 0.15, 0.24), vec3(0.54, 0.43, 0.38), c2);
   vec3 lit = shade + vec3(1.6, 1.0, 0.55) * pow(sd, 4.0) * (1.0 - dens) * 1.4;
   col = mix(col, lit, cover * 0.9);
 
@@ -86,10 +86,15 @@ void main(){
   float distort = (fbm3(d * 5.0 + vec3(0.0, time * 0.03, 0.0)) - 0.5) * 0.1;
   float w = abs(dot(d, n) + distort);
   float mask = smoothstep(0.2, 0.75, along) * smoothstep(0.05, 0.3, h);
-  float core = exp(-w * w * 16000.0) * mask;
+  float ridge = fbm3(d * 24.0 + vec3(time * 0.018, 1.8, 0.0));
+  float core = exp(-w * w * 26000.0) * mask * (0.55 + ridge);
+  float branch = (fbm3(d * 11.0 + vec3(3.7, 0.0, time * 0.022)) - 0.43) * 0.14;
+  float filament = (dot(d, n) + distort + branch) * 145.0;
+  float arcs = exp(-filament * filament) * mask * smoothstep(0.35, 0.68, ridge);
   float glowR = exp(-w * w * 500.0) * mask;
   float pulse = 0.85 + 0.15 * sin(time * 1.3 + along * 9.0);
   col += (vec3(6.0, 2.6, 1.2) * core * 2.5 + vec3(1.6, 0.35, 0.25) * glowR * 0.6) * pulse * (1.0 + flash * 2.0);
+  col += vec3(2.0, 0.5, 0.17) * arcs * pulse;
   col += vec3(1.0, 0.5, 0.45) * flash * glowR * cover;
 
   gl_FragColor = vec4(col, 1.0);
@@ -108,21 +113,25 @@ precision highp float;
 varying vec2 vUV;
 uniform float time;
 uniform float seed;
+uniform vec3 energyColor;
 ${NOISE_GLSL}
 void main(){
   vec2 p = vUV * 2.0 - 1.0;
   float r = length(p);
   if (r > 1.0) discard;
-  float a = atan(p.y, p.x);
-  float sw = a + 3.5 / (r + 0.25) - time * 0.9;
-  float n = fbm3(vec3(cos(sw) * 2.2, sin(sw) * 2.2, r * 3.0 - time * 0.6 + seed));
-  float n2 = fbm3(vec3(p * 5.0, time * 0.4 + seed));
-  vec3 deep = vec3(0.12, 0.0, 0.05);
-  vec3 hot = vec3(3.2, 0.62, 0.08);
-  vec3 col = mix(deep, hot, smoothstep(0.35, 0.85, n) * (0.4 + r));
-  col += vec3(4.5, 2.4, 1.4) * pow(max(0.0, 1.0 - r * 2.4), 3.0) * (0.6 + n2);
-  float ring = exp(-pow((r - 0.93) * 16.0, 2.0)) * (0.7 + 0.6 * n2);
-  col += vec3(4.0, 0.9, 0.15) * ring;
+  float angle = atan(p.y, p.x);
+  float twist = angle + 2.8 * log(r + 0.15) - time * 0.72;
+  vec3 flow = vec3(cos(twist), sin(twist), r * 2.9 + seed);
+  float cloud = fbm3(flow * 2.5 + vec3(0.0, 0.0, -time * 0.4));
+  float detail = fbm3(flow * 6.0 + vec3(time * 0.27, 0.0, 0.0));
+  float arms = 0.5 + 0.5 * sin(5.0 * twist + cloud * 7.4 + r * 3.0);
+  float streaks = pow(arms, 7.0) * smoothstep(0.22, 0.72, cloud + detail * 0.25);
+  float annulus = smoothstep(0.06, 0.25, r) * (1.0 - smoothstep(0.87, 1.0, r));
+  float limb = r - (0.90 + (detail - 0.5) * 0.10);
+  float rim = exp(-limb * limb * 1250.0) * (0.45 + cloud);
+  float mist = smoothstep(0.28, 0.72, cloud) * annulus;
+  vec3 col = energyColor * (0.025 + mist * 0.38 + streaks * annulus * 1.9 + rim * 1.25);
+  col += mix(energyColor, vec3(1.0), 0.55) * (streaks * streaks * annulus + rim * rim * 0.4);
   gl_FragColor = vec4(col, 1.0);
 }`;
 
@@ -165,6 +174,19 @@ void main(){
   gl_FragColor = vec4(color * a, a);
 }`;
 
+/** A shared energy membrane with scene-specific color and a different flow field at each gate. */
+export function createRiftMaterial(scene: Scene, name: string, color: Color3, seed: number): ShaderMaterial {
+  const material = new ShaderMaterial(name, scene, 'rwRift', {
+    attributes: ['position', 'uv'],
+    uniforms: ['worldViewProjection', 'time', 'seed', 'energyColor'],
+  });
+  material.backFaceCulling = false;
+  material.setFloat('time', 0);
+  material.setFloat('seed', seed);
+  material.setColor3('energyColor', color);
+  return material;
+}
+
 /** Downward cone of light on a wall: bright at the top, fading and widening. */
 function splashTexture(scene: Scene) {
   const W = 128;
@@ -204,7 +226,6 @@ const LAMPS: [number, number][] = [
  */
 export class Atmosphere {
   private sky: ShaderMaterial;
-  private riftMat: ShaderMaterial;
   private beamMat: ShaderMaterial;
   private dust: ParticleSystem;
   private embers: ParticleSystem;
@@ -218,9 +239,9 @@ export class Atmosphere {
   /** Static meshes that should appear in environment reflections. */
   readonly envMeshes: AbstractMesh[] = [];
   /** Golden-hour haze. */
-  readonly fogColor = new Color3(0.6, 0.58, 0.56);
+  readonly fogColor = new Color3(0.38, 0.42, 0.51);
   /** Direction *towards* the sun (low, behind the south-east wall). */
-  readonly sunDir = new Vector3(0.45, 0.52, -0.72).normalize();
+  readonly sunDir = new Vector3(0.63, 0.39, -0.68).normalize();
 
   constructor(private scene: Scene, private P: Palette, private layout: ArenaLayout) {
     const sky = new ShaderMaterial('sky', scene, 'rwSky', {
@@ -231,7 +252,7 @@ export class Atmosphere {
     sky.disableDepthWrite = true;
     sky.setVector3('riftDir', new Vector3(-0.25, 0.6, 1).normalize());
     sky.setVector3('sunDir', this.sunDir);
-    sky.setColor3('horizonColor', new Color3(0.86, 0.72, 0.58));
+    sky.setColor3('horizonColor', new Color3(0.66, 0.51, 0.52));
     sky.setFloat('time', 0);
     sky.setFloat('flash', 0);
     this.sky = sky;
@@ -242,13 +263,6 @@ export class Atmosphere {
     this.skyMesh.alwaysSelectAsActiveMesh = true;
     this.skyMesh.applyFog = false;
     this.envMeshes.push(this.skyMesh);
-
-    this.riftMat = new ShaderMaterial('riftPortal', scene, 'rwRift', {
-      attributes: ['position', 'uv'],
-      uniforms: ['worldViewProjection', 'time', 'seed'],
-    });
-    this.riftMat.backFaceCulling = false;
-    this.riftMat.setFloat('seed', 0);
 
     this.beamMat = new ShaderMaterial('lampBeam', scene, 'rwBeam', {
       attributes: ['position', 'normal', 'uv'],
@@ -275,8 +289,7 @@ export class Atmosphere {
     let i = 0;
     for (const m of this.scene.meshes) {
       if (m.name !== 'rift') continue;
-      const mat = this.riftMat.clone(`riftPortal${i}`);
-      mat.setFloat('seed', i * 13.7);
+      const mat = createRiftMaterial(this.scene, `riftPortal${i}`, new Color3(2.9, 0.39, 0.09), i * 13.7);
       m.material = mat;
       this.portalMats.push(mat);
       i++;
@@ -289,10 +302,10 @@ export class Atmosphere {
     const lights: Mesh[] = [];
     for (let i = 0; i < 70; i++) {
       const ang = (i / 70) * Math.PI * 2 + r() * 0.06;
-      const dist = 78 + r() * 110;
-      const w = 8 + r() * 18;
+      const dist = 104 + r() * 112;
+      const w = 6 + r() * 17;
       const d = 8 + r() * 18;
-      const h = 14 + r() * r() * 90;
+      const h = 14 + r() * r() * 82;
       const b = MeshBuilder.CreateBox('sky_b', { width: w, depth: d, height: h }, this.scene);
       b.position.set(Math.sin(ang) * dist, h / 2 - 2, Math.cos(ang) * dist);
       b.rotation.y = r() * Math.PI;
@@ -319,7 +332,7 @@ export class Atmosphere {
     mat.metallic = 0.55;
     mat.roughness = 0.32;
     mat.emissiveTexture = windowsTexture(this.scene);
-    mat.emissiveColor = new Color3(0.35, 0.3, 0.26);
+    mat.emissiveColor = new Color3(0.68, 0.55, 0.47);
     mat.usePhysicalLightFalloff = false;
     city.material = mat;
     city.isPickable = false;
@@ -422,6 +435,7 @@ export class Atmosphere {
 
   private buildGateLights(): void {
     const H = this.layout.half;
+    const filament = sparkSprite(this.scene);
     for (const [x, z] of [[0, H - 1.5], [H - 1.5, 0], [-H + 1.5, 0]]) {
       const l = new PointLight('gateLight', new Vector3(x, 4, z), this.scene);
       l.diffuse = new Color3(1, 0.42, 0.12);
@@ -431,7 +445,10 @@ export class Atmosphere {
       this.gateLights.push(l);
       // embers pouring out of each rift
       const ps = new ParticleSystem('gateEmbers', 120, this.scene);
-      ps.particleTexture = flareSprite(this.scene);
+      ps.particleTexture = filament;
+      ps.billboardMode = ParticleSystem.BILLBOARDMODE_STRETCHED;
+      ps.minScaleY = 1.7;
+      ps.maxScaleY = 3.8;
       const inward = new Vector3(-x, 0, -z).normalize();
       ps.emitter = new Vector3(x, 3.5, z).addInPlace(inward.scale(-6));
       ps.minEmitBox = new Vector3(-2.5, -2.5, -2.5);
@@ -439,11 +456,11 @@ export class Atmosphere {
       ps.direction1 = inward.scale(1.5).add(new Vector3(-0.6, 0.2, -0.6));
       ps.direction2 = inward.scale(3.5).add(new Vector3(0.6, 1.2, 0.6));
       ps.minEmitPower = 0.8;
-      ps.maxEmitPower = 2.2;
+      ps.maxEmitPower = 2.9;
       ps.minLifeTime = 2;
       ps.maxLifeTime = 4.5;
       ps.minSize = 0.04;
-      ps.maxSize = 0.11;
+      ps.maxSize = 0.085;
       ps.emitRate = 22;
       ps.gravity = new Vector3(0, 0.4, 0);
       ps.addColorGradient(0, new Color4(0, 0, 0, 0));
@@ -541,13 +558,14 @@ export class Atmosphere {
   setQuality(high: boolean): void {
     this.dust.emitRate = high ? 45 : 18;
     this.embers.emitRate = high ? 8 : 3;
+    for (const particles of this.gateEmbers) particles.emitRate = high ? 30 : 14;
   }
 
   /**
    * Render the static scene once into a cube map from above the reactor plaza, prefilter
    * it for roughness, and use it as the PBR environment (reflections + ambient light).
    */
-  captureEnvironment(extra: AbstractMesh[], lit: { realTimeFiltering: boolean }[]): void {
-    captureEnvironment(this.scene, [...this.envMeshes, ...extra], lit, new Vector3(0, 7, -8));
+  captureEnvironment(extra: AbstractMesh[], lit: { realTimeFiltering: boolean }[], high: boolean): void {
+    captureEnvironment(this.scene, [...this.envMeshes, ...extra], lit, new Vector3(0, 7, -8), high ? 256 : 128);
   }
 }

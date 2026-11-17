@@ -16,6 +16,29 @@ const DOWN = new Vector3(0, -1, 0);
 const GRAVITY = new Vector3(0, -26, 0);
 
 export const MOVE = {
+  runSpeed: 15,
+  sprintSpeed: 22,
+  groundAccel: 150,
+  groundDecel: 120,
+  airAccel: 70,
+  jumpVel: 10.8,
+  boostVel: 12.4,
+  boostSpeed: 26,
+  dashSpeed: 44,
+  dashCarrySpeed: 24,
+  dashTime: 0.18,
+  dashCharges: 2,
+  dashRecharge: 1.0,
+  coyote: 0.1,
+  jumpBuffer: 0.11,
+  strafeRoll: 0.045,
+  sprintFov: 0.09,
+  dashFov: 0.16,
+  boostFov: 0.07,
+};
+
+export const HQ_MOVE: typeof MOVE = {
+  ...MOVE,
   runSpeed: 11,
   sprintSpeed: 15.5,
   groundAccel: 95,
@@ -23,15 +46,20 @@ export const MOVE = {
   airAccel: 32,
   jumpVel: 9.6,
   boostVel: 10.2,
+  boostSpeed: 0,
   dashSpeed: 31,
+  dashCarrySpeed: 15.5,
   dashTime: 0.16,
-  dashCharges: 2,
   dashRecharge: 1.5,
-  coyote: 0.1,
-  capsuleHeight: 1.8,
-  capsuleRadius: 0.55,
-  eyeOffset: 0.55,
+  strafeRoll: 0.012,
+  sprintFov: 0.05,
+  dashFov: 0.12,
+  boostFov: 0,
 };
+
+const CAPSULE_HEIGHT = 1.8;
+const CAPSULE_RADIUS = 0.55;
+const EYE_OFFSET = 0.55;
 
 /**
  * First-person hover drone. Collision, slopes and ramps are resolved by Havok's
@@ -49,8 +77,9 @@ export class Player {
   private vy = 0;
   grounded = false;
   private coyoteT = 0;
+  private jumpBufferT = 0;
   private airBoost = true;
-  dashCharges = MOVE.dashCharges;
+  dashCharges: number;
   dashRecharge = 0;
   private dashT = 0;
   /** Set when a dash starts (consumed by the game to emit the dash event). */
@@ -86,20 +115,21 @@ export class Player {
   private readonly spawn: Vector3;
   private readonly spawnYaw: number;
 
-  constructor(scene: Scene, spawn: { x: number; z: number; yaw: number }) {
-    this.spawn = new Vector3(spawn.x, MOVE.capsuleHeight / 2 + 0.05, spawn.z);
+  constructor(scene: Scene, spawn: { x: number; z: number; yaw: number }, private readonly move = MOVE) {
+    this.spawn = new Vector3(spawn.x, CAPSULE_HEIGHT / 2 + 0.05, spawn.z);
     this.spawnYaw = spawn.yaw;
     this.camera = new FreeCamera('playerCam', this.spawn.clone(), scene);
     this.camera.inputs.clear();
     this.camera.minZ = 0.05;
     this.camera.maxZ = 400;
     this.camera.fov = this.baseFov;
-    this.controller = new PhysicsCharacterController(this.spawn.clone(), { capsuleHeight: MOVE.capsuleHeight, capsuleRadius: MOVE.capsuleRadius }, scene);
+    this.controller = new PhysicsCharacterController(this.spawn.clone(), { capsuleHeight: CAPSULE_HEIGHT, capsuleRadius: CAPSULE_RADIUS }, scene);
     this.controller.maxSlopeCosine = Math.cos((50 * Math.PI) / 180);
     this.controller.keepDistance = 0.03;
     this.controller.shape.filterMembershipMask = PHYS_PLAYER;
     this.support = this.controller.checkSupport(1 / 60, DOWN);
     this.yaw = spawn.yaw;
+    this.dashCharges = move.dashCharges;
   }
 
   get position(): Vector3 {
@@ -126,9 +156,17 @@ export class Player {
     this.sinceShieldHit = 99;
     this.alive = true;
     this.respawnT = 0;
-    this.dashCharges = MOVE.dashCharges;
+    this.grounded = false;
+    this.coyoteT = 0;
+    this.jumpBufferT = 0;
+    this.airBoost = true;
+    this.dashCharges = this.move.dashCharges;
     this.dashRecharge = 0;
     this.dashT = 0;
+    this.sprinting = false;
+    this.landDip = 0;
+    this.roll = 0;
+    this.fovKick = 0;
     this.sinceHurt = 99;
     this.hurtFlash = 0;
     this.trauma = 0;
@@ -185,6 +223,8 @@ export class Player {
       this.alive = false;
       this.respawnT = ECONOMY.playerRespawnTime;
       this.hv.setAll(0);
+      this.dashT = 0;
+      this.jumpBufferT = 0;
     }
   }
 
@@ -199,6 +239,7 @@ export class Player {
   }
 
   update(dt: number, input: Input, moveSpeedMult: number, controlsEnabled: boolean): void {
+    const move = this.move;
     // --- Look ---
     if (controlsEnabled) {
       const k = 0.0022 * this.sensitivity;
@@ -253,79 +294,81 @@ export class Player {
     const wasGrounded = this.grounded;
     this.grounded = this.support.supportedState === CharacterSupportedState.SUPPORTED && this.vy <= 0.01;
     if (this.grounded) {
-      this.coyoteT = MOVE.coyote;
+      this.coyoteT = move.coyote;
       this.airBoost = true;
       if (!wasGrounded && this.vy < -6) this.landDip = Math.min(0.22, -this.vy * 0.012);
     } else this.coyoteT -= dt;
 
     // Dash charges
-    if (this.dashCharges < MOVE.dashCharges) {
-      this.dashRecharge += (dt * this.dashRechargeMult) / MOVE.dashRecharge;
+    const shiftHeld = input.isDown('ShiftLeft') || input.isDown('ShiftRight');
+    const shiftPressed = input.pressed('ShiftLeft') || input.pressed('ShiftRight');
+    if (this.dashCharges < move.dashCharges) {
+      this.dashRecharge += (dt * this.dashRechargeMult) / move.dashRecharge;
       if (this.dashRecharge >= 1) {
         this.dashCharges++;
-        this.dashRecharge = this.dashCharges < MOVE.dashCharges ? this.dashRecharge - 1 : 0;
+        this.dashRecharge = this.dashCharges < move.dashCharges ? this.dashRecharge - 1 : 0;
       }
     }
-    if (active && input.pressed('ShiftLeft') && this.dashCharges > 0) {
-      this.dashCharges--;
-      this.dashedThisFrame = true;
-      this.dashT = MOVE.dashTime;
-      if (wl > 0) this.dashDir.set(wx, 0, wz);
-      else this.dashDir.set(sin, 0, cos);
-      this.fovKick = 0.12;
-      sfx.play('dash');
-    }
-    this.sprinting = active && input.isDown('ShiftLeft') && fz > 0 && this.dashT <= 0;
-
-    if (this.dashT > 0) {
-      this.dashT -= dt;
-      this.hv.set(this.dashDir.x * MOVE.dashSpeed, 0, this.dashDir.z * MOVE.dashSpeed);
-      this.vy = Math.max(this.vy, 0);
-      if (this.dashT <= 0) {
-        const exit = this.sprinting || input.isDown('ShiftLeft') ? MOVE.sprintSpeed : MOVE.runSpeed;
-        this.hv.set(this.dashDir.x * exit, 0, this.dashDir.z * exit);
-      }
-    } else {
-      const speed = (this.sprinting ? MOVE.sprintSpeed : MOVE.runSpeed) * moveSpeedMult;
-      const tx = wx * speed;
-      const tz = wz * speed;
-      const accel = this.grounded ? (wl > 0 ? MOVE.groundAccel : MOVE.groundDecel) : MOVE.airAccel;
-      const dx = tx - this.hv.x;
-      const dz = tz - this.hv.z;
-      const dl = Math.hypot(dx, dz);
-      const step = accel * dt;
-      if (dl <= step) this.hv.set(tx, 0, tz);
-      else {
-        // In the air, never decelerate actively below current speed when no input (keep momentum).
-        if (!this.grounded && wl === 0) {
-          /* keep momentum */
-        } else {
-          this.hv.x += (dx / dl) * step;
-          this.hv.z += (dz / dl) * step;
-        }
-      }
-    }
-
-    // Vertical
-    if (active && input.pressed('Space')) {
+    // A second jump can redirect the drone mid-dash. With no input, keep its heading.
+    const jumpPressed = active && input.pressed('Space');
+    this.jumpBufferT = active ? Math.max(0, this.jumpBufferT - dt) : 0;
+    let redirected = false;
+    if (jumpPressed || this.jumpBufferT > 0) {
       if (this.coyoteT > 0) {
-        this.vy = MOVE.jumpVel;
+        this.vy = move.jumpVel;
         this.coyoteT = 0;
         this.grounded = false;
+        this.jumpBufferT = 0;
         sfx.play('jump');
       } else if (this.airBoost) {
-        this.vy = MOVE.boostVel;
+        this.vy = move.boostVel;
         this.airBoost = false;
+        this.jumpBufferT = 0;
+        this.fovKick = Math.max(this.fovKick, move.boostFov);
+        if (wl > 0 && move.boostSpeed > 0) {
+          const speed = move.boostSpeed * moveSpeedMult;
+          this.hv.set(wx * speed, 0, wz * speed);
+          this.dashT = 0;
+          redirected = true;
+        }
         sfx.play('jump', { pitch: 1.4 });
+      } else if (jumpPressed) {
+        this.jumpBufferT = move.jumpBuffer;
       }
     }
-    if (this.dashT > 0) {
-      this.vy = Math.max(0, this.vy);
-    } else if (this.grounded && this.vy <= 0) {
+
+    if (active && shiftPressed && this.dashCharges > 0) {
+      this.dashCharges--;
+      this.dashedThisFrame = true;
+      this.dashT = move.dashTime;
+      if (wl > 0) this.dashDir.set(wx, 0, wz);
+      else this.dashDir.set(sin, 0, cos);
+      this.fovKick = move.dashFov;
+      sfx.play('dash');
+    }
+    this.sprinting = active && shiftHeld && fz > 0 && this.dashT <= 0;
+    const dashDt = Math.min(dt, this.dashT);
+    if (dashDt > 0) {
+      this.dashT -= dashDt;
+      // Blend the last partial frame into carry speed so a low frame rate cannot extend the dash.
+      const speed = move.dashCarrySpeed + (move.dashSpeed - move.dashCarrySpeed) * (dashDt / dt);
+      this.hv.set(this.dashDir.x * speed, 0, this.dashDir.z * speed);
+    } else if (!redirected && (this.grounded || wl > 0)) {
+      const speed = (this.sprinting ? move.sprintSpeed : move.runSpeed) * moveSpeedMult;
+      const dx = wx * speed - this.hv.x;
+      const dz = wz * speed - this.hv.z;
+      const accel = this.grounded ? (wl > 0 ? move.groundAccel : move.groundDecel) : move.airAccel;
+      const change = Math.hypot(dx, dz);
+      const fraction = change > 0 ? Math.min(1, (accel * dt) / change) : 0;
+      this.hv.x += dx * fraction;
+      this.hv.z += dz * fraction;
+    }
+
+    if (this.grounded && this.vy <= 0) {
       this.vy = -2; // keep snapped to the ground on slopes/ramps
     } else {
-      this.vy += GRAVITY.y * dt;
-      this.vy = Math.max(this.vy, -40);
+      if (dashDt > 0) this.vy = Math.max(0, this.vy);
+      this.vy = Math.max(-40, this.vy + GRAVITY.y * dt);
     }
 
     this.tmp.set(this.hv.x, this.vy, this.hv.z);
@@ -335,6 +378,10 @@ export class Player {
     // Accept collision response (walls, ceilings, landings)
     this.hv.x = v.x;
     this.hv.z = v.z;
+    if (dashDt > 0 && this.dashT === 0) {
+      const speed = this.speed;
+      if (speed > move.dashCarrySpeed) this.hv.scaleInPlace(move.dashCarrySpeed / speed);
+    }
     if (this.vy > 0 && v.y < this.vy - 0.5) this.vy = v.y; // bonked a ceiling
     if (this.grounded) this.vy = Math.min(this.vy, 0);
 
@@ -342,7 +389,7 @@ export class Player {
     const p = this.controller.getPosition();
     if (p.y < -5) this.controller.setPosition(this.spawn.clone());
 
-    this.updateCamera(dt, fx);
+    this.updateCamera(dt, this.hv.x * cos - this.hv.z * sin);
   }
 
   private updateCamera(dt: number, strafe: number): void {
@@ -352,9 +399,9 @@ export class Player {
     const hover = Math.sin(this.bobT * 1.6) * 0.025; // gentle hover drift, not a walk bob
     this.landDip *= Math.exp(-dt * 9);
     const deadDrop = this.alive ? 0 : -0.9;
-    this.camera.position.set(p.x, p.y + MOVE.eyeOffset + hover - this.landDip + deadDrop, p.z);
-    const targetRoll = -strafe * 0.012 * Math.min(1, speed / MOVE.runSpeed);
-    this.roll += (targetRoll - this.roll) * Math.min(1, dt * 10);
+    this.camera.position.set(p.x, p.y + EYE_OFFSET + hover - this.landDip + deadDrop, p.z);
+    const targetRoll = -this.move.strafeRoll * Math.max(-1, Math.min(1, strafe / this.move.runSpeed));
+    this.roll += (targetRoll - this.roll) * (1 - Math.exp(-dt * 12));
     this.trauma = Math.max(0, this.trauma - dt * 1.4);
     const sh = this.trauma * this.trauma;
     const t = performance.now() * 0.001;
@@ -363,8 +410,8 @@ export class Player {
     const sr = sh * 0.05 * Math.sin(t * 27.7 + 0.7);
     this.camera.rotation.set(this.pitch - this.recoil + sp, this.yaw + sy, (this.alive ? this.roll : 0.25) + sr);
     this.fovKick *= Math.exp(-dt * 8);
-    const sprintFov = this.sprinting ? 0.05 : 0;
-    this.camera.fov += (this.baseFov + this.fovKick + sprintFov - this.camera.fov) * Math.min(1, dt * 12);
+    const sprintFov = this.sprinting ? this.move.sprintFov : 0;
+    this.camera.fov += (this.baseFov + this.fovKick + sprintFov - this.camera.fov) * (1 - Math.exp(-dt * 14));
   }
 
   /** Vertical velocity (m/s), for viewmodel jump/landing response. */

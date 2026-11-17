@@ -24,11 +24,13 @@ export interface ShotRequest {
 }
 
 export type ShotTarget = 'enemy' | 'shield' | 'surface' | 'none';
+export type SurfaceImpact = 'alloy' | 'ceramic' | 'wetDeck';
 
 export interface ShotOutcome {
   point: Vector3;
   normal: Vector3 | null;
   target: ShotTarget;
+  surface?: SurfaceImpact;
   /** Stable id of the first enemy hit (beam ramp tracking), null if none. */
   enemyId: number | null;
 }
@@ -41,7 +43,7 @@ export interface WeaponFxHooks {
 
 /** Fill optional outcome fields (callers may return only a point). */
 function normalize(o: Partial<ShotOutcome> & { point: Vector3 }): ShotOutcome {
-  return { point: o.point, normal: o.normal ?? null, target: o.target ?? 'none', enemyId: o.enemyId ?? null };
+  return { point: o.point, normal: o.normal ?? null, target: o.target ?? 'none', surface: o.surface, enemyId: o.enemyId ?? null };
 }
 
 /** Presentation no-op (automation / headless callers). */
@@ -87,7 +89,8 @@ export class Weapon {
   private switchT = 0;
   private visible = true;
 
-  private vm: TransformNode;
+  private readonly vmProjection: TransformNode;
+  private readonly vm: TransformNode;
   rig!: WeaponRig;
   anim!: WeaponAnimator;
   private buildKey = '';
@@ -106,8 +109,11 @@ export class Weapon {
 
   constructor(private scene: Scene, public def: WeaponDef, private player: Player, item?: ItemInstance | null) {
     this.spread = def.spreadMin;
+    this.vmProjection = new TransformNode('viewmodelProjection', scene);
+    this.vmProjection.parent = player.camera;
     this.vm = new TransformNode('viewmodel', scene);
-    this.vm.parent = player.camera;
+    this.vm.parent = this.vmProjection;
+    this.vm.scaling.setAll(ANCHOR.scale);
     this.flashRoot = new TransformNode('flashRoot', scene);
     const star = starSprite(scene);
     this.flashMat = unlit(scene, 'vmFlashMat', [2.4, 3.6, 4.4], { tex: star, opacity: star, additive: true, twoSided: true });
@@ -406,11 +412,11 @@ export class Weapon {
     });
     const p = this.anim.pose;
     const cam = this.player.camera;
-    // Keep the weapon's screen footprint stable when the FOV changes (sprint kick, settings).
+    // Compensate on the camera's X/Y axes so FOV kicks cannot stretch the model in depth.
     const s = Math.tan(cam.fov / 2) / Math.tan(REF_FOV / 2);
-    this.vm.position.set((ANCHOR.x + p.x) * s, (ANCHOR.y + p.y) * s, ANCHOR.z + p.z);
+    this.vmProjection.scaling.set(s, s, 1);
+    this.vm.position.set(ANCHOR.x + p.x, ANCHOR.y + p.y, ANCHOR.z + p.z);
     this.vm.rotation.set(ANCHOR.pitch + p.pitch, ANCHOR.yaw + p.yaw, ANCHOR.roll + p.roll);
-    this.vm.scaling.setAll(s * ANCHOR.scale);
 
     this.flashT -= dt;
     if (this.flashT <= 0) for (const f of this.flashMeshes) f.setEnabled(false);

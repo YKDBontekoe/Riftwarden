@@ -13,7 +13,7 @@ async function boot(): Promise<void> {
   root.render(<App getFlow={() => flow} />);
 
   const canvas = document.getElementById('game') as HTMLCanvasElement;
-  const engine = new Engine(canvas, true, { stencil: true, preserveDrawingBuffer: false, powerPreference: 'high-performance' }, true);
+  const engine = new Engine(canvas, true, { stencil: true, preserveDrawingBuffer: false, powerPreference: 'high-performance' });
   const havok = await HavokPhysics({ locateFile: () => havokWasmUrl });
   // In-world screens and signs are drawn to canvases: make sure the UI fonts are ready (bounded wait).
   await Promise.race([document.fonts?.ready ?? Promise.resolve(), new Promise((r) => setTimeout(r, 2500))]);
@@ -28,7 +28,7 @@ async function boot(): Promise<void> {
   flow.boot();
   // The only render loop for the whole session; worlds are swapped underneath it.
   engine.runRenderLoop(() => flow!.frame());
-  window.addEventListener('resize', () => engine.resize());
+  window.addEventListener('resize', () => flow?.resize());
 }
 
 boot().catch((err) => {
