@@ -67,6 +67,8 @@ export class Flow {
   /** Timing of the most recent scene swap (profiling aid, also shown in automation). */
   lastTransition: { disposeMs: number; buildMs: number; readyMs: number; timedOut: boolean } | null = null;
   private loopStopped = false;
+  /** Debug/test: seed for the next run's upgrade offers (cleared once used). */
+  nextUpgradeSeed: number | null = null;
 
   constructor(
     readonly engine: Engine,
@@ -163,6 +165,8 @@ export class Flow {
         tier,
         loadout,
         run,
+        seed: this.nextUpgradeSeed ?? undefined,
+        towerTech: [...save.towers.unlocked],
         hooks: {
           // Reported as secured only once the write succeeded.
           bank: (wave, rewards) => this.profile.mutate((d) => bankRewards(d, run.id, wave, rewards)) && this.profile.lastWriteOk,

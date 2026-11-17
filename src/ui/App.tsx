@@ -11,6 +11,7 @@ import { useHud } from './store';
 import { TerminalHost } from './TerminalHost';
 import { ArenaInventory } from './LootHud';
 import { BriefList } from './items';
+import { BuildOverview, TowerPanel, UpgradePanel } from './Roguelite';
 
 interface Props {
   getFlow: () => Flow | null;
@@ -25,7 +26,7 @@ export function fmtTime(s: number): string {
   return `${m}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 }
 
-const ARENA_SCREENS = new Set(['playing', 'paused', 'checkpoint', 'defeat', 'inventory']);
+const ARENA_SCREENS = new Set(['playing', 'paused', 'checkpoint', 'defeat', 'inventory', 'upgrade', 'build', 'towers']);
 const HOME_HUD_SCREENS = new Set(['home', 'terminal', 'paused']);
 
 export function App({ getFlow }: Props) {
@@ -43,6 +44,9 @@ export function App({ getFlow }: Props) {
       {screen === 'terminal' && flow && home && <TerminalHost key={`term${flow.transitions}`} flow={flow} home={home} />}
       {screen === 'paused' && flow && <PauseMenu flow={flow} />}
       {screen === 'checkpoint' && flow && arena && <CheckpointPanel flow={flow} game={arena} />}
+      {screen === 'upgrade' && arena && <UpgradePanel key={`up${arena.director.build.offers}`} game={arena} />}
+      {screen === 'build' && arena && <BuildOverview game={arena} />}
+      {screen === 'towers' && arena && <TowerPanel game={arena} />}
       {screen === 'inventory' && arena && <ArenaInventory key={`inv${flow?.transitions}`} game={arena} />}
       {screen === 'defeat' && flow && <DefeatScreen flow={flow} />}
       {screen === 'summary' && flow && <SummaryScreen flow={flow} />}
@@ -155,7 +159,10 @@ const CONTROLS: [string, string][] = [
   ['SHIFT', 'Dash · hold to sprint'],
   ['E', 'Use terminal (HQ) · pick up loot'],
   ['I / TAB', 'Drone cargo / inventory'],
-  ['2 / B', 'Build Sentinel'],
+  ['2 / B', 'Build tower (C/V/N/M cycle parts)'],
+  ['T', 'Tower engineering (preparation)'],
+  ['AIM + R/C/V/N', 'Refit tower: level / weapon / core / modifier'],
+  ['U', 'Run build overview'],
   ['Q', 'Tactical slow-time'],
   ['HOLD X', 'Recycle turret'],
   ['G', 'Start wave early'],

@@ -15,10 +15,11 @@ import { useSave } from './App';
 import { ConfirmButton, CostLine, ResourceBar, TxMessage, useTx } from './economy';
 import { type InvEntry, ItemCard, ItemDetail, itemTitle, sortEntries, TierPips } from './items';
 import { Shell } from './shell';
+import { TowerTech } from './TowerTech';
 import { ModuleBench, saveEntries } from './Terminals';
 import { WeaponViewer } from './WeaponViewer';
 
-type Tab = 'modules' | 'affixes' | 'enhance' | 'components';
+type Tab = 'modules' | 'affixes' | 'enhance' | 'components' | 'towers';
 
 interface EngEntry extends InvEntry {
   /** Weapon this module is installed in. */
@@ -46,6 +47,7 @@ export function EngineeringTerminal({ flow, close }: { flow: Flow; close: () => 
               ['affixes', 'AFFIXES'],
               ['enhance', 'ENHANCE'],
               ['components', 'COMPONENTS'],
+              ['towers', 'TOWER TECH'],
             ] as [Tab, string][]
           ).map(([id, label]) => (
             <button key={id} className={tab === id ? 'on' : ''} data-tab={id} onClick={() => setTab(id)}>
@@ -56,12 +58,13 @@ export function EngineeringTerminal({ flow, close }: { flow: Flow; close: () => 
         <ResourceBar save={save} compact />
       </div>
       {tab === 'modules' && <ModuleBench flow={flow} selW={selW} setSelW={setSelW} />}
-      {tab !== 'modules' && <Bench key={tab} flow={flow} save={save} tab={tab} selW={selW} setSelW={setSelW} />}
+      {tab === 'towers' && <TowerTech flow={flow} save={save} />}
+      {tab !== 'modules' && tab !== 'towers' && <Bench key={tab} flow={flow} save={save} tab={tab} selW={selW} setSelW={setSelW} />}
     </Shell>
   );
 }
 
-function Bench({ flow, save, tab, selW, setSelW }: { flow: Flow; save: SaveData; tab: Exclude<Tab, 'modules'>; selW: string | null; setSelW: (u: string) => void }) {
+function Bench({ flow, save, tab, selW, setSelW }: { flow: Flow; save: SaveData; tab: Exclude<Tab, 'modules' | 'towers'>; selW: string | null; setSelW: (u: string) => void }) {
   const tx = useTx(flow, 'workshop');
   const weaponsOnly = tab === 'components';
   const all = useMemo(() => sortEntries(engEntries(save), 'rarity') as EngEntry[], [save]);

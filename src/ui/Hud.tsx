@@ -1,3 +1,4 @@
+import { RunBadges } from './Roguelite';
 import { useEffect, useRef, useState } from 'react';
 import type { Game } from '../core/Game';
 import { ARENA } from '../world/layout';
@@ -28,6 +29,7 @@ export function Hud({ game }: { game: Game }) {
       <Banner />
       <Hint />
       <Respawn />
+      <RunBadges />
       <Perf />
     </div>
   );
@@ -670,13 +672,14 @@ function CenterPanel() {
   const cost = useHud((s) => s.buildCost);
   const cores = useHud((s) => s.cores);
   const inspect = useHud((s) => s.inspect);
+  const m5 = useHud((s) => s.m5);
   return (
     <div className="bottom-center">
       {build && (
         <div className={`build-panel panel-frame ${valid ? 'ok' : 'bad'}`}>
           <div className="bp-head">
             <span className="bp-icon">◈</span>
-            <span className="bp-title">SENTINEL TURRET</span>
+            <span className="bp-title">{m5?.template ?? 'TOWER'}</span>
             <span className={cores >= cost ? 'cost' : 'cost bad'}>◆ {cost}</span>
           </div>
           <div className="status">
@@ -684,7 +687,7 @@ function CenterPanel() {
             {msg}
           </div>
           <div className="keys">
-            <Key k="LMB" /> place <Key k="RMB" /> cancel {active ? <span className="rapid">RAPID PLACEMENT</span> : <><Key k="Q" /> tactical</>}
+            <Key k="C" /> weapon <Key k="V" /> core <Key k="N" /> mod <Key k="M" /> base · <Key k="LMB" /> place <Key k="RMB" /> cancel {active ? <span className="rapid">RAPID PLACEMENT</span> : <><Key k="Q" /> tactical</>}
           </div>
         </div>
       )}
@@ -708,6 +711,22 @@ function CenterPanel() {
               <span>REFUND</span>
             </div>
           </div>
+          {inspect.card && (
+            <div className="tc" data-testid="tower-card">
+              <div className="tc-line"><span>L{inspect.card.level}/{inspect.card.maxLevel} · {inspect.card.base}</span><b>{inspect.card.st.dps.toFixed(0)} DPS</b>{inspect.card.empowered && <em className="emp">EMPOWERED</em>}</div>
+              {inspect.card.slots.map((sl) => (
+                <div key={sl.slot} className="tc-line">
+                  <span>{sl.slot.toUpperCase()}</span>
+                  <b>{sl.name}</b>
+                  {sl.next ? <small>→ {sl.next} ◆{sl.nextCost}</small> : <small>—</small>}
+                </div>
+              ))}
+              <div className="keys">
+                <Key k="R" /> level {inspect.card.level < inspect.card.maxLevel ? `◆${inspect.card.levelCost}` : 'MAX'} <Key k="C" /> weapon <Key k="V" /> core <Key k="N" /> modifier
+              </div>
+              {inspect.edit && <div className="tc-warn">{inspect.edit}</div>}
+            </div>
+          )}
           <div className="keys">
             Hold <Key k="X" /> to recycle
           </div>
@@ -812,7 +831,9 @@ export function Perf() {
   if (!p) return null;
   return (
     <div className="perf">
-      {p.fps} FPS · {p.enemies} enemies · {p.draws} draws · {p.particles} particles
+      {p.fps} FPS · {p.enemies} enemies · {p.towers ?? 0} towers · {p.projectiles ?? 0} proj · {p.draws} draws · {p.particles} particles
+      <br />
+      fx queue {p.pending ?? 0} · {p.effects ?? 0} effects · {p.triggers ?? 0} triggers/s · {p.statuses ?? 0} statuses · dropped {p.dropped ?? 0} · dps player {p.dpsPlayer ?? 0} / tower {p.dpsTower ?? 0}
     </div>
   );
 }

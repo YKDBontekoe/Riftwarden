@@ -179,7 +179,7 @@ export class WeaponFx {
     this.arcMat = additive(scene, 'arcMat', new Color3(1.6, 2.4, 4.5), tex);
     const arcSrc = mk('arcSrc', this.arcMat);
     arcSrc.isVisible = false;
-    for (let i = 0; i < 40; i++) {
+    for (let i = 0; i < 90; i++) {
       const m = arcSrc.clone('arc');
       m.isVisible = true;
       m.isPickable = false;

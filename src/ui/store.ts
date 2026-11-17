@@ -6,7 +6,7 @@ import type { RunResult } from '../progression/run';
  * report after returning). Arena: playing, checkpoint (bank/continue/return choice),
  * defeat. Shared: loading, transit (scene swap), paused.
  */
-export type Screen = 'loading' | 'menu' | 'home' | 'terminal' | 'summary' | 'transit' | 'playing' | 'paused' | 'checkpoint' | 'defeat' | 'inventory';
+export type Screen = 'loading' | 'menu' | 'home' | 'terminal' | 'summary' | 'transit' | 'playing' | 'paused' | 'checkpoint' | 'defeat' | 'inventory' | 'upgrade' | 'build' | 'towers';
 export type Location = 'home' | 'arena';
 export type TerminalId = 'deploy' | 'loadout' | 'storage' | 'workshop' | 'command' | 'merchant' | 'modules' | 'salvage' | 'fabricate';
 
@@ -33,12 +33,41 @@ export interface RunHud {
 }
 export type WavePhase = 'prep' | 'combat' | 'cleared';
 
+export interface TowerCard {
+  id: number;
+  name: string;
+  base: string;
+  level: number;
+  maxLevel: number;
+  levelCost: number;
+  slots: { slot: 'weapon' | 'core' | 'modifier'; id: string; name: string; next: string | null; nextCost: number }[];
+  st: { damage: number; fireRate: number; range: number; dps: number; chain: number; targets: number; element: string; archetype: string };
+  empowered: boolean;
+  kills: number;
+  damage: number;
+}
+
 export interface InspectInfo {
   name: string;
   kills: number;
   damage: number;
   refund: number;
   recycle: number; // 0..1 hold progress
+  card?: TowerCard;
+  /** Why tower edits are unavailable right now (null = allowed). */
+  edit?: string | null;
+}
+
+export interface M5Hud {
+  upgrades: number;
+  buffs: { name: string; t: number; stacks: number }[];
+  network: number;
+  grid: number;
+  empowered: number;
+  towers: number;
+  note: string;
+  template: string;
+  templateCost: number;
 }
 
 /** The pickup currently targeted in the arena (interaction prompt). */
@@ -103,7 +132,8 @@ export interface HudState {
   hint: string;
   spread: number; // crosshair gap in px
   stats: { kills: number; time: number; wave: number; coresEarned: number; turretsBuilt: number };
-  perf: { fps: number; enemies: number; draws: number; particles: number } | null;
+  perf: { fps: number; enemies: number; draws: number; particles: number; towers?: number; projectiles?: number; pending?: number; statuses?: number; triggers?: number; dpsPlayer?: number; dpsTower?: number; effects?: number; dropped?: number } | null;
+  m5: M5Hud | null;
 }
 
 export const initialHud: HudState = {
@@ -151,6 +181,7 @@ export const initialHud: HudState = {
   spread: 0,
   stats: { kills: 0, time: 0, wave: 0, coresEarned: 0, turretsBuilt: 0 },
   perf: null,
+  m5: null,
 };
 
 type Listener = () => void;

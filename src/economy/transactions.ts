@@ -24,6 +24,7 @@ import {
 } from './config';
 import { checkFullReroll, checkSingleReroll, engineeringRand, maxLocks, rerollAll, rerollSingle, swapComponent } from './engineering';
 import { type MerchantId, merchantEntries } from './market';
+import { isUnlocked, partDef, STARTER_TECH, techKey, type TowerSlot } from '../towers/components';
 import { craftCost, fabricate, qualityDef, recipeDef, unlockedFor } from './recipes';
 
 /**
@@ -417,3 +418,41 @@ export function craft(data: SaveData, recipeId: string, qualityId: string | null
     return { ok: true, item, give: {}, cost: sumCost(cost) };
   });
 }
+
+// ------------------------------------------------------------------ M5: tower technology
+
+export function bestWaveCleared(data: SaveData): number {
+  return Object.values(data.records).reduce((m, r) => Math.max(m, r.bestWave), 0);
+}
+
+/** Why a blueprint cannot be researched right now (null = researchable). */
+export function researchBlocker(data: SaveData, slot: TowerSlot, id: string): string | null {
+  const p = partDef(slot, id);
+  if (!p) return 'Unknown blueprint';
+  if (!p.tech) return 'Starter blueprint';
+  if (isUnlocked(data.towers.unlocked, slot, id)) return 'Already researched';
+  if (bestWaveCleared(data) < p.tech.wave) return `Reach wave ${p.tech.wave} (best: ${bestWaveCleared(data)})`;
+  const cost = { credits: p.tech.credits, components: p.tech.components };
+  if (!canAfford(data, cost)) return missingText(data, cost);
+  return null;
+}
+
+/**
+ * Research a tower blueprint permanently (HQ only): needs a survival milestone plus credits / advanced
+ * components. Validate-all-then-apply like every economy transaction; deployed towers are never persisted.
+ */
+export function researchTower(data: SaveData, slot: TowerSlot, id: string, txId?: string): TxResult<{ key: string }> {
+  return withTx(data, txId, () => {
+    const hq = hqOnly(data);
+    if (hq) return hq;
+    const why = researchBlocker(data, slot, id);
+    if (why) return fail(why);
+    const p = partDef(slot, id)!;
+    pay(data, { credits: p.tech!.credits, components: p.tech!.components });
+    const key = techKey(slot, id);
+    data.towers.unlocked.push(key);
+    return { ok: true, key };
+  });
+}
+
+export const ownedTowerTech = (data: SaveData): string[] => [...STARTER_TECH, ...data.towers.unlocked];

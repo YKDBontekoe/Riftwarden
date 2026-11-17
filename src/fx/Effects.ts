@@ -31,7 +31,9 @@ export type BurstKind =
   | 'fire'
   | 'sparks'
   | 'embers'
-  | 'puff';
+  | 'puff'
+  | 'zap'
+  | 'frost';
 
 type TexKey = 'flare' | 'smoke' | 'spark' | 'star';
 
@@ -88,6 +90,9 @@ const BURSTS: Record<BurstKind, BurstConfig> = {
   },
   sparks: { tex: 'spark', capacity: 220, colors: [[0, c4(5, 3.2, 1.4)], [0.5, c4(3.6, 1.1, 0.2)], [1, c4(1, 0.15, 0, 0)]], minSize: 0.05, maxSize: 0.1, minLife: 0.35, maxLife: 1.0, minPower: 8, maxPower: 22, gravity: -15, blend: ADD, spread: 1, stretch: 7, drag: 0.8 },
   embers: { tex: 'flare', capacity: 200, colors: [[0, c4(4, 1.6, 0.4)], [0.5, c4(2.4, 0.5, 0.08)], [1, c4(0.4, 0.05, 0, 0)]], minSize: 0.05, maxSize: 0.13, minLife: 1, maxLife: 2.4, minPower: 2, maxPower: 7, gravity: -2.5, blend: ADD, spread: 1, drag: 2.2 },
+  // M5 elemental identities: electric = hard blue-white zaps, cryo = pale drifting frost motes.
+  zap: { tex: 'spark', capacity: 200, colors: [[0, c4(3.2, 4, 5)], [0.4, c4(0.9, 1.9, 4.5)], [1, c4(0.1, 0.3, 1.6, 0)]], minSize: 0.04, maxSize: 0.08, minLife: 0.1, maxLife: 0.28, minPower: 6, maxPower: 15, gravity: 0, blend: ADD, spread: 1, stretch: 7 },
+  frost: { tex: 'flare', capacity: 220, colors: [[0, c4(1.8, 2.6, 3)], [0.5, c4(0.9, 1.7, 2.4)], [1, c4(0.4, 0.9, 1.4, 0)]], minSize: 0.07, maxSize: 0.2, minLife: 0.5, maxLife: 1.1, minPower: 0.6, maxPower: 3, gravity: 1.6, blend: ADD, spread: 1, drag: 1.5, emitRadius: 0.4 },
   // Small dust/smoke puff for surface impacts.
   puff: {
     tex: 'smoke', capacity: 80,
@@ -263,7 +268,7 @@ export class Effects {
     this.world = new CollisionBoxes(layout);
     this.hotSparks = new BounceSparks(scene, tex.spark, this.world);
 
-    const poolSizes: Record<BurstKind, number> = { spark: 10, crit: 6, enemySpark: 8, impact: 10, explosion: 6, smoke: 8, shield: 5, build: 3, flash: 6, fire: 8, sparks: 8, embers: 6, puff: 8 };
+    const poolSizes: Record<BurstKind, number> = { spark: 10, crit: 6, enemySpark: 8, impact: 10, explosion: 6, smoke: 8, shield: 5, build: 3, flash: 6, fire: 8, sparks: 8, embers: 6, puff: 8, zap: 8, frost: 6 };
     for (const k of Object.keys(BURSTS) as BurstKind[]) this.bursts.set(k, new BurstPool(scene, tex[BURSTS[k].tex], BURSTS[k], poolSizes[k]));
 
     const root = kit.node('fxRoot', null);

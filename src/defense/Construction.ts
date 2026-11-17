@@ -1,10 +1,9 @@
-import { type AbstractMesh, type Mesh, MeshBuilder, Ray, type Scene, Vector3 } from '@babylonjs/core';
+import { type AbstractMesh, type Material, type Mesh, MeshBuilder, Ray, type Scene, Vector3 } from '@babylonjs/core';
 import type { CombatStats } from '../combat/stats';
-import { SENTINEL, towerCost } from '../data/defs';
 import type { Player } from '../player/Player';
-import type { Kit } from '../visuals/kit';
 import type { Palette } from '../visuals/materials';
-import { buildTurret, type TurretRig } from '../visuals/models';
+import type { TurretRig } from '../visuals/models';
+import { BASES, composeTower, configCost, DEFAULT_CONFIG, NO_RUN_INPUT, type TowerConfig } from '../towers/components';
 import type { ArenaLayout } from '../world/layout';
 import { FOOTPRINT_SAMPLES, PLACEMENT_MESSAGES, type PlacementReason, validatePlacement } from './placement';
 import type { Turret } from './Turrets';
@@ -22,24 +21,37 @@ export class Construction {
   valid = false;
   reason: PlacementReason = 'no-surface';
   readonly point = new Vector3();
-  private ghostOk: TurretRig;
-  private ghostBad: TurretRig;
+  private ghostOk!: TurretRig;
+  private ghostBad!: TurretRig;
+  template: TowerConfig = { ...DEFAULT_CONFIG };
   private ring: Mesh;
   private inspectRing: Mesh;
   private ray = new Ray(Vector3.Zero(), Vector3.Forward(), BUILD_REACH);
   private downRay = new Ray(Vector3.Zero(), new Vector3(0, -1, 0), 20);
 
-  constructor(private scene: Scene, kit: Kit, P: Palette, private layout: ArenaLayout) {
-    this.ghostOk = buildTurret(kit, P, P.ghostOk);
-    this.ghostBad = buildTurret(kit, P, P.ghostBad);
-    this.ghostOk.root.setEnabled(false);
-    this.ghostBad.root.setEnabled(false);
+  constructor(private scene: Scene, private buildGhost: (cfg: TowerConfig, unique: Material) => TurretRig, private P: Palette, private layout: ArenaLayout) {
+    this.makeGhosts();
     this.ring = MeshBuilder.CreateTorus('rangeRing', { diameter: 2, thickness: 0.02, tessellation: 96 }, scene);
     this.ring.material = P.cyanGlow;
     this.ring.isPickable = false;
     this.ring.setEnabled(false);
     this.inspectRing = this.ring.clone('inspectRing');
     this.inspectRing.setEnabled(false);
+  }
+
+  /** (Re)build the placement ghosts for a tower configuration. */
+  private makeGhosts(): void {
+    this.ghostOk?.root.dispose(false, false);
+    this.ghostBad?.root.dispose(false, false);
+    this.ghostOk = this.buildGhost(this.template, this.P.ghostOk);
+    this.ghostBad = this.buildGhost(this.template, this.P.ghostBad);
+    this.ghostOk.root.setEnabled(false);
+    this.ghostBad.root.setEnabled(false);
+  }
+
+  setTemplate(cfg: TowerConfig): void {
+    this.template = { ...cfg };
+    this.makeGhosts();
   }
 
   get message(): string {
@@ -79,7 +91,7 @@ export class Construction {
     const p = hit.pickedPoint;
     const n = hit.getNormal(true, true) ?? Vector3.Up();
     const surface = hit.pickedMesh?.metadata?.surface as string;
-    const r = SENTINEL.radius;
+    const r = BASES[this.template.base]?.radius ?? 1.1;
     const heights = FOOTPRINT_SAMPLES.map(([ox, oz]) => this.surfaceHeight(p.x + ox * r, p.z + oz * r, p.y + 8));
     this.reason = validatePlacement(this.layout, {
       x: p.x,
@@ -93,8 +105,8 @@ export class Construction {
       playerZ: player.position.z,
       maxRange: BUILD_REACH,
       cores,
-      cost: towerCost(SENTINEL, stats.buildCostMult),
-      towers: turrets.map((t) => ({ x: t.pos.x, z: t.pos.z, radius: t.def.radius })),
+      cost: configCost(this.template, stats.buildCostMult),
+      towers: turrets.map((t) => ({ x: t.pos.x, z: t.pos.z, radius: t.radius })),
     });
     this.valid = this.reason === 'ok';
     this.point.copyFrom(p);
@@ -104,18 +116,18 @@ export class Construction {
     show.root.setEnabled(true);
     show.root.position.copyFrom(p);
     show.yaw.rotation.y = player.yaw;
-    const range = SENTINEL.range * stats.turretRangeMult;
+    const range = composeTower(this.template, 1, { ...NO_RUN_INPUT, rangeMult: stats.turretRangeMult }).range;
     this.ring.setEnabled(true);
     this.ring.position.set(p.x, p.y + 0.06, p.z);
     this.ring.scaling.set(range, 1, range);
   }
 
-  showInspect(t: Turret | null, stats: CombatStats): void {
+  showInspect(t: Turret | null): void {
     if (!t) {
       this.inspectRing.setEnabled(false);
       return;
     }
-    const range = t.range(stats);
+    const range = t.range();
     this.inspectRing.setEnabled(true);
     this.inspectRing.position.set(t.pos.x, t.pos.y + 0.06, t.pos.z);
     this.inspectRing.scaling.set(range, 1, range);
