@@ -30,7 +30,7 @@ export interface WeaponRig {
   /** Vent fins: rotate about local x up to `max` radians as heat rises. */
   fins: { node: TransformNode; max: number }[];
   /** Capacitors / rings that slide forward and glow with charge. */
-  charge: { node: TransformNode; travel: number }[];
+  charge: { node: TransformNode; travel: number; z0: number }[];
   /** Heat indicator LEDs (lit progressively) and their materials. */
   leds: Mesh[];
   ledOn: PBRMaterial;
@@ -53,6 +53,8 @@ export interface ModelOpts {
   renderingGroupId?: number;
   layerMask?: number;
   name?: string;
+  /** Include the drone hardpoint arm (viewmodel only). Default true. */
+  mount?: boolean;
 }
 
 type V3 = [number, number, number];
@@ -140,7 +142,7 @@ class Assembler {
   private prep(mesh: Mesh, mat: Material): void {
     mesh.material = mat;
     mesh.isPickable = false;
-    mesh.doNotSyncBoundingInfo = true;
+    if (this.opts.renderingGroupId) mesh.alwaysSelectAsActiveMesh = true;
     if (this.opts.renderingGroupId !== undefined) mesh.renderingGroupId = this.opts.renderingGroupId;
     if (this.opts.layerMask !== undefined) mesh.layerMask = this.opts.layerMask;
     this.meshes.push(mesh);
@@ -167,6 +169,7 @@ const tubeZ = (ro: number, ri: number, z0: number, z1: number, tess = 28) => alo
 const cylX = (r: number, x0: number, x1: number, ch = 0.002, tess = 20) => alongX(latheData(cylProfile(r, x0, x1, ch), tess));
 
 interface Ctx {
+  mount: boolean;
   a: Assembler;
   M: WeaponMaterials;
   shell: Material;
@@ -214,19 +217,21 @@ function plasmaChassis(c: Ctx): Mounts {
   a.add(boxData(W - 0.02, y(0.085), 0.016, 0.004), M.polymer, root, [0, y(0.016), z(-0.318)]);
   // Side inset panels and seams (visible flank and the far side).
   for (const s of [-1, 1]) {
-    a.add(prismData([[z(-0.12), y(0.026)], [z(0.1), y(0.026)], [z(0.125), y(0.05)], [z(0.1), y(0.074)], [z(-0.1), y(0.074)]], 0.004, 0.0012), M.dark, root, [s * (W / 2 + 0.0015), 0, 0]);
-    a.add(boxData(0.003, 0.004, z(0.3), 0.001), c.trim, root, [s * (W / 2 + 0.001), y(0.006), z(0.0)]);
-    // Rear grip ribs.
-    for (let i = 0; i < 4; i++) a.add(boxData(0.003, y(0.05), 0.007, 0.001), M.dark, root, [s * ((W - 0.014) / 2 + 0.001), y(0.018), z(-0.29 + i * 0.018)]);
+    // Raised nose plate (dark) and seams; the core sits mid-flank as the focal point.
+    a.add(prismData([[z(0.13), y(0.058)], [z(0.2), y(0.058)], [z(0.215), y(0.072)], [z(0.14), y(0.084)], [z(0.115), y(0.07)]], 0.006, 0.0018), M.dark, root, [s * (W / 2 + 0.002), 0, 0]);
+    a.add(boxData(0.003, 0.0035, z(0.36), 0.001), c.trim, root, [s * (W / 2 + 0.001), y(0.006), z(-0.02)]);
+    a.add(boxData(0.003, 0.003, z(0.14), 0.0008), M.dark, root, [s * (W / 2 + 0.0012), y(0.08), z(-0.07)]);
+    // Rear panel with two vent slots.
+    a.add(prismData([[z(-0.3), y(-0.02)], [z(-0.215), y(-0.026)], [z(-0.215), y(0.055)], [z(-0.26), y(0.056)], [z(-0.3), y(0.03)]], 0.004, 0.0012), c.shell, root, [s * ((W - 0.014) / 2 + 0.002), 0, 0]);
+    for (let i = 0; i < 2; i++) a.add(boxData(0.003, 0.006, z(0.06), 0.001), M.dark, root, [s * ((W - 0.014) / 2 + 0.0045), y(0.0 + i * 0.016), z(-0.255)]);
   }
   // Top rail with teeth.
-  a.add(boxData(0.026, 0.008, z(0.2), 0.002), M.dark, root, [0, y(0.098), z(-0.02)]);
-  for (let i = 0; i < 8; i++) a.add(boxData(0.03, 0.005, 0.009, 0.0015), M.dark, root, [0, y(0.104), z(-0.105 + i * 0.024)]);
+  a.add(boxData(0.022, 0.006, z(0.12), 0.002), M.dark, root, [0, y(0.097), z(-0.08)]);
   // Mount yoke: pivot drum and the drone hardpoint arm (runs off-screen to the hull).
   a.add(cylX(0.026, -0.04, 0.04, 0.004), M.satin, root, [0, y(-0.058), z(-0.02)]);
   a.add(prismData([[-0.05, -0.03], [0.03, -0.03], [0.02, 0.02], [-0.06, 0.02]], 0.05, 0.005), M.graphite, root, [0.03, y(-0.07), z(-0.02)]);
-  a.add(boxData(0.04, 0.045, 0.34, 0.006), M.graphite, root, [0.1, y(-0.13), -0.12], [0.35, -0.55, 0.15]);
-  a.add(boxData(0.044, 0.012, 0.3, 0.003), c.trim, root, [0.1, y(-0.105), -0.13], [0.35, -0.55, 0.15]);
+  if (c.mount) a.add(boxData(0.04, 0.045, 0.34, 0.006), M.graphite, root, [0.1, y(-0.13), -0.12], [0.35, -0.55, 0.15]);
+  if (c.mount) a.add(boxData(0.044, 0.012, 0.3, 0.003), c.trim, root, [0.1, y(-0.105), -0.13], [0.35, -0.55, 0.15]);
   // Status window on the top rear (heat LEDs sit here).
   a.add(boxData(0.03, 0.006, 0.07, 0.002), M.dark, root, [0, y(0.097), z(-0.15)]);
   return {
@@ -262,7 +267,7 @@ function railChassis(c: Ctx): Mounts {
     const n = a.node('railCap', bank, [0, 0, i * 0.052]);
     a.add(cylZ(0.016, -0.022, 0.022, 0.003), M.satin, n);
     a.add(tubeZ(0.0172, 0.014, -0.006, 0.006), c.chargeGlow, n);
-    c.rig.charge.push({ node: n, travel: 0.006 });
+    c.rig.charge.push({ node: n, travel: 0.006, z0: n.position.z });
   }
   a.add(boxData(0.006, 0.042, z(0.17), 0.002), M.dark, root, [-(W / 2) - 0.004, y(0.055), z(-0.15)]);
   for (const s of [-1, 1]) a.add(boxData(0.028, 0.004, z(0.17), 0.001), M.dark, root, [-(W / 2) - 0.012, y(0.055) + s * 0.019, z(-0.15)]);
@@ -273,8 +278,8 @@ function railChassis(c: Ctx): Mounts {
   }
   // Mount yoke and hardpoint arm.
   a.add(cylX(0.028, -0.042, 0.042, 0.004), M.satin, root, [0, y(-0.05), z(-0.08)]);
-  a.add(boxData(0.04, 0.045, 0.34, 0.006), M.graphite, root, [0.1, y(-0.12), -0.18], [0.35, -0.55, 0.15]);
-  a.add(boxData(0.044, 0.012, 0.3, 0.003), c.trim, root, [0.1, y(-0.095), -0.19], [0.35, -0.55, 0.15]);
+  if (c.mount) a.add(boxData(0.04, 0.045, 0.34, 0.006), M.graphite, root, [0.1, y(-0.12), -0.18], [0.35, -0.55, 0.15]);
+  if (c.mount) a.add(boxData(0.044, 0.012, 0.3, 0.003), c.trim, root, [0.1, y(-0.095), -0.19], [0.35, -0.55, 0.15]);
   a.add(boxData(0.03, 0.006, 0.07, 0.002), M.dark, root, [0, y(0.118), z(-0.2)]);
   return {
     axisY: y(0.0),
@@ -322,8 +327,8 @@ function beamChassis(c: Ctx): Mounts {
   a.add(boxData(W - 0.03, y(0.07), 0.016, 0.004), M.polymer, root, [0, y(0.02), z(-0.26)]);
   // Mount yoke and hardpoint arm.
   a.add(cylX(0.03, -0.046, 0.046, 0.004), M.satin, root, [0, y(-0.058), z(-0.04)]);
-  a.add(boxData(0.04, 0.045, 0.34, 0.006), M.graphite, root, [0.1, y(-0.13), -0.15], [0.35, -0.55, 0.15]);
-  a.add(boxData(0.044, 0.012, 0.3, 0.003), c.trim, root, [0.1, y(-0.105), -0.16], [0.35, -0.55, 0.15]);
+  if (c.mount) a.add(boxData(0.04, 0.045, 0.34, 0.006), M.graphite, root, [0.1, y(-0.13), -0.15], [0.35, -0.55, 0.15]);
+  if (c.mount) a.add(boxData(0.044, 0.012, 0.3, 0.003), c.trim, root, [0.1, y(-0.105), -0.16], [0.35, -0.55, 0.15]);
   a.add(boxData(0.03, 0.006, 0.07, 0.002), M.dark, root, [0, y(0.093), z(-0.15)]);
   return {
     axisY: y(0.025),
@@ -357,21 +362,25 @@ function barrel(c: Ctx, m: Mounts): number {
       const L = (long ? 0.32 : 0.21) + 0.08 * lenK;
       const sh = twin ? 0.036 : 0.03;
       // Shroud: angular prism with a raked front, vent slots on top.
-      a.add(prismData([[z0 - 0.01, ay - sh], [z0 + L * 0.72, ay - sh * 0.86], [z0 + L * 0.78, ay - sh * 0.55], [z0 + L * 0.78, ay + sh * 0.7], [z0 + L * 0.66, ay + sh], [z0 - 0.01, ay + sh * 1.05]], twin ? 0.052 : 0.046, 0.006), c.shell, slide);
+      const sw = twin ? 0.054 : 0.048;
+      // Shroud body (graphite) with a shell-coloured top cover: reads as its own assembly.
+      a.add(prismData([[z0 - 0.012, ay - sh], [z0 + L * 0.7, ay - sh * 0.9], [z0 + L * 0.78, ay - sh * 0.5], [z0 + L * 0.78, ay + sh * 0.55], [z0 + L * 0.7, ay + sh * 0.8], [z0 - 0.012, ay + sh * 0.85]], sw, 0.005), M.graphite, slide);
+      a.add(prismData([[z0 - 0.016, ay + sh * 0.7], [z0 + L * 0.6, ay + sh * 0.7], [z0 + L * 0.68, ay + sh * 0.92], [z0 + L * 0.56, ay + sh * 1.12], [z0 - 0.016, ay + sh * 1.15]], sw + 0.004, 0.005), c.shell, slide);
+      // Underbarrel energy rail: gives the front a deeper silhouette.
+      a.add(prismData([[z0 - 0.01, ay - sh * 0.95], [z0 + L * 0.5, ay - sh * 0.95], [z0 + L * 0.58, ay - sh * 1.3], [z0 + L * 0.1, ay - sh * 1.55], [z0 - 0.01, ay - sh * 1.45]], sw - 0.016, 0.004), c.shell, slide);
       const slots = long ? 5 : 3;
-      for (let i = 0; i < slots; i++) a.add(boxData(0.03, 0.006, 0.014, 0.002), M.dark, slide, [0, ay + sh * 1.0, z0 + 0.03 + i * (L * 0.55 / slots)]);
-      for (const s of [-1, 1]) a.add(boxData(0.003, sh * 0.6, L * 0.5, 0.001), M.dark, slide, [s * ((twin ? 0.052 : 0.046) / 2 + 0.001), ay, z0 + L * 0.32]);
+      for (let i = 0; i < slots; i++) for (const s of [-1, 1]) a.add(boxData(0.004, sh * 0.55, 0.012, 0.0012), M.dark, slide, [s * (sw / 2 + 0.0005), ay - sh * 0.05, z0 + 0.03 + i * (L * 0.5 / slots)]);
       const bores = twin ? [ay + 0.016, ay - 0.016] : [ay];
       const coils = a.node('coils', slide, [0, 0, 0]);
       for (const by of bores) {
-        a.add(cylZ(twin ? 0.0095 : 0.012, z0 + L * 0.5, z0 + L + 0.045, 0.002), M.satin, slide, [0, by, 0]);
+        a.add(cylZ(twin ? 0.011 : 0.0145, z0 + L * 0.5, z0 + L + 0.045, 0.002), M.satin, slide, [0, by, 0]);
         // Accelerator coils (energy) between shroud and tip.
         const coilSpin = a.node('coilSpin', coils, [0, by, 0]);
-        for (let i = 0; i < 3; i++) a.add(tubeZ(twin ? 0.0165 : 0.021, twin ? 0.011 : 0.0135, 0, 0.006), c.chargeGlow, coilSpin, [0, 0, z0 + L * 0.8 + i * 0.016]);
-        for (let i = 0; i < 2; i++) a.add(tubeZ(twin ? 0.015 : 0.019, twin ? 0.0105 : 0.013, 0, 0.004), M.dark, coilSpin, [0, 0, z0 + L * 0.8 + 0.009 + i * 0.016]);
+        for (let i = 0; i < 3; i++) a.add(tubeZ(twin ? 0.019 : 0.025, twin ? 0.0125 : 0.016, 0, 0.007), c.chargeGlow, coilSpin, [0, 0, z0 + L * 0.8 + i * 0.019]);
+        for (let i = 0; i < 4; i++) a.add(tubeZ(twin ? 0.0165 : 0.022, twin ? 0.012 : 0.0155, 0, 0.005), M.dark, coilSpin, [0, 0, z0 + L * 0.8 - 0.006 + i * 0.019]);
         c.rig.spin.push({ node: coilSpin, axis: 'z', rate: 3 });
         // Muzzle crown (heat-reactive tip).
-        a.add(alongZ(lathe([[0.008, 0], [0.017, 0], [0.019, 0.008], [0.017, 0.024], [0.011, 0.028], [0.008, 0.028]], 20)), c.heat, slide, [0, by, z0 + L + 0.03]);
+        a.add(alongZ(lathe([[0.009, 0], [0.021, 0], [0.024, 0.006], [0.024, 0.02], [0.018, 0.03], [0.009, 0.03]], 24)), c.heat, slide, [0, by, z0 + L + 0.03]);
         muzzle(z0 + L + 0.06, by);
       }
       if (long) {
@@ -407,7 +416,7 @@ function barrel(c: Ctx, m: Mounts): number {
       for (let i = 0; i < 3; i++) {
         const n = a.node('railRing', slide, [0, ay, z0 + 0.1 + i * 0.08]);
         a.add(tubeZ(0.052, 0.045, -0.004, 0.004, 32), c.chargeGlow, n);
-        c.rig.charge.push({ node: n, travel: 0.02 });
+        c.rig.charge.push({ node: n, travel: 0.02, z0: n.position.z });
       }
       if (shroud) {
         a.add(prismData([[z0, -0.048], [z0 + L * 0.8, -0.045], [z0 + L * 0.85, -0.03], [z0 + L * 0.85, 0.03], [z0 + L * 0.8, 0.045], [z0, 0.048]], 0.066, 0.006), c.shell, slide, [0, ay, 0]);
@@ -703,7 +712,7 @@ export function buildWeaponModel(scene: Scene, build: WeaponBuild, installed: (I
   const ledOff = weaponGlow(scene, 'wpnLedOff', [0.02, 0.025, 0.03]);
   const owned = [energy, chargeGlow, heat, ledOn, ledHot, ledOff];
   const rig: Ctx['rig'] = { spin: [], fins: [], charge: [], muzzles: [] };
-  const c: Ctx = { a, M, shell: M.shell(build.finish), trim: rarityIndex >= 2 ? M.trim(build.finish) : M.satin, energy, chargeGlow, heat, b: build, rarity: rarityIndex, rig };
+  const c: Ctx = { mount: opts.mount !== false, a, M, shell: M.shell(build.finish), trim: rarityIndex >= 2 ? M.trim(build.finish) : M.satin, energy, chargeGlow, heat, b: build, rarity: rarityIndex, rig };
   rig.slide = a.node('slide', root);
 
   const mounts = build.family === 'rail' ? railChassis(c) : build.family === 'beam' ? beamChassis(c) : plasmaChassis(c);

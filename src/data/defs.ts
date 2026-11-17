@@ -39,7 +39,7 @@ export interface WeaponDef {
   boltSpeed: number;
 }
 
-const WEAPON_DEFAULTS = { burstCount: 3, chargeTime: 0.8, pierce: 0, beamWidth: 0, rampMax: 1, rampTime: 1, boltSpeed: 190 };
+const WEAPON_DEFAULTS = { burstCount: 3, chargeTime: 0.8, pierce: 0, beamWidth: 0, rampMax: 1, rampTime: 1, boltSpeed: 130 };
 
 export const PLASMA_REPEATER: WeaponDef = {
   ...WEAPON_DEFAULTS,

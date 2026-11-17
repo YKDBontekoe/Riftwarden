@@ -43,7 +43,7 @@ export interface FamilyDef {
 
 export const FAMILIES: Readonly<Record<WeaponFamily, FamilyDef>> = {
   plasma: { id: 'plasma', label: 'Plasma Repeater', role: 'Fast automatic fire, rapid heat build-up', template: PLASMA_REPEATER, socketPattern: ['barrel', 'power', 'system', 'system'], energy: [0.3, 1.7, 2.6] },
-  rail: { id: 'rail', label: 'Railgun', role: 'Charged precision slugs that pierce targets', template: RAILGUN, socketPattern: ['power', 'barrel', 'system', 'power'], energy: [1.1, 1.0, 3.4] },
+  rail: { id: 'rail', label: 'Railgun', role: 'Charged precision slugs that pierce targets', template: RAILGUN, socketPattern: ['power', 'barrel', 'system', 'power'], energy: [1.9, 0.7, 3.8] },
   beam: { id: 'beam', label: 'Beam Emitter', role: 'Continuous beam, damage ramps on a held target', template: BEAM_EMITTER, socketPattern: ['power', 'system', 'barrel', 'system'], energy: [0.5, 2.6, 0.9] },
 };
 

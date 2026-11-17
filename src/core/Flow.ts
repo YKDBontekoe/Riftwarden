@@ -1,7 +1,9 @@
 import { type Engine, type Scene, Vector3 } from '@babylonjs/core';
+import { buildWeaponModel } from '../weapons/model';
+import { rarity } from '../loot/rarity';
 import { generateItem } from '../loot/generate';
 import type { RarityId } from '../loot/rarity';
-import type { Category } from '../loot/types';
+import type { Category, ItemInstance } from '../loot/types';
 import { sfx } from '../audio/Sfx';
 import { HomeBase } from '../home/HomeBase';
 import { newUid, SLOT_IDS } from '../progression/items';
@@ -402,6 +404,28 @@ export class Flow {
         pl.yaw = Math.atan2(p.focus.x - x, p.focus.z - z);
         pl.pitch = 0.05;
         return true;
+      },
+      /**
+       * Visual QA: show weapon models for `items` in front of the camera (rendering group 1),
+       * stacked vertically, 3/4 side view. Returns a disposer.
+       */
+      lab: (items: ItemInstance[], o: { yaw?: number; pitch?: number; scale?: number; spacing?: number; x?: number } = {}) => {
+        const sc = flow.world?.scene;
+        const cam = sc?.activeCamera;
+        if (!sc || !cam) return null;
+        const rigs = items.map((it, i) => {
+          const rig = buildWeaponModel(sc, it.build!, it.socketed, { renderingGroupId: 1, name: 'lab', mount: false }, rarity(it.rarity).index);
+          rig.root.parent = cam;
+          const sp = o.spacing ?? 0.3;
+          rig.root.position.set(o.x ?? 0, ((items.length - 1) / 2 - i) * sp - 0.04, 1.25);
+          rig.root.rotation.set(o.pitch ?? 0.12, -Math.PI / 2 + (o.yaw ?? 0.45), 0);
+          rig.root.scaling.setAll(o.scale ?? 1);
+          rig.root.position.x -= ((rig.front + rig.rear) / 2) * (o.scale ?? 1) * 0;
+          return rig;
+        });
+        if (flow.arena) flow.arena.weapon.setVisible(false);
+        document.body.classList.add('lab');
+        return () => rigs.forEach((r) => r.dispose());
       },
       /** Resource counters for leak checks across transitions. */
       leakStats: () => {

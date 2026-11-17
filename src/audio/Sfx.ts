@@ -23,7 +23,14 @@ export type SfxName =
   | 'pickup'
   | 'lootDrop'
   | 'equip'
-  | 'bank';
+  | 'bank'
+  | 'railCharge'
+  | 'railFire'
+  | 'vent'
+  | 'arc'
+  | 'weaponSwitch'
+  | 'install'
+  | 'uninstall';
 
 interface PlayOpts {
   volume?: number;
@@ -188,6 +195,60 @@ export class Sfx {
     src.stop(t + dur + 0.02);
   }
 
+  private beam: { gain: GainNode; osc: OscillatorNode; osc2: OscillatorNode; filter: BiquadFilterNode } | null = null;
+
+  /** Continuous beam hum (started/stopped with the beam; cheap: two oscillators + noise). */
+  beamLoop(on: boolean): void {
+    if (!this.ctx || this.ctx.state !== 'running') return;
+    const ctx = this.ctx;
+    if (!this.beam) {
+      const gain = ctx.createGain();
+      gain.gain.value = 0;
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.value = 1800;
+      const osc = ctx.createOscillator();
+      osc.type = 'sawtooth';
+      osc.frequency.value = 96;
+      const osc2 = ctx.createOscillator();
+      osc2.type = 'square';
+      osc2.frequency.value = 193;
+      const g2 = ctx.createGain();
+      g2.gain.value = 0.25;
+      const src = ctx.createBufferSource();
+      src.buffer = this.noise;
+      src.loop = true;
+      const nf = ctx.createBiquadFilter();
+      nf.type = 'bandpass';
+      nf.frequency.value = 4200;
+      const ng = ctx.createGain();
+      ng.gain.value = 0.35;
+      osc.connect(filter);
+      osc2.connect(g2).connect(filter);
+      src.connect(nf).connect(ng).connect(filter);
+      filter.connect(gain).connect(this.master);
+      osc.start();
+      osc2.start();
+      src.start();
+      this.beam = { gain, osc, osc2, filter };
+    }
+    const t = ctx.currentTime;
+    this.beam.gain.gain.cancelScheduledValues(t);
+    this.beam.gain.gain.setTargetAtTime(on ? 0.09 : 0, t, on ? 0.03 : 0.06);
+    if (on) {
+      this.osc('sine', 1800, 400, 0.12, 0.06, this.master);
+    }
+  }
+
+  /** Beam pitch/brightness follow ramp and heat. */
+  beamLevel(ramp: number, heat: number): void {
+    if (!this.beam || !this.ctx) return;
+    const t = this.ctx.currentTime;
+    this.beam.osc.frequency.setTargetAtTime(90 + ramp * 22 + heat * 30, t, 0.05);
+    this.beam.osc2.frequency.setTargetAtTime(186 + ramp * 40, t, 0.05);
+    this.beam.filter.frequency.setTargetAtTime(1200 + ramp * 900 + heat * 1500, t, 0.08);
+  }
+
   play(name: SfxName, o: PlayOpts = {}): void {
     if (!this.ctx || this.ctx.state !== 'running') return;
     // Rate-limit identical sounds so dense combat does not turn into noise.
@@ -309,6 +370,40 @@ export class Sfx {
         this.noiseBurst(0.06, 0.12 * v, 2500, 800, out, 'bandpass', 2);
         this.osc('square', 220, 330, 0.08, 0.07 * v, out, 0.03);
         this.osc('sine', 880, 1320, 0.1, 0.06 * v, out, 0.06);
+        break;
+      case 'railCharge':
+        // Rising capacitor whine (~0.8 s at base charge speed).
+        this.osc('sawtooth', 180 * p, 1900 * p, 0.85 / p, 0.05 * v, out);
+        this.osc('sine', 360 * p, 3800 * p, 0.85 / p, 0.04 * v, out);
+        break;
+      case 'railFire':
+        // Hypersonic crack + low thump + electric tail.
+        this.noiseBurst(0.08, 0.5 * v, 9000, 2500, out, 'highpass', 0.7);
+        this.osc('sine', 110 * p, 38, 0.45, 0.55 * v, out);
+        this.osc('square', 2400 * p * j, 300, 0.22, 0.07 * v, out);
+        this.noiseBurst(0.5, 0.16 * v, 3200, 400, out, 'bandpass', 1.4, 0.03);
+        break;
+      case 'vent':
+        this.noiseBurst(0.45, 0.14 * v, 2500, 9000, out, 'bandpass', 0.9);
+        this.osc('sine', 600, 900, 0.12, 0.05 * v, out);
+        break;
+      case 'arc':
+        for (let i = 0; i < 3; i++) this.noiseBurst(0.04, 0.12 * v, 7000, 3000, out, 'highpass', 1, i * 0.03);
+        this.osc('square', 1200 * j, 600, 0.08, 0.04 * v, out);
+        break;
+      case 'weaponSwitch':
+        this.noiseBurst(0.08, 0.14 * v, 1800, 600, out, 'bandpass', 2);
+        this.osc('triangle', 300, 520, 0.12, 0.08 * v, out, 0.05);
+        this.noiseBurst(0.05, 0.1 * v, 3000, 1500, out, 'bandpass', 3, 0.16);
+        break;
+      case 'install':
+        this.noiseBurst(0.06, 0.14 * v, 2600, 900, out, 'bandpass', 2);
+        this.osc('triangle', 440, 660, 0.12, 0.09 * v, out, 0.04);
+        this.osc('sine', 1320, 1760, 0.2, 0.06 * v, out, 0.12);
+        break;
+      case 'uninstall':
+        this.osc('triangle', 660, 330, 0.18, 0.09 * v, out);
+        this.noiseBurst(0.1, 0.1 * v, 900, 2400, out, 'bandpass', 2, 0.06);
         break;
       case 'bank':
         this.osc('triangle', 392, 392, 0.2, 0.1 * v, out);

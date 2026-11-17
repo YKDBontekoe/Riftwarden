@@ -19,7 +19,9 @@ import {
 import { sfx } from '../audio/Sfx';
 import { mulberry32, rollDamage } from '../combat/damage';
 import { BASE_STATS, type CombatStats, computeStats, type StatModifier } from '../combat/stats';
-import { type ShotOutcome, type ShotRequest, Weapon } from '../combat/Weapon';
+import { type ShotOutcome, type ShotRequest, Weapon, type WeaponFxHooks } from '../combat/Weapon';
+import type { WeaponFamily } from '../data/defs';
+import { WeaponFx } from '../fx/WeaponFx';
 import { ECONOMY, SENTINEL, towerCost } from '../data/defs';
 import { pickInteractable } from '../home/interaction';
 import { DROP_SOURCES, type DropSourceId, rollDrops } from '../loot/drops';
@@ -86,6 +88,9 @@ export class Game {
   readonly player: Player;
   readonly weapon: Weapon;
   readonly fx: Effects;
+  readonly wfx: WeaponFx;
+  /** Arc Conductor procs this run (automation/tests). */
+  arcs = 0;
   readonly enemies: EnemyManager;
   readonly turrets: TurretManager;
   readonly construction: Construction;
@@ -198,10 +203,12 @@ export class Game {
     scene.activeCamera = this.player.camera;
     const weaponDef = weaponDefFor(cfg.loadout.weapon);
     if (!weaponDef) throw new Error('deployment requires an equipped weapon');
-    this.weapon = new Weapon(scene, this.pal, weaponDef, this.player);
+    this.weapon = new Weapon(scene, weaponDef, this.player, cfg.loadout.weapon);
     scene.setRenderingAutoClearDepthStencil(1, true, true, true);
 
     this.fx = new Effects(scene, this.kit, this.pal, ARENA);
+    this.wfx = new WeaponFx(scene);
+    this.wfx.setColor(this.weapon.rig.energyBase);
     this.fx.onShake = (pos, strength) => {
       const d = Vector3.Distance(pos, this.player.position);
       const k = strength * Math.max(0, 1 - d / 38);
@@ -365,8 +372,12 @@ export class Game {
   refreshEquipment(): void {
     const s = computeStats([...equipmentModifiers(this.inventory.equippedItems()), ...this.modifiers]);
     Object.assign(this.stats, s);
-    const w = weaponDefFor(this.inventory.equipped('weapon'));
-    if (w && (w.damage !== this.weapon.def.damage || w.name !== this.weapon.def.name || w.fireRate !== this.weapon.def.fireRate)) this.weapon.setDef(w);
+    const item = this.inventory.equipped('weapon');
+    const w = weaponDefFor(item);
+    if (w) {
+      this.weapon.setItem(item, w);
+      this.wfx.setColor(this.weapon.rig.energyBase);
+    }
     this.player.applyStats(this.stats, this.attackerScale);
     this.tactical.rechargeMult = this.stats.tacticalRechargeMult;
     this.inventoryVersion++;
@@ -586,6 +597,7 @@ export class Game {
     this.disposed = true;
     this.input.onLockChange = () => {};
     sfx.setTactical(false);
+    sfx.beamLoop(false);
     this.scene.dispose();
   }
 
@@ -593,6 +605,7 @@ export class Game {
     this.enemies.clear();
     this.turrets.clear();
     this.fx.reset();
+    this.wfx.reset();
     this.player.reset();
     this.weapon.reset();
     this.tactical.reset();
@@ -674,8 +687,8 @@ export class Game {
 
     // ---- shooting
     const trigger = controls && input.mouse(0) && !this.construction.active;
-    this.weapon.update(dt, trigger, this.stats, this.shoot);
-    if (this.weapon.lastShot) this.fx.tracer(this.weapon.lastShot.from, this.weapon.lastShot.to, 0, 0.045, 0.06);
+    this.weapon.update(dt, trigger, this.stats, this.shoot, this.weaponFx);
+    this.wfx.update(dt, this.player.camera.position);
 
     // ---- inspect / recycle, loot
     this.updateInspect(dt, controls);
@@ -794,7 +807,12 @@ export class Game {
 
   // ---------------------------------------------------------------- combat
 
-  /** Player hitscan: nearest of level surfaces and enemy hitboxes (turrets are see-through). */
+  /**
+   * Player hitscan: level surfaces and enemy hitboxes (turrets are see-through).
+   * Rail slugs continue through `pierce` further enemies (15% less damage each) until a
+   * surface stops them; beams get an aim-assist radius (`width`) around their axis.
+   * Damage is applied here, immediately; `weaponFx` only visualises the outcome.
+   */
   private shoot = (r: ShotRequest): ShotOutcome => {
     // Hitboxes must reflect this frame's enemy poses, not last frame's render.
     for (const e of this.enemies.active) {
@@ -804,29 +822,117 @@ export class Game {
     this.shotRay.origin.copyFrom(r.origin);
     this.shotRay.direction.copyFrom(r.dir);
     this.shotRay.length = r.range;
-    const hits = this.scene.multiPickWithRay(this.shotRay, (m: AbstractMesh) => (!!m.metadata?.surface || !!m.metadata?.enemy) && m.isEnabled());
-    if (!hits || hits.length === 0) return { point: r.origin.add(r.dir.scale(r.range)) };
+    const hits = this.scene.multiPickWithRay(this.shotRay, (m: AbstractMesh) => (!!m.metadata?.surface || !!m.metadata?.enemy) && m.isEnabled()) ?? [];
     hits.sort((a, b) => a.distance - b.distance);
-    const first = hits[0];
-    const point = first.pickedPoint!.clone();
-    const meta = first.pickedMesh!.metadata as Partial<EnemyHitboxMeta> & { surface?: string };
-    if (meta.enemy) {
+    const wallIdx = hits.findIndex((h) => !!(h.pickedMesh!.metadata as { surface?: string }).surface);
+    const wall = wallIdx >= 0 ? hits[wallIdx] : null;
+    const maxDist = wall ? wall.distance : r.range;
+    const struck: Enemy[] = [];
+    let first: { point: Vector3; target: 'enemy' | 'shield' } | null = null;
+    let dmg = r.damage;
+    for (const h of hits) {
+      if (h.distance > maxDist) break;
+      const meta = h.pickedMesh!.metadata as Partial<EnemyHitboxMeta>;
+      const e = meta.enemy;
+      if (!e || struck.includes(e) || !e.alive) continue;
       let weak = !!meta.weak;
       if (!weak) {
         // Weakpoint overlapping the body sphere still counts if the ray passes through it.
-        const w = hits.find((h) => (h.pickedMesh!.metadata as EnemyHitboxMeta | null)?.enemy === meta.enemy && (h.pickedMesh!.metadata as EnemyHitboxMeta).weak);
-        if (w && w.distance - first.distance < 0.6) weak = true;
+        const w = hits.find((x) => (x.pickedMesh!.metadata as EnemyHitboxMeta | null)?.enemy === e && (x.pickedMesh!.metadata as EnemyHitboxMeta).weak);
+        if (w && w.distance - h.distance < 0.6) weak = true;
       }
-      this.damageEnemy('player', meta.enemy, r.damage, point, weak);
-    } else {
-      const n = first.getNormal(true, true) ?? Vector3.Up();
-      this.fx.impact(point.add(n.scale(0.03)), n);
+      const shielded = e.shield > 0;
+      struck.push(e);
+      const point = h.pickedPoint!.clone();
+      if (!first) first = { point, target: shielded ? 'shield' : 'enemy' };
+      this.damageEnemy('player', e, dmg, point, weak, undefined, r.family);
+      if (struck.length > r.pierce) break;
+      dmg *= 0.85;
     }
-    return { point };
+    // Beam aim assist: nearest enemy body within `width` of the axis, in front of the wall.
+    if (!first && r.width > 0) {
+      let best: Enemy | null = null;
+      let bestT = Infinity;
+      for (const e of this.enemies.active) {
+        if (!e.alive) continue;
+        const c = e.center(TMP);
+        const t = (c.x - r.origin.x) * r.dir.x + (c.y - r.origin.y) * r.dir.y + (c.z - r.origin.z) * r.dir.z;
+        if (t <= 0 || t > maxDist || t >= bestT) continue;
+        const px = r.origin.x + r.dir.x * t - c.x;
+        const py = r.origin.y + r.dir.y * t - c.y;
+        const pz = r.origin.z + r.dir.z * t - c.z;
+        const rr = e.def.bodyR * e.def.scale + r.width;
+        if (px * px + py * py + pz * pz <= rr * rr) {
+          best = e;
+          bestT = t;
+        }
+      }
+      if (best) {
+        const point = r.origin.add(r.dir.scale(bestT - best.def.bodyR * 0.6));
+        first = { point, target: best.shield > 0 ? 'shield' : 'enemy' };
+        struck.push(best);
+        this.damageEnemy('player', best, dmg, point, false, undefined, 'beam');
+      }
+    }
+    if (first) return { point: first.point, normal: null, target: first.target, enemyId: struck[0].id };
+    if (wall) {
+      const n = wall.getNormal(true, true) ?? Vector3.Up();
+      return { point: wall.pickedPoint!.clone(), normal: n, target: 'surface', enemyId: null };
+    }
+    return { point: r.origin.add(r.dir.scale(r.range)), normal: null, target: 'none', enemyId: null };
   };
 
-  damageEnemy(source: 'player' | 'turret', e: Enemy, base: number, point: Vector3, weakpoint: boolean, turret?: Turret): void {
+  /** World-space shot visuals and impacts per family (presentation only). */
+  private beamFxT = 0;
+  private weaponFx: WeaponFxHooks = {
+    shot: (family, from, out, power, speed) => {
+      const impact = () => this.impactFx(family, out, power);
+      if (family === 'plasma') {
+        this.wfx.bolt(from, out.point, speed, 0.34, out.target === 'none' ? null : impact);
+      } else if (family === 'rail') {
+        this.wfx.rail(from, out.point, power);
+        this.fx.ring(from, 0.22 + 0.18 * power, 0.12, this.weapon.rig.energyBase.scale(0.5), false);
+        impact();
+      } else {
+        // Beam ticks: throttle contact particles (the beam itself is continuous).
+        this.beamFxT -= 1 / 15;
+        if (this.beamFxT <= 0) {
+          this.beamFxT = 0.12;
+          impact();
+        }
+      }
+    },
+    beam: (on, from, to, intensity, contact) => this.wfx.beam(on, from, to, intensity, contact),
+  };
+
+  private impactFx(family: WeaponFamily, out: ShotOutcome, power: number): void {
+    const p = out.point;
+    if (out.target === 'surface' && out.normal) {
+      const pos = p.add(out.normal.scale(0.03));
+      if (family === 'rail') {
+        this.fx.impact(pos, out.normal);
+        this.fx.burst('sparks', pos, Math.round(8 + 10 * power), out.normal, 0.7);
+        this.fx.ring(pos, 1.6 * power + 0.6, 0.25, this.weapon.rig.energyBase.scale(0.5), false);
+        this.fx.flashLight(pos, 3 * power, 0.18, this.weapon.rig.energyBase.scale(0.4));
+      } else if (family === 'beam') {
+        this.fx.burst('impact', pos, 3, out.normal);
+        this.fx.burst('puff', pos, 1, out.normal);
+      } else this.fx.impact(pos, out.normal);
+    } else if (out.target === 'shield') {
+      this.fx.burst('shield', p, family === 'rail' ? 24 : 8, undefined, family === 'rail' ? 1.5 : 1);
+      if (family === 'rail') this.fx.ring(p, 2.4, 0.25, new Color3(2.6, 0.9, 0.2), false);
+    } else if (out.target === 'enemy') {
+      if (family === 'rail') {
+        this.fx.burst('sparks', p, 14, undefined, 0.8);
+        this.fx.debrisBurst(p, 3, 5, 0.6);
+      } else if (family === 'beam') this.fx.burst('enemySpark', p, 4, undefined, 0.8);
+    }
+  }
+
+  damageEnemy(source: 'player' | 'turret', e: Enemy, base: number, point: Vector3, weakpoint: boolean, turret?: Turret, family?: WeaponFamily | 'arc'): void {
     const roll = rollDamage(base, this.stats, weakpoint, Math.random, 'energy', source);
+    // Arc Conductor: a player hit may jump to the nearest other enemy (no chains of arcs).
+    if (source === 'player' && family !== 'arc' && this.stats.arcChance > 0 && Math.random() < this.stats.arcChance) this.arcFrom(e, point, roll.amount * this.stats.arcDamage);
     const res = this.enemies.damage(e, roll.amount, 'energy', point, this.fx);
     if (!res) return;
     let kind: HitKind = res.toHp === 0 && res.toShield > 0 ? 'shield' : roll.crit ? 'crit' : 'hit';
@@ -838,14 +944,39 @@ export class Game {
     }
     if (source === 'player') {
       uiEvents.emit('hit', kind);
-      if (kind === 'crit') this.fx.burst('crit', point, 10);
-      else if (kind === 'hit') this.fx.burst('enemySpark', point, 6);
-      sfx.play(kind === 'kill' ? 'kill' : kind === 'crit' ? 'crit' : kind === 'shield' ? 'shieldHit' : 'hit');
+      // Beam ticks are frequent: lighter per-tick feedback (the beam contact carries the rest).
+      const beam = family === 'beam';
+      if (kind === 'crit') this.fx.burst('crit', point, beam ? 3 : 10);
+      else if (kind === 'hit' && !beam) this.fx.burst('enemySpark', point, 6);
+      if (!beam || kind === 'kill' || kind === 'crit') sfx.play(kind === 'kill' ? 'kill' : kind === 'crit' ? 'crit' : kind === 'shield' ? 'shieldHit' : 'hit');
+      else sfx.play('hit', { volume: 0.35 });
     }
     // Turret numbers far from the player are noise; kills always show.
     if (source === 'player' || kind === 'kill' || Vector3.DistanceSquared(point, this.player.position) < 25 * 25) {
       uiEvents.emit('damageNumber', { x: point.x, y: point.y, z: point.z, amount: Math.round(roll.amount), kind, player: source === 'player' });
     }
+  }
+
+  /** Arc to the nearest other living enemy within 8 m of the struck one. */
+  private arcFrom(src: Enemy, point: Vector3, amount: number): void {
+    if (amount <= 0) return;
+    let best: Enemy | null = null;
+    let bestD = 8 * 8;
+    for (const o of this.enemies.active) {
+      if (o === src || !o.alive) continue;
+      const d = Vector3.DistanceSquared(o.pos, src.pos);
+      if (d < bestD) {
+        bestD = d;
+        best = o;
+      }
+    }
+    if (!best) return;
+    const to = best.center(new Vector3());
+    this.arcs++;
+    this.wfx.arc(point, to);
+    this.fx.burst('impact', to, 8);
+    sfx.play('arc', { volume: 0.7 });
+    this.damageEnemy('player', best, amount, to, false, undefined, 'arc');
   }
 
   private onEnemyKilled(e: Enemy): void {

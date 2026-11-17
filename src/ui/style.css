@@ -742,3 +742,4 @@ button.mini.expand { border-color: var(--amber-dim); color: #ffe2b5; }
 /* Long loot lists must never push modal buttons off-screen. */
 .modal { max-height: 94vh; overflow-y: auto; }
 .modal .brief-list { max-height: 116px; overflow-y: auto; }
+body.lab .hud, body.lab .hud-root, body.lab #ui > * { display: none !important; }
