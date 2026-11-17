@@ -63,6 +63,7 @@ export function DeployTerminal({ flow, close }: { flow: Flow; close: () => void 
               <rect x="20" y="10" width="160" height="100" className="wall" />
               <path d="M100 10 V40 M180 60 H140 M20 60 H60" className="lane" />
               <path d="M100 40 L100 52 M140 60 L112 60 M60 60 L88 60" className="lane" />
+              <path d="M100 110 V82 L112 75 L112 66 L104 64" className="lane sealed" />
               <circle cx="100" cy="60" r="9" className="core" />
               <circle cx="100" cy="60" r="16" className="ring" />
               <rect x="64" y="84" width="22" height="12" className="plat" />
@@ -70,7 +71,7 @@ export function DeployTerminal({ flow, close }: { flow: Flow; close: () => void 
             </svg>
           </div>
           <div className="arena-name">SECTOR 07 · REACTOR DEFENSE</div>
-          <p>Hold the reactor against endless machine waves arriving through three rift gates. Build Sentinel turrets beside the orange lanes.</p>
+          <p>Hold the reactor against endless machine waves arriving through three rift gates (a sealed fourth gate opens as the facility evolves). Build turrets beside the orange lanes; the grey reserved corridor stays free for the future route.</p>
           <ul className="rules">
             <li>
               Enemies drop <b>equipment</b>. Collected loot and salvage are <b className="o">unsecured</b> until a checkpoint.
