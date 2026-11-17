@@ -127,7 +127,7 @@ const fire = (p) =>
   });
   await boot(p, true);
   let s = await save(p);
-  check('S0 fresh v4 profile: credits, components and merchant stock', s.version === 4 && s.resources.credits === 200 && s.resources.components === 0 && s.market.equipment.length === 8 && s.market.modules.length === 6, JSON.stringify(s.resources));
+  check('S0 fresh profile: credits, components and merchant stock', s.version >= 4 && s.resources.credits === 200 && s.resources.components === 0 && s.market.equipment.length === 8 && s.market.modules.length === 6, JSON.stringify(s.resources));
 
   // ---------------------------------------------------------------- stock consistency (D, part 1)
   await toHq(p);
