@@ -30,7 +30,7 @@ async function deploy(p, tier = 1, dev = true, seed = null) {
   await ev(p, () => window.__rift.advance(1 / 60));
 }
 async function home(p) {
-  await ev(p, () => window.__rift.flow.abandonRun());
+  await ev(p, async () => { const f = window.__rift.flow; if (!(await f.abandonRun())) await f.leaveArena(); });
   await waitFor(p, () => window.__rift.state().location === 'home' && !window.__rift.state().busy);
   await ev(p, () => { const R = window.__rift; if (R.state().screen === 'summary') R.home.takeControl(false); });
 }
@@ -284,6 +284,7 @@ async function home(p) {
 
   // ------------------------------------------------------------------ E: arena evolution
   if (want('E')) {
+    await home(p); await deploy(p, 1, true);
     let r = await ev(p, () => {
       const R = window.__rift, g = R.game, V = R.V3;
       R.dev.reset();
@@ -344,6 +345,7 @@ async function home(p) {
 
   // ------------------------------------------------------------------ F: dynamic events
   if (want('F')) {
+    await home(p); await deploy(p, 1, true);
     const runEvent = (id) => ev(p, (id) => {
       const R = window.__rift, g = R.game;
       R.dev.reset();
@@ -400,6 +402,7 @@ async function home(p) {
 
   // ------------------------------------------------------------------ D: boss encounters
   if (want('D')) {
+    await home(p); await deploy(p, 1, true);
     // Colossus: spawn, telegraphs, attacks hurting the drone / towers / reactor, phases, core exposure, beam, kill + rewards.
     let r = await ev(p, () => {
       const R = window.__rift, g = R.game, V = R.V3;

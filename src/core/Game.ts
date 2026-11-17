@@ -1685,6 +1685,11 @@ export class Game {
     this.survival.endEvent();
     this.reactorHp = ECONOMY.reactorMaxHp;
     for (const t of this.turrets.turrets) t.disabledT = 0;
+    // Back to a playable state (a long dev session may have reached a checkpoint/upgrade screen).
+    this.offer = null;
+    this.upgradeDue = false;
+    this.checkpointOpen = false;
+    if (this.screen !== 'playing' && this.screen !== 'defeat') this.setScreen('playing');
   }
 
   /** Copy measured damage totals into the run ledger (before the run is finalized/recorded). */
