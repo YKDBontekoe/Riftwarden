@@ -130,6 +130,8 @@ export class Game {
   /** Upgrade choice currently on screen (mandatory selection after a wave). */
   offer: UpgradeDef[] | null = null;
   private upgradeDue = false;
+  /** Automation only: legacy milestone suites fight many waves without choosing upgrades. */
+  skipUpgrades = false;
   /** Configuration new towers are built with (chosen in the tower panel / build mode). */
   buildConfig: TowerConfig = { ...DEFAULT_CONFIG };
   /** Researched blueprints for this run. */
@@ -362,6 +364,7 @@ export class Game {
         run.waveReached(w.number);
         if (w.number > 1 && run.atCheckpoint) this.checkpointOpen = true;
         // Mandatory upgrade choice first (the prep countdown is frozen while it is open), then the checkpoint choice.
+        if (this.skipUpgrades) this.upgradeDue = false;
         if (this.upgradeDue && w.number > 1) this.openUpgrade();
         else if (this.checkpointOpen) this.openCheckpoint();
       },

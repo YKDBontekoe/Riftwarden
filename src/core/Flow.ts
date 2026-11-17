@@ -69,6 +69,8 @@ export class Flow {
   private loopStopped = false;
   /** Debug/test: seed for the next run's upgrade offers (cleared once used). */
   nextUpgradeSeed: number | null = null;
+  /** Automation: legacy suites skip the mandatory upgrade screen. */
+  skipUpgrades = false;
 
   constructor(
     readonly engine: Engine,
@@ -174,6 +176,7 @@ export class Flow {
           defeat: () => this.endRun('defeat'),
         },
       });
+      this.arena.skipUpgrades = this.skipUpgrades;
       this.location = 'arena';
       return this.arena.scene;
     });

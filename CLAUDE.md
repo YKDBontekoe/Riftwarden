@@ -1,6 +1,6 @@
 # Riftwarden: project notes for future sessions
 
-Browser FPS + tower-defense roguelite. Current milestone: **M4 complete** (see "Milestones"). Read this before changing code.
+Browser FPS + tower-defense roguelite. Current milestone: **M5 complete** (see "Milestones"). Read this before changing code.
 
 ## Stack
 
@@ -41,6 +41,14 @@ src/economy/market.ts      merchant stock generation (seeded by profile+rotation
 src/economy/recipes.ts     fabrication recipes + quality grades, craft costs, odds, fabricate() [pure]
 src/economy/transactions.ts every economy transaction: validate-all-then-apply, tx-id guard, ownership/protection [pure]
 src/home/economyProps.ts   exchange wall, module vault/broker, reclamation press, fabricator, calibration ring (live displays)
+src/combat/events.ts       M5: EffectBus (typed events, chain id/depth, per-effect cooldown/chance/chainLimit, budgeted queue)  [pure]
+src/combat/status.ts       M5: burn/shock/chill statuses + 3 reactions (thermal shock, overload, superconduct)         [pure]
+src/combat/gameEvents.ts   M5: HitEv/StatusEv/ReactionEv/TowerAttackEv payload types
+src/combat/Director.ts     M5: per-run director: shared damage pipeline deal(), inflict(), blast(), chainLightning(), towerFire(), buffs, upgrade effects (effectsFor)
+src/roguelite/upgrades.ts  M5: 36 run upgrades (UP numbers shared by text + effects), seeded 3-choice offers, RunBuild  [pure]
+src/towers/components.ts   M5: tower bases/weapons/cores/modifiers, compatibility, composeTower, costs, tech list      [pure]
+src/visuals/towers.ts      M5: procedural modular tower models (one builder, instanced kit)
+src/ui/Roguelite.tsx       M5: UpgradePanel, BuildOverview (U), TowerPanel (T), RunBadges;  src/ui/TowerTech.tsx: HQ research tab
 src/loot/LootField.ts      physical pickups (instanced holograms, beams, rings), lifetime + saturation rules
 src/progression/tiers.ts   threat tiers + checkpoint interval                          [pure]
 src/progression/Profile.ts owns the SaveData; mutate() persists + publishes a snapshot store
@@ -96,6 +104,19 @@ scripts/e2e-m3.cjs         M3 browser acceptance suite (families, generation, en
 ```
 
 ## Key design decisions
+
+### M5: roguelite upgrades, elements, modular towers
+
+- **One damage pipeline.** Every source (weapon, tower, status tick, effect, reaction) calls `Director.deal()`: vulnerability (chilled +, frozen +25%) -> elemental power -> `EnemyManager.damage` -> attribution (`damageBy`, per-tower kills/damage) -> reactions + statuses -> kill handling (`Game.onEnemyKilled`) -> typed events. `Game.damageEnemy` is the legacy entry (rolls crit, plays hitmarkers) and routes to it.
+- **Effect bus** (`events.ts`): effects register under an owner id (`upgrade:<id>`) and are rebuilt from scratch on every pick (no duplicate listeners). Events carry `chain {id, depth}` and `source {kind,id,towerId}`. Rules: damage is never dropped, only trigger propagation: events deeper than `MAX_DEPTH` (4) reach no effects; an effect fires at most `chainLimit` (default 1) times per chain; cooldown + chance per effect; queue drained per frame with budget 300 (carry-over) and hard cap 1500 (refusals counted in `stats.dropped`). Pooled enemies carry `gen`; events compare it so recycled targets are ignored. Visual work (arcs, heavy explosions, numbers) has per-frame budgets; logic does not.
+- **Statuses** (`status.ts`, stored on `Enemy.status`, reset on spawn/release): Burning (stacks to 5, 0.5 s ticks), Shocked (0.5 s disruption, 2 s internal cooldown), Chilled meter (slow up to 55%, freeze at 100 for 1.5 s then 5 s immunity). Statuses also scale enemy movement, attack timers and animation. Reactions use the contact element (hit element or applied status), consume their fuel and have per-target cooldowns: thermal shock (thermal on chill>=50), overload (electric on burning), superconduct (electric on chill>=40, +2 chain). DoT ticks never react.
+- **Run upgrades** (`upgrades.ts`): live only in `Game.director.build` (never in the save; a new `Game` = empty build). Stat upgrades are StatModifiers per stack (`RunBuild.modifiers()`), others are bus effects keyed by upgrade id in `effectsFor`. `Game.rebuildStats()` composes equipment + debug + upgrades + temporary buffs (event driven). Offers: `RunBuild.roll(ctx, index)` seeded by (seed, index) -> deterministic; rarity weights x depth, tag affinity, stack penalty, eligibility (`needs`: towers, notFamily, anyTag, towerArch; `minWave`), max one legendary, category diversity. Flow: wave cleared -> prep start -> `openUpgrade()` (screen `upgrade`, sim and prep countdown frozen) -> `chooseUpgrade` -> checkpoint panel if due -> resume. Seed: `ArenaConfig.seed` (`flow.nextUpgradeSeed` for tests) else hash of run id. `skipUpgrades` (Flow/Game) is automation-only (legacy suites).
+- **Modular towers** (`towers/components.ts`): `TowerConfig {base, weapon, core, modifier}`, archetypes ballistic / arc / cryo field. `composeTower` is the single source of numbers (base x weapon x core x modifier x level x run stats x empowerment), recomposed lazily when `statsVersion` changes. Default config == the old Sentinel (cost 100). Compatibility is explicit (`canInstall`). Refit (`Game.modifyTower`): weapon/core/modifier swap (net cost = new - 50% old, x `buildCostMult`) or level up (max 5); allowed in prep/cleared, and in combat only while tactical mode is active; base is fixed. Hotkeys: aim at tower + R/C/V/N (build mode: C/V/N/M cycle the template); T opens the panel (prep only); U shows the run build.
+- **Synergies** are bus effects (Phase Sync empowers towers on Storm Crit lightning; Thermal Detonation; Cryogenic Precision in `damageEnemy`; Feedback Loop / Battle Network Link buffs on tower kills; Overcharge Network, Conductor Link, Grid Capacitor discharges). Tower attribution travels in `source.towerId`.
+- **Persistence**: save v5 adds `towers.unlocked` (`slot:id`; starters implicit). `economy/transactions.researchTower` (HQ only, best wave + credits/components, tx id guard); UI = workshop "TOWER TECH" tab. `ArenaConfig.towerTech` snapshots unlocks at deploy. Deployed towers, levels and run upgrades are never persisted.
+- **Diagnostics**: F3 shows FPS, enemies, towers, projectiles, bus queue, effects, triggers/s, statuses, dropped triggers, player/tower dps.
+- **Tests**: `tests/m5.test.ts` (bus, statuses, reactions, upgrades, towers, research/migration); `node scripts/e2e-m5.cjs` (24 checks: upgrade flow, seeds, reset, statuses/reactions, tower refit incl. tactical, synergy, 42-enemy stress with 19 upgrades, research reload). Legacy e2e scripts set `flow.skipUpgrades`.
+- **Limitations / not done**: no protective-barrier upgrade, no combat-drone legendary; towers are not damageable (base "durability" is not modelled); Cryogenic Field is not occluded by walls; element visuals reuse pooled bursts (zap/frost added); balance is first-pass; real-GPU FPS not measured (headless SwiftShader sim: 1.9 ms avg/frame, p95 12.7 ms with 42 enemies, 6 towers, 19 upgrades).
 
 ### M4: persistent economy, merchants, salvage, fabrication, engineering
 
@@ -219,5 +240,6 @@ scripts/e2e-m3.cjs         M3 browser acceptance suite (families, generation, en
 - **M2 (done):** procedural loot (6 rarities, 20 affixes, 19 bases over 7 categories, seeded generator, level scaling), drop tables per source incl. elite/target-farm and checkpoint cache, physical pickups with lifetime rules, run cargo + prep-only equipping, functional armor/shield/reactor/processor/accessory stats, comparison UI, banking/loss/ownership rules, HQ storage (scrap, expansion sink), presets, module drops (stored), save v2 migration.
 - **M3 (done):** three weapon families with distinct mechanics/effects/sound, procedural components baked into rolls, procedural first-person models with mechanical animation and heat visuals, 8 functional module types in rarity-based typed sockets, HQ weapon engineering (install/remove/transfer for salvage) with live 3D inspection, save v3 migration.
 - **M4 (done):** credits + advanced components, equipment exchange and module broker with persisted rotating stock and material exchange, reclamation press with batch dismantling and item locks, affix recalibration with locks and escalation, enhancement, component refits, fabrication recipes with quality grades, two new HQ rooms with live station displays, transactional saves with rollback, save v4.
-- **Next:** run upgrades, legendary signature effects (`signature` is still reserved; rerolls already preserve it).
+- **M5 (done):** see the M5 section.
+- **Next:** legendary signature effects (`signature` is still reserved; rerolls already preserve it).
 - Later: combat depth (second tower, turret upgrades, enemy variety, hit flash, audio pass, deep-import bundle split), run upgrades, M4 modular towers, M5 advanced endless (bosses/events), M6 content, M7 co-op evaluation.

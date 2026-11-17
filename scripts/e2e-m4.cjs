@@ -36,6 +36,7 @@ async function boot(p, reload = false) {
   else await p.goto('http://localhost:5173/?test');
   await p.waitForFunction(() => window.__rift && window.__rift.state().screen === 'menu', null, { timeout: 180000 });
   await p.evaluate(() => window.__rift.stopLoop());
+  await p.evaluate(() => { window.__rift.flow.skipUpgrades = true; });
 }
 const waitFor = (p, fn, arg, t = 120000) => p.waitForFunction(fn, arg, { timeout: t, polling: 100 });
 const shot = async (p, name) => {
@@ -76,7 +77,7 @@ async function clickAction(p, testId) {
 async function deploy(p, tier = 1) {
   await p.evaluate((t) => window.__rift.flow.deploy(t), tier);
   await waitFor(p, () => window.__rift.state().location === 'arena' && !window.__rift.state().busy && window.__rift.game);
-  await p.evaluate(() => window.__rift.advance(1 / 60));
+  await p.evaluate(() => { window.__rift.advance(1 / 60); });
 }
 async function clearThrough(p, wave) {
   for (let guard = 0; guard < 60; guard++) {
