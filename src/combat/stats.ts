@@ -57,6 +57,10 @@ export interface CombatStats {
   pierce: number;
   /** Multiplies weapon range. */
   rangeMult: number;
+  /** M5: multiplies cores earned from kills. */
+  coreIncomeMult: number;
+  /** M5: multiplies all elemental damage and status magnitudes. */
+  elementalPower: number;
 }
 
 export type StatKey = keyof CombatStats;
@@ -105,6 +109,8 @@ export const STAT_DEFS: Readonly<Record<StatKey, StatDef>> = {
   heatDamage: { key: 'heatDamage', label: 'Damage at full heat', base: 0, min: 0, max: 5, kind: 'chance', better: 'higher', group: 'offense' },
   pierce: { key: 'pierce', label: 'Pierce', base: 0, min: 0, max: 10, kind: 'flat', better: 'higher', group: 'offense' },
   rangeMult: { key: 'rangeMult', label: 'Weapon range', base: 1, min: 0.5, max: 2, kind: 'ratio', better: 'higher', group: 'offense' },
+  coreIncomeMult: { key: 'coreIncomeMult', label: 'Core income', base: 1, min: 0.5, max: 10, kind: 'ratio', better: 'higher', group: 'utility' },
+  elementalPower: { key: 'elementalPower', label: 'Elemental power', base: 1, min: 0.25, max: 20, kind: 'ratio', better: 'higher', group: 'offense' },
 };
 
 export const STAT_KEYS = Object.keys(STAT_DEFS) as StatKey[];

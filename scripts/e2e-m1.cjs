@@ -13,6 +13,7 @@ async function launch(storageState) {
   const b = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--js-flags=--expose-gc'] });
   const ctx = await b.newContext({ viewport: { width: 1280, height: 720 }, storageState });
   if (!storageState) await ctx.addInitScript(() => { if (!localStorage.getItem('riftwarden.settings')) localStorage.setItem('riftwarden.settings', JSON.stringify({ v: 1, data: { sensitivity: 1, fov: 90, quality: 'low', volume: 0 } })); });
+  await ctx.addInitScript(() => { window.__skipUpgrades = true; });
   const p = await ctx.newPage();
   const errs = [];
   p.on('pageerror', (e) => errs.push('PAGEERR ' + e.message));
@@ -20,6 +21,7 @@ async function launch(storageState) {
   await p.goto('http://localhost:5173/?test');
   await p.waitForFunction(() => window.__rift && window.__rift.state().screen === 'menu', null, { timeout: 180000 });
   await p.evaluate(() => window.__rift.stopLoop());
+  await p.evaluate(() => { window.__rift.flow.skipUpgrades = true; });
   return { b, ctx, p, errs };
 }
 const S = (p) => p.evaluate(() => window.__rift.state());

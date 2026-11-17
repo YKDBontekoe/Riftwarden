@@ -25,6 +25,7 @@ async function launch(init) {
       for (const [k, v] of Object.entries(extra)) localStorage.setItem(k, v);
     }
   }, [SETTINGS, init ?? null]);
+  await ctx.addInitScript(() => { window.__skipUpgrades = true; });
   const p = await ctx.newPage();
   const errs = [];
   p.on('pageerror', (e) => errs.push('PAGEERR ' + e.message));
@@ -39,6 +40,7 @@ async function boot(p, reload = false) {
   else await p.goto('http://localhost:5173/?test');
   await p.waitForFunction(() => window.__rift && window.__rift.state().screen === 'menu', null, { timeout: 180000 });
   await p.evaluate(() => window.__rift.stopLoop());
+  await p.evaluate(() => { window.__rift.flow.skipUpgrades = true; });
 }
 const S = (p) => p.evaluate(() => window.__rift.state());
 const waitFor = (p, fn, arg, t = 90000) => p.waitForFunction(fn, arg, { timeout: t, polling: 100 });
@@ -49,7 +51,7 @@ const shot = async (p, name) => {
 async function deploy(p, tier = 1) {
   await p.evaluate((t) => window.__rift.flow.deploy(t), tier);
   await waitFor(p, () => window.__rift.state().location === 'arena' && !window.__rift.state().busy && window.__rift.game);
-  await p.evaluate(() => window.__rift.advance(1 / 60));
+  await p.evaluate(() => { window.__rift.advance(1 / 60); });
 }
 const press = (p, code) =>
   p.evaluate((c) => {

@@ -82,6 +82,8 @@ export class Player {
   dashCharges: number;
   dashRecharge = 0;
   private dashT = 0;
+  /** Set when a dash starts (consumed by the game to emit the dash event). */
+  dashedThisFrame = false;
   private dashDir = new Vector3();
   sprinting = false;
   private landDip = 0;
@@ -337,6 +339,7 @@ export class Player {
 
     if (active && shiftPressed && this.dashCharges > 0) {
       this.dashCharges--;
+      this.dashedThisFrame = true;
       this.dashT = move.dashTime;
       if (wl > 0) this.dashDir.set(wx, 0, wz);
       else this.dashDir.set(sin, 0, cos);

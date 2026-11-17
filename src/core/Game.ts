@@ -18,11 +18,15 @@ import {
 } from '@babylonjs/core';
 import { sfx } from '../audio/Sfx';
 import { mulberry32, rollDamage } from '../combat/damage';
+import { Director } from '../combat/Director';
+import { isChilled, speedFactor } from '../combat/status';
+import { hashRunSeed, type OfferContext, UP, type UpgradeDef, upgradeDef } from '../roguelite/upgrades';
+import { availableParts, canInstall, configCost, DEFAULT_CONFIG, levelCost, MAX_TOWER_LEVEL, partDef, STARTER_TECH, swapCost, type TowerConfig, type TowerSlot } from '../towers/components';
 import { BASE_STATS, type CombatStats, computeStats, type StatModifier } from '../combat/stats';
 import { type ShotOutcome, type ShotRequest, type SurfaceImpact, Weapon, type WeaponFxHooks } from '../combat/Weapon';
 import type { WeaponFamily } from '../data/defs';
 import { WeaponFx } from '../fx/WeaponFx';
-import { ECONOMY, SENTINEL, towerCost } from '../data/defs';
+import { ECONOMY } from '../data/defs';
 import { pickInteractable } from '../home/interaction';
 import { DROP_SOURCES, type DropSourceId, rollDrops } from '../loot/drops';
 import { equipmentModifiers, weaponDefFor } from '../loot/equipment';
@@ -79,6 +83,10 @@ export interface ArenaConfig {
   loadout: Partial<Record<SlotId, ItemInstance | null>>;
   run: RunLedger;
   hooks: ArenaHooks;
+  /** Upgrade-offer seed (debug/reproducibility). Defaults to a hash of the run id. */
+  seed?: number;
+  /** Permanently researched tower blueprints (`slot:id`), snapshotted at deployment. */
+  towerTech?: readonly string[];
 }
 
 /**
@@ -113,9 +121,29 @@ export class Game {
   private lastFlash = 0;
   private arenaVisuals: ArenaBuilder;
 
-  /** Extra modifiers (future run upgrades); equipment modifiers are derived from the run loadout. */
+  /** Extra modifiers (debug); equipment, run upgrades and temporary buffs are composed in rebuildStats. */
   modifiers: StatModifier[] = [];
   stats: CombatStats = { ...BASE_STATS };
+  /** M5: combat director (effect bus, damage pipeline, run build). One per run, disposed with the Game. */
+  readonly director: Director;
+  /** Bumped whenever derived stats change: towers recompose lazily. */
+  statsVersion = 0;
+  /** Upgrade choice currently on screen (mandatory selection after a wave). */
+  offer: UpgradeDef[] | null = null;
+  private upgradeDue = false;
+  /** Automation only: legacy milestone suites fight many waves without choosing upgrades. */
+  skipUpgrades = false;
+  /** Configuration new towers are built with (chosen in the tower panel / build mode). */
+  buildConfig: TowerConfig = { ...DEFAULT_CONFIG };
+  /** Researched blueprints for this run. */
+  readonly towerTech: ReadonlySet<string>;
+  /** Last tower-edit result message (HUD). */
+  towerNote = { text: '', t: 0 };
+  towerPanelFocus: number | null = null;
+  /** Cost of the next tower from the build template (UI). */
+  get m5Cost(): number {
+    return configCost(this.buildConfig, this.stats.buildCostMult);
+  }
 
   /** Run inventory + loadout (ownership rules live in RunInventory/RunLedger). */
   readonly inventory: RunInventory;
@@ -151,7 +179,7 @@ export class Game {
   private shotRay = new Ray(Vector3.Zero(), Vector3.Forward(), 1);
   private physResult = new PhysicsRaycastResult();
   private enemyCtx: EnemyContext;
-  private turretCtx: TurretContext;
+  turretCtx: TurretContext;
 
   /** Return-home window: open from checkpoint prep until the next wave starts. */
   checkpointOpen = false;
@@ -247,11 +275,13 @@ export class Game {
     }
     this.enemies = new EnemyManager(scene, this.kit, this.pal);
     this.turrets = new TurretManager(scene, this.kit, this.pal);
-    this.construction = new Construction(scene, this.kit, this.pal, ARENA);
+    this.construction = new Construction(scene, (cfg, u) => this.turrets.build(cfg, 1, u), this.pal, ARENA);
     this.loot = new LootField(scene, this.kit, this.pal);
     this.loot.onLand = (p) => this.onLootLanded(p);
     this.inventory = new RunInventory(cfg.loadout, cfg.run);
     this.lootRand = mulberry32(hashSeed(cfg.run.id));
+    this.towerTech = new Set([...STARTER_TECH, ...(cfg.towerTech ?? [])]);
+    this.director = new Director(this, cfg.seed ?? hashRunSeed(cfg.run.id));
 
     // Reflections/ambient: capture the finished static scene once into a prefiltered cube map.
     this.atmosphere.captureEnvironment([...arena.meshes, ...this.reactor.root.getChildMeshes()], this.pal.lit, high);
@@ -268,8 +298,10 @@ export class Game {
       enemies: this.enemies.active,
       effects: this.fx,
       stats: this.stats,
+      statsVersion: 0,
       los: (a, b) => this.los(a, b),
-      hitEnemy: (t, e, dmg, pt) => this.damageEnemy('turret', e, dmg, pt, false, t),
+      input: (t) => this.director.towerInput(t),
+      attack: (t, e, mult) => this.director.towerFire(t, e, mult),
       panFor: (p) => this.panFor(p),
     };
 
@@ -288,6 +320,8 @@ export class Game {
         uiEvents.emit('banner', { title: `WAVE ${w.number}`, sub: `${w.spawns.length} hostiles inbound`, tone: 'orange' });
       },
       onWaveCleared: (w) => {
+        this.upgradeDue = true;
+        this.director.bus.emit({ type: 'waveCleared', chain: this.director.bus.newChain(), source: { kind: 'effect', id: 'wave' }, value: w.number });
         this.wallet.earn(w.clearReward);
         uiEvents.emit('coresGained', w.clearReward);
         this.reactorHp = Math.min(ECONOMY.reactorMaxHp, this.reactorHp + ECONOMY.reactorMaxHp * ECONOMY.reactorRepairPerWave);
@@ -332,10 +366,11 @@ export class Game {
       onPrepStart: (w) => {
         this.arenaVisuals.prepareWave(w.spawns.map((entry) => entry.gate));
         run.waveReached(w.number);
-        if (w.number > 1 && run.atCheckpoint) {
-          this.checkpointOpen = true;
-          this.openCheckpoint();
-        }
+        if (w.number > 1 && run.atCheckpoint) this.checkpointOpen = true;
+        // Mandatory upgrade choice first (the prep countdown is frozen while it is open), then the checkpoint choice.
+        if (this.skipUpgrades) this.upgradeDue = false;
+        if (this.upgradeDue && w.number > 1) this.openUpgrade();
+        else if (this.checkpointOpen) this.openCheckpoint();
       },
     }, cfg.tier);
 
@@ -384,17 +419,27 @@ export class Game {
    * construction because the list is rebuilt from scratch.
    */
   refreshEquipment(): void {
-    const s = computeStats([...equipmentModifiers(this.inventory.equippedItems()), ...this.modifiers]);
-    Object.assign(this.stats, s);
+    this.rebuildStats();
     const item = this.inventory.equipped('weapon');
     const w = weaponDefFor(item);
     if (w) {
       this.weapon.setItem(item, w);
       this.wfx.setColor(this.weapon.rig.energyBase);
     }
+    this.inventoryVersion++;
+  }
+
+  /**
+   * Recompute derived stats from scratch: equipment + debug modifiers + run upgrades + temporary buffs.
+   * Event-driven (equipment change, upgrade picked, buff gained/expired), never per frame.
+   */
+  rebuildStats(): void {
+    const mods = [...equipmentModifiers(this.inventory.equippedItems()), ...this.modifiers, ...this.director.build.modifiers(), ...this.director.buffModifiers()];
+    Object.assign(this.stats, computeStats(mods));
     this.player.applyStats(this.stats, this.attackerScale);
     this.tactical.rechargeMult = this.stats.tacticalRechargeMult;
-    this.inventoryVersion++;
+    this.statsVersion++;
+    this.turretCtx.statsVersion = this.statsVersion;
   }
 
   /** Equipment changes are allowed only between waves (preparation phase). */
@@ -571,6 +616,224 @@ export class Game {
     this.refreshEquipment();
   }
 
+
+  // ---------------------------------------------------------------- M5: run upgrades
+
+  get offerContext(): OfferContext {
+    const ts = this.turrets.turrets;
+    return { wave: this.waves.number, family: this.weapon.def.family, towers: ts.length, towerArchetypes: [...new Set(ts.map((t) => t.archetype))] };
+  }
+
+  /** Mandatory three-choice selection between waves. Freezes the simulation (and the prep countdown) until chosen. */
+  openUpgrade(): void {
+    if (this.screen === 'defeat') return;
+    this.upgradeDue = false;
+    const offer = this.director.build.nextOffer(this.offerContext);
+    if (!offer.length) {
+      if (this.checkpointOpen) this.openCheckpoint();
+      return;
+    }
+    this.offer = offer;
+    this.setBuildMode(false);
+    this.tactical.deactivate();
+    this.setScreen('upgrade');
+    this.publishHud(true);
+    this.input.releaseLock();
+    sfx.play('bank', { pitch: 1.4, volume: 0.6 });
+  }
+
+  /** Pick one of the offered upgrades: applied immediately (stats + effects), then play resumes. */
+  chooseUpgrade(id: string): boolean {
+    if (this.screen !== 'upgrade' || !this.offer || !this.offer.some((u) => u.id === id)) return false;
+    const def = upgradeDef(id)!;
+    if (!this.director.takeUpgrade(id)) return false;
+    this.offer = null;
+    sfx.play('equip', { pitch: 1.3 });
+    uiEvents.emit('banner', { title: def.name.toUpperCase(), sub: `${def.rarity} upgrade · ${def.text(this.director.build.count(id))}`, tone: def.rarity === 'legendary' ? 'orange' : def.rarity === 'epic' ? 'white' : 'cyan' });
+    void this.afterUpgrade();
+    return true;
+  }
+
+  private async afterUpgrade(): Promise<void> {
+    if (this.checkpointOpen && this.cfg.run.atCheckpoint) {
+      this.openCheckpoint();
+      return;
+    }
+    await this.resume();
+    if (this.screen === 'upgrade') this.setScreen('paused');
+  }
+
+  /** Run build overview (U): upgrades, stacks, active buffs and key stats. */
+  openBuildOverview(): void {
+    if (this.screen !== 'playing') return;
+    this.setBuildMode(false);
+    this.tactical.deactivate();
+    this.setScreen('build');
+    this.publishHud(true);
+    this.input.releaseLock();
+  }
+
+  get towerPanelAllowed(): boolean {
+    return this.screen === 'playing' && this.waves.phase !== 'combat';
+  }
+
+  /** Tower configuration panel (T): preparation / between waves; combat edits use the tactical hotkeys. */
+  openTowerPanel(): void {
+    if (!this.towerPanelAllowed) return;
+    this.setBuildMode(false);
+    this.tactical.deactivate();
+    this.towerPanelFocus = this.inspected?.id ?? null;
+    this.setScreen('towers');
+    this.publishHud(true);
+    this.input.releaseLock();
+  }
+
+  async closePanel(): Promise<void> {
+    if (this.screen !== 'build' && this.screen !== 'towers') return;
+    sfx.play('ui');
+    this.setScreen('paused');
+    await this.resume();
+  }
+
+  /** G / early start. Rapid Deployment pays for the preparation time skipped. */
+  startWave(): void {
+    if (this.waves.phase !== 'prep') return;
+    const remaining = Math.max(0, this.waves.timer);
+    this.waves.startNow();
+    if (remaining > 0.5) this.director.bus.emit({ type: 'earlyStart', chain: this.director.bus.newChain(), source: { kind: 'effect', id: 'earlyStart' }, value: remaining });
+  }
+
+  grantCores(n: number): void {
+    this.wallet.earn(n);
+    uiEvents.emit('coresGained', n);
+  }
+
+  // ---------------------------------------------------------------- M5: tower engineering
+
+  /** Why tower modifications are unavailable right now (null = allowed). */
+  towerEditReason(): string | null {
+    if (this.screen !== 'playing' && this.screen !== 'towers') return 'Not available right now';
+    if (this.waves.phase === 'combat' && !this.tactical.active) return 'Activate tactical mode (Q) to modify towers during a wave';
+    return null;
+  }
+
+  private towerFail(text: string): { ok: false; reason: string } {
+    this.towerNote = { text, t: 3 };
+    sfx.play('buildDeny');
+    return { ok: false, reason: text };
+  }
+
+  /**
+   * Upgrade a tower's level or swap its weapon / core / modifier. Validates phase, compatibility, research and
+   * resources first, then spends, recomposes numbers from scratch, rebuilds the model and resets attack state.
+   */
+  modifyTower(t: Turret, what: 'level' | TowerSlot, id?: string): { ok: true; cost: number } | { ok: false; reason: string } {
+    const phase = this.towerEditReason();
+    if (phase) return this.towerFail(phase);
+    if (!this.turrets.turrets.includes(t)) return this.towerFail('Tower no longer exists');
+    if (t.building) return this.towerFail('Tower is still deploying');
+    const mult = this.stats.buildCostMult;
+    let cost: number;
+    let cfg = t.config;
+    let level = t.level;
+    if (what === 'level') {
+      if (t.level >= MAX_TOWER_LEVEL) return this.towerFail('Tower is at maximum level');
+      cost = levelCost(t.config, t.level, mult);
+      level = t.level + 1;
+    } else {
+      if (what === 'base') return this.towerFail('The base is fixed once built');
+      if (!id || !partDef(what, id)) return this.towerFail('Unknown component');
+      if (t.config[what] === id) return this.towerFail('Already installed');
+      if (!this.towerTech.has(`${what}:${id}`) && partDef(what, id)?.tech) return this.towerFail('Blueprint not researched (HQ tower technology)');
+      const bad = canInstall(t.config, what, id);
+      if (bad) return this.towerFail(bad);
+      cost = swapCost(t.config, what, id, mult);
+      cfg = { ...t.config, [what]: id };
+    }
+    if (!this.wallet.spend(cost)) return this.towerFail(`Not enough cores (need ${cost})`);
+    t.paid += cost;
+    t.refit(cfg, level, this.turretCtx);
+    this.fx.burst('build', t.head, 24);
+    this.fx.ring(new Vector3(t.pos.x, t.pos.y + 0.1, t.pos.z), 3, 0.4, new Color3(0.4, 1.8, 2.2), true);
+    sfx.play('equip', { pitch: 1.1 });
+    this.towerNote = { text: `${t.name} refit${what === 'level' ? ` · level ${level}` : ''}${cost ? ` · -${cost} cores` : ''}`, t: 3 };
+    this.inventoryVersion++;
+    return { ok: true, cost };
+  }
+
+  /** Choose the configuration for towers built from now on (no cost). Incompatible dependants reset to defaults. */
+  setBuildConfig(slot: TowerSlot, id: string): { ok: true } | { ok: false; reason: string } {
+    const def = partDef(slot, id);
+    if (!def) return { ok: false, reason: 'Unknown component' };
+    if (def.tech && !this.towerTech.has(`${slot}:${id}`)) return { ok: false, reason: 'Blueprint not researched' };
+    let cfg: TowerConfig = { ...this.buildConfig, [slot]: id };
+    // Auto-repair dependants (weapon -> core/modifier, base -> weapon) so the template is always valid.
+    for (let i = 0; i < 3; i++) {
+      const bad = canInstall(cfg, slot, id);
+      if (!bad) break;
+      if (!bad.includes('cannot mount') && slot === 'weapon') {
+        if (bad.includes(partDef('core', cfg.core)?.name ?? '#')) cfg = { ...cfg, core: 'standard_core' };
+        if (bad.includes(partDef('modifier', cfg.modifier)?.name ?? '#')) cfg = { ...cfg, modifier: 'none' };
+      } else if (slot === 'base') cfg = { ...cfg, weapon: 'autocannon', core: 'standard_core', modifier: 'none' };
+      else return { ok: false, reason: bad };
+    }
+    if (canInstall(cfg, slot, id)) return { ok: false, reason: canInstall(cfg, slot, id)! };
+    this.buildConfig = cfg;
+    this.construction.setTemplate(cfg);
+    this.inventoryVersion++;
+    return { ok: true };
+  }
+
+  /** Cycle helper for hotkeys: next owned+compatible component of a slot. */
+  private nextPart(cfg: TowerConfig, slot: TowerSlot): string | null {
+    const list = availableParts(cfg, slot, this.towerTech);
+    if (list.length < 2) return null;
+    const i = list.findIndex((p) => p.id === cfg[slot]);
+    return list[(i + 1) % list.length].id;
+  }
+
+  /** In-world tower hotkeys: while aiming at a tower (refit) or in build mode (template). R level, C weapon, V core, N modifier, M base. */
+  private towerKeys(input: Input): void {
+    const t = this.inspected;
+    const slots: [string, TowerSlot][] = [['KeyC', 'weapon'], ['KeyV', 'core'], ['KeyN', 'modifier'], ['KeyM', 'base']];
+    if (this.construction.active) {
+      for (const [key, slot] of slots) {
+        if (!input.pressed(key)) continue;
+        const nxt = this.nextPart(this.buildConfig, slot);
+        const r = nxt ? this.setBuildConfig(slot, nxt) : { ok: false as const, reason: 'No other compatible blueprint owned' };
+        this.towerNote = { text: r.ok ? `Build template: ${partDef(slot, nxt!)?.name} · ${configCost(this.buildConfig, this.stats.buildCostMult)} cores` : r.reason, t: 2.5 };
+        sfx.play(r.ok ? 'ui' : 'buildDeny');
+      }
+      return;
+    }
+    if (!t) return;
+    if (input.pressed('KeyR')) this.modifyTower(t, 'level');
+    for (const [key, slot] of slots) {
+      if (!input.pressed(key) || slot === 'base') continue;
+      const nxt = this.nextPart(t.config, slot);
+      if (!nxt) this.towerFail('No other compatible blueprint owned');
+      else this.modifyTower(t, slot, nxt);
+    }
+  }
+
+  /** Floating damage number with a per-frame budget (kills always show). */
+  showNumber(p: Vector3, amount: number, kind: HitKind, player: boolean, allowed: boolean): void {
+    if (!allowed && kind !== 'kill') return;
+    if (player || kind === 'kill' || Vector3.DistanceSquared(p, this.player.position) < 25 * 25) {
+      uiEvents.emit('damageNumber', { x: p.x, y: p.y, z: p.z, amount: Math.round(amount), kind, player });
+    }
+  }
+
+  /** Inspect card data for HUD / panel. */
+  towerInfo(t: Turret) {
+    const mult = this.stats.buildCostMult;
+    const slots = (['weapon', 'core', 'modifier'] as const).map((slot) => {
+      const nxt = this.nextPart(t.config, slot);
+      return { slot, id: t.config[slot], name: partDef(slot, t.config[slot])?.name ?? '?', next: nxt ? partDef(slot, nxt)?.name ?? null : null, nextCost: nxt ? swapCost(t.config, slot, nxt, mult) : 0 };
+    });
+    return { id: t.id, name: t.name, base: partDef('base', t.config.base)?.name ?? '', level: t.level, maxLevel: MAX_TOWER_LEVEL, levelCost: t.level < MAX_TOWER_LEVEL ? levelCost(t.config, t.level, mult) : 0, slots, st: { ...t.st }, empowered: t.empowered, kills: t.kills, damage: Math.round(t.damageDealt) };
+  }
+
   /** Enter the arena: fresh run state, preparation phase of wave 1. */
   start(): void {
     this.newRun();
@@ -610,6 +873,7 @@ export class Game {
     if (this.disposed) return;
     this.disposed = true;
     this.input.onLockChange = () => {};
+    this.director.bus.reset();
     sfx.setTactical(false);
     sfx.beamLoop(false);
     this.scene.dispose();
@@ -627,6 +891,12 @@ export class Game {
     this.loot.clear();
     this.lootTarget = null;
     this.modifiers = [];
+    this.director.reset(this.cfg.seed ?? hashRunSeed(this.cfg.run.id));
+    this.offer = null;
+    this.upgradeDue = false;
+    this.buildConfig = { ...DEFAULT_CONFIG };
+    this.construction.setTemplate(this.buildConfig);
+    this.towerNote = { text: '', t: 0 };
     this.refreshEquipment();
     this.player.reset();
     this.reactorHp = ECONOMY.reactorMaxHp;
@@ -667,7 +937,7 @@ export class Game {
     // ---- global keys
     if (controls) {
       if (input.pressed('F3')) this.togglePerf();
-      if (input.pressed('KeyG')) this.waves.startNow();
+      if (input.pressed('KeyG')) this.startWave();
       if (input.pressed('KeyQ')) this.toggleTactical();
       if (input.pressed('Digit2') || input.pressed('KeyB')) this.setBuildMode(!this.construction.active);
       if (input.pressed('Digit1')) this.setBuildMode(false);
@@ -677,6 +947,15 @@ export class Game {
         this.openInventory();
         return;
       }
+      if (input.pressed('KeyU')) {
+        this.openBuildOverview();
+        return;
+      }
+      if (input.pressed('KeyT') && this.towerPanelAllowed) {
+        this.openTowerPanel();
+        return;
+      }
+      this.towerKeys(input);
     }
 
     this.tactical.update(dt);
@@ -692,6 +971,10 @@ export class Game {
       this.cfg.run.tick(dt);
     }
     this.player.update(dt, input, this.stats.moveSpeedMult, controls);
+    if (this.player.dashedThisFrame) {
+      this.player.dashedThisFrame = false;
+      this.director.bus.emit({ type: 'dash', chain: this.director.bus.newChain(), source: { kind: 'weapon', id: 'dash' }, value: 1 });
+    }
 
     // ---- building
     if (this.construction.active) {
@@ -714,6 +997,8 @@ export class Game {
     this.enemies.update(hdt, this.enemyCtx);
     this.turretCtx.stats = this.stats;
     this.turrets.update(dt, this.turretCtx);
+    this.director.update(dt, this.screen === 'playing' ? hdt : 0);
+    if (this.towerNote.t > 0) this.towerNote.t -= dt;
     this.updateProjectiles(hdt);
     this.fx.update(dt);
     this.updateReactor(dt, true);
@@ -787,12 +1072,12 @@ export class Game {
 
   private tryPlace(): void {
     const c = this.construction;
-    const cost = towerCost(SENTINEL, this.stats.buildCostMult);
+    const cost = configCost(this.buildConfig, this.stats.buildCostMult);
     if (!c.valid || !this.wallet.spend(cost)) {
       sfx.play('buildDeny');
       return;
     }
-    this.turrets.add(c.point, this.player.yaw).paid = cost;
+    this.turrets.add(c.point, this.player.yaw, this.turretCtx, this.buildConfig).paid = cost;
     this.turretsBuilt++;
     this.fx.burst('build', c.point.add(new Vector3(0, 0.5, 0)), 40);
     // Rapid multi-placement while tactical mode is active.
@@ -812,11 +1097,11 @@ export class Game {
     }
     if (t !== this.inspected) this.recycleT = 0;
     this.inspected = t;
-    this.construction.showInspect(t, this.stats);
+    this.construction.showInspect(t);
     if (t && this.input.isDown('KeyX')) {
       this.recycleT += dt / 0.6;
       if (this.recycleT >= 1) {
-        const refund = Math.round(t.paid * t.def.refundRatio);
+        const refund = Math.round(t.paid * t.refundRatio);
         this.wallet.earn(refund);
         uiEvents.emit('coresGained', refund);
         this.fx.burst('build', t.head, 30);
@@ -838,6 +1123,7 @@ export class Game {
    * Damage is applied here, immediately; `weaponFx` only visualises the outcome.
    */
   private shoot = (r: ShotRequest): ShotOutcome => {
+    this.director.bus.emit({ type: 'fire', chain: this.director.bus.newChain(), source: { kind: 'weapon', id: r.family }, value: 1 });
     // Hitboxes must reflect this frame's enemy poses, not last frame's render.
     for (const e of this.enemies.active) {
       e.root.computeWorldMatrix(true);
@@ -953,20 +1239,22 @@ export class Game {
     }
   }
 
+  /**
+   * Legacy damage entry (player weapon, Sentinel-style tower hits, debug): rolls crit, then hands the hit to the
+   * director's shared pipeline (statuses, reactions, events, kill handling) and plays direct-hit feedback.
+   */
   damageEnemy(source: 'player' | 'turret', e: Enemy, base: number, point: Vector3, weakpoint: boolean, turret?: Turret, family?: WeaponFamily | 'arc'): void {
-    const roll = rollDamage(base, this.stats, weakpoint, Math.random, 'energy', source);
+    if (!e.alive) return;
+    const player = source === 'player';
+    const prec = this.director.build.count('s_precision');
+    const crit = player && prec && (isChilled(e.status, 1) || speedFactor(e.status) < 0.95) ? { critChance: this.stats.critChance + UP.precision.crit(prec), critMultiplier: this.stats.critMultiplier + UP.precision.critDmg(prec) } : this.stats;
+    const roll = rollDamage(base, crit, weakpoint, Math.random, 'energy', source);
     // Arc Conductor: a player hit may jump to the nearest other enemy (no chains of arcs).
-    if (source === 'player' && family !== 'arc' && this.stats.arcChance > 0 && Math.random() < this.stats.arcChance) this.arcFrom(e, point, roll.amount * this.stats.arcDamage);
-    const res = this.enemies.damage(e, roll.amount, 'energy', point, this.fx);
-    if (!res) return;
-    let kind: HitKind = res.toHp === 0 && res.toShield > 0 ? 'shield' : roll.crit ? 'crit' : 'hit';
-    if (turret) turret.damageDealt += roll.amount;
-    if (res.killed) {
-      kind = 'kill';
-      if (turret) turret.kills++;
-      this.onEnemyKilled(e);
-    }
-    if (source === 'player') {
+    if (player && family !== 'arc' && this.stats.arcChance > 0 && Math.random() < this.stats.arcChance) this.arcFrom(e, point, roll.amount * this.stats.arcDamage);
+    const src = family === 'arc' ? { kind: 'effect' as const, id: 'arc_conductor' } : player ? { kind: 'weapon' as const, id: family ?? 'plasma' } : { kind: 'tower' as const, id: 'sentinel', towerId: turret?.id };
+    const res = this.director.deal({ target: e, amount: roll.amount, base, crit: roll.crit, weak: weakpoint, element: 'none', source: src, chain: this.director.bus.newChain(), point, family: family ?? (player ? 'plasma' : 'tower') });
+    if (player) {
+      const kind = res.kind;
       uiEvents.emit('hit', kind);
       // Beam ticks are frequent: lighter per-tick feedback (the beam contact carries the rest).
       const beam = family === 'beam';
@@ -974,10 +1262,6 @@ export class Game {
       else if (kind === 'hit' && !beam) this.fx.burst('enemySpark', point, 6);
       if (!beam || kind === 'kill' || kind === 'crit') sfx.play(kind === 'kill' ? 'kill' : kind === 'crit' ? 'crit' : kind === 'shield' ? 'shieldHit' : 'hit');
       else sfx.play('hit', { volume: 0.35 });
-    }
-    // Turret numbers far from the player are noise; kills always show.
-    if (source === 'player' || kind === 'kill' || Vector3.DistanceSquared(point, this.player.position) < 25 * 25) {
-      uiEvents.emit('damageNumber', { x: point.x, y: point.y, z: point.z, amount: Math.round(roll.amount), kind, player: source === 'player' });
     }
   }
 
@@ -1003,10 +1287,11 @@ export class Game {
     this.damageEnemy('player', best, amount, to, false, undefined, 'arc');
   }
 
-  private onEnemyKilled(e: Enemy): void {
+  onEnemyKilled(e: Enemy): void {
     this.kills++;
-    this.wallet.earn(e.def.reward);
-    uiEvents.emit('coresGained', e.def.reward);
+    const reward = Math.round(e.def.reward * this.stats.coreIncomeMult);
+    this.wallet.earn(reward);
+    uiEvents.emit('coresGained', reward);
     const salvage = Math.round(e.def.salvage * this.cfg.tier.salvageMult);
     if (this.cfg.run.collect({ salvage })) uiEvents.emit('salvageGained', salvage);
     // M4 income: credits per kill (elites pay well) and a chance of an advanced component from elites.
@@ -1111,7 +1396,7 @@ export class Game {
 
   // ---------------------------------------------------------------- queries
 
-  private los(a: Vector3, b: Vector3): boolean {
+  los(a: Vector3, b: Vector3): boolean {
     const physics = this.scene.getPhysicsEngine() as PhysicsEngineV2 | null;
     if (!physics) return true;
     physics.raycastToRef(a, b, this.physResult, ENV_QUERY);
@@ -1138,6 +1423,33 @@ export class Game {
     const p = Vector3.Project(TMP.set(x, y, z), Matrix.IdentityReadOnly, this.scene.getTransformMatrix(), cam.viewport.toGlobal(w, h));
     const scale = this.canvas.clientWidth / w;
     return { x: p.x * scale, y: p.y * scale };
+  }
+
+  private perfHud() {
+    const d = this.director.diag();
+    let projectiles = this.wfx.liveBolts;
+    for (const p of this.fx.projectiles) if (p.active) projectiles++;
+    return {
+      fps: Math.round(this.fpsSmooth), enemies: this.enemies.count, draws: this.drawCalls, particles: this.fx.particleCount,
+      towers: this.turrets.turrets.length, projectiles, pending: d.pending, statuses: d.statuses, triggers: d.triggersPerSec,
+      dpsPlayer: Math.round(d.dps.weapon), dpsTower: Math.round(d.dps.tower), effects: d.effects, dropped: d.dropped,
+    };
+  }
+
+  private m5Hud() {
+    const dir = this.director;
+    const ts = this.turrets.turrets;
+    return {
+      upgrades: dir.build.total,
+      buffs: dir.buffs.map((b) => ({ name: b.name, t: b.t, stacks: b.stacks })),
+      network: dir.networkCharge,
+      grid: dir.gridCharge,
+      empowered: ts.filter((t) => t.empowered).length,
+      towers: ts.length,
+      note: this.towerNote.t > 0 ? this.towerNote.text : '',
+      template: `${partDef('weapon', this.buildConfig.weapon)?.name} · ${partDef('core', this.buildConfig.core)?.name} · ${partDef('modifier', this.buildConfig.modifier)?.name}`,
+      templateCost: configCost(this.buildConfig, this.stats.buildCostMult),
+    };
   }
 
   // ---------------------------------------------------------------- HUD
@@ -1220,12 +1532,13 @@ export class Game {
       buildMode: c.active,
       buildValid: c.valid,
       buildMessage: c.message,
-      buildCost: towerCost(SENTINEL, this.stats.buildCostMult),
-      inspect: t ? { name: t.def.name, kills: t.kills, damage: Math.round(t.damageDealt), refund: Math.round(t.paid * t.def.refundRatio), recycle: this.recycleT } : null,
+      buildCost: configCost(this.buildConfig, this.stats.buildCostMult),
+      m5: this.m5Hud(),
+      inspect: t ? { name: t.name, kills: t.kills, damage: Math.round(t.damageDealt), refund: Math.round(t.paid * t.refundRatio), recycle: this.recycleT, card: this.towerInfo(t), edit: this.towerEditReason() } : null,
       hint,
       spread: 6 + this.weapon.spread * 900,
       perf: this.perfOn
-        ? { fps: Math.round(this.fpsSmooth), enemies: this.enemies.count, draws: this.drawCalls, particles: this.fx.particleCount }
+        ? this.perfHud()
         : null,
     });
     void force;

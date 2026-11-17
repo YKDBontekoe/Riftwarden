@@ -67,6 +67,10 @@ export class Flow {
   /** Timing of the most recent scene swap (profiling aid, also shown in automation). */
   lastTransition: { disposeMs: number; buildMs: number; readyMs: number; timedOut: boolean } | null = null;
   private loopStopped = false;
+  /** Debug/test: seed for the next run's upgrade offers (cleared once used). */
+  nextUpgradeSeed: number | null = null;
+  /** Automation: legacy suites skip the mandatory upgrade screen. */
+  skipUpgrades = false;
   private renderQuality: Settings['quality'];
 
   constructor(
@@ -177,6 +181,8 @@ export class Flow {
         tier,
         loadout,
         run,
+        seed: this.nextUpgradeSeed ?? undefined,
+        towerTech: [...save.towers.unlocked],
         hooks: {
           // Reported as secured only once the write succeeded.
           bank: (wave, rewards) => this.profile.mutate((d) => bankRewards(d, run.id, wave, rewards)) && this.profile.lastWriteOk,
@@ -184,6 +190,7 @@ export class Flow {
           defeat: () => this.endRun('defeat'),
         },
       });
+      this.arena.skipUpgrades = this.skipUpgrades || !!(globalThis as { __skipUpgrades?: boolean }).__skipUpgrades;
       this.location = 'arena';
       return this.arena.scene;
     });

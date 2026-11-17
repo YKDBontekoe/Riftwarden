@@ -1,3 +1,4 @@
+import { TECH_LIST, techKey } from '../towers/components';
 import { ACCENTS, DEFAULT_PLACEABLES, type Placeable, PLACEABLE_BOUNDS, PROP_TYPES, type PropType, type PropValue } from '../home/placeables';
 import { isStatKey, type StatOp } from '../combat/stats';
 import { affixDef } from '../loot/affixes';
@@ -24,7 +25,7 @@ import { generateMarket, type MarketEntry, type MarketState, progressLevel } fro
  *   under CORRUPT_KEY and the last good backup (BACKUP_KEY) or a fresh save is used.
  * - Older versions are upgraded by MIGRATIONS; newer versions are never downgraded.
  */
-export const SAVE_VERSION = 4;
+export const SAVE_VERSION = 5;
 export const SAVE_KEY = 'riftwarden.save';
 export const BACKUP_KEY = 'riftwarden.save.bak';
 export const CORRUPT_KEY = 'riftwarden.save.corrupt';
@@ -116,6 +117,8 @@ export interface SaveData {
   market: MarketState;
   /** M4: transaction guard, deterministic crafting counter and economy statistics. */
   economy: EconomyState;
+  /** M5: researched tower blueprints (`slot:id`; starter parts are implicit). Deployed towers and run upgrades are never saved. */
+  towers: { unlocked: string[] };
 }
 
 export interface EconomyStats {
@@ -177,6 +180,7 @@ export function createDefaultSave(now = Date.now()): SaveData {
     base: { layoutVersion: 1, placeables: DEFAULT_PLACEABLES.map((p) => structuredCloneSafe(p)), facilities: [...DEFAULT_FACILITIES] },
     market: generateMarket(profileId, 0, { level: 1, tier: 1 }, now),
     economy: emptyEconomy(),
+    towers: { unlocked: [] },
   };
 }
 
@@ -496,6 +500,7 @@ export function sanitizeSave(raw: unknown, now = Date.now()): { data: SaveData; 
     base: { layoutVersion: 1, placeables: [], facilities: [] },
     market: def.market,
     economy: emptyEconomy(),
+    towers: { unlocked: sanitizeTowerTech(obj(r.towers).unlocked) },
   };
 
   // Capacity is derived from purchased expansions (cannot be edited independently).
@@ -642,6 +647,14 @@ export function sanitizeSave(raw: unknown, now = Date.now()): { data: SaveData; 
   return { data, repairs };
 }
 
+/** Keep only known, researchable blueprints (unknown ids are dropped, duplicates removed). */
+export function sanitizeTowerTech(v: unknown): string[] {
+  const valid = new Set(TECH_LIST.map((t) => techKey(t.slot, t.id)));
+  const out: string[] = [];
+  for (const k of arr(v)) if (typeof k === 'string' && valid.has(k) && !out.includes(k)) out.push(k);
+  return out;
+}
+
 // ------------------------------------------------------------------ migrations
 
 /**
@@ -697,6 +710,11 @@ export const MIGRATIONS: Record<number, (data: Obj) => Obj> = {
     delete out.economy;
     return out;
   },
+  /**
+   * v4 (M4) -> v5 (M5): permanent tower blueprints. Nothing is rerolled or removed; the player starts
+   * with only the starter parts researched (towers.unlocked is empty).
+   */
+  4: (d) => ({ ...d, towers: { unlocked: [] } }),
 };
 
 export function migrate(data: unknown, fromVersion: number): { data: unknown; ok: boolean } {

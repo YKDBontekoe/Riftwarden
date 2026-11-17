@@ -6,6 +6,8 @@ import type { Effects } from '../fx/Effects';
 import type { Player } from '../player/Player';
 import type { Kit } from '../visuals/kit';
 import type { Palette } from '../visuals/materials';
+import { hasAnyStatus, isBurning, isChilled, isFrozen, isShocked, newStatus, resetStatus, speedFactor, type StatusState } from '../combat/status';
+import { unlit } from '../visuals/materials';
 import { buildRusher, buildWalker, type DroneRig, type WalkerRig } from '../visuals/models';
 import type { ArenaLayout, GateId, Vec2 } from '../world/layout';
 import { WalkerMotion } from './walkerMotion';
@@ -56,6 +58,12 @@ export class Enemy implements Health {
   /** performance.now() of the last damage taken (drives the HUD health bar). */
   lastHit = 0;
   readonly hitboxes: Mesh[] = [];
+  /** M5 elemental statuses (reset on spawn and release, so nothing outlives the enemy). */
+  readonly status: StatusState = newStatus();
+  /** Spawn generation: pooled enemies are reused, queued events compare this to detect a recycled target. */
+  gen = 0;
+  mark: Mesh | null = null;
+  markKind = '';
   readonly motion: WalkerMotion | null;
 
   constructor(
@@ -82,8 +90,20 @@ export class EnemyManager {
   readonly active: Enemy[] = [];
   private pool = new Map<EnemyKind, Enemy[]>();
   private hitboxTemplate: Mesh;
+  private markMats: Record<string, ReturnType<typeof unlit>>;
+  private markTemplate: Mesh;
 
   constructor(scene: Scene, private kit: Kit, private P: Palette) {
+    this.markMats = {
+      burn: unlit(scene, 'markBurn', [3.2, 0.9, 0.12], { additive: true }),
+      shock: unlit(scene, 'markShock', [0.7, 1.8, 4.2], { additive: true }),
+      chill: unlit(scene, 'markChill', [1.4, 2.3, 2.8], { additive: true }),
+      freeze: unlit(scene, 'markFreeze', [2.4, 3.2, 3.6], { additive: true }),
+    };
+    this.markTemplate = MeshBuilder.CreateIcoSphere('statusMark', { radius: 0.5, subdivisions: 1, flat: true }, scene);
+    this.markTemplate.isVisible = false;
+    this.markTemplate.isPickable = false;
+    this.markTemplate.setEnabled(false);
     this.hitboxTemplate = MeshBuilder.CreateSphere('hitbox', { diameter: 1, segments: 6 }, scene);
     this.hitboxTemplate.isVisible = false;
     this.hitboxTemplate.isPickable = false;
@@ -112,6 +132,13 @@ export class EnemyManager {
     };
     addHit(def.bodyY, 0, def.bodyR, false);
     addHit(def.weakY, def.weakForward, def.weakR, true);
+    const mk = this.markTemplate.clone('mark', e.root)!;
+    mk.isVisible = true;
+    mk.isPickable = false;
+    mk.position.set(0, def.weakY + 0.75, 0);
+    mk.scaling.setAll(0.34);
+    mk.setEnabled(false);
+    e.mark = mk;
     return e;
   }
 
@@ -124,6 +151,10 @@ export class EnemyManager {
     e.damageMult = dmgMult;
     e.speedMult = speedMult;
     e.alive = true;
+    e.gen++;
+    resetStatus(e.status);
+    e.mark?.setEnabled(false);
+    e.markKind = '';
     e.state = 'move';
     e.attackT = def.attackInterval * Math.random();
     e.shotT = def.playerShotInterval * (0.5 + Math.random());
@@ -194,6 +225,9 @@ export class EnemyManager {
 
   private release(e: Enemy): void {
     e.alive = false;
+    resetStatus(e.status);
+    e.mark?.setEnabled(false);
+    e.markKind = '';
     e.root.setEnabled(false);
     const i = this.active.indexOf(e);
     if (i >= 0) this.active.splice(i, 1);
@@ -203,6 +237,26 @@ export class EnemyManager {
 
   clear(): void {
     for (const e of [...this.active]) this.release(e);
+  }
+
+  /** Status indicator above the head: colour = dominant status (freeze > burn > shock > chill), pulses. */
+  updateMarks(t: number): void {
+    for (const e of this.active) {
+      const m = e.mark;
+      if (!m) continue;
+      const st = e.status;
+      const kind = !hasAnyStatus(st) ? '' : isFrozen(st) ? 'freeze' : isBurning(st) ? 'burn' : isShocked(st) ? 'shock' : isChilled(st) ? 'chill' : '';
+      if (kind !== e.markKind) {
+        e.markKind = kind;
+        if (kind) m.material = this.markMats[kind];
+        m.setEnabled(!!kind);
+      }
+      if (kind) {
+        const pulse = kind === 'shock' ? 0.28 + 0.12 * Math.sin(t * 40 + e.id) : kind === 'burn' ? 0.3 + 0.08 * Math.sin(t * 14 + e.id) : 0.3 + 0.04 * Math.sin(t * 5 + e.id);
+        m.scaling.setAll(pulse * e.def.scale);
+        m.rotation.y = t * 3;
+      }
+    }
   }
 
   update(hdt: number, ctx: EnemyContext): void {
@@ -244,7 +298,10 @@ export class EnemyManager {
         }
       }
 
-      const slow = 1 - e.flinch * 0.5;
+      // Statuses: chill slows, shock disrupts briefly, freeze stops movement, attacks and animation.
+      const sf = speedFactor(e.status);
+      const adt = hdt * sf;
+      const slow = (1 - e.flinch * 0.5) * sf;
       if (e.state === 'move') {
         const target = e.path[e.seg];
         const dx = target.x - e.pos.x;
@@ -300,7 +357,7 @@ export class EnemyManager {
         // Attack the reactor
         const desiredYaw = Math.atan2(ctx.layout.reactor.x - e.pos.x, ctx.layout.reactor.z - e.pos.z);
         e.yaw = turnTowards(e.yaw, desiredYaw, hdt * 4);
-        e.attackT -= hdt;
+        e.attackT -= adt;
         if (e.attackT <= 0) {
           e.attackT = def.attackInterval;
           const muzzle = this.muzzlePos(e, TMP);
@@ -319,7 +376,7 @@ export class EnemyManager {
       // Walkers fire telegraphed plasma bolts at the player when they have line of sight.
       if (e.walker && player.alive && def.playerShotInterval > 0) {
         if (e.chargeT > 0) {
-          e.chargeT -= hdt;
+          e.chargeT -= adt;
           if (e.chargeT <= 0) {
             const muzzle = this.muzzlePos(e, TMP);
             const aim = TMP2.copyFrom(player.eye);
@@ -332,7 +389,7 @@ export class EnemyManager {
             sfx.play('enemyShot', { volume: a.volume, pan: a.pan });
           }
         } else {
-          e.shotT -= hdt;
+          e.shotT -= adt;
           if (e.shotT <= 0) {
             e.shotT = def.playerShotInterval * (0.8 + Math.random() * 0.4);
             const c = e.center(TMP);
@@ -342,7 +399,7 @@ export class EnemyManager {
         }
       }
 
-      this.animate(e, hdt, ppos, ctx.effects);
+      this.animate(e, adt, ppos, ctx.effects);
     }
   }
 
