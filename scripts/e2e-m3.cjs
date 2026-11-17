@@ -25,6 +25,7 @@ async function launch(init) {
       for (const [k, v] of Object.entries(extra)) localStorage.setItem(k, v);
     }
   }, [SETTINGS, init ?? null]);
+  await ctx.addInitScript(() => { window.__skipUpgrades = true; });
   const p = await ctx.newPage();
   const errs = [];
   p.on('pageerror', (e) => errs.push('PAGEERR ' + e.message));

@@ -176,7 +176,7 @@ export class Flow {
           defeat: () => this.endRun('defeat'),
         },
       });
-      this.arena.skipUpgrades = this.skipUpgrades;
+      this.arena.skipUpgrades = this.skipUpgrades || !!(globalThis as { __skipUpgrades?: boolean }).__skipUpgrades;
       this.location = 'arena';
       return this.arena.scene;
     });

@@ -22,6 +22,7 @@ async function launch() {
   await ctx.addInitScript((s) => {
     if (!localStorage.getItem('riftwarden.settings')) localStorage.setItem('riftwarden.settings', s);
   }, SETTINGS);
+  await ctx.addInitScript(() => { window.__skipUpgrades = true; });
   const p = await ctx.newPage();
   const errs = [];
   p.on('pageerror', (e) => errs.push('PAGEERR ' + e.message));
