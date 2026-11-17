@@ -315,7 +315,10 @@ describe('H: save v2 -> v3 migration and sanitising', () => {
     expect(all).toContain(split.uid); // evicted to storage, not deleted
     expect(r.data.storage.uids).toContain(split.uid);
     // An invalid component id (rail barrel on a plasma weapon) falls back to the default build.
-    const bad = parseSave(serializeSave(d).replace(/"barrel":"pb_[a-z]+"/, '"barrel":"rb_quad"'));
+    const tampered = JSON.parse(JSON.stringify(d)) as SaveData;
+    tampered.items.find((i) => i.uid === w.uid)!.build!.barrel = 'rb_quad';
+    const body = JSON.stringify(tampered);
+    const bad = parseSave(`{"v":3,"sum":"${checksum(body)}","data":${body}}`);
     expect(bad.ok).toBe(true);
     if (bad.ok) expect(isValidBuild(bad.data.items.find((i) => i.uid === w.uid)!.build!)).toBe(true);
   });
