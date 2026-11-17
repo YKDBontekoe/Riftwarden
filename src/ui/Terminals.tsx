@@ -1,16 +1,23 @@
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { sfx } from '../audio/Sfx';
-import { BASE_STATS, computeStats, fmtNum, formatStat, maxHull, mitigation, STAT_DEFS } from '../combat/stats';
+import { BASE_STATS, computeStats, fmtNum, formatModifier, formatStat, maxHull, mitigation, STAT_DEFS } from '../combat/stats';
 import type { Flow } from '../core/Flow';
 import { ECONOMY, SENTINEL, towerCost } from '../data/defs';
 import type { HomeBase } from '../home/HomeBase';
 import { scrapValue, STORAGE_EXPANSION, storageExpansionCost } from '../loot/economy';
-import { equipmentModifiers, weaponDefFor, weaponSummary } from '../loot/equipment';
+import { equipmentModifiers, weaponDefFor, weaponStatRows, weaponSummary, withSocket } from '../loot/equipment';
+import { FAMILIES, SOCKET_LABEL } from '../weapons/build';
+import { canInstall, moduleTypeDef, removalCost } from '../weapons/modules';
+import { WeaponViewer } from './WeaponViewer';
 import { rarity } from '../loot/rarity';
 import { MOVE } from '../player/Player';
 import { type ItemInstance, type SlotId, SLOTS } from '../progression/items';
 import {
   deployBlocker,
+  type EngineeringResult,
+  installModule,
+  transferModule,
+  uninstallModule,
   equipFromStorage,
   equippedItem,
   expandStorage,
@@ -383,52 +390,189 @@ function StorageTerminal({ flow, close }: { flow: Flow; close: () => void }) {
 
 function WorkshopTerminal({ flow, close }: { flow: Flow; close: () => void }) {
   const save = useSave(flow);
+  const weapons = useMemo(() => sortEntries(saveEntries(save).filter((e) => e.item.category === 'weapon'), 'rarity'), [save]);
   const modules = useMemo(() => sortEntries(saveEntries(save).filter((e) => e.item.category === 'module'), 'rarity'), [save]);
-  const [sel, setSel] = useState<string | null>(null);
-  const cur = modules.find((m) => m.item.uid === sel) ?? modules[0] ?? null;
-  const socketed = SLOTS.map((s) => equippedItem(save, s.id)).filter((i): i is ItemInstance => !!i);
+  const [selW, setSelW] = useState<string | null>(() => save.loadout.weapon);
+  const [selS, setSelS] = useState(0);
+  const [hover, setHover] = useState<string | null>(null);
+  const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const weapon = weapons.find((e) => e.item.uid === selW)?.item ?? weapons[0]?.item ?? null;
+  const socket = weapon && selS < weapon.sockets ? selS : 0;
+  const installed = weapon?.socketed[socket] ?? null;
+  const hoverModule = modules.find((m) => m.item.uid === hover)?.item ?? null;
+  // The preview shows the hovered module already installed (visual + stat preview).
+  const shown = weapon && hoverModule && !installed && canInstall(weapon, socket, hoverModule).ok ? withSocket(weapon, socket, hoverModule) : weapon;
+  const before = useMemo(() => (weapon ? weaponStatRows(weapon) : []), [weapon]);
+  const after = useMemo(() => (shown && shown !== weapon ? weaponStatRows(shown) : null), [shown, weapon]);
+  const removal = installed ? removalCost(installed) : 0;
+
+  const run = (fn: (d: SaveData) => EngineeringResult, okText: string, sound: 'install' | 'uninstall') => {
+    let res: EngineeringResult = { ok: false, reason: 'No change' };
+    flow.profile.mutate((d) => {
+      res = fn(d);
+      return res.ok;
+    });
+    const r = res as EngineeringResult;
+    setMsg(r.ok ? { text: `${okText}${r.cost ? ` · −${r.cost} salvage` : ''}`, ok: true } : { text: r.reason, ok: false });
+    sfx.play(r.ok ? sound : 'buildDeny');
+    setHover(null);
+  };
+  // Other owned weapons with a compatible empty socket for the installed module (transfer targets).
+  const targets: { w: ItemInstance; i: number }[] = [];
+  if (installed) {
+    for (const e of weapons) {
+      const probe = e.item.uid === weapon!.uid ? withSocket(e.item, socket, null) : e.item;
+      for (let i = 0; i < e.item.sockets; i++) if (!(e.item.uid === weapon!.uid && i === socket) && canInstall(probe, i, installed).ok) targets.push({ w: e.item, i });
+    }
+  }
+
   return (
-    <Shell code="WS-04" title="WORKSHOP" sub="Engineering bench · module archive" close={close} accent="amber" wide>
-      <div className="workshop-grid">
-        <div>
-          <div className="offline-badge">MODULE INSTALLATION OFFLINE · ENGINEERING NOT YET AVAILABLE</div>
-          <p>Upgrade modules recovered in the field are archived here. They cannot be installed yet, so they have no effect on your drone. Their rolls are kept exactly as found.</p>
-          <div className="col-label">MODULE ARCHIVE · {modules.length}</div>
-          {modules.length === 0 ? (
-            <div className="empty-state small">
-              <b>No modules recovered</b>
-              <p>Enemies occasionally drop upgrade modules. Collect them and secure them at a checkpoint.</p>
-            </div>
-          ) : (
-            <div className="inv-list short">
-              {modules.map((e) => (
-                <ItemCard key={e.item.uid} e={e} selected={e.item.uid === cur?.item.uid} onSelect={() => setSel(e.item.uid)} />
-              ))}
-            </div>
-          )}
-          <div className="col-label">SOCKETS ON EQUIPPED GEAR</div>
-          <div className="socket-list">
-            {socketed.map((it) => (
-              <div key={it.uid} className="socket-row" style={{ ['--rc' as string]: rarity(it.rarity).color }}>
-                <b>{it.name}</b>
-                <span>
-                  {Array.from({ length: Math.max(1, it.sockets) }, (_, i) => (
-                    <i key={i} className={i < it.sockets ? 'free' : 'none'} />
-                  ))}
-                  {it.sockets} SOCKET{it.sockets === 1 ? '' : 'S'}
-                </span>
-              </div>
+    <Shell code="WS-04" title="WEAPON ENGINEERING" sub="Inspect weapons · install, remove and transfer upgrade modules" close={close} accent="amber" wide>
+      <div className="eng-grid">
+        <div className="eng-col">
+          <div className="col-label">OWNED WEAPONS · {weapons.length}</div>
+          <div className="inv-list short">
+            {weapons.map((e) => (
+              <ItemCard
+                key={e.item.uid}
+                e={e}
+                selected={e.item.uid === weapon?.uid}
+                onSelect={() => {
+                  setSelW(e.item.uid);
+                  setSelS(0);
+                  setMsg(null);
+                }}
+              />
             ))}
           </div>
           <div className="resource">
             <span className="res-ico">⬢</span>
             <div>
               <b>{save.resources.salvage}</b>
-              <span>SALVAGE IN RESERVE</span>
+              <span>SALVAGE · removal/transfer costs salvage, installing is free</span>
             </div>
           </div>
         </div>
-        <div>{cur ? <ItemDetail item={cur.item} status="stored" /> : null}</div>
+        <div className="eng-col eng-center">
+          <WeaponViewer item={shown} caption={hoverModule && shown !== weapon ? `PREVIEW · ${hoverModule.name.toUpperCase()} INSTALLED` : undefined} />
+          {weapon && (
+            <>
+              <div className="eng-title" style={{ ['--rc' as string]: rarity(weapon.rarity).color }}>
+                <b>{weapon.name}</b>
+                <span>
+                  {rarity(weapon.rarity).label.toUpperCase()} · LV {fmtNum(weapon.level)} · {weapon.build ? FAMILIES[weapon.build.family].label.toUpperCase() : ''}
+                </span>
+              </div>
+              <div className="sockets">
+                {weapon.sockets === 0 && <div className="id-none">This weapon has no module sockets. Uncommon and better weapons have 1–4.</div>}
+                {weapon.build?.sockets.map((k, i) => {
+                  const m = weapon.socketed[i];
+                  return (
+                    <button key={i} className={`sock ${i === socket ? 'on' : ''} ${m ? 'filled' : ''}`} style={m ? { ['--rc' as string]: rarity(m.rarity).color } : undefined} onClick={() => setSelS(i)}>
+                      <i className={`sock-ico k-${k}`} />
+                      <span>{SOCKET_LABEL[k]}</span>
+                      <b>{m ? m.name : 'EMPTY'}</b>
+                    </button>
+                  );
+                })}
+              </div>
+              <table className="cmp-table eng-stats">
+                <thead>
+                  <tr>
+                    <th>WEAPON</th>
+                    <th>CURRENT</th>
+                    {after && <th>WITH MODULE</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {before.map((r) => {
+                    const a = after?.find((x) => x.key === r.key);
+                    const v = a ? (Math.abs(a.value - r.value) < 1e-9 ? 0 : (a.value > r.value) === (r.better === 'higher') ? 1 : -1) : 0;
+                    return (
+                      <tr key={r.key} className={v > 0 ? 'up' : v < 0 ? 'down' : ''}>
+                        <td>{r.label}</td>
+                        <td>{r.text}</td>
+                        {after && <td>{a ? `${a.text} ${v > 0 ? '▲' : v < 0 ? '▼' : ''}` : '—'}</td>}
+                      </tr>
+                    );
+                  })}
+                  {after?.filter((a) => !before.some((b) => b.key === a.key)).map((a) => (
+                    <tr key={a.key} className="up">
+                      <td>{a.label}</td>
+                      <td>—</td>
+                      <td>{a.text} ▲</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
+        </div>
+        <div className="eng-col">
+          {weapon && weapon.sockets > 0 && installed && (
+            <>
+              <div className="col-label">INSTALLED · {SOCKET_LABEL[weapon.build!.sockets[socket]]} SOCKET</div>
+              <ItemDetail item={installed} />
+              <button
+                className="mini wide"
+                disabled={save.resources.salvage < removal || save.storage.uids.length >= save.storage.capacity}
+                onClick={() => run((d) => uninstallModule(d, weapon.uid, socket), `${installed.name} returned to storage`, 'uninstall')}
+              >
+                REMOVE TO STORAGE · {removal} SALVAGE
+              </button>
+              {save.storage.uids.length >= save.storage.capacity && <div className="faint small">Storage full: free a bay or transfer instead.</div>}
+              <div className="col-label">TRANSFER · {removal} SALVAGE</div>
+              {targets.length === 0 && <div className="id-none">No other weapon has a free compatible socket.</div>}
+              {targets.map((t) => (
+                <button key={`${t.w.uid}.${t.i}`} className="mini wide" disabled={save.resources.salvage < removal} onClick={() => run((d) => transferModule(d, weapon.uid, socket, t.w.uid, t.i), `Transferred to ${t.w.name}`, 'install')}>
+                  → {t.w.name} · {SOCKET_LABEL[t.w.build!.sockets[t.i]]} {t.i + 1}
+                </button>
+              ))}
+            </>
+          )}
+          {weapon && weapon.sockets > 0 && !installed && (
+            <>
+              <div className="col-label">
+                MODULES FOR THIS {SOCKET_LABEL[weapon.build!.sockets[socket]]} SOCKET · {modules.length} IN STORAGE
+              </div>
+              {modules.length === 0 && (
+                <div className="empty-state small">
+                  <b>No modules in storage</b>
+                  <p>Enemies drop upgrade modules. Collect them and secure them at a checkpoint.</p>
+                </div>
+              )}
+              <div className="mod-list">
+                {modules.map((e) => {
+                  const chk = canInstall(weapon, socket, e.item);
+                  const def = moduleTypeDef(e.item.module?.type);
+                  return (
+                    <div
+                      key={e.item.uid}
+                      className={`mod-row ${chk.ok ? '' : 'bad'}`}
+                      style={{ ['--rc' as string]: rarity(e.item.rarity).color }}
+                      onMouseEnter={() => setHover(e.item.uid)}
+                      onMouseLeave={() => setHover((h) => (h === e.item.uid ? null : h))}
+                    >
+                      <div>
+                        <b>{e.item.name}</b>
+                        <span>
+                          {rarity(e.item.rarity).label.toUpperCase()} · LV {fmtNum(e.item.level)} · {def ? SOCKET_LABEL[def.socket] : '?'}
+                        </span>
+                        <small>{[...e.item.base, ...e.item.affixes].map((x) => `${formatModifier(x.stat, x.op, x.value)} ${STAT_DEFS[x.stat].label.toLowerCase()}`).join(' · ')}</small>
+                        {!chk.ok && <em>{chk.reason}</em>}
+                      </div>
+                      <button className="mini" disabled={!chk.ok} onFocus={() => setHover(e.item.uid)} onClick={() => run((d) => installModule(d, weapon.uid, socket, e.item.uid), `${e.item.name} installed`, 'install')}>
+                        INSTALL
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+          {weapon && weapon.sockets === 0 && <ItemDetail item={weapon} />}
+          {msg && <div className={`term-msg ${msg.ok ? '' : 'bad'}`}>{msg.text}</div>}
+        </div>
       </div>
     </Shell>
   );

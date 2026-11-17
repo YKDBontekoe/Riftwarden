@@ -207,3 +207,46 @@ export function statPreview(equipped: readonly (ItemInstance | null)[], candidat
   }
   return rows;
 }
+
+export interface WeaponStatRow {
+  key: string;
+  label: string;
+  value: number;
+  text: string;
+  better: 'higher' | 'lower';
+}
+
+/**
+ * Effective numbers of one weapon on its own (its rolls, affixes and installed modules,
+ * through the real stat pipeline). Used by the engineering bench to show what an
+ * installation or removal changes.
+ */
+export function weaponStatRows(item: ItemInstance): WeaponStatRow[] {
+  const w = weaponDefFor(item);
+  if (!w) return [];
+  const st = computeStats(itemModifiers(item));
+  const s = weaponSummary(w, st);
+  const rows: WeaponStatRow[] = [];
+  const add = (key: string, label: string, value: number, text: string, better: 'higher' | 'lower' = 'higher') => rows.push({ key, label, value, text, better });
+  add('dps', 'Sustained DPS', s.dps, fmtNum(s.dps));
+  add('damage', w.family === 'beam' ? 'Damage / tick' : 'Damage / shot', s.damage, fmtNum(s.damage));
+  if (s.projectiles > 1) add('proj', 'Projectiles', s.projectiles, String(s.projectiles));
+  add('rate', w.family === 'beam' ? 'Tick rate' : 'Fire rate', s.rate, `${fmtNum(s.rate)}/s`);
+  add('crit', 'Critical chance', st.critChance, `${fmtNum(st.critChance * 100)}%`);
+  add('critdmg', 'Critical damage', st.critMultiplier, `×${fmtNum(st.critMultiplier)}`);
+  add('sustain', 'Fire time to overheat', s.sustain, `${fmtNum(s.sustain)} s`);
+  add('cool', 'Cooling', s.cool, `${fmtNum(s.cool)}%/s`);
+  add('range', 'Range', s.range, `${fmtNum(s.range)} m`);
+  add('spread', 'Spread & recoil', st.spreadMult, `${fmtNum(st.spreadMult * 100)}%`, 'lower');
+  if (w.mechanism === 'charge') add('charge', 'Charge time', s.chargeTime, `${fmtNum(s.chargeTime)} s`, 'lower');
+  if (w.family === 'rail') add('pierce', 'Pierce', s.pierce, `${s.pierce}`);
+  if (w.family === 'beam') add('ramp', 'Ramp time', s.rampTime, `${fmtNum(s.rampTime)} s`, 'lower');
+  if (st.arcChance > 0) add('arc', 'Arc chance · damage', st.arcChance, `${fmtNum(st.arcChance * 100)}% · ${fmtNum(st.arcDamage * 100)}%`);
+  if (st.heatDamage > 0) add('thermal', 'Damage at full heat', st.heatDamage, `+${fmtNum(st.heatDamage * 100)}%`);
+  return rows;
+}
+
+/** Copy of a weapon with a socket changed (engineering preview; never persisted). */
+export function withSocket(weapon: ItemInstance, index: number, module: ItemInstance | null): ItemInstance {
+  return { ...weapon, socketed: weapon.socketed.map((m, i) => (i === index ? module : m)) };
+}

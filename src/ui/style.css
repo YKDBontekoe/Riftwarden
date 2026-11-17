@@ -742,4 +742,49 @@ button.mini.expand { border-color: var(--amber-dim); color: #ffe2b5; }
 /* Long loot lists must never push modal buttons off-screen. */
 .modal { max-height: 94vh; overflow-y: auto; }
 .modal .brief-list { max-height: 116px; overflow-y: auto; }
-body.lab .hud, body.lab .hud-root, body.lab #ui > * { display: none !important; }
+
+
+/* ---- M3: weapon engineering & inspection */
+body.lab #ui > * { display: none !important; }
+.terminal.wide:has(.eng-grid) { width: min(1360px, 98vw); }
+.eng-grid { display: grid; grid-template-columns: 280px minmax(0, 1fr) 330px; gap: 18px; align-items: start; }
+.eng-col { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.eng-col .inv-list.short { max-height: 420px; }
+.wpn-viewer { position: relative; width: 100%; aspect-ratio: 16 / 9; border: 1px solid var(--amber-dim); background: #060b10; clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut)); }
+.wpn-viewer canvas { width: 100%; height: 100%; display: block; outline: none; touch-action: none; cursor: grab; }
+.wpn-viewer canvas:active { cursor: grabbing; }
+.wv-hint { position: absolute; left: 12px; bottom: 8px; font-family: var(--mono); font-size: 10px; letter-spacing: 0.14em; color: var(--faint); pointer-events: none; }
+.wv-empty { position: absolute; inset: 0; display: grid; place-items: center; font-family: var(--mono); font-size: 12px; letter-spacing: 0.2em; color: var(--faint); pointer-events: none; }
+.eng-title { display: flex; flex-direction: column; gap: 2px; border-left: 3px solid var(--rc); padding-left: 10px; }
+.eng-title b { font-family: var(--display); font-size: 20px; color: var(--rc); }
+.eng-title span { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; color: var(--muted); }
+.sockets { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+button.sock { display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; gap: 2px 8px; align-items: center; text-align: left; padding: 8px 10px; margin: 0; width: auto; clip-path: none; border: 1px dashed var(--line); background: rgba(5, 12, 18, 0.6); }
+button.sock.filled { border: 1px solid color-mix(in srgb, var(--rc) 55%, transparent); }
+button.sock.on { box-shadow: inset 0 0 0 1px var(--amber); background: rgba(255, 181, 71, 0.08); }
+button.sock span { font-family: var(--mono); font-size: 10px; letter-spacing: 0.16em; color: var(--muted); }
+button.sock b { grid-column: 1 / -1; font-size: 13px; font-weight: 600; color: var(--white); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+button.sock.filled b { color: var(--rc); }
+.sock-ico { display: inline-block; width: 10px; height: 10px; border: 2px solid var(--amber); transform: rotate(45deg); }
+.sock-ico.k-power { border-color: #ff7a5c; border-radius: 50%; transform: none; }
+.sock-ico.k-system { border-color: var(--cyan); transform: none; }
+.mod-list { display: flex; flex-direction: column; gap: 6px; max-height: 470px; overflow-y: auto; padding-right: 4px; }
+.mod-row { display: flex; gap: 10px; align-items: center; justify-content: space-between; padding: 8px 10px; border: 1px solid var(--line); border-left: 3px solid var(--rc); background: rgba(5, 12, 18, 0.55); }
+.mod-row:hover { background: rgba(255, 181, 71, 0.07); }
+.mod-row.bad { opacity: 0.55; }
+.mod-row > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.mod-row b { color: var(--rc); font-size: 14px; }
+.mod-row span { font-family: var(--mono); font-size: 10px; letter-spacing: 0.12em; color: var(--muted); }
+.mod-row small { font-size: 12px; color: var(--white); opacity: 0.85; }
+.mod-row em { font-style: normal; font-family: var(--mono); font-size: 10px; color: var(--red); letter-spacing: 0.08em; }
+button.mini.wide { width: 100%; padding: 7px 10px; }
+.term-msg.bad { color: var(--red); }
+.eng-stats td:nth-child(n + 2) { text-align: right; font-family: var(--mono); }
+.id-row.comp small, .id-row.affix small { margin-left: 6px; font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.12em; color: var(--faint); text-transform: uppercase; }
+.comp-fx { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 2px 8px; font-weight: 500; }
+.comp-fx em { font-style: normal; font-size: 12px; }
+.comp-fx em.up { color: #7ff0a0; }
+.comp-fx em.down { color: #ff8f7a; }
+.id-row.socket.filled b { color: var(--rc); }
+.small { font-size: 11px; }
+@media (max-width: 1100px) { .eng-grid { grid-template-columns: 1fr; } }

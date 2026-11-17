@@ -7,6 +7,9 @@ import { RARITIES, rarity } from '../loot/rarity';
 import { CATEGORY_LABEL, type Category, type ItemInstance } from '../loot/types';
 import { getSlot, type SlotId, SLOTS, slotsFor } from '../progression/items';
 import { fmtNum } from '../combat/stats';
+import { buildComponents, FAMILIES, SOCKET_LABEL } from '../weapons/build';
+import { describeEffects } from '../weapons/components';
+import { moduleTypeDef } from '../weapons/modules';
 
 const CATEGORY_ICON: Record<Category, IconKind> = { weapon: 'rifle', armor: 'plate', shield: 'ring', reactor: 'core', processor: 'chip', accessory: 'gem', module: 'cube' };
 
@@ -157,29 +160,7 @@ export function ItemDetail({ item, status }: { item: ItemInstance; status?: Entr
         </div>
       </div>
       <p className="id-blurb">{base ? base.blurb : 'This item’s definition is missing from this build. It is kept safely in storage but cannot be equipped.'}</p>
-      {ws && w && (
-        <div className="id-block">
-          <div className="id-label">WEAPON</div>
-          <div className="id-row">
-            <span>Damage / shot</span>
-            <b>{fmtNum(w.damage)}</b>
-          </div>
-          <div className="id-row">
-            <span>Fire rate</span>
-            <b>{fmtNum(w.fireRate)}/s</b>
-          </div>
-          <div className="id-row">
-            <span>Heat / shot · shots to overheat</span>
-            <b>
-              {fmtNum(w.heatPerShot)}% · {ws.shotsToOverheat}
-            </b>
-          </div>
-          <div className="id-row">
-            <span>Cooling</span>
-            <b>{fmtNum(w.coolRate)}%/s</b>
-          </div>
-        </div>
-      )}
+      {ws && w && <WeaponBlock item={item} />}
       {item.base.length > 0 && (
         <div className="id-block">
           <div className="id-label">BASE</div>
@@ -192,7 +173,7 @@ export function ItemDetail({ item, status }: { item: ItemInstance; status?: Entr
         </div>
       )}
       <div className="id-block">
-        <div className="id-label">{item.category === 'module' ? 'MODULE EFFECTS · INACTIVE UNTIL INSTALLED' : `AFFIXES · ${item.affixes.length}`}</div>
+        <div className="id-label">{item.category === 'module' ? `MODULE AFFIXES · ${item.affixes.length}` : `AFFIXES · ${item.affixes.length}`}</div>
         {item.affixes.length === 0 && <div className="id-none">No affixes</div>}
         {item.affixes.map((a, i) => (
           <div key={i} className="id-row affix">
@@ -205,16 +186,118 @@ export function ItemDetail({ item, status }: { item: ItemInstance; status?: Entr
           </div>
         ))}
       </div>
-      {item.category === 'module' && item.module ? (
-        <div className="id-note">
-          Fits: <b>{item.module.compatible.map(catLabel).join(' · ')}</b> · socket cost <b>{item.module.socketCost}</b>. Installation requires weapon engineering, which is not
-          available yet: this module has no effect until then.
+      {item.category === 'module' && item.module && <ModuleNote item={item} />}
+    </div>
+  );
+}
+
+const MECH_LABEL: Record<string, string> = { auto: 'AUTOMATIC', burst: '3-ROUND BURST', charge: 'CHARGE & RELEASE', cycle: 'AUTO-CYCLE', beam: 'CONTINUOUS BEAM' };
+
+/** Weapon readout: family, firing mechanism, effective numbers, generated components and sockets. */
+export function WeaponBlock({ item, compact }: { item: ItemInstance; compact?: boolean }) {
+  const w = weaponDefFor(item);
+  if (!w) return null;
+  const ws = weaponSummary(w);
+  const fam = FAMILIES[w.family];
+  const comps = item.build ? buildComponents(item.build) : [];
+  return (
+    <>
+      <div className="id-block">
+        <div className="id-label">
+          {fam.label.toUpperCase()} · {MECH_LABEL[w.mechanism] ?? w.mechanism}
         </div>
-      ) : (
-        <div className="id-note">
-          Module sockets: <b>{item.sockets}</b> {item.sockets > 0 ? '(empty · installation arrives with engineering)' : ''}
+        <div className="id-row">
+          <span>{w.family === 'beam' ? 'Damage / tick · ticks/s' : w.family === 'rail' && w.mechanism === 'charge' ? 'Damage (full charge) · cycle' : 'Damage / shot · fire rate'}</span>
+          <b>
+            {fmtNum(w.damage)} · {fmtNum(w.fireRate)}/s
+          </b>
+        </div>
+        <div className="id-row">
+          <span>Sustained DPS (base)</span>
+          <b>{fmtNum(ws.dps)}</b>
+        </div>
+        <div className="id-row">
+          <span>Range</span>
+          <b>{fmtNum(w.range)} m</b>
+        </div>
+        <div className="id-row">
+          <span>Heat / {w.family === 'beam' ? 'tick' : 'shot'} · fire time to overheat</span>
+          <b>
+            {fmtNum(w.heatPerShot)}% · {fmtNum(ws.sustain)} s
+          </b>
+        </div>
+        <div className="id-row">
+          <span>Cooling</span>
+          <b>{fmtNum(w.coolRate)}%/s</b>
+        </div>
+        {w.family === 'rail' && (
+          <div className="id-row">
+            <span>{w.mechanism === 'charge' ? 'Charge time · pierce' : 'Pierce'}</span>
+            <b>
+              {w.mechanism === 'charge' ? `${fmtNum(w.chargeTime)} s · ` : ''}
+              {w.pierce} extra target{w.pierce === 1 ? '' : 's'}
+            </b>
+          </div>
+        )}
+        {w.family === 'beam' && (
+          <div className="id-row">
+            <span>Ramp ceiling · beam width</span>
+            <b>
+              ×{fmtNum(w.rampMax)} in {fmtNum(w.rampTime)} s · {fmtNum(w.beamWidth)} m
+            </b>
+          </div>
+        )}
+      </div>
+      {!compact && comps.length > 0 && (
+        <div className="id-block">
+          <div className="id-label">COMPONENTS</div>
+          {comps.map((c) => {
+            const fx = describeEffects(c.effects);
+            return (
+              <div key={c.id} className="id-row comp">
+                <span>
+                  {c.name}
+                  <small>{c.slot}</small>
+                </span>
+                <b className="comp-fx">
+                  {fx.length ? fx.map((f, k) => (
+                    <em key={k} className={f.good ? 'up' : 'down'}>
+                      {f.text}
+                    </em>
+                  )) : <em className="faint">cosmetic</em>}
+                </b>
+              </div>
+            );
+          })}
         </div>
       )}
+      <div className="id-block">
+        <div className="id-label">MODULE SOCKETS · {item.sockets}</div>
+        {item.sockets === 0 && <div className="id-none">No sockets (uncommon and better weapons have 1–4)</div>}
+        {item.build?.sockets.map((k, i) => {
+          const m = item.socketed[i];
+          return (
+            <div key={i} className={`id-row socket ${m ? 'filled' : ''}`} style={m ? { ['--rc' as string]: rarity(m.rarity).color } : undefined}>
+              <span>
+                <i className={`sock-ico k-${k}`} /> {SOCKET_LABEL[k]}
+              </span>
+              <b>{m ? m.name : 'EMPTY'}</b>
+            </div>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
+function ModuleNote({ item }: { item: ItemInstance }) {
+  const def = moduleTypeDef(item.module?.type);
+  if (!def) return <div className="id-note">Unknown module type: kept in storage, cannot be installed.</div>;
+  return (
+    <div className="id-note">
+      {def.blurb} Fits a <b>{SOCKET_LABEL[def.socket]}</b> socket on{' '}
+      <b>{def.families.length === 3 ? 'any weapon family' : def.families.map((f) => FAMILIES[f].label).join(' · ')}</b>. Install it at the HQ workshop; it takes effect while that weapon
+      is equipped.
     </div>
   );
 }
