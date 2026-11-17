@@ -2,7 +2,7 @@ import { Color3, Vector3 } from '@babylonjs/core';
 import { sfx } from '../../audio/Sfx';
 import { speedFactor } from '../../combat/status';
 import { BOSSES, bossPhase, bossScaling } from '../../survival/bosses';
-import { buildColossus, COLOSSUS_HULL_Y, type ColossusRig } from '../../visuals/bossModels';
+import { buildColossus, COLOSSUS_HULL_Y, COLOSSUS_SCALE, type ColossusRig } from '../../visuals/bossModels';
 import type { Behavior, Enemy, EnemyContext } from '../EnemyManager';
 import { turnTowards } from '../EnemyManager';
 
@@ -68,8 +68,8 @@ export const colossusBehavior: Behavior = {
     const rig = buildColossus(m.kit, m.P);
     rig.root.parent = e.root;
     e.ai.rig = rig;
-    m.addHitbox(e, e.root, COLOSSUS_HULL_Y, 0, 3.1, false);
-    m.addHitbox(e, e.root, COLOSSUS_HULL_Y + 1.2, -0.5, 2.2, false);
+    m.addHitbox(e, rig.hull, 0, 0, 3.0, false);
+    m.addHitbox(e, rig.hull, 1.2, -0.5, 2.1, false);
     // Sensor head: small, always exposed (precision reward).
     m.addHitbox(e, rig.head, 0, 0.55, 0.75, true, 'head');
     // Rear reactor core: only pickable while the compartment is open.
@@ -181,7 +181,7 @@ export const colossusBehavior: Behavior = {
     const a = ai(e);
     if (a.transT > 0) return amount * 0.15;
     let out = amount;
-    if (info.weak && a.door > 0.5 && info.point.y < e.pos.y + COLOSSUS_HULL_Y + 1.4 && isRear(e, info.point)) out *= COLOSSUS.coreMult;
+    if (info.weak && a.door > 0.5 && info.point.y < e.pos.y + (COLOSSUS_HULL_Y + 1.4) * COLOSSUS_SCALE && isRear(e, info.point)) out *= COLOSSUS.coreMult;
     if (a.atk?.kind === 'beam') a.taken += out;
     return out;
   },

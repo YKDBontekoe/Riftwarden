@@ -215,6 +215,8 @@ export class EnemyManager {
   private markTemplate: Mesh;
   private behaviors: Partial<Record<EnemyKind, Behavior>> = {};
   private blasts: PendingBlast[] = [];
+  /** Pool pre-warm queue: rigs are built ahead of need, one per frame, so spawns never hitch. */
+  private warmQueue: EnemyKind[] = [];
   /** Wrecks playing a destruction sequence (bosses). */
   private wrecks: { e: Enemy; t: number; dur: number }[] = [];
   private blastTemplate: Mesh;
@@ -244,6 +246,48 @@ export class EnemyManager {
     this.blastTemplate.material = unlit(scene, 'volatileChargeMat', [3.2, 0.35, 0.12], { additive: true });
     this.blastTemplate.isPickable = false;
     this.blastTemplate.setEnabled(false);
+  }
+
+  /**
+   * Make sure the pool can serve `counts` simultaneous enemies per kind without building rigs mid-combat.
+   * Work is spread over frames (one object per update call).
+   */
+  prewarm(counts: Partial<Record<EnemyKind, number>>): void {
+    for (const [kind, n] of Object.entries(counts) as [EnemyKind, number][]) {
+      const have = (this.pool.get(kind)?.length ?? 0) + this.active.filter((e) => e.kind === kind).length + this.warmQueue.filter((k) => k === kind).length;
+      for (let i = have; i < n; i++) this.warmQueue.push(kind);
+    }
+  }
+
+  /**
+   * Build one pooled object of each kind now (arena construction), and attach every elite modifier's hardware to
+   * a walker, so all rig templates exist before shaders are compiled behind the deployment transition.
+   */
+  prebuild(kinds: EnemyKind[]): void {
+    for (const kind of kinds) {
+      if (this.pool.get(kind)?.length) continue;
+      const e = this.create(kind);
+      e.root.setEnabled(false);
+      if (!this.pool.has(kind)) this.pool.set(kind, []);
+      this.pool.get(kind)!.push(e);
+      if (kind === 'walker') {
+        for (const mod of ['overcharged', 'armored', 'accelerated', 'volatile'] as EliteModId[]) e.eliteParts.set(mod, buildEliteParts(this.kit, this.P, e.root, e.def, mod));
+        e.threat = buildThreatMark(this.kit, this.P, e.root, e.def);
+      }
+    }
+  }
+
+  get warming(): number {
+    return this.warmQueue.length;
+  }
+
+  private warmOne(): void {
+    const kind = this.warmQueue.shift();
+    if (!kind) return;
+    const e = this.create(kind);
+    e.root.setEnabled(false);
+    if (!this.pool.has(kind)) this.pool.set(kind, []);
+    this.pool.get(kind)!.push(e);
   }
 
   /** Register the AI for an archetype (Game wires every M6 behaviour at construction). */
@@ -364,12 +408,13 @@ export class EnemyManager {
       for (const p of parts.plates) p.setEnabled(true);
     }
     e.armor = e.has('armored') ? e.maxHp * ELITE.armorBreak : 0;
-    const marked = e.mods.length > 0 || e.def.role === 'support';
+    const support = e.def.role === 'support' && e.kind !== 'pylon';
+    const marked = e.mods.length > 0 || support;
     if (marked && !e.threat) e.threat = buildThreatMark(this.kit, this.P, e.root, e.def);
     if (e.threat) {
       e.threat.node.setEnabled(marked);
       e.threat.diamond.setEnabled(e.mods.length > 0);
-      e.threat.support.setEnabled(e.def.role === 'support');
+      e.threat.support.setEnabled(support);
       for (const [id, pip] of e.threat.pips) pip.setEnabled(e.mods.includes(id));
       e.threat.buff.setEnabled(false);
     }
@@ -609,6 +654,7 @@ export class EnemyManager {
 
   update(hdt: number, ctx: EnemyContext, dt = hdt): void {
     const t0 = performance.now();
+    if (this.warmQueue.length) this.warmOne();
     this.updateBlasts(hdt, ctx);
     for (let i = this.wrecks.length - 1; i >= 0; i--) {
       const w = this.wrecks[i];

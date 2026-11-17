@@ -690,6 +690,58 @@ async function home(p) {
     check('L1 development session checkpoints never commit permanent rewards', r.dev && r.saved === false && res1.salvage === res0.salvage && res1.items === res0.items && res1.credits === res0.credits, JSON.stringify({ r, res0, res1 }));
   }
 
+  // ------------------------------------------------------------------ J: performance under heavy load (measured)
+  if (want('J')) {
+    await home(p); await deploy(p, 3, true, 5150);
+    const r = await ev(p, () => {
+      const R = window.__rift, g = R.game, V = R.V3;
+      R.dev.jump(30);
+      R.dev.evolve('routes'); R.dev.evolve('instability');
+      R.dev.force({ event: 'instability' });
+      // Towers of several archetypes + many run upgrades (elemental synergies).
+      const spots = [[-14, -24], [14, -24], [-22, 6], [22, -6], [-6, 16], [6, -16], [-26, -10], [26, 12]];
+      for (const [x, z] of spots) { const t = g.turrets.add(new V(x, 0, z), 0, g.turretCtx); t.building = false; }
+      let taken = 0;
+      for (let i = 0; i < 40 && taken < 14; i++) { const offer = g.director.build.roll({ wave: 30, family: g.weapon.def.family, towers: 8, towerArchetypes: ['ballistic'] }, 100 + i); if (offer[0] && g.director.takeUpgrade(offer[0].id)) taken++; }
+      g.startWave(); R.advance(0.5);
+      R.dev.spawn('colossus', [], 'east');
+      const mods = [['overcharged'], ['armored', 'volatile'], ['accelerated', 'volatile'], ['overcharged', 'armored'], []];
+      const kinds = ['walker', 'enforcer', 'artillery', 'engineer', 'rusher', 'bulwark'];
+      for (let i = 0; i < 34; i++) R.dev.spawn(kinds[i % kinds.length], mods[i % mods.length], ['north', 'east', 'west', 'south'][i % 4]);
+      g.togglePerf(true);
+      // Pools are pre-warmed during preparation in real play; warm them here too (one rig per frame).
+      g.enemies.prewarm({ walker: 12, enforcer: 8, artillery: 8, engineer: 8, rusher: 12, bulwark: 8 });
+      for (let i = 0; i < 80; i++) R.advance(1 / 60);
+      // Simulation cost: 600 fixed steps while the drone fires continuously.
+      R.teleport(0, -12); R.look(0, 0.05);
+      g.input.simulateMouse(0, true);
+      const times = [];
+      let maxEnemies = 0, maxOrd = 0, maxTele = 0, nan = false;
+      for (let i = 0; i < 600; i++) {
+        const t0 = performance.now();
+        R.advance(1 / 60);
+        times.push(performance.now() - t0);
+        maxEnemies = Math.max(maxEnemies, g.enemies.count); maxOrd = Math.max(maxOrd, g.ordnance.live); maxTele = Math.max(maxTele, g.tele.active);
+        if (g.enemies.active.some((e) => !Number.isFinite(e.hp) || !Number.isFinite(e.pos.x))) nan = true;
+        if (!g.player.alive) g.player.respawnT = 0;
+        g.reactorHp = 1000;
+        if (g.enemies.count < 30) R.dev.spawn(kinds[i % kinds.length], mods[i % mods.length], ['north', 'east', 'west', 'south'][i % 4]);
+      }
+      g.input.simulateMouse(0, false);
+      times.sort((a, b) => a - b);
+      const avg = times.reduce((a, b) => a + b, 0) / times.length;
+      // Render cost (SwiftShader software GL; not representative of a GPU).
+      const rt = [];
+      for (let i = 0; i < 12; i++) { const t0 = performance.now(); R.render(1); rt.push(performance.now() - t0); }
+      rt.sort((a, b) => a - b);
+      return { simAvg: +avg.toFixed(2), simP50: +times[300].toFixed(2), over20: times.filter((t) => t > 20).length, simP95: +times[Math.floor(times.length * 0.95)].toFixed(2), simMax: +times[times.length - 1].toFixed(2), aiAvg: +g.enemies.aiAvg.toFixed(2), renderMedian: Math.round(rt[6]), draws: g.drawCalls, maxEnemies, maxOrd, maxTele, particles: g.fx.particleCount, upgrades: taken, towers: g.turrets.turrets.length, nan, bus: g.director.diag() };
+    });
+    console.log('MEASURED', JSON.stringify(r));
+    // Rare 100-250 ms frames also occur with plain M5 content in headless SwiftShader (GC); assert on median and p95.
+    check('J1 heavy combat (40 enemies incl. elites + boss, 8 towers, 14 upgrades, hazards) keeps simulation responsive', !r.nan && r.simP50 < 4 && r.simP95 < 14 && r.maxEnemies >= 35, JSON.stringify({ p50: r.simP50, p95: r.simP95, avg: r.simAvg, ai: r.aiAvg, enemies: r.maxEnemies }));
+    check('J2 hostile ordnance / telegraph pools stay bounded', r.maxOrd <= 192 && r.maxTele <= 128, JSON.stringify({ ord: r.maxOrd, tele: r.maxTele }));
+  }
+
   console.log(errs.length ? 'ERRORS:\n' + errs.slice(0, 10).join('\n') : 'no page errors');
   check('Z page errors', errs.length === 0, String(errs.length));
   console.log(`\n${passes} passed, ${failures} failed`);

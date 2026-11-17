@@ -50,7 +50,7 @@ export const OVERSEER = {
     [13, -14],
     [-13, 15],
   ] as [number, number][],
-  orbitR: 6.2,
+  orbitR: 7.6,
   exposed: 10,
   sweepCharge: 1.7,
   sweepTime: 2.2,

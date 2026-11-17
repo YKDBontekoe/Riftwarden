@@ -80,6 +80,13 @@ export class Kit {
     return t;
   }
 
+  /** Compile every (shape, material) template in its instanced variant (no first-sight shader hitches). */
+  warmAll(): Promise<unknown> {
+    const jobs: Promise<unknown>[] = [];
+    for (const t of this.templates.values()) if (t.material) jobs.push(t.material.forceCompilationAsync(t, { useInstances: true }).catch(() => {}));
+    return Promise.all(jobs);
+  }
+
   /** Create a part. If `unique` material is given, makes a standalone clone with that material. */
   part(shape: Shape, mat: Material, parent: TransformNode, o: PartOpts = {}, unique?: Material): AbstractMesh {
     const t = this.template(shape, mat);

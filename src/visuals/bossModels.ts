@@ -29,6 +29,9 @@ export interface ColossusRig {
 }
 
 export const COLOSSUS_HULL_Y = 5.0;
+/** Whole-rig scale (hitboxes live inside the rig, so they scale with it). */
+export const COLOSSUS_SCALE = 1.22;
+export const OVERSEER_SCALE = 1.45;
 
 /**
  * Four-legged siege platform (~9 m long, 7 m tall): armoured hull with layered plating, sensor head,
@@ -38,15 +41,16 @@ export const COLOSSUS_HULL_Y = 5.0;
 export function buildColossus(kit: Kit, P: Palette): ColossusRig {
   const M = enemyMats(P.white.getScene(), P);
   const root = kit.node('colossus', null);
+  root.scaling.setAll(COLOSSUS_SCALE);
   const hull = kit.node('cHull', root, [0, COLOSSUS_HULL_Y, 0]);
   // Hull layers
-  kit.part('box', P.enemyDark, hull, { pos: [0, -1.25, 0], scale: [3.6, 0.9, 5.4] });
-  kit.part('box', P.enemyArmor, hull, { scale: [4.4, 2.0, 5.8] });
+  kit.part('box', M.bossDark, hull, { pos: [0, -1.25, 0], scale: [3.6, 0.9, 5.4] });
+  kit.part('box', M.bossArmor, hull, { scale: [4.4, 2.0, 5.8] });
   kit.part('box', P.graphite, hull, { pos: [0, 1.1, -0.2], scale: [3.6, 0.3, 4.8] });
-  kit.part('box', P.enemyArmor, hull, { pos: [0, 1.38, -0.4], scale: [2.2, 0.35, 3.6] });
-  kit.part('box', P.enemyArmor, hull, { pos: [0, 0.5, 3.05], scale: [3.8, 1.3, 0.5], rot: [-0.35, 0, 0] });
+  kit.part('box', M.bossArmor, hull, { pos: [0, 1.38, -0.4], scale: [2.2, 0.35, 3.6] });
+  kit.part('box', M.bossArmor, hull, { pos: [0, 0.5, 3.05], scale: [3.8, 1.3, 0.5], rot: [-0.35, 0, 0] });
   for (const side of [-1, 1]) {
-    kit.part('box', P.enemyArmor, hull, { pos: [side * 2.3, -0.35, 0], scale: [0.35, 1.3, 5.0], rot: [0, 0, side * 0.18] });
+    kit.part('box', M.bossArmor, hull, { pos: [side * 2.3, -0.35, 0], scale: [0.35, 1.3, 5.0], rot: [0, 0, side * 0.18] });
     kit.part('box', P.orangeDim, hull, { pos: [side * 2.48, -0.35, 0.4], scale: [0.04, 0.12, 3.6], rot: [0, 0, side * 0.18], shadow: false });
     // Spine ribs
     for (let i = 0; i < 4; i++) kit.part('box', P.graphite, hull, { pos: [side * 1.25, 1.45, -1.9 + i * 1.1], scale: [0.25, 0.35, 0.5] });
@@ -62,8 +66,8 @@ export function buildColossus(kit: Kit, P: Palette): ColossusRig {
   for (const v of vents) v.setEnabled(false);
   // Head
   const head = kit.node('cHead', hull, [0, 0.25, 3.2]);
-  kit.part('box', P.enemyDark, head, { scale: [2.2, 1.2, 1.4] });
-  kit.part('box', P.enemyArmor, head, { pos: [0, 0.65, -0.1], scale: [2.0, 0.25, 1.4], rot: [0.15, 0, 0] });
+  kit.part('box', M.bossDark, head, { scale: [2.2, 1.2, 1.4] });
+  kit.part('box', M.bossArmor, head, { pos: [0, 0.65, -0.1], scale: [2.0, 0.25, 1.4], rot: [0.15, 0, 0] });
   kit.part('box', P.graphite, head, { pos: [0, 0, 0.66], scale: [2.0, 0.55, 0.1] });
   kit.part('box', P.orangeGlow, head, { pos: [0, 0.05, 0.72], scale: [1.7, 0.14, 0.04], shadow: false });
   for (const x of [-0.6, 0, 0.6]) kit.part('cyl', P.metal, head, { pos: [x, -0.35, 0.68], rot: [Math.PI / 2, 0, 0], scale: [0.26, 0.12, 0.26] });
@@ -76,7 +80,7 @@ export function buildColossus(kit: Kit, P: Palette): ColossusRig {
   const doors: TransformNode[] = [];
   for (const side of [-1, 1]) {
     const d = kit.node('cDoor', comp, [side * 0.7, 0, -0.42]);
-    kit.part('box', P.enemyArmor, d, { scale: [1.4, 1.95, 0.22] });
+    kit.part('box', M.bossArmor, d, { scale: [1.4, 1.95, 0.22] });
     kit.part('box', P.orangeDim, d, { pos: [-side * 0.66, 0, -0.12], scale: [0.04, 1.6, 0.04], shadow: false });
     doors.push(d);
   }
@@ -87,12 +91,12 @@ export function buildColossus(kit: Kit, P: Palette): ColossusRig {
   const cannons: ColossusRig['cannons'] = [];
   for (const side of [-1, 1]) {
     const mount = kit.node('cMount', hull, [side * 2.55, 1.15, 1.2]);
-    kit.part('sphere', P.enemyArmor, mount, { scale: [1.2, 1.1, 1.2] });
+    kit.part('sphere', M.bossArmor, mount, { scale: [1.2, 1.1, 1.2] });
     kit.part('box', P.graphite, mount, { pos: [side * 0.2, 0.5, 0], scale: [0.6, 0.3, 1.3] });
     const barrel = kit.node('cBarrel', mount, [side * 0.15, 0.05, 0.4]);
-    kit.part('box', P.enemyDark, barrel, { pos: [0, 0, 0.6], scale: [0.85, 0.75, 1.6] });
+    kit.part('box', M.bossDark, barrel, { pos: [0, 0, 0.6], scale: [0.85, 0.75, 1.6] });
     kit.part('cyl', P.metal, barrel, { pos: [0, 0.1, 1.9], rot: [Math.PI / 2, 0, 0], scale: [0.42, 1.8, 0.42] });
-    kit.part('cyl', P.enemyArmor, barrel, { pos: [0, 0.1, 2.85], rot: [Math.PI / 2, 0, 0], scale: [0.6, 0.35, 0.6] });
+    kit.part('cyl', M.bossArmor, barrel, { pos: [0, 0.1, 2.85], rot: [Math.PI / 2, 0, 0], scale: [0.6, 0.35, 0.6] });
     kit.part('torus', P.orangeGlow, barrel, { pos: [0, 0.1, 3.05], rot: [Math.PI / 2, 0, 0], scale: [0.5, 0.5, 0.5], shadow: false });
     for (let i = 0; i < 3; i++) kit.part('box', P.graphite, barrel, { pos: [0, 0.48, 1.1 + i * 0.5], scale: [0.3, 0.12, 0.3] });
     const muzzle = kit.node('cMuzzle', barrel, [0, 0.1, 3.2]);
@@ -102,7 +106,7 @@ export function buildColossus(kit: Kit, P: Palette): ColossusRig {
   const pods: ColossusRig['pods'] = [];
   for (const side of [-1, 1]) {
     const pod = kit.node('cPod', hull, [side * 1.35, 1.75, -1.1]);
-    kit.part('box', P.enemyDark, pod, { scale: [1.1, 0.7, 1.5] });
+    kit.part('box', M.bossDark, pod, { scale: [1.1, 0.7, 1.5] });
     const glow: AbstractMesh[] = [];
     for (let r = 0; r < 2; r++) for (let c = 0; c < 3; c++) {
       kit.part('cyl', P.graphite, pod, { pos: [(c - 1) * 0.32, 0.36, (r - 0.5) * 0.5], scale: [0.22, 0.05, 0.22] });
@@ -110,7 +114,7 @@ export function buildColossus(kit: Kit, P: Palette): ColossusRig {
     }
     for (const g of glow) g.setEnabled(false);
     const cover = kit.node('cCover', pod, [0, 0.38, 0.75]);
-    kit.part('box', P.enemyArmor, cover, { pos: [0, 0.04, -0.75], scale: [1.15, 0.1, 1.55] });
+    kit.part('box', M.bossArmor, cover, { pos: [0, 0.04, -0.75], scale: [1.15, 0.1, 1.55] });
     const muzzle = kit.node('cPodMuzzle', pod, [0, 0.6, 0]);
     pods.push({ cover, glow, muzzle });
   }
@@ -118,26 +122,26 @@ export function buildColossus(kit: Kit, P: Palette): ColossusRig {
   const lance = kit.node('cLance', hull, [0, -1.55, 2.4]);
   kit.part('box', P.graphite, lance, { pos: [0, 0.15, -0.5], scale: [1.1, 0.5, 1.4] });
   kit.part('cyl', P.metal, lance, { pos: [0, 0, 0.9], rot: [Math.PI / 2, 0, 0], scale: [0.5, 2.0, 0.5] });
-  for (let i = 0; i < 3; i++) kit.part('torus', P.enemyArmor, lance, { pos: [0, 0, 0.4 + i * 0.5], rot: [Math.PI / 2, 0, 0], scale: [0.72, 0.72, 0.72] });
+  for (let i = 0; i < 3; i++) kit.part('torus', M.bossArmor, lance, { pos: [0, 0, 0.4 + i * 0.5], rot: [Math.PI / 2, 0, 0], scale: [0.72, 0.72, 0.72] });
   const lanceTip = kit.part('sphere', M.chargeRed, lance, { pos: [0, 0, 1.95], scale: [0.36, 0.36, 0.36], shadow: false });
   // Legs: hip (swing) -> splayed thigh -> knee -> vertical shin -> foot pad
   const legs: ColossusLeg[] = [];
   for (const side of [-1, 1]) for (const front of [-1, 1]) {
     const hip = kit.node('cHip', hull, [side * 1.9, -0.6, front * 2.1]);
-    kit.part('sphere', P.enemyArmor, hip, { scale: [1.1, 1.1, 1.1] });
+    kit.part('sphere', M.bossArmor, hip, { scale: [1.1, 1.1, 1.1] });
     const thigh = kit.node('cThigh', hip);
     thigh.rotation.z = side * 0.95;
-    kit.part('box', P.enemyDark, thigh, { pos: [0, -1.1, 0], scale: [0.8, 2.3, 0.85] });
-    kit.part('box', P.enemyArmor, thigh, { pos: [side * -0.1, -1.0, 0.05], scale: [0.5, 1.9, 0.95] });
+    kit.part('box', M.bossDark, thigh, { pos: [0, -1.1, 0], scale: [1.0, 2.3, 1.05] });
+    kit.part('box', M.bossArmor, thigh, { pos: [side * -0.1, -1.0, 0.05], scale: [0.5, 1.9, 0.95] });
     kit.part('cyl', P.metal, thigh, { pos: [side * 0.45, -1.2, 0], scale: [0.18, 1.6, 0.18] });
     const knee = kit.node('cKnee', thigh, [0, -2.3, 0]);
     knee.rotation.z = -side * 0.95;
     kit.part('sphere', P.metal, knee, { scale: [0.75, 0.75, 0.75] });
-    kit.part('box', P.enemyArmor, knee, { pos: [0, -1.4, 0], scale: [0.7, 2.6, 0.7] });
+    kit.part('box', M.bossArmor, knee, { pos: [0, -1.4, 0], scale: [0.95, 2.6, 0.95] });
     kit.part('box', P.graphite, knee, { pos: [0, -1.0, front * 0.38], scale: [0.5, 1.6, 0.12] });
     kit.part('box', P.orangeDim, knee, { pos: [0, -0.9, front * 0.45], scale: [0.08, 1.0, 0.02], shadow: false });
     kit.part('cyl6', P.graphite, knee, { pos: [0, -2.75, 0], scale: [1.5, 0.3, 1.7] });
-    kit.part('cyl6', P.enemyDark, knee, { pos: [0, -2.55, 0], scale: [1.1, 0.3, 1.2] });
+    kit.part('cyl6', M.bossDark, knee, { pos: [0, -2.55, 0], scale: [1.1, 0.3, 1.2] });
     legs.push({ hip, knee, side, front });
   }
   return { root, hull, head, legs, cannons, pods, doors, core, lance, lanceTip, plates, vents, hatch };
@@ -165,12 +169,13 @@ export interface OverseerRig {
 export function buildOverseer(kit: Kit, P: Palette): OverseerRig {
   const M = enemyMats(P.white.getScene(), P);
   const root = kit.node('overseer', null);
+  root.scaling.setAll(OVERSEER_SCALE);
   const body = kit.node('oBody', root);
-  kit.part('sphere', P.enemyDark, body, { scale: [2.5, 2.5, 2.5] });
+  kit.part('sphere', M.bossDark, body, { scale: [2.5, 2.5, 2.5] });
   const inner = kit.part('sphere', M.violet, body, { scale: [1.7, 1.7, 1.7], shadow: false });
   // Equator band + lens
   kit.part('torus', P.graphite, body, { scale: [2.7, 2.7, 2.7] });
-  kit.part('cyl', P.enemyArmor, body, { pos: [0, 0, 1.1], rot: [Math.PI / 2, 0, 0], scale: [1.2, 0.4, 1.2] });
+  kit.part('cyl', M.bossArmor, body, { pos: [0, 0, 1.1], rot: [Math.PI / 2, 0, 0], scale: [1.2, 0.4, 1.2] });
   kit.part('torus', P.metal, body, { pos: [0, 0, 1.32], rot: [Math.PI / 2, 0, 0], scale: [1.15, 1.15, 1.15] });
   const eye = kit.part('sphere', M.bossCore, body, { pos: [0, 0, 1.32], scale: [0.7, 0.7, 0.25], shadow: false });
   // Plate rings
@@ -186,7 +191,7 @@ export function buildOverseer(kit: Kit, P: Palette): OverseerRig {
       const holder = kit.node('oPlateH', node);
       holder.rotation.y = a;
       const plate = kit.node('oPlate', holder, [0, 0, r]);
-      kit.part('box', P.enemyArmor, plate, { scale: [1.5, 0.55, 0.22] });
+      kit.part('box', M.bossArmor, plate, { scale: [1.5, 0.55, 0.22] });
       kit.part('box', P.graphite, plate, { pos: [0, 0, 0.12], scale: [1.1, 0.25, 0.08] });
       kit.part('box', M.violetDim, plate, { pos: [0, 0.18, 0.13], scale: [0.9, 0.04, 0.02], shadow: false });
       plates.push(plate);
@@ -197,7 +202,7 @@ export function buildOverseer(kit: Kit, P: Palette): OverseerRig {
   const arms: OverseerRig['arms'] = [];
   for (const side of [-1, 1]) {
     const node = kit.node('oArm', body, [side * 2.1, -0.5, 0.3]);
-    kit.part('sphere', P.enemyArmor, node, { scale: [0.8, 0.8, 0.8] });
+    kit.part('sphere', M.bossArmor, node, { scale: [0.8, 0.8, 0.8] });
     kit.part('box', P.graphite, node, { pos: [side * 0.6, -0.1, 0.4], scale: [0.4, 0.4, 1.4] });
     kit.part('cyl', P.metal, node, { pos: [side * 0.6, -0.1, 1.4], rot: [Math.PI / 2, 0, 0], scale: [0.36, 1.0, 0.36] });
     kit.part('torus', M.violet, node, { pos: [side * 0.6, -0.1, 1.92], rot: [Math.PI / 2, 0, 0], scale: [0.4, 0.4, 0.4], shadow: false });
@@ -217,7 +222,7 @@ export function buildOverseer(kit: Kit, P: Palette): OverseerRig {
     kit.part('cyl', P.graphite, body, { pos: [Math.sin(a) * 0.9, -1.25, Math.cos(a) * 0.9], scale: [0.5, 0.4, 0.5] });
     thrusters.push(kit.part('cone', M.energyWallViolet, body, { pos: [Math.sin(a) * 0.9, -2.0, Math.cos(a) * 0.9], rot: [Math.PI, 0, 0], scale: [0.45, 1.2, 0.45], shadow: false }));
   }
-  const shield = kit.part('sphere', M.energyWallViolet, body, { scale: [7.4, 7.4, 7.4], shadow: false });
+  const shield = kit.part('sphere', M.bossShield, body, { scale: [7.4, 7.4, 7.4], shadow: false });
   return { root, body, rings, eye, inner, shield, arms, crown, thrusters };
 }
 

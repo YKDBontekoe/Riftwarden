@@ -27,6 +27,11 @@ export interface EnemyMats {
   /** Additive energy-wall material (enforcer shield, overseer barriers). */
   energyWall: PBRMaterial;
   energyWallViolet: PBRMaterial;
+  /** Boss hull materials: heavier, darker and rougher than regular machines (silhouette + menace). */
+  bossArmor: PBRMaterial;
+  bossDark: PBRMaterial;
+  /** Additive lattice barrier shell (see-through, reads as an energy dome). */
+  bossShield: PBRMaterial;
 }
 
 /** Scanline energy panel: bright rims, hex-ish cells, transparent (black) body for additive blending. */
@@ -88,10 +93,16 @@ export function enemyMats(scene: Scene, P: Palette): EnemyMats {
     bossCore: unlit(scene, 'bossCore', [3.6, 1.1, 0.25]),
     energyWall: unlit(scene, 'energyWall', [3.4, 1.15, 0.2], { additive: true, twoSided: true }),
     energyWallViolet: unlit(scene, 'energyWallViolet', [1.2, 0.45, 2.6], { additive: true, twoSided: true }),
+    bossArmor: metal(scene, 'bossArmor', [0.36, 0.12, 0.06], 0.3, 0.72, P),
+    bossDark: metal(scene, 'bossDark', [0.045, 0.045, 0.05], 0.45, 0.62, P),
+    bossShield: unlit(scene, 'bossShield', [0.55, 0.24, 1.3], { additive: true }),
   };
   const tex = wallTexture(scene);
   m.energyWall.emissiveTexture = tex;
+  m.bossShield.emissiveTexture = tex;
   m.energyWallViolet.emissiveTexture = tex;
+  m.bossArmor.environmentIntensity = 0.85;
+  m.bossDark.environmentIntensity = 0.7;
   cache.set(scene, m);
   return m;
 }

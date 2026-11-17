@@ -3,6 +3,7 @@ import { sfx } from '../audio/Sfx';
 import type { Game } from '../core/Game';
 import type { Turret } from '../defense/Turrets';
 import type { Enemy } from '../enemies/EnemyManager';
+import type { EnemyKind } from '../data/defs';
 import type { DropSource } from '../loot/drops';
 import { DROP_SOURCES } from '../loot/drops';
 import type { Category } from '../loot/types';
@@ -52,6 +53,11 @@ export class SurvivalRuntime {
   /** Preparation of wave `w`: apply scheduled evolutions and announce what is coming. */
   prep(w: WaveDef): void {
     this.plan = w.plan ?? null;
+    // Pre-build rigs for the coming wave (bounded by the active cap) while the player prepares.
+    const counts: Partial<Record<EnemyKind, number>> = {};
+    for (const sp of w.spawns) counts[sp.kind] = Math.min(14, (counts[sp.kind] ?? 0) + 1);
+    if (w.plan?.boss) counts.pylon = 5;
+    this.g.enemies.prewarm(counts);
     const p = this.plan;
     if (!p) return;
     for (const id of p.evolved) if (!this.evolved.has(id)) this.applyEvolution(id, p.evolution !== id);

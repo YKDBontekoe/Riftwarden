@@ -65,6 +65,15 @@ export class Telegraphs {
     }
   }
 
+  /** Compile every telegraph shader up front (first boss attack must not hitch or appear late). */
+  warm(): Promise<unknown> {
+    const jobs: Promise<unknown>[] = [];
+    for (const m of this.ringMats.values()) jobs.push(m.forceCompilationAsync(this.ringT).catch(() => {}));
+    for (const m of this.fillMats.values()) jobs.push(m.forceCompilationAsync(this.fillT).catch(() => {}));
+    for (const m of this.lineMats.values()) jobs.push(m.forceCompilationAsync(this.lineT).catch(() => {}));
+    return Promise.all(jobs);
+  }
+
   get active(): number {
     let n = 0;
     for (const m of this.markers) if (m.t < m.dur) n++;
@@ -266,6 +275,10 @@ export class Ordnance {
     let n = 0;
     for (const r of this.rounds) if (r.active) n++;
     return n;
+  }
+
+  warm(): Promise<unknown> {
+    return Promise.all((Object.keys(this.templates) as OrdnanceKind[]).map((k) => this.mats[k].forceCompilationAsync(this.templates[k]).catch(() => {})));
   }
 
   private take(kind: OrdnanceKind): Round | null {

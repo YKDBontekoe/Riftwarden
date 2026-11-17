@@ -199,6 +199,8 @@ export class Game {
   checkpointOpen = false;
 
   // ---- M6 survival
+  /** Resolves once every M6 shader (enemy/boss/telegraph/ordnance/arena-machinery) is compiled. */
+  readonly m6Warmup: Promise<unknown>;
   readonly tele: Telegraphs;
   readonly ordnance: Ordnance;
   readonly dynamics: ArenaDynamics;
@@ -328,6 +330,7 @@ export class Game {
       },
       shake: (pos, k) => this.fx.onShake?.(pos, k),
     });
+    this.m6Warmup = this.warmShaders();
     this.planner = new SurvivalPlanner(((cfg.seed ?? hashRunSeed(cfg.run.id)) >>> 0) ^ 0x6d2b79f5, cfg.tier);
     this.survival = new SurvivalRuntime(this);
     this.turrets = new TurretManager(scene, this.kit, this.pal);
@@ -1472,6 +1475,22 @@ export class Game {
     }
   }
 
+  /**
+   * Compile M6 materials before the arena is revealed: enemy/boss hull + glow materials (instanced variants, as the
+   * kit renders them), telegraphs, ordnance and the hidden arena machinery. Avoids hitches and late pop-in the first
+   * time a boss, elite or event appears.
+   */
+  private warmShaders(): Promise<unknown> {
+    // One of every rig (and all elite hardware) so every (shape, material) template exists, then compile them all.
+    this.enemies.prebuild(['walker', 'rusher', 'bulwark', 'enforcer', 'artillery', 'engineer', 'courier', 'colossus', 'overseer', 'pylon']);
+    const jobs: Promise<unknown>[] = [this.tele.warm(), this.ordnance.warm(), this.kit.warmAll()];
+    for (const m of this.scene.meshes) {
+      if (m.isEnabled() || !m.material || !/^(dynPart|ventPlume|ventWarn|volatileCharge)/.test(m.name)) continue;
+      jobs.push(m.material.forceCompilationAsync(m).catch(() => {}));
+    }
+    return Promise.all(jobs);
+  }
+
   /** Reinforcements summoned by bosses (bounded by the active-enemy cap). */
   summon(kind: EnemyKind, at: Vector3, o: { mods?: EliteModId[]; gate?: GateId } = {}): Enemy | null {
     if (this.enemies.count >= 46) return null;
@@ -1575,8 +1594,32 @@ export class Game {
     return { name: e.def.name.toUpperCase(), title: '', hp: e.hp, max: e.maxHp, phase: 1, ticks: [], state: '', immune: false, attack: '', encounter: e.encounter, ...extra };
   }
 
+  /** First sighting of each M6 archetype / elite modifier this run: one line of counterplay intel. */
+  private seenKinds = new Set<string>();
+  private static readonly INTEL: Record<string, string> = {
+    enforcer: 'NEW THREAT · SHIELDED ENFORCER · frontal shield: flank it, hit the rear generator, or shock it',
+    artillery: 'NEW THREAT · ARTILLERY DRONE · interrupt its charge with burst damage before the shell lands',
+    engineer: 'NEW THREAT · SUPPORT ENGINEER · repairs and empowers allies: eliminate it first',
+    overcharged: 'ELITE · OVERCHARGED · blue ring = discharge incoming: back off or freeze/shock it',
+    armored: 'ELITE · ARMORED · plating absorbs body hits: aim for weakpoints',
+    accelerated: 'ELITE · ACCELERATED · fast with thruster boosts: intercept early',
+    volatile: 'ELITE · VOLATILE · detonates 1.4 s after death: keep your distance',
+  };
+
+  private watchIntel(): void {
+    for (const e of this.enemies.active) {
+      const keys = [e.kind as string, ...e.mods];
+      for (const k of keys) {
+        if (this.seenKinds.has(k) || !Game.INTEL[k]) continue;
+        this.seenKinds.add(k);
+        uiEvents.emit('alert', { text: Game.INTEL[k], tone: e.mods.includes(k as EliteModId) ? 'white' : 'orange' });
+      }
+    }
+  }
+
   /** Boss entrance: camera shake, roar, banner (once per boss). */
   private watchBoss(): void {
+    if (this.hudT <= 0) this.watchIntel();
     for (const e of this.enemies.active) {
       if (e.def.role !== 'boss' || !e.alive || e.id === this.bossSeen) continue;
       this.bossSeen = e.id;
