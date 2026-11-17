@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import type { Flow } from '../core/Flow';
 import type { Game } from '../core/Game';
 import type { Settings } from '../core/settings';
@@ -263,7 +263,17 @@ function PauseMenu({ flow }: { flow: Flow }) {
   const [tab, setTab] = useState<'settings' | 'controls'>('settings');
   const [confirm, setConfirm] = useState(false);
   const inArena = flow.location === 'arena';
-  const resume = () => (inArena ? void flow.arena?.resume() : void flow.home?.takeControl());
+  const resume = useCallback(() => (inArena ? void flow.arena?.resume() : void flow.home?.takeControl()), [flow, inArena]);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.repeat || e.code !== 'Escape') return;
+      e.preventDefault();
+      if (confirm) setConfirm(false);
+      else resume();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [confirm, resume]);
   return (
     <div className="screen dim">
       <div className="modal panel-frame">

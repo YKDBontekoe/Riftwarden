@@ -45,4 +45,34 @@ describe('Input pointer-lock capture', () => {
     await input.requestLock();
     expect(input.captured).toBe(false);
   });
+
+  it('retries after Escape cooldown refusals so one resume click is enough', async () => {
+    const { canvas, doc } = fakeDom();
+    let calls = 0;
+    canvas.requestPointerLock = vi.fn(async () => {
+      calls++;
+      if (calls <= 2) throw new Error('user exited pointer lock with Escape');
+      doc.pointerLockElement = canvas;
+    });
+    const input = new Input(canvas);
+    await input.requestLock();
+    expect(calls).toBeGreaterThanOrEqual(3);
+    expect(input.captured).toBe(true);
+  });
+
+  it('joins an in-flight retry instead of starting a competing one', async () => {
+    const { canvas, doc } = fakeDom();
+    let calls = 0;
+    canvas.requestPointerLock = vi.fn(async () => {
+      calls++;
+      if (calls <= 2) throw new Error('cooldown');
+      doc.pointerLockElement = canvas;
+    });
+    const input = new Input(canvas);
+    const first = input.requestLock();
+    const second = input.requestLock();
+    await Promise.all([first, second]);
+    expect(input.captured).toBe(true);
+    expect(calls).toBeLessThanOrEqual(3);
+  });
 });

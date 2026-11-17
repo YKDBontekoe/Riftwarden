@@ -12,6 +12,7 @@ export class Input {
   /** Test hook: treat input as captured without real pointer lock (headless automation). */
   forceCapture = false;
   onLockChange: (locked: boolean) => void = () => {};
+  private lockAttempt: Promise<void> | null = null;
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     window.addEventListener('keydown', (e) => {
@@ -53,19 +54,44 @@ export class Input {
 
   async requestLock(): Promise<void> {
     if (this.forceCapture) return;
+    // A second click while a retry sequence is running must join it, not start
+    // a competing request (which would just extend the blocked window).
+    if (this.lockAttempt) return this.lockAttempt;
+    const attempt = this.acquireLock();
+    this.lockAttempt = attempt;
     try {
-      await this.canvas.requestPointerLock({ unadjustedMovement: true } as PointerLockOptions);
-    } catch {
-      try {
-        await this.canvas.requestPointerLock();
-      } catch {
-        /* user gesture required; the menu will ask again */
-        return;
-      }
+      await attempt;
+    } finally {
+      if (this.lockAttempt === attempt) this.lockAttempt = null;
     }
-    // pointerlockchange is delivered in a later task than the request promise.
-    // Reflect an acquired lock immediately so `captured` is trustworthy for
-    // callers that check it right after awaiting requestLock().
+  }
+
+  private async acquireLock(): Promise<void> {
+    if (this.isLockedNow()) {
+      this.reflectLock();
+      return;
+    }
+    // Chrome refuses a fresh lock for a short window after the user left it
+    // with Escape, even from a click gesture. Retry inside the click's
+    // transient-activation window so one press of RESUME is enough.
+    for (let i = 0; i < 8; i++) {
+      if (i > 0) await new Promise<void>((r) => setTimeout(r, 200));
+      try {
+        await this.canvas.requestPointerLock({ unadjustedMovement: true } as PointerLockOptions);
+      } catch {
+        try {
+          await this.canvas.requestPointerLock();
+        } catch {
+          continue;
+        }
+      }
+      break;
+    }
+    this.reflectLock();
+  }
+
+  /** pointerlockchange is delivered in a later task than the request promise. */
+  private reflectLock(): void {
     if (this.isLockedNow()) {
       this.locked = true;
       this.skipMouse = 2;
