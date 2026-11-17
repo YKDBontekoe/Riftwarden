@@ -313,7 +313,8 @@ const fire = (p) =>
   check('E2 the actual result is displayed after rerolling', !!resultShown);
   await boot(p, true);
   const tR = (await save(p)).items.find((i) => i.uid === target.uid);
-  check('E3 reroll persists after reload', JSON.stringify(tR.affixes) === JSON.stringify(tE.affixes) && tR.rerolls === 1);
+  const same = (a, b) => a.length === b.length && a.every((x, i) => x.id === b[i].id && x.stat === b[i].stat && x.op === b[i].op && x.value === b[i].value && x.tier === b[i].tier && x.roll === b[i].roll);
+  check('E3 reroll persists after reload', same(tR.affixes, tE.affixes) && tR.rerolls === 1, `${tR.affixes[0].id} T${tR.affixes[0].tier} ${tR.affixes[0].value}`);
   await toHq(p);
   // F: lock affix 1 in the UI, full recalibration keeps it exactly.
   await openTerm(p, 'workshop');

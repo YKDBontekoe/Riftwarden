@@ -1,6 +1,6 @@
 import { type AbstractMesh, MeshBuilder, type PBRMaterial, type Scene, type TransformNode } from '@babylonjs/core';
 import type { MarketEntry } from '../economy/market';
-import { rarity } from '../loot/rarity';
+import { RARITIES, rarity } from '../loot/rarity';
 import type { Category } from '../loot/types';
 import type { Shape } from '../visuals/kit';
 import { unlit } from '../visuals/materials';
@@ -42,9 +42,15 @@ const GLYPH: Record<Category, { shape: Shape; scale: [number, number, number]; r
   module: { shape: 'box', scale: [0.22, 0.22, 0.22], rot: [0.6, 0.6, 0] },
 };
 
+/** Create every (shape, rarity) template up front: the scene's mesh set then never depends on stock. */
+function warmTemplates(ctx: EconCtx, shapes: readonly Shape[]): void {
+  for (const r of RARITIES) for (const sh of shapes) ctx.kit.template(sh, rarityMat(ctx.scene, r.id));
+}
+
 /** Equipment exchange: console + a lit wall of display bays mirroring the real stock. */
 export function equipmentExchange(ctx: EconCtx, st: Station, screen: ScreenTex): { update(entries: readonly MarketEntry[]): void } {
   const { kit, M, scene } = ctx;
+  warmTemplates(ctx, [...new Set([...Object.values(GLYPH).map((g) => g.shape), 'box', 'torusThin'] as Shape[])]);
   consoleDesk(ctx, st, screen, 1.8);
   const wallZ = 7.62;
   const root = kit.node('exchangeWall', null, [st.pos[0], 0, wallZ]);
@@ -103,13 +109,12 @@ export function equipmentExchange(ctx: EconCtx, st: Station, screen: ScreenTex):
         const mat = rarityMat(scene, e.item.rarity);
         // Rarity light strip (dim graphite when sold)
         b.parts.push(kit.part('box', e.sold ? M.graphite : mat, b.node, { pos: [0, -0.55, -0.27], scale: [1.4, 0.03, 0.02] }));
-        if (e.sold) {
-          b.parts.push(kit.part('box', M.amberDim, b.node, { pos: [0, 0.05, -0.12], scale: [0.6, 0.06, 0.02] }));
-          return;
-        }
+        // Always three parts per bay (strip, glyph or sold marker, featured ring) so instance counts stay constant.
         const g = GLYPH[e.item.category] ?? GLYPH.module;
-        b.parts.push(kit.part(g.shape, mat, b.glyph, { rot: g.rot, scale: g.scale }));
-        if (e.featured) b.parts.push(kit.part('torusThin', rarityMat(scene, e.item.rarity), b.glyph, { rot: [Math.PI / 2, 0, 0], scale: [0.9, 0.9, 0.9] }));
+        b.parts.push(e.sold ? kit.part('box', M.amberDim, b.node, { pos: [0, 0.05, -0.12], scale: [0.6, 0.06, 0.02] }) : kit.part(g.shape, mat, b.glyph, { rot: g.rot, scale: g.scale }));
+        const ring = kit.part('torusThin', mat, b.glyph, { rot: [Math.PI / 2, 0, 0], scale: [0.9, 0.9, 0.9] });
+        ring.setEnabled(e.featured && !e.sold);
+        b.parts.push(ring);
       });
     },
   };
@@ -118,6 +123,7 @@ export function equipmentExchange(ctx: EconCtx, st: Station, screen: ScreenTex):
 /** Module broker: console, rotating module vault and the material exchange tanks. */
 export function moduleBroker(ctx: EconCtx, st: Station, screen: ScreenTex): { update(entries: readonly MarketEntry[], exchange: { id: string; left: number }[]): void } {
   const { kit, M, scene } = ctx;
+  warmTemplates(ctx, ['box']);
   consoleDesk(ctx, st, screen, 1.6);
   // Vault: glass column with module cores orbiting inside (live stock).
   const vx = st.pos[0] - 3.1;
