@@ -262,8 +262,16 @@ function MainMenu({ flow }: { flow: Flow }) {
 function PauseMenu({ flow }: { flow: Flow }) {
   const [tab, setTab] = useState<'settings' | 'controls'>('settings');
   const [confirm, setConfirm] = useState(false);
+  const [resuming, setResuming] = useState(false);
   const inArena = flow.location === 'arena';
-  const resume = useCallback(() => (inArena ? void flow.arena?.resume() : void flow.home?.takeControl()), [flow, inArena]);
+  const resume = useCallback(() => {
+    if (resuming) return;
+    setResuming(true);
+    if (inArena) void flow.arena?.resume();
+    else void flow.home?.takeControl();
+    // Re-enable if pointer lock was denied outright so the menu isn't stuck.
+    window.setTimeout(() => setResuming(false), 4000);
+  }, [flow, inArena, resuming]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.repeat || e.code !== 'Escape') return;
@@ -282,8 +290,8 @@ function PauseMenu({ flow }: { flow: Flow }) {
           PAUSED
         </div>
         <div className="pause-loc">{inArena ? `SECTOR 07 · THREAT TIER ${getTier(flow.run?.tier ?? 1).roman}` : 'HEADQUARTERS'}</div>
-        <button className="primary" onClick={resume}>
-          RESUME
+        <button className="primary" disabled={resuming} onClick={resume}>
+          {resuming ? 'RESUMING…' : 'RESUME'}
         </button>
         {inArena &&
           (confirm ? (

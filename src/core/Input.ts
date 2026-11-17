@@ -13,9 +13,21 @@ export class Input {
   forceCapture = false;
   onLockChange: (locked: boolean) => void = () => {};
   private lockAttempt: Promise<void> | null = null;
+  /** When the browser's default Escape unlock happened (programmatic exits don't have a cooldown). */
+  private unlockedAt = 0;
+  private programmaticUnlock = false;
+  private static readonly ESCAPE_COOLDOWN_MS = 1250;
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     window.addEventListener('keydown', (e) => {
+      if (e.code === 'Escape' && this.captured) {
+        // Release through the API, not the browser's default Escape gesture.
+        // A default-gesture unlock makes the browser refuse requestPointerLock
+        // for a short window, which is why RESUME needed extra clicks.
+        e.preventDefault();
+        this.releaseLock();
+        return;
+      }
       if (!this.captured) return;
       if (['Space', 'Tab', 'F3', 'ArrowUp', 'ArrowDown'].includes(e.code)) e.preventDefault();
       if (!this.down.has(e.code)) this.pressedSet.add(e.code);
@@ -41,7 +53,11 @@ export class Input {
     document.addEventListener('contextmenu', (e) => e.preventDefault());
     document.addEventListener('pointerlockchange', () => {
       this.locked = document.pointerLockElement === this.canvas;
-      if (!this.locked) this.clear();
+      if (!this.locked) {
+        this.clear();
+        this.unlockedAt = this.programmaticUnlock ? 0 : Date.now();
+        this.programmaticUnlock = false;
+      }
       this.skipMouse = 2; // some browsers report a large delta right after locking
       this.onLockChange(this.locked);
     });
@@ -71,11 +87,16 @@ export class Input {
       this.reflectLock();
       return;
     }
-    // Chrome refuses a fresh lock for a short window after the user left it
-    // with Escape, even from a click gesture. Retry inside the click's
-    // transient-activation window so one press of RESUME is enough.
-    for (let i = 0; i < 8; i++) {
-      if (i > 0) await new Promise<void>((r) => setTimeout(r, 200));
+    // Chrome ignores Escape while locked, so it always unlocks with the default
+    // gesture and then refuses a fresh lock for a short window. Wait that out
+    // inside the click's transient activation so one RESUME click is enough.
+    const remaining = Input.ESCAPE_COOLDOWN_MS - (Date.now() - this.unlockedAt);
+    if (remaining > 0) await new Promise<void>((r) => setTimeout(r, remaining + 50));
+    // Sparse retries cover browsers with a longer block; still inside the
+    // click's ~5 s activation window.
+    const gaps = [0, 250, 500, 800];
+    for (const gap of gaps) {
+      if (gap > 0) await new Promise<void>((r) => setTimeout(r, gap));
       try {
         await this.canvas.requestPointerLock({ unadjustedMovement: true } as PointerLockOptions);
       } catch {
@@ -104,7 +125,10 @@ export class Input {
   }
 
   releaseLock(): void {
-    if (document.pointerLockElement) document.exitPointerLock();
+    if (document.pointerLockElement) {
+      this.programmaticUnlock = true;
+      document.exitPointerLock();
+    }
   }
 
   isDown(code: string): boolean {
