@@ -61,11 +61,11 @@ function round(v: number, stat: StatKey | 'weapon'): number {
 }
 
 /** Roll inside [0,1] with the rarity's quality floor. */
-function qualityRoll(rand: () => number, r: RarityDef): number {
+export function qualityRoll(rand: () => number, r: RarityDef): number {
   return r.quality + (1 - r.quality) * rand();
 }
 
-function pickWeighted<T>(items: readonly T[], weight: (t: T) => number, rand: () => number): T | undefined {
+export function pickWeighted<T>(items: readonly T[], weight: (t: T) => number, rand: () => number): T | undefined {
   let total = 0;
   for (const it of items) total += Math.max(0, weight(it));
   if (total <= 0) return undefined;
@@ -186,9 +186,7 @@ export function generateItem(spec: GenSpec): ItemInstance {
       const a = pickWeighted(pool, (x) => x.weights[base.category] ?? 0, rand);
       if (!a) break;
       used.add(a.group);
-      // Tier: skewed low for commons, high for exotics.
-      const p = 1.6 / (1 + r.tierBias);
-      let tier = 1 + Math.floor(Math.pow(rand(), p) * maxTier);
+      let tier = rollTier(rand, r, maxTier);
       if (i === 0 && r.minTopTier > 0) tier = Math.max(tier, Math.min(maxTier, r.minTopTier));
       tier = Math.min(maxTier, Math.max(1, tier));
       affixes.push(rollAffix(a, tier, qualityRoll(rand, r), level, r));
@@ -219,7 +217,13 @@ export function generateItem(spec: GenSpec): ItemInstance {
   return item;
 }
 
-function groupOfStat(stat: StatKey): string {
+/** Affix tier roll: skewed low for commons, high for exotics, capped by the level's max tier. */
+export function rollTier(rand: () => number, r: RarityDef, maxTier: number): number {
+  const p = 1.6 / (1 + r.tierBias);
+  return Math.min(maxTier, Math.max(1, 1 + Math.floor(Math.pow(rand(), p) * maxTier)));
+}
+
+export function groupOfStat(stat: StatKey): string {
   // Implicit stats block affixes on the same stat (no "+crit" on a crit processor).
   return AFFIXES.find((a) => a.stat === stat)?.group ?? `stat:${stat}`;
 }

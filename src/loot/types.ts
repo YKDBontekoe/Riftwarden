@@ -31,6 +31,8 @@ export interface RolledAffix extends RolledStat {
   tier: number;
   /** Position inside the tier's range, 0..1 (for "roll quality" display). */
   roll: number;
+  /** M4: protected from full recalibration (affix engineering). */
+  locked?: boolean;
 }
 
 /** Rolled base parameters of a weapon (applied to its WeaponDef template). */
@@ -93,4 +95,13 @@ export interface ItemInstance {
   /** Generation metadata: seed and generator version. */
   seed: number;
   gen: number;
+  // ---- M4 engineering state (absent = default)
+  /** Protected: cannot be sold or dismantled until unlocked. */
+  locked?: boolean;
+  /** Enhancement level (0..maxEnhance(rarity)). */
+  enhance?: number;
+  /** Affix engineering operations performed (cost escalation + deterministic reroll stream). */
+  rerolls?: number;
+  /** Weapon component modifications performed (cost escalation). */
+  mods?: number;
 }

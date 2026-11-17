@@ -2,6 +2,7 @@ import { BASE_STATS, type CombatStats, computeStats, formatModifier, formatStat,
 import type { WeaponDef } from '../data/defs';
 import { buildMechanism, FAMILIES } from '../weapons/build';
 import { installedModules } from '../weapons/modules';
+import { enhanceStatMult, weaponEnhance } from '../economy/config';
 import { baseDef } from './bases';
 import type { ItemInstance, RolledStat } from './types';
 
@@ -18,13 +19,22 @@ import type { ItemInstance, RolledStat } from './types';
 export function itemModifiers(item: ItemInstance): StatModifier[] {
   if (item.category === 'module') return [];
   const out: StatModifier[] = [];
+  // Enhancement (M4) scales beneficial stored values; the stored roll itself never changes.
   const push = (it: ItemInstance) => {
-    for (const s of it.base) out.push({ stat: s.stat, op: s.op, value: s.value, source: it.uid });
-    for (const a of it.affixes) out.push({ stat: a.stat, op: a.op, value: a.value, source: it.uid });
+    for (const s of it.base) out.push({ stat: s.stat, op: s.op, value: s.value * enhanceStatMult(it, s.stat, s.value, 'base'), source: it.uid });
+    for (const a of it.affixes) out.push({ stat: a.stat, op: a.op, value: a.value * enhanceStatMult(it, a.stat, a.value, 'affix'), source: it.uid });
   };
   push(item);
   if (item.category === 'weapon') for (const m of installedModules(item)) push(m);
   return out;
+}
+
+/** A module's own stats with its enhancement applied (what it adds once installed). */
+export function moduleStats(item: ItemInstance): RolledStat[] {
+  return [
+    ...item.base.map((s) => ({ stat: s.stat, op: s.op, value: s.value * enhanceStatMult(item, s.stat, s.value, 'base') })),
+    ...item.affixes.map((a) => ({ stat: a.stat, op: a.op, value: a.value * enhanceStatMult(item, a.stat, a.value, 'affix') })),
+  ];
 }
 
 export function equipmentModifiers(items: readonly (ItemInstance | null | undefined)[]): StatModifier[] {
@@ -46,15 +56,16 @@ export function weaponDefFor(item: ItemInstance | null | undefined): WeaponDef |
   const w = item.weapon;
   const t = FAMILIES[b.weapon.family]?.template ?? b.weapon.template;
   const acc = w.accuracy ?? 1;
+  const enh = weaponEnhance(item);
   return {
     ...t,
     id: item.defId,
     name: item.name.toUpperCase(),
     mechanism: buildMechanism(item.build) ?? t.mechanism,
-    damage: w.damage,
+    damage: w.damage * enh.damage,
     fireRate: w.fireRate,
     heatPerShot: w.heatPerShot,
-    coolRate: w.coolRate,
+    coolRate: w.coolRate * enh.cooling,
     range: w.range ?? t.range,
     spreadMin: t.spreadMin * acc,
     spreadMax: t.spreadMax * acc,
@@ -83,7 +94,7 @@ export function statTotals(item: ItemInstance | null | undefined): Map<string, R
   const m = new Map<string, RolledStat>();
   if (!item) return m;
   // Weapons include their installed modules.
-  const list = item.category === 'module' ? [...item.base, ...item.affixes] : itemModifiers(item);
+  const list = item.category === 'module' ? moduleStats(item) : itemModifiers(item);
   for (const s of list) {
     const k = `${s.stat}|${s.op}`;
     const cur = m.get(k);

@@ -2,7 +2,7 @@ import { ACCENTS, DEFAULT_PLACEABLES, type Placeable, PLACEABLE_BOUNDS, PROP_TYP
 import { isStatKey, type StatOp } from '../combat/stats';
 import { affixDef } from '../loot/affixes';
 import { baseDef } from '../loot/bases';
-import { scrapValue, storageExpansionCost, STORAGE_EXPANSION } from '../loot/economy';
+import { storageExpansionCost, STORAGE_EXPANSION } from '../loot/economy';
 import { clampLevel, generateItem, hashSeed, starterWeapon } from '../loot/generate';
 import { isRarity, rarity } from '../loot/rarity';
 import { CATEGORIES, type Category, type RolledAffix, type RolledStat } from '../loot/types';
@@ -12,6 +12,8 @@ import { CHECKPOINT_INTERVAL, THREAT_TIERS } from './tiers';
 import { defaultBuild, FAMILIES, isValidBuild, socketKinds, type Finish, type SocketKind, type WeaponBuild } from '../weapons/build';
 import { canInstall, removalCost } from '../weapons/modules';
 import type { WeaponFamily } from '../data/defs';
+import { dismantleYield, MAX_BALANCE, MAX_ENHANCE_ANY, MARKET, STARTING_CREDITS } from '../economy/config';
+import { generateMarket, type MarketEntry, type MarketState, progressLevel } from '../economy/market';
 
 /**
  * Persistent player state (pure module; storage is injected).
@@ -22,7 +24,7 @@ import type { WeaponFamily } from '../data/defs';
  *   under CORRUPT_KEY and the last good backup (BACKUP_KEY) or a fresh save is used.
  * - Older versions are upgraded by MIGRATIONS; newer versions are never downgraded.
  */
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 export const SAVE_KEY = 'riftwarden.save';
 export const BACKUP_KEY = 'riftwarden.save.bak';
 export const CORRUPT_KEY = 'riftwarden.save.corrupt';
@@ -57,6 +59,9 @@ export interface RunHistoryEntry {
   itemsLost: number;
   endedAt: number;
   newRecord: boolean;
+  /** M4 */
+  creditsSecured: number;
+  componentsSecured: number;
 }
 
 export interface ActiveRun {
@@ -67,6 +72,8 @@ export interface ActiveRun {
   bankedThroughWave: number;
   salvageSecured: number;
   itemsSecured: number;
+  creditsSecured: number;
+  componentsSecured: number;
 }
 
 export interface LoadoutPreset {
@@ -77,7 +84,8 @@ export interface LoadoutPreset {
 export interface SaveData {
   version: number;
   profile: { id: string; callsign: string; createdAt: number; lastSavedAt: number };
-  resources: { salvage: number };
+  /** Persistent resources (M4: credits = trade currency, components = advanced components). */
+  resources: { salvage: number; credits: number; components: number };
   /** Every owned item. Each uid is either equipped (loadout) or in storage, never both. */
   items: ItemInstance[];
   /** Storage holds every owned item that is not equipped. `expansions` were bought with salvage. */
@@ -104,9 +112,41 @@ export interface SaveData {
   history: RunHistoryEntry[];
   activeRun: ActiveRun | null;
   base: { layoutVersion: number; placeables: Placeable[]; facilities: string[] };
+  /** M4: merchant stock (persisted: reopening a terminal never rerolls it). */
+  market: MarketState;
+  /** M4: transaction guard, deterministic crafting counter and economy statistics. */
+  economy: EconomyState;
 }
 
-export const DEFAULT_FACILITIES = ['command', 'deployment', 'configuration', 'storage', 'workshop'];
+export interface EconomyStats {
+  creditsEarned: number;
+  creditsSpent: number;
+  itemsBought: number;
+  itemsSold: number;
+  itemsDismantled: number;
+  itemsCrafted: number;
+  rerolls: number;
+  enhancements: number;
+  componentSwaps: number;
+}
+
+export interface EconomyState {
+  /** Recently committed transaction ids (repeat submissions with the same id are rejected). */
+  tx: string[];
+  /** Fabrication counter (deterministic crafting seeds). */
+  crafts: number;
+  stats: EconomyStats;
+}
+
+export const TX_HISTORY = 40;
+
+export const emptyEconomy = (): EconomyState => ({
+  tx: [],
+  crafts: 0,
+  stats: { creditsEarned: 0, creditsSpent: 0, itemsBought: 0, itemsSold: 0, itemsDismantled: 0, itemsCrafted: 0, rerolls: 0, enhancements: 0, componentSwaps: 0 },
+});
+
+export const DEFAULT_FACILITIES = ['command', 'deployment', 'configuration', 'storage', 'workshop', 'merchant', 'modules', 'salvage', 'fabricate'];
 
 const emptyLoadout = (): Record<SlotId, string | null> => Object.fromEntries(SLOT_IDS.map((s) => [s, null])) as Record<SlotId, string | null>;
 
@@ -120,10 +160,11 @@ export function createDefaultSave(now = Date.now()): SaveData {
   const starter = starterWeapon(newUid('it'), now);
   const loadout = emptyLoadout();
   loadout.weapon = starter.uid;
+  const profileId = newUid('pf');
   return {
     version: SAVE_VERSION,
-    profile: { id: newUid('pf'), callsign: 'WARDEN', createdAt: now, lastSavedAt: now },
-    resources: { salvage: 0 },
+    profile: { id: profileId, callsign: 'WARDEN', createdAt: now, lastSavedAt: now },
+    resources: { salvage: 0, credits: STARTING_CREDITS, components: 0 },
     items: [starter],
     storage: { capacity: STORAGE_CAPACITY, expansions: 0, uids: [] },
     loadout,
@@ -134,7 +175,20 @@ export function createDefaultSave(now = Date.now()): SaveData {
     history: [],
     activeRun: null,
     base: { layoutVersion: 1, placeables: DEFAULT_PLACEABLES.map((p) => structuredCloneSafe(p)), facilities: [...DEFAULT_FACILITIES] },
+    market: generateMarket(profileId, 0, { level: 1, tier: 1 }, now),
+    economy: emptyEconomy(),
   };
+}
+
+/** Progress inputs for merchant stock and fabrication (best loot level reached, unlocked tier). */
+export function marketProgress(data: Pick<SaveData, 'records' | 'threat'>): { level: number; tier: number } {
+  return { level: progressLevel(data.records, data.threat.unlocked), tier: data.threat.unlocked };
+}
+
+/** Replace the stock with the next rotation (free after a completed run; paid refreshes count separately). */
+export function rotateMarket(data: SaveData, now = Date.now(), refreshes = 0): void {
+  data.market = generateMarket(data.profile.id, data.market.rotation + 1, marketProgress(data), now);
+  data.market.refreshes = refreshes;
 }
 
 function structuredCloneSafe<T>(v: T): T {
@@ -251,7 +305,9 @@ export function sanitizeItem(v: unknown, repairs: string[] = [], nested = false,
       repairs.push('dropped invalid affix');
       continue;
     }
-    affixes.push({ ...st, id: typeof ar.id === 'string' && affixDef(ar.id) ? ar.id : 'unknown', tier: int(ar.tier, 1, 1, 5), roll: num(ar.roll, 0.5, 0, 1) });
+    const af: RolledAffix = { ...st, id: typeof ar.id === 'string' && affixDef(ar.id) ? ar.id : 'unknown', tier: int(ar.tier, 1, 1, 5), roll: num(ar.roll, 0.5, 0, 1) };
+    if (ar.locked === true) af.locked = true;
+    affixes.push(af);
   }
   const item: ItemInstance = {
     uid,
@@ -271,6 +327,16 @@ export function sanitizeItem(v: unknown, repairs: string[] = [], nested = false,
     seed: int(r.seed, 0, 0, 0xffffffff),
     gen: int(r.gen, 1, 0, 1000),
   };
+  // M4 engineering state (only stored when set).
+  if (r.locked === true) item.locked = true;
+  const enh = int(r.enhance, 0, 0, MAX_ENHANCE_ANY);
+  if (enh > 0) item.enhance = Math.min(enh, [4, 6, 8, 10, 12, 15][rarity(item.rarity).index]);
+  const rr = int(r.rerolls, 0, 0, 1e6);
+  if (rr > 0) item.rerolls = rr;
+  const md = int(r.mods, 0, 0, 1e6);
+  if (md > 0) item.mods = md;
+  // Locks never cover every affix (at least one always rerolls).
+  while (affixes.filter((a) => a.locked).length > Math.max(0, affixes.length - 1)) delete affixes.filter((a) => a.locked).pop()!.locked;
   const w = obj(r.weapon);
   const posNum = (x: unknown) => typeof x === 'number' && Number.isFinite(x) && x > 0;
   if (category === 'weapon') {
@@ -350,7 +416,50 @@ function sanitizeHistory(v: unknown): RunHistoryEntry | null {
     itemsLost: int(r.itemsLost, 0),
     endedAt: num(r.endedAt, 0, 0),
     newRecord: r.newRecord === true,
+    creditsSecured: int(r.creditsSecured, 0),
+    componentsSecured: int(r.componentsSecured, 0),
   };
+}
+
+function sanitizeMarket(v: unknown, data: SaveData, owned: Set<string>, repairs: string[], now: number): MarketState {
+  const r = obj(v);
+  const rotation = int(r.rotation, 0, 0, 1e9);
+  const entries = (list: unknown, prefix: string, kind: 'equipment' | 'modules'): MarketEntry[] | null => {
+    if (!Array.isArray(list)) return null;
+    const out: MarketEntry[] = [];
+    for (const ev of list.slice(0, 16)) {
+      const e = obj(ev);
+      const it = sanitizeItem(e.item, repairs, true);
+      if (typeof e.id !== 'string' || !e.id.startsWith(prefix) || !it) continue;
+      if (kind === 'modules' ? it.category !== 'module' : it.category === 'module') continue;
+      it.socketed = it.socketed.map(() => null);
+      delete it.locked;
+      // A stock item whose uid is already owned was bought: it can never be sold twice.
+      out.push({ id: e.id.slice(0, 32), item: it, sold: e.sold === true || owned.has(it.uid), featured: e.featured === true });
+    }
+    return out;
+  };
+  const eq = entries(r.equipment, 'mk', 'equipment');
+  const mo = entries(r.modules, 'mk', 'modules');
+  if (!eq || !mo || (!eq.length && !mo.length)) {
+    repairs.push('regenerated merchant stock');
+    return generateMarket(data.profile.id, rotation, marketProgress(data), now);
+  }
+  const exchange = MARKET.exchange.map((o) => {
+    const found = arr(r.exchange).map(obj).find((x) => x.id === o.id);
+    return { id: o.id, left: int(found?.left, o.stock, 0, o.stock + 4) };
+  });
+  return { rotation, generatedAt: num(r.generatedAt, now, 0), refreshes: int(r.refreshes, 0, 0, 1000), equipment: eq, modules: mo, exchange };
+}
+
+function sanitizeEconomy(v: unknown): EconomyState {
+  const r = obj(v);
+  const e = emptyEconomy();
+  e.tx = arr(r.tx).filter((x): x is string => typeof x === 'string').map((x) => x.slice(0, 64)).slice(-TX_HISTORY);
+  e.crafts = int(r.crafts, 0);
+  const st = obj(r.stats);
+  for (const k of Object.keys(e.stats) as (keyof EconomyStats)[]) e.stats[k] = int(st[k], 0);
+  return e;
 }
 
 /**
@@ -370,7 +479,11 @@ export function sanitizeSave(raw: unknown, now = Date.now()): { data: SaveData; 
       createdAt: num(profile.createdAt, now, 0),
       lastSavedAt: num(profile.lastSavedAt, now, 0),
     },
-    resources: { salvage: int(obj(r.resources).salvage, 0) },
+    resources: {
+      salvage: int(obj(r.resources).salvage, 0, 0, MAX_BALANCE),
+      credits: int(obj(r.resources).credits, 0, 0, MAX_BALANCE),
+      components: int(obj(r.resources).components, 0, 0, MAX_BALANCE),
+    },
     items: [],
     storage: { capacity: STORAGE_CAPACITY, expansions: int(obj(r.storage).expansions, 0, 0, 1000), uids: [] },
     loadout: emptyLoadout(),
@@ -381,6 +494,8 @@ export function sanitizeSave(raw: unknown, now = Date.now()): { data: SaveData; 
     history: [],
     activeRun: null,
     base: { layoutVersion: 1, placeables: [], facilities: [] },
+    market: def.market,
+    economy: emptyEconomy(),
   };
 
   // Capacity is derived from purchased expansions (cannot be edited independently).
@@ -502,6 +617,8 @@ export function sanitizeSave(raw: unknown, now = Date.now()): { data: SaveData; 
       bankedThroughWave: int(ar.bankedThroughWave, 0),
       salvageSecured: int(ar.salvageSecured, 0),
       itemsSecured: int(ar.itemsSecured, 0),
+      creditsSecured: int(ar.creditsSecured, 0),
+      componentsSecured: int(ar.componentsSecured, 0),
     };
   }
 
@@ -518,6 +635,9 @@ export function sanitizeSave(raw: unknown, now = Date.now()): { data: SaveData; 
   data.base.layoutVersion = int(base.layoutVersion, 1, 1);
   const fac = arr(base.facilities).filter((f): f is string => typeof f === 'string');
   data.base.facilities = fac.length ? [...new Set([...DEFAULT_FACILITIES, ...fac])] : [...DEFAULT_FACILITIES];
+
+  data.market = sanitizeMarket(r.market, data, new Set(allOwnedUids(data)), repairs, now);
+  data.economy = sanitizeEconomy(r.economy);
 
   return { data, repairs };
 }
@@ -562,6 +682,19 @@ export const MIGRATIONS: Record<number, (data: Obj) => Obj> = {
       it.socketed = [];
       return it;
     });
+    return out;
+  },
+  /**
+   * v3 (M3) -> v4 (M4): persistent economy. Adds credits (with the commissioning stipend)
+   * and advanced components; merchant stock and economy state are generated by sanitize.
+   * Items are untouched (engineering fields default to "none").
+   */
+  3: (d) => {
+    const out: Obj = { ...d };
+    const res = obj(d.resources);
+    out.resources = { salvage: res.salvage, credits: STARTING_CREDITS, components: 0 };
+    delete out.market;
+    delete out.economy;
     return out;
   },
 };
@@ -709,6 +842,8 @@ export function resolveInterruptedRun(data: SaveData, now = Date.now()): RunHist
     itemsLost: 0,
     endedAt: now,
     newRecord: false,
+    creditsSecured: a.creditsSecured,
+    componentsSecured: a.componentsSecured,
   };
   const rec = record(data, a.tier);
   rec.runs++;
@@ -718,12 +853,13 @@ export function resolveInterruptedRun(data: SaveData, now = Date.now()): RunHist
   data.history.unshift(entry);
   data.history = data.history.slice(0, HISTORY_LIMIT);
   data.activeRun = null;
+  rotateMarket(data, now);
   return entry;
 }
 
 export function beginRun(data: SaveData, runId: string, tier: number, now = Date.now()): void {
   resolveInterruptedRun(data, now);
-  data.activeRun = { id: runId, tier, startedAt: now, bankedThroughWave: 0, salvageSecured: 0, itemsSecured: 0 };
+  data.activeRun = { id: runId, tier, startedAt: now, bankedThroughWave: 0, salvageSecured: 0, itemsSecured: 0, creditsSecured: 0, componentsSecured: 0 };
 }
 
 /**
@@ -731,7 +867,7 @@ export function beginRun(data: SaveData, runId: string, tier: number, now = Date
  * applied twice (repeated calls, double clicks, re-entrant events). Also unlocks the
  * next threat tier at the first checkpoint of the current one.
  */
-export function bankRewards(data: SaveData, runId: string, wave: number, rewards: Rewards): boolean {
+export function bankRewards(data: SaveData, runId: string, wave: number, rewards: Pick<Rewards, 'salvage' | 'items'> & Partial<Rewards>): boolean {
   const a = data.activeRun;
   if (!a || a.id !== runId || wave <= a.bankedThroughWave || wave % CHECKPOINT_INTERVAL !== 0) return false;
   // Validate everything first, then apply in one step (application-level atomicity).
@@ -745,9 +881,16 @@ export function bankRewards(data: SaveData, runId: string, wave: number, rewards
   }
   a.bankedThroughWave = wave;
   const s = Math.max(0, Math.floor(rewards.salvage));
+  const cr = Math.max(0, Math.floor(rewards.credits ?? 0));
+  const co = Math.max(0, Math.floor(rewards.components ?? 0));
   a.salvageSecured += s;
   a.itemsSecured += incoming.length;
-  data.resources.salvage += s;
+  a.creditsSecured += cr;
+  a.componentsSecured += co;
+  data.resources.salvage = Math.min(MAX_BALANCE, data.resources.salvage + s);
+  data.resources.credits = Math.min(MAX_BALANCE, data.resources.credits + cr);
+  data.resources.components = Math.min(MAX_BALANCE, data.resources.components + co);
+  data.economy.stats.creditsEarned += cr;
   data.totals.salvageSecured += s;
   data.totals.itemsSecured += incoming.length;
   // Banking never discards items: storage may exceed capacity (deployment is then blocked).
@@ -793,9 +936,13 @@ export function recordRun(data: SaveData, result: RunResult): boolean {
     itemsLost: result.itemsLost,
     endedAt: result.endedAt,
     newRecord,
+    creditsSecured: result.creditsSecured ?? 0,
+    componentsSecured: result.componentsSecured ?? 0,
   });
   data.history = data.history.slice(0, HISTORY_LIMIT);
   data.activeRun = null;
+  // Merchants restock after every completed operation.
+  rotateMarket(data, result.endedAt);
   return true;
 }
 
@@ -921,8 +1068,11 @@ export function scrapItem(data: SaveData, uid: string): number {
   if (data.activeRun) return 0;
   const idx = data.storage.uids.indexOf(uid);
   const item = itemByUid(data, uid);
-  if (idx < 0 || !item || slotOf(data, uid)) return 0;
-  const value = scrapValue(item);
+  if (idx < 0 || !item || slotOf(data, uid) || item.locked) return 0;
+  const y = dismantleYield(item);
+  const value = y.salvage;
+  data.resources.components += y.components;
+  data.economy.stats.itemsDismantled++;
   data.storage.uids.splice(idx, 1);
   data.items = data.items.filter((i) => i.uid !== uid);
   for (const m of item.socketed ?? []) {

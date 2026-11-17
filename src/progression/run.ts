@@ -12,6 +12,9 @@ import { isCheckpointWave } from './tiers';
  */
 export interface Rewards {
   salvage: number;
+  /** M4: trade currency and advanced components (banked like salvage). */
+  credits: number;
+  components: number;
   items: ItemInstance[];
 }
 
@@ -31,6 +34,10 @@ export interface RunResult {
   salvageLost: number;
   itemsSecured: number;
   itemsLost: number;
+  creditsSecured: number;
+  creditsLost: number;
+  componentsSecured: number;
+  componentsLost: number;
   /** Names of lost / secured items for the summary screens (capped). */
   lostItems?: ItemBrief[];
   securedItems?: ItemBrief[];
@@ -50,7 +57,7 @@ export interface ItemBrief {
 
 export const brief = (i: ItemInstance): ItemBrief => ({ uid: i.uid, name: i.name, rarity: i.rarity, level: i.level, category: i.category });
 
-export const emptyRewards = (): Rewards => ({ salvage: 0, items: [] });
+export const emptyRewards = (): Rewards => ({ salvage: 0, credits: 0, components: 0, items: [] });
 
 export class RunLedger {
   duration = 0;
@@ -85,7 +92,11 @@ export class RunLedger {
   collect(r: Partial<Rewards>): boolean {
     if (this.ended) return false;
     const s = Math.max(0, Math.floor(r.salvage ?? 0));
+    const cr = Math.max(0, Math.floor(r.credits ?? 0));
+    const co = Math.max(0, Math.floor(r.components ?? 0));
     this.unsecured.salvage += s;
+    this.unsecured.credits += cr;
+    this.unsecured.components += co;
     let added = 0;
     for (const it of r.items ?? []) {
       if (this.has(it.uid)) continue;
@@ -93,7 +104,7 @@ export class RunLedger {
       this.itemsCollected++;
       added++;
     }
-    return s > 0 || added > 0;
+    return s > 0 || cr > 0 || co > 0 || added > 0;
   }
 
   /** Items collected so far (for statistics). */
@@ -135,6 +146,8 @@ export class RunLedger {
     const moved = this.unsecured;
     this.unsecured = emptyRewards();
     this.secured.salvage += moved.salvage;
+    this.secured.credits += moved.credits;
+    this.secured.components += moved.components;
     this.secured.items.push(...moved.items);
     this.lastBankedWave = wave;
     this.checkpoints++;
@@ -161,6 +174,10 @@ export class RunLedger {
       salvageLost: this.unsecured.salvage,
       itemsSecured: this.secured.items.length,
       itemsLost: this.unsecured.items.length,
+      creditsSecured: this.secured.credits,
+      creditsLost: this.unsecured.credits,
+      componentsSecured: this.secured.components,
+      componentsLost: this.unsecured.components,
       lostItems: this.unsecured.items.slice(0, 12).map(brief),
       securedItems: this.secured.items.slice(0, 12).map(brief),
       checkpoints: this.checkpoints,

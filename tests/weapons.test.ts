@@ -249,7 +249,7 @@ describe('C/D/E: engineering transactions', () => {
 
   it('engineering is refused during an active run', () => {
     const { d, w, amp, power } = setup();
-    d.activeRun = { id: 'r', tier: 1, startedAt: 0, bankedThroughWave: 0, salvageSecured: 0, itemsSecured: 0 };
+    d.activeRun = { id: 'r', tier: 1, startedAt: 0, bankedThroughWave: 0, salvageSecured: 0, itemsSecured: 0, creditsSecured: 0, componentsSecured: 0 };
     expect(installModule(d, w.uid, power, amp.uid).ok).toBe(false);
   });
 
