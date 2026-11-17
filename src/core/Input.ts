@@ -60,7 +60,15 @@ export class Input {
         await this.canvas.requestPointerLock();
       } catch {
         /* user gesture required; the menu will ask again */
+        return;
       }
+    }
+    // pointerlockchange is delivered in a later task than the request promise.
+    // Reflect an acquired lock immediately so `captured` is trustworthy for
+    // callers that check it right after awaiting requestLock().
+    if (this.isLockedNow()) {
+      this.locked = true;
+      this.skipMouse = 2;
     }
   }
 

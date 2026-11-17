@@ -844,7 +844,10 @@ export class Game {
   async resume(): Promise<void> {
     sfx.init();
     await this.input.requestLock();
-    if (this.input.captured) this.setScreen('playing');
+    // The pointerlockchange event (which updates `captured`) can lag the
+    // requestPointerLock promise. Query the lock directly so resuming from the
+    // pause menu doesn't leave us stuck on a menu with an already-locked mouse.
+    if (this.input.captured || this.input.isLockedNow()) this.setScreen('playing');
   }
 
   /** Checkpoint choice: release the mouse and freeze the (prep-phase) simulation. */
