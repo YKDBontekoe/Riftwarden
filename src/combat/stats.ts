@@ -40,6 +40,23 @@ export interface CombatStats {
   buildCostMult: number;
   /** Multiplies tactical energy recharge speed. */
   tacticalRechargeMult: number;
+  // ---- weapon behaviour (M3: only weapon components and installed modules provide these)
+  /** Projectiles per plasma/rail shot (Projectile Splitter). */
+  projectiles: number;
+  /** Multiplies weapon spread and recoil (lower = more precise). */
+  spreadMult: number;
+  /** Multiplies railgun charge speed and beam damage ramp speed. */
+  chargeRateMult: number;
+  /** Chance per player hit to arc to a nearby enemy. */
+  arcChance: number;
+  /** Arc damage as a fraction of the triggering hit. */
+  arcDamage: number;
+  /** Bonus damage fraction at 100% heat (scales linearly with current heat). */
+  heatDamage: number;
+  /** Extra enemies a railgun slug passes through. */
+  pierce: number;
+  /** Multiplies weapon range. */
+  rangeMult: number;
 }
 
 export type StatKey = keyof CombatStats;
@@ -80,6 +97,14 @@ export const STAT_DEFS: Readonly<Record<StatKey, StatDef>> = {
   turretRangeMult: { key: 'turretRangeMult', label: 'Turret range', base: 1, min: 0.5, max: 1.8, kind: 'ratio', better: 'higher', group: 'tower' },
   buildCostMult: { key: 'buildCostMult', label: 'Construction cost', base: 1, min: 0.5, max: 2, kind: 'ratio', better: 'lower', group: 'tower' },
   tacticalRechargeMult: { key: 'tacticalRechargeMult', label: 'Tactical recharge', base: 1, min: 0.25, max: 4, kind: 'ratio', better: 'higher', group: 'utility' },
+  projectiles: { key: 'projectiles', label: 'Projectiles per shot', base: 1, min: 1, max: 6, kind: 'flat', better: 'higher', group: 'offense' },
+  spreadMult: { key: 'spreadMult', label: 'Spread & recoil', base: 1, min: 0.2, max: 4, kind: 'ratio', better: 'lower', group: 'offense' },
+  chargeRateMult: { key: 'chargeRateMult', label: 'Charge / ramp speed', base: 1, min: 0.25, max: 4, kind: 'ratio', better: 'higher', group: 'offense' },
+  arcChance: { key: 'arcChance', label: 'Arc chance', base: 0, min: 0, max: 1, kind: 'chance', better: 'higher', group: 'offense' },
+  arcDamage: { key: 'arcDamage', label: 'Arc damage', base: 0, min: 0, max: 5, kind: 'chance', better: 'higher', group: 'offense' },
+  heatDamage: { key: 'heatDamage', label: 'Damage at full heat', base: 0, min: 0, max: 5, kind: 'chance', better: 'higher', group: 'offense' },
+  pierce: { key: 'pierce', label: 'Pierce', base: 0, min: 0, max: 10, kind: 'flat', better: 'higher', group: 'offense' },
+  rangeMult: { key: 'rangeMult', label: 'Weapon range', base: 1, min: 0.5, max: 2, kind: 'ratio', better: 'higher', group: 'offense' },
 };
 
 export const STAT_KEYS = Object.keys(STAT_DEFS) as StatKey[];

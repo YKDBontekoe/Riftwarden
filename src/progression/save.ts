@@ -9,6 +9,9 @@ import { CATEGORIES, type Category, type RolledAffix, type RolledStat } from '..
 import { fitsSlot, getSlot, type ItemInstance, isSlotId, newUid, SLOT_IDS, type SlotId, slotsFor } from './items';
 import type { Rewards, RunOutcome, RunResult } from './run';
 import { CHECKPOINT_INTERVAL, THREAT_TIERS } from './tiers';
+import { defaultBuild, FAMILIES, isValidBuild, socketKinds, type Finish, type SocketKind, type WeaponBuild } from '../weapons/build';
+import { canInstall, removalCost } from '../weapons/modules';
+import type { WeaponFamily } from '../data/defs';
 
 /**
  * Persistent player state (pure module; storage is injected).
@@ -19,7 +22,7 @@ import { CHECKPOINT_INTERVAL, THREAT_TIERS } from './tiers';
  *   under CORRUPT_KEY and the last good backup (BACKUP_KEY) or a fresh save is used.
  * - Older versions are upgraded by MIGRATIONS; newer versions are never downgraded.
  */
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 export const SAVE_KEY = 'riftwarden.save';
 export const BACKUP_KEY = 'riftwarden.save.bak';
 export const CORRUPT_KEY = 'riftwarden.save.corrupt';
@@ -188,13 +191,41 @@ function sanitizeStat(v: unknown): RolledStat | null {
   return { stat: r.stat, op: r.op as StatOp, value: Math.max(-1e15, Math.min(1e15, r.value)) };
 }
 
+const FINISH_IDS: Finish[] = ['arctic', 'gunmetal', 'sand', 'slate', 'gilded', 'iridescent'];
+const SOCKET_IDS: SocketKind[] = ['barrel', 'power', 'system'];
+
+/** Validate a stored weapon build (null if missing or invalid: the caller assigns the default). */
+function sanitizeBuild(v: unknown, chassis: string, family: WeaponFamily, sockets: number): WeaponBuild | null {
+  const r = obj(v);
+  if (!Object.keys(r).length) return null;
+  const p = obj(r.params);
+  const unit = (x: unknown) => num(x, 0.5, 0, 1);
+  const kinds = arr(r.sockets).filter((k): k is SocketKind => SOCKET_IDS.includes(k as SocketKind)).slice(0, 8);
+  const b: WeaponBuild = {
+    v: int(r.v, 1, 1, 1000),
+    family,
+    chassis,
+    barrel: str(r.barrel, '', 32),
+    core: str(r.core, '', 32),
+    cooling: str(r.cooling, '', 32),
+    mechanism: str(r.mechanism, '', 32),
+    attachments: arr(r.attachments).filter((a): a is string => typeof a === 'string').slice(0, 4),
+    finish: FINISH_IDS.includes(r.finish as Finish) ? (r.finish as Finish) : 'arctic',
+    params: { length: unit(p.length), bulk: unit(p.bulk), hue: unit(p.hue) },
+    sockets: kinds.length === sockets ? kinds : socketKinds(family, sockets),
+  };
+  if (r.family !== family || !FAMILIES[family] || !isValidBuild(b)) return null;
+  return b;
+}
+
 /**
  * Validate a stored item. Stored rolls are authoritative (never rerolled). Items in the
  * pre-M2 shape (no level/rarity) are upgraded to the deterministic level-1 common roll
  * of their base. Items whose base definition no longer exists are kept (inert, cannot be
- * equipped) rather than deleted.
+ * equipped) rather than deleted. Installed modules that no longer fit their socket are
+ * pushed to `evicted` (the caller returns them to storage) instead of being dropped.
  */
-export function sanitizeItem(v: unknown, repairs: string[] = []): ItemInstance | null {
+export function sanitizeItem(v: unknown, repairs: string[] = [], nested = false, evicted: ItemInstance[] = []): ItemInstance | null {
   const r = obj(v);
   if (typeof r.uid !== 'string' || !r.uid || typeof r.defId !== 'string' || !r.defId) return null;
   const uid = r.uid.slice(0, 64);
@@ -233,8 +264,9 @@ export function sanitizeItem(v: unknown, repairs: string[] = []): ItemInstance |
     name: str(r.name, base?.name ?? 'Unknown equipment', 96),
     base: stats,
     affixes,
-    sockets: int(r.sockets, rarity(r.rarity).sockets, 0, 8),
-    modules: arr(r.modules).filter((m): m is string => typeof m === 'string').slice(0, 8),
+    // Only weapons have sockets (M3); the count is bounded by the build's socket list below.
+    sockets: category === 'weapon' ? int(r.sockets, rarity(r.rarity).sockets, 0, 8) : 0,
+    socketed: [],
     signature: typeof r.signature === 'string' ? r.signature.slice(0, 64) : null,
     seed: int(r.seed, 0, 0, 0xffffffff),
     gen: int(r.gen, 1, 0, 1000),
@@ -250,11 +282,52 @@ export function sanitizeItem(v: unknown, repairs: string[] = []): ItemInstance |
       item.weapon = fresh.weapon;
       repairs.push('repaired weapon parameters');
     }
+    if (item.weapon) {
+      // M3 family parameters: optional, bounded.
+      const opt = (k: keyof NonNullable<ItemInstance['weapon']>, lo: number, hi: number) => {
+        const x = w[k];
+        if (typeof x === 'number' && Number.isFinite(x) && x >= lo && x <= hi) (item.weapon as unknown as Record<string, number>)[k] = x;
+      };
+      opt('range', 5, 1000);
+      opt('accuracy', 0.05, 5);
+      opt('pierce', 0, 10);
+      opt('chargeTime', 0.05, 10);
+      opt('beamWidth', 0, 5);
+      opt('rampMax', 1, 10);
+    }
+    const family: WeaponFamily = base?.weapon?.family ?? 'plasma';
+    const b = sanitizeBuild(r.build, defId, family, item.sockets);
+    if (!b) repairs.push('assigned default weapon build');
+    item.build = b ?? defaultBuild(defId, family, item.sockets);
+    // Socket list and installed modules (one level deep, each validated against its socket).
+    item.sockets = item.build.sockets.length;
+    const inst = arr(r.socketed);
+    item.socketed = item.build.sockets.map(() => null);
+    if (!nested) {
+      inst.slice(0, item.sockets).forEach((mv, i) => {
+        if (!mv) return;
+        const m = sanitizeItem(mv, repairs, true);
+        if (!m || m.category !== 'module') {
+          repairs.push('dropped invalid installed module');
+          return;
+        }
+        const check = canInstall(item, i, m);
+        if (!check.ok) {
+          // Never destroy a module: the caller moves it back to storage.
+          evicted.push(m);
+          repairs.push(`evicted incompatible module from ${uid}`);
+          return;
+        }
+        item.socketed[i] = m;
+      });
+    }
   }
   const m = obj(r.module);
   if (category === 'module') {
     const compat = arr(m.compatible).filter((c): c is Category => CATEGORIES.includes(c as Category) && c !== 'module');
-    item.module = { type: str(m.type, base?.module?.type ?? 'unknown', 32), compatible: compat.length ? compat : [...(base?.module?.compatible ?? ['weapon'])], socketCost: int(m.socketCost, base?.module?.socketCost ?? 1, 1, 4) };
+    // Since M3 every module installs into weapons and occupies exactly one socket.
+    void compat;
+    item.module = { type: str(m.type, base?.module?.type ?? 'unknown', 32), compatible: ['weapon'], socketCost: 1 };
   }
   return item;
 }
@@ -314,14 +387,32 @@ export function sanitizeSave(raw: unknown, now = Date.now()): { data: SaveData; 
   data.storage.capacity = STORAGE_CAPACITY + data.storage.expansions * STORAGE_EXPANSION;
   // Items: unique uids only.
   const seen = new Set<string>();
+  const evicted: ItemInstance[] = [];
   for (const v of arr(r.items)) {
-    const it = sanitizeItem(v, repairs);
+    const it = sanitizeItem(v, repairs, false, evicted);
     if (!it || seen.has(it.uid)) {
       repairs.push('dropped invalid/duplicate item');
       continue;
     }
     seen.add(it.uid);
     data.items.push(it);
+  }
+  // Installed modules share the uid space: a uid may exist exactly once (loose or installed).
+  for (const it of data.items) {
+    it.socketed = it.socketed.map((m) => {
+      if (!m) return null;
+      if (seen.has(m.uid)) {
+        repairs.push('removed duplicated installed module');
+        return null;
+      }
+      seen.add(m.uid);
+      return m;
+    });
+  }
+  for (const m of evicted) {
+    if (seen.has(m.uid)) continue;
+    seen.add(m.uid);
+    data.items.push(m);
   }
   const byUid = new Map(data.items.map((i) => [i.uid, i]));
   const placed = new Set<string>();
@@ -454,6 +545,23 @@ export const MIGRATIONS: Record<number, (data: Obj) => Obj> = {
     out.loadout = lo;
     out.storage = { expansions: 0, uids };
     out.presets = [];
+    return out;
+  },
+  /**
+   * v2 (M2) -> v3 (M3): weapons gain a default component build (stats untouched) and the
+   * M3 socket count of their rarity; other categories lose their (never functional)
+   * sockets; the unused `modules` uid list becomes `socketed` (all empty).
+   */
+  2: (d) => {
+    const out: Obj = { ...d };
+    out.items = arr(d.items).map((v) => {
+      const it = { ...obj(v) };
+      const isWeapon = it.category === 'weapon' || baseDef(typeof it.defId === 'string' ? it.defId : '')?.category === 'weapon';
+      it.sockets = isWeapon && isRarity(it.rarity) ? rarity(it.rarity).sockets : 0;
+      delete it.modules;
+      it.socketed = [];
+      return it;
+    });
     return out;
   },
 };
@@ -627,7 +735,7 @@ export function bankRewards(data: SaveData, runId: string, wave: number, rewards
   const a = data.activeRun;
   if (!a || a.id !== runId || wave <= a.bankedThroughWave || wave % CHECKPOINT_INTERVAL !== 0) return false;
   // Validate everything first, then apply in one step (application-level atomicity).
-  const known = new Set(data.items.map((i) => i.uid));
+  const known = new Set(allOwnedUids(data));
   const incoming: ItemInstance[] = [];
   for (const raw of rewards.items) {
     const it = sanitizeItem(JSON.parse(JSON.stringify(raw)));
@@ -805,7 +913,10 @@ export function loadPreset(data: SaveData, index: number): boolean {
   return applyLoadout(data, p.slots);
 }
 
-/** Dismantle a stored (not equipped) item for salvage. Presets referencing it are cleared. */
+/**
+ * Dismantle a stored (not equipped) item for salvage. Presets referencing it are cleared.
+ * Modules installed in a scrapped weapon are returned to storage (never destroyed).
+ */
 export function scrapItem(data: SaveData, uid: string): number {
   if (data.activeRun) return 0;
   const idx = data.storage.uids.indexOf(uid);
@@ -814,6 +925,11 @@ export function scrapItem(data: SaveData, uid: string): number {
   const value = scrapValue(item);
   data.storage.uids.splice(idx, 1);
   data.items = data.items.filter((i) => i.uid !== uid);
+  for (const m of item.socketed ?? []) {
+    if (!m) continue;
+    data.items.push(m);
+    data.storage.uids.push(m.uid);
+  }
   for (const p of data.presets) for (const s of SLOT_IDS) if (p.slots[s] === uid) p.slots[s] = null;
   data.resources.salvage += value;
   data.totals.itemsScrapped++;
@@ -828,6 +944,92 @@ export function expandStorage(data: SaveData): boolean {
   data.storage.expansions++;
   data.storage.capacity = STORAGE_CAPACITY + data.storage.expansions * STORAGE_EXPANSION;
   return true;
+}
+
+// ------------------------------------------------------------------ weapon engineering (M3)
+
+export type EngineeringResult = { ok: true; cost: number } | { ok: false; reason: string };
+
+/** An owned weapon (equipped or stored). Engineering never touches run cargo. */
+function ownedWeapon(data: SaveData, uid: string): ItemInstance | null {
+  const it = itemByUid(data, uid);
+  return it && it.category === 'weapon' && (data.storage.uids.includes(uid) || slotOf(data, uid)) ? it : null;
+}
+
+/**
+ * Install a stored module into a socket of an owned weapon (HQ only, free). The module
+ * leaves storage and the item list and lives inside the weapon from then on. Everything
+ * is validated before anything changes.
+ */
+export function installModule(data: SaveData, weaponUid: string, socket: number, moduleUid: string): EngineeringResult {
+  if (data.activeRun) return { ok: false, reason: 'Engineering is only available at HQ between runs' };
+  const weapon = ownedWeapon(data, weaponUid);
+  if (!weapon) return { ok: false, reason: 'Weapon not owned' };
+  const mi = data.storage.uids.indexOf(moduleUid);
+  const module = itemByUid(data, moduleUid);
+  if (mi < 0 || !module) return { ok: false, reason: 'Module not in storage' };
+  const check = canInstall(weapon, socket, module);
+  if (!check.ok) return check;
+  data.storage.uids.splice(mi, 1);
+  data.items = data.items.filter((i) => i.uid !== moduleUid);
+  weapon.socketed[socket] = module;
+  return { ok: true, cost: 0 };
+}
+
+/** Salvage cost of removing the module in a socket (null when the socket is empty). */
+export function moduleRemovalCost(data: SaveData, weaponUid: string, socket: number): number | null {
+  const m = itemByUid(data, weaponUid)?.socketed?.[socket];
+  return m ? removalCost(m) : null;
+}
+
+/** Pull an installed module back into storage for salvage (needs a free storage bay). */
+export function uninstallModule(data: SaveData, weaponUid: string, socket: number): EngineeringResult {
+  if (data.activeRun) return { ok: false, reason: 'Engineering is only available at HQ between runs' };
+  const weapon = ownedWeapon(data, weaponUid);
+  const m = weapon?.socketed?.[socket];
+  if (!weapon || !m) return { ok: false, reason: 'Socket is empty' };
+  const cost = removalCost(m);
+  if (data.resources.salvage < cost) return { ok: false, reason: `Needs ${cost} salvage` };
+  if (data.storage.uids.length >= data.storage.capacity) return { ok: false, reason: 'Storage full' };
+  if (data.items.some((i) => i.uid === m.uid)) return { ok: false, reason: 'Duplicate module id' };
+  data.resources.salvage -= cost;
+  weapon.socketed[socket] = null;
+  data.items.push(m);
+  data.storage.uids.push(m.uid);
+  return { ok: true, cost };
+}
+
+/**
+ * Move an installed module straight into a socket of another (or the same) owned weapon.
+ * Costs the same as a removal; needs no free storage bay. Validated before any change.
+ */
+export function transferModule(data: SaveData, fromUid: string, fromSocket: number, toUid: string, toSocket: number): EngineeringResult {
+  if (data.activeRun) return { ok: false, reason: 'Engineering is only available at HQ between runs' };
+  const from = ownedWeapon(data, fromUid);
+  const to = ownedWeapon(data, toUid);
+  const m = from?.socketed?.[fromSocket];
+  if (!from || !to || !m) return { ok: false, reason: 'Nothing to transfer' };
+  if (from === to && fromSocket === toSocket) return { ok: false, reason: 'Same socket' };
+  // Check against the target as if the module had already left its socket.
+  const probe: ItemInstance = { ...to, socketed: to.socketed.map((x) => (x?.uid === m.uid ? null : x)) };
+  const check = canInstall(probe, toSocket, m);
+  if (!check.ok) return check;
+  const cost = removalCost(m);
+  if (data.resources.salvage < cost) return { ok: false, reason: `Needs ${cost} salvage` };
+  data.resources.salvage -= cost;
+  from.socketed[fromSocket] = null;
+  to.socketed[toSocket] = m;
+  return { ok: true, cost };
+}
+
+/** Every uid owned by the profile, including installed modules (duplicate detection). */
+export function allOwnedUids(data: SaveData): string[] {
+  const out: string[] = [];
+  for (const it of data.items) {
+    out.push(it.uid);
+    for (const m of it.socketed ?? []) if (m) out.push(m.uid);
+  }
+  return out;
 }
 
 export { isSlotId };

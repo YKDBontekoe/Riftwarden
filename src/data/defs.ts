@@ -1,11 +1,20 @@
 /** Data-driven content definitions. */
 
+export type WeaponFamily = 'plasma' | 'rail' | 'beam';
+/** How the trigger turns into shots. Each family supports a fixed subset (see weapons/families.ts). */
+export type Mechanism = 'auto' | 'burst' | 'charge' | 'cycle' | 'beam';
+
 export interface WeaponDef {
   id: string;
   name: string;
+  family: WeaponFamily;
+  mechanism: Mechanism;
+  /** Damage per shot (plasma/rail: full-charge shot; beam: per damage tick). */
   damage: number;
-  fireRate: number; // shots per second
+  /** Shots per second (beam: damage ticks per second; burst: average rate). */
+  fireRate: number;
   range: number;
+  /** Heat per shot / per beam tick (0..100 scale). */
   heatPerShot: number;
   coolRate: number; // heat per second while cooling
   coolDelay: number; // seconds after last shot before cooling starts
@@ -15,11 +24,29 @@ export interface WeaponDef {
   spreadPerShot: number;
   spreadRecover: number; // radians per second
   recoilPitch: number; // radians per shot
+  /** Burst: rounds per trigger cycle. */
+  burstCount: number;
+  /** Charge: seconds to full charge (before chargeRateMult). */
+  chargeTime: number;
+  /** Rail: enemies a slug passes through after the first. */
+  pierce: number;
+  /** Beam: aim-assist radius around the beam axis (m). */
+  beamWidth: number;
+  /** Beam: damage multiplier reached after holding on one target for rampTime. */
+  rampMax: number;
+  rampTime: number;
+  /** Visual speed of plasma bolts (m/s); damage is resolved instantly (hitscan). */
+  boltSpeed: number;
 }
 
+const WEAPON_DEFAULTS = { burstCount: 3, chargeTime: 0.8, pierce: 0, beamWidth: 0, rampMax: 1, rampTime: 1, boltSpeed: 190 };
+
 export const PLASMA_REPEATER: WeaponDef = {
+  ...WEAPON_DEFAULTS,
   id: 'plasma_repeater',
   name: 'PLASMA REPEATER',
+  family: 'plasma',
+  mechanism: 'auto',
   damage: 13,
   fireRate: 9.5,
   range: 140,
@@ -32,6 +59,53 @@ export const PLASMA_REPEATER: WeaponDef = {
   spreadPerShot: 0.0035,
   spreadRecover: 0.09,
   recoilPitch: 0.0055,
+};
+
+/** Precision accelerator: charged slugs that pierce, long cycle, big heat spikes. */
+export const RAILGUN: WeaponDef = {
+  ...WEAPON_DEFAULTS,
+  id: 'railgun',
+  name: 'RAILGUN',
+  family: 'rail',
+  mechanism: 'charge',
+  damage: 92,
+  fireRate: 1.6,
+  range: 240,
+  heatPerShot: 26,
+  coolRate: 40,
+  coolDelay: 0.5,
+  overheatRecover: 35,
+  spreadMin: 0.0004,
+  spreadMax: 0.01,
+  spreadPerShot: 0.004,
+  spreadRecover: 0.03,
+  recoilPitch: 0.034,
+  chargeTime: 0.8,
+  pierce: 1,
+};
+
+/** Continuous emitter: damage ticks that ramp up on a held target, steady heat. */
+export const BEAM_EMITTER: WeaponDef = {
+  ...WEAPON_DEFAULTS,
+  id: 'beam_emitter',
+  name: 'BEAM EMITTER',
+  family: 'beam',
+  mechanism: 'beam',
+  damage: 6.4,
+  fireRate: 15,
+  range: 60,
+  heatPerShot: 1.45,
+  coolRate: 48,
+  coolDelay: 0.3,
+  overheatRecover: 25,
+  spreadMin: 0,
+  spreadMax: 0,
+  spreadPerShot: 0,
+  spreadRecover: 0,
+  recoilPitch: 0.0006,
+  beamWidth: 0.35,
+  rampMax: 2.2,
+  rampTime: 1.6,
 };
 
 export type EnemyKind = 'walker' | 'rusher' | 'bulwark';

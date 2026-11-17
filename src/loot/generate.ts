@@ -4,6 +4,7 @@ import { AFFIXES, type AffixDef, affixPool, MAX_TIER, type Scaling, TIER_MULT } 
 import { type BaseDef, baseDef, BASES, basesFor } from './bases';
 import { type RarityDef, type RarityId, rarity } from './rarity';
 import type { Category, ItemInstance, RolledAffix, RolledStat, WeaponRoll } from './types';
+import { buildEffects, rollBuild } from '../weapons/build';
 
 /**
  * Centralised, deterministic item generation.
@@ -11,7 +12,8 @@ import type { Category, ItemInstance, RolledAffix, RolledStat, WeaponRoll } from
  * Same (seed, spec, GENERATOR_VERSION, definitions) -> same item. The result stores all
  * rolled values, so formula changes in later versions never reroll owned items.
  */
-export const GENERATOR_VERSION = 1;
+/** 2 = M3: weapon builds (family components baked into the roll), weapon-only sockets. */
+export const GENERATOR_VERSION = 2;
 
 /**
  * Numerical safety bound for item levels. Not a design cap: progression is endless, but
@@ -120,20 +122,55 @@ export function generateItem(spec: GenSpec): ItemInstance {
   const implicit: RolledStat[] = base.implicit.map((s) => ({
     stat: s.stat,
     op: s.op,
-    value: round(lerp(s.range[0], s.range[1], roll()) * levelScale(s.scaling, level) * (s.range[0] < 0 ? 1 : r.baseMult), s.stat),
+    value: round(lerp(s.range[0], s.range[1], roll()) * levelScale(s.scaling, level) * (s.range[0] < 0 || s.exact ? 1 : r.baseMult), s.stat),
   }));
 
-  // Weapon base parameters.
+  // Weapon base parameters, then the procedural build (own random stream, so the
+  // affix sequence of a seed is independent of component tables).
   let weapon: WeaponRoll | undefined;
+  let build: ItemInstance['build'];
+  const sockets = base.category === 'weapon' ? r.sockets : 0;
   if (base.weapon) {
     const w = base.weapon;
+    const t = w.template;
     weapon = {
-      damage: round(lerp(w.damage[0], w.damage[1], roll()) * flatScale(level) * r.baseMult, 'weapon'),
-      fireRate: Math.round(lerp(w.fireRate[0], w.fireRate[1], roll()) * 100) / 100,
+      damage: lerp(w.damage[0], w.damage[1], roll()) * flatScale(level) * r.baseMult,
+      fireRate: lerp(w.fireRate[0], w.fireRate[1], roll()),
       // Lower heat is better: high quality rolls land at the low end.
-      heatPerShot: Math.round(lerp(w.heatPerShot[1], w.heatPerShot[0], roll()) * 100) / 100,
-      coolRate: Math.round(lerp(w.coolRate[0], w.coolRate[1], roll()) * 10) / 10,
+      heatPerShot: lerp(w.heatPerShot[1], w.heatPerShot[0], roll()),
+      coolRate: lerp(w.coolRate[0], w.coolRate[1], roll()),
     };
+    {
+      build = rollBuild(mulberry32((spec.seed ^ 0x5bd1e995) >>> 0), w.family, base.id, fixed === undefined ? r.index : 0, sockets);
+      if (fixed !== undefined) {
+        // Starter-grade kit: plain default components.
+        build.barrel = w.family === 'plasma' ? 'pb_single' : w.family === 'rail' ? 'rb_open' : 'be_lens';
+        build.core = 'co_cell';
+        build.cooling = 'cl_fins';
+        build.mechanism = w.family === 'plasma' ? 'mc_auto' : w.family === 'rail' ? 'mc_charge' : 'mc_beam';
+        build.attachments = [];
+        build.finish = 'arctic';
+        build.params = { length: 0.5, bulk: 0.5, hue: 0.5 };
+      }
+      // Fixed (starter/legacy/repair) rolls keep the template numbers exactly.
+      const e = fixed === undefined ? buildEffects(build) : { ...buildEffects({ ...build, attachments: [], barrel: '', core: '', cooling: '', mechanism: '' }), range: 1 };
+      weapon.damage *= e.damage;
+      weapon.fireRate *= e.fireRate;
+      weapon.heatPerShot *= e.heatPerShot;
+      weapon.coolRate *= e.coolRate;
+      weapon.range = Math.round(t.range * e.range);
+      weapon.accuracy = Math.round(e.accuracy * 100) / 100;
+      weapon.pierce = t.pierce + e.pierce;
+      if (w.family === 'rail') weapon.chargeTime = Math.round(t.chargeTime * e.chargeTime * 100) / 100;
+      if (w.family === 'beam') {
+        weapon.beamWidth = Math.round(t.beamWidth * e.beamWidth * 100) / 100;
+        weapon.rampMax = Math.round(t.rampMax * e.rampMax * 100) / 100;
+      }
+    }
+    weapon.damage = round(weapon.damage, 'weapon');
+    weapon.fireRate = Math.round(weapon.fireRate * 100) / 100;
+    weapon.heatPerShot = Math.round(weapon.heatPerShot * 100) / 100;
+    weapon.coolRate = Math.round(weapon.coolRate * 10) / 10;
   }
 
   // Affixes.
@@ -170,9 +207,10 @@ export function generateItem(spec: GenSpec): ItemInstance {
     base: implicit,
     affixes,
     weapon,
+    build,
     module: base.module ? { type: base.module.type, compatible: [...base.module.compatible], socketCost: base.module.socketCost } : undefined,
-    sockets: base.category === 'module' ? 0 : r.sockets,
-    modules: [],
+    sockets,
+    socketed: Array.from({ length: sockets }, () => null),
     signature: null,
     seed: spec.seed >>> 0,
     gen: GENERATOR_VERSION,

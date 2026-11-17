@@ -1,4 +1,5 @@
 import type { StatKey, StatOp } from '../combat/stats';
+import type { WeaponBuild } from '../weapons/build';
 import type { RarityId } from './rarity';
 
 /** Equipment categories. 'module' items are collectible upgrade modules (installation: M3). */
@@ -38,6 +39,14 @@ export interface WeaponRoll {
   fireRate: number;
   heatPerShot: number;
   coolRate: number;
+  /** M3 family parameters (absent on pre-M3 weapons: the family template value applies). */
+  range?: number;
+  /** Spread multiplier from components (1 = template). */
+  accuracy?: number;
+  pierce?: number;
+  chargeTime?: number;
+  beamWidth?: number;
+  rampMax?: number;
 }
 
 export interface ModuleInfo {
@@ -45,7 +54,7 @@ export interface ModuleInfo {
   type: string;
   /** Equipment categories it will be installable into. */
   compatible: Category[];
-  /** Sockets it occupies when installed (future engineering). */
+  /** Sockets it occupies when installed (always 1 since M3). */
   socketCost: number;
 }
 
@@ -68,10 +77,17 @@ export interface ItemInstance {
   base: RolledStat[];
   affixes: RolledAffix[];
   weapon?: WeaponRoll;
+  /** Weapons: generated component configuration (family, parts, finish, socket kinds). */
+  build?: WeaponBuild;
   module?: ModuleInfo;
-  /** Future module socket capacity and installed module uids (always empty in M2). */
+  /** Module socket capacity (weapons only since M3). */
   sockets: number;
-  modules: string[];
+  /**
+   * Installed modules, one entry per socket (null = empty). Installed modules live inside
+   * the weapon item (not in storage), so a module can never be in two places and always
+   * shares its weapon's ownership (carried/secured/unsecured).
+   */
+  socketed: (ItemInstance | null)[];
   /** Future legendary signature effect id (none exist yet). */
   signature: string | null;
   /** Generation metadata: seed and generator version. */

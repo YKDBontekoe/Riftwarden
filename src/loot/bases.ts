@@ -1,5 +1,5 @@
 import type { StatKey, StatOp } from '../combat/stats';
-import { PLASMA_REPEATER, type WeaponDef } from '../data/defs';
+import { BEAM_EMITTER, PLASMA_REPEATER, RAILGUN, type WeaponDef, type WeaponFamily } from '../data/defs';
 import type { Scaling } from './affixes';
 import type { Category } from './types';
 
@@ -12,9 +12,12 @@ export interface BaseStatDef {
   op: StatOp;
   range: [number, number];
   scaling: Scaling;
+  /** Not multiplied by the rarity base multiplier (counts such as projectiles). */
+  exact?: boolean;
 }
 
 export interface WeaponBase {
+  family: WeaponFamily;
   template: WeaponDef;
   /** Level-1 roll ranges; damage scales with item level ('flat'). */
   damage: [number, number];
@@ -45,7 +48,7 @@ export interface BaseDef {
 }
 
 export const BASES: readonly BaseDef[] = [
-  // ---------------------------------------------------------------- weapons (one family: plasma repeater)
+  // ---------------------------------------------------------------- weapons: plasma repeater chassis
   {
     id: 'plasma_repeater',
     category: 'weapon',
@@ -53,7 +56,7 @@ export const BASES: readonly BaseDef[] = [
     blurb: 'Standard-issue hitscan repeater. Sustained fire builds heat; weakpoint hits always crit.',
     weight: 10,
     implicit: [],
-    weapon: { template: PLASMA_REPEATER, damage: [12, 14], fireRate: [9.2, 9.8], heatPerShot: [6.0, 6.4], coolRate: [52, 58] },
+    weapon: { family: 'plasma', template: PLASMA_REPEATER, damage: [12, 14], fireRate: [9.2, 9.8], heatPerShot: [6.0, 6.4], coolRate: [52, 58] },
     icon: 'rifle',
   },
   {
@@ -63,7 +66,7 @@ export const BASES: readonly BaseDef[] = [
     blurb: 'Repeater frame with a dense plasma chamber: hits much harder, cycles slower and runs hot.',
     weight: 6,
     implicit: [{ stat: 'critMultiplier', op: 'add', range: [0.15, 0.25], scaling: 'none' }],
-    weapon: { template: PLASMA_REPEATER, damage: [20, 24], fireRate: [6.0, 6.6], heatPerShot: [8.6, 9.4], coolRate: [50, 56] },
+    weapon: { family: 'plasma', template: PLASMA_REPEATER, damage: [20, 24], fireRate: [6.0, 6.6], heatPerShot: [8.6, 9.4], coolRate: [50, 56] },
     icon: 'rifle',
   },
   {
@@ -73,7 +76,69 @@ export const BASES: readonly BaseDef[] = [
     blurb: 'Light repeater frame: high cycle rate and efficient cooling at the cost of per-shot damage.',
     weight: 6,
     implicit: [{ stat: 'coolRateMult', op: 'pct', range: [0.08, 0.14], scaling: 'none' }],
-    weapon: { template: PLASMA_REPEATER, damage: [8.4, 9.6], fireRate: [12.6, 13.6], heatPerShot: [4.4, 4.8], coolRate: [58, 64] },
+    weapon: { family: 'plasma', template: PLASMA_REPEATER, damage: [8.4, 9.6], fireRate: [12.6, 13.6], heatPerShot: [4.4, 4.8], coolRate: [58, 64] },
+    icon: 'rifle',
+  },
+  // ---------------------------------------------------------------- weapons: railgun chassis
+  {
+    id: 'rail_lancer',
+    category: 'weapon',
+    name: 'Rail Lancer',
+    blurb: 'Balanced railgun frame. Charged slugs pierce through targets; heavy heat per shot.',
+    weight: 6,
+    implicit: [],
+    weapon: { family: 'rail', template: RAILGUN, damage: [86, 98], fireRate: [1.5, 1.7], heatPerShot: [24, 28], coolRate: [38, 44] },
+    icon: 'rifle',
+  },
+  {
+    id: 'rail_siege',
+    category: 'weapon',
+    name: 'Siege Rail',
+    blurb: 'Long-spine siege accelerator: enormous slugs, slow cycle, crits hit harder.',
+    weight: 4,
+    implicit: [{ stat: 'critMultiplier', op: 'add', range: [0.2, 0.3], scaling: 'none' }],
+    weapon: { family: 'rail', template: RAILGUN, damage: [122, 136], fireRate: [1.1, 1.25], heatPerShot: [32, 36], coolRate: [36, 40] },
+    icon: 'rifle',
+  },
+  {
+    id: 'rail_striker',
+    category: 'weapon',
+    name: 'Striker Rail',
+    blurb: 'Short-frame railgun: lighter slugs, fast charge and cycle.',
+    weight: 4,
+    implicit: [{ stat: 'chargeRateMult', op: 'pct', range: [0.15, 0.25], scaling: 'none' }],
+    weapon: { family: 'rail', template: RAILGUN, damage: [62, 70], fireRate: [2.3, 2.6], heatPerShot: [17, 20], coolRate: [44, 50] },
+    icon: 'rifle',
+  },
+  // ---------------------------------------------------------------- weapons: beam emitter chassis
+  {
+    id: 'beam_prism',
+    category: 'weapon',
+    name: 'Prism Emitter',
+    blurb: 'Standard continuous emitter. Damage ramps up while the beam stays on one target.',
+    weight: 6,
+    implicit: [],
+    weapon: { family: 'beam', template: BEAM_EMITTER, damage: [6.0, 6.8], fireRate: [14.6, 15.4], heatPerShot: [1.38, 1.5], coolRate: [46, 52] },
+    icon: 'rifle',
+  },
+  {
+    id: 'beam_lattice',
+    category: 'weapon',
+    name: 'Lattice Projector',
+    blurb: 'Heavy lattice projector: a hotter, harder-hitting beam.',
+    weight: 4,
+    implicit: [{ stat: 'rangeMult', op: 'pct', range: [0.08, 0.14], scaling: 'none' }],
+    weapon: { family: 'beam', template: BEAM_EMITTER, damage: [8.6, 9.6], fireRate: [14.6, 15.4], heatPerShot: [1.9, 2.1], coolRate: [44, 48] },
+    icon: 'rifle',
+  },
+  {
+    id: 'beam_focus',
+    category: 'weapon',
+    name: 'Focus Lance',
+    blurb: 'Efficient lance: low heat, reaches full intensity quickly.',
+    weight: 4,
+    implicit: [{ stat: 'chargeRateMult', op: 'pct', range: [0.2, 0.3], scaling: 'none' }],
+    weapon: { family: 'beam', template: BEAM_EMITTER, damage: [5.0, 5.6], fireRate: [14.6, 15.4], heatPerShot: [1.0, 1.1], coolRate: [52, 58] },
     icon: 'rifle',
   },
   // ---------------------------------------------------------------- armor
@@ -225,50 +290,88 @@ export const BASES: readonly BaseDef[] = [
     implicit: [{ stat: 'critMultiplier', op: 'add', range: [0.12, 0.2], scaling: 'none' }],
     icon: 'gem',
   },
-  // ---------------------------------------------------------------- upgrade modules (stored only in M2)
+  // ---------------------------------------------------------------- weapon upgrade modules (M3)
+  // Trade-off ranges are ordered worst -> best roll, so a better roll means a smaller penalty.
   {
-    id: 'barrel_module',
-    category: 'module',
-    name: 'Barrel Module',
-    blurb: 'Weapon barrel insert. Installable once weapon engineering is available.',
-    weight: 10,
-    implicit: [],
-    module: { type: 'barrel', compatible: ['weapon'], socketCost: 1 },
-    affixes: ['dmg', 'rate', 'crit', 'critdmg'],
-    icon: 'cube',
+    id: 'amp_module', category: 'module', name: 'Damage Amplifier', blurb: 'Power-socket amplifier: raises weapon damage.', weight: 10,
+    implicit: [{ stat: 'weaponDamageMult', op: 'pct', range: [0.1, 0.18], scaling: 'pct' }],
+    module: { type: 'amp', compatible: ['weapon'], socketCost: 1 }, affixes: ['dmg', 'critdmg'], icon: 'cube',
   },
   {
-    id: 'coolant_module',
-    category: 'module',
-    name: 'Coolant Module',
-    blurb: 'Thermal regulation insert for weapons and reactors. Installable once engineering is available.',
-    weight: 8,
-    implicit: [],
-    module: { type: 'coolant', compatible: ['weapon', 'reactor'], socketCost: 1 },
-    affixes: ['heat', 'cool', 'rate'],
-    icon: 'cube',
+    id: 'cooling_module', category: 'module', name: 'Cooling Matrix', blurb: 'System-socket coolant matrix: faster cooling, less heat per shot.', weight: 9,
+    implicit: [
+      { stat: 'coolRateMult', op: 'pct', range: [0.15, 0.28], scaling: 'none' },
+      { stat: 'heatEfficiency', op: 'pct', range: [0.06, 0.12], scaling: 'none' },
+    ],
+    module: { type: 'cooling', compatible: ['weapon'], socketCost: 1 }, affixes: ['rate', 'dmg'], icon: 'cube',
   },
   {
-    id: 'capacitor_module',
-    category: 'module',
-    name: 'Capacitor Module',
-    blurb: 'Energy storage insert for weapons and shields. Installable once engineering is available.',
-    weight: 7,
-    implicit: [],
-    module: { type: 'capacitor', compatible: ['weapon', 'shield'], socketCost: 1 },
-    affixes: ['dmg', 'shieldcap', 'shieldregen'],
-    icon: 'cube',
+    id: 'crit_module', category: 'module', name: 'Critical Processor', blurb: 'System-socket targeting processor: critical chance and damage.', weight: 8,
+    implicit: [
+      { stat: 'critChance', op: 'add', range: [0.04, 0.07], scaling: 'none' },
+      { stat: 'critMultiplier', op: 'add', range: [0.15, 0.3], scaling: 'none' },
+    ],
+    module: { type: 'crit', compatible: ['weapon'], socketCost: 1 }, affixes: ['dmg', 'rate', 'heat'], icon: 'cube',
   },
   {
-    id: 'arc_module',
-    category: 'module',
-    name: 'Arc Module',
-    blurb: 'Arc-stabilised energy insert with high socket cost. Installable once engineering is available.',
-    weight: 4,
-    implicit: [],
-    module: { type: 'arc', compatible: ['weapon'], socketCost: 2 },
-    affixes: ['dmg', 'critdmg', 'crit', 'heat'],
-    icon: 'cube',
+    id: 'overcharge_module', category: 'module', name: 'Overcharge Capacitor', blurb: 'Power-socket capacitor: big damage boost, worse heat efficiency.', weight: 7,
+    implicit: [
+      { stat: 'weaponDamageMult', op: 'pct', range: [0.22, 0.36], scaling: 'pct' },
+      { stat: 'heatEfficiency', op: 'pct', range: [-0.24, -0.14], scaling: 'none' },
+    ],
+    module: { type: 'overcharge', compatible: ['weapon'], socketCost: 1 }, affixes: ['crit', 'critdmg', 'rate'], icon: 'cube',
+  },
+  {
+    id: 'splitter_module', category: 'module', name: 'Projectile Splitter', blurb: 'Barrel-socket splitter (plasma only): +1 bolt per shot, weaker bolts, wider spread.', weight: 5,
+    implicit: [
+      { stat: 'projectiles', op: 'add', range: [1, 1], scaling: 'none', exact: true },
+      { stat: 'weaponDamageMult', op: 'pct', range: [-0.36, -0.28], scaling: 'none' },
+      { stat: 'spreadMult', op: 'pct', range: [0.7, 0.45], scaling: 'none', exact: true },
+    ],
+    module: { type: 'splitter', compatible: ['weapon'], socketCost: 1 }, affixes: ['dmg', 'crit', 'heat'], icon: 'cube',
+  },
+  {
+    id: 'arc_conductor', category: 'module', name: 'Arc Conductor', blurb: 'Barrel-socket conductor: hits may arc to a nearby enemy. Slightly more heat.', weight: 6,
+    implicit: [
+      { stat: 'arcChance', op: 'add', range: [0.18, 0.3], scaling: 'none' },
+      { stat: 'arcDamage', op: 'add', range: [0.45, 0.75], scaling: 'none' },
+      { stat: 'heatEfficiency', op: 'pct', range: [-0.08, -0.04], scaling: 'none' },
+    ],
+    module: { type: 'arc', compatible: ['weapon'], socketCost: 1 }, affixes: ['dmg', 'critdmg'], icon: 'cube',
+  },
+  {
+    id: 'thermal_module', category: 'module', name: 'Thermal Converter', blurb: 'Power-socket converter: damage rises with weapon heat; slower cooling.', weight: 6,
+    implicit: [
+      { stat: 'heatDamage', op: 'add', range: [0.4, 0.7], scaling: 'none' },
+      { stat: 'coolRateMult', op: 'pct', range: [-0.15, -0.08], scaling: 'none' },
+    ],
+    module: { type: 'thermal', compatible: ['weapon'], socketCost: 1 }, affixes: ['dmg', 'heat'], icon: 'cube',
+  },
+  {
+    id: 'stabilizer_module', category: 'module', name: 'Precision Stabilizer', blurb: 'Barrel-socket gyro: less spread and recoil, faster charge and ramp, slightly slower fire.', weight: 8,
+    implicit: [
+      { stat: 'spreadMult', op: 'pct', range: [-0.25, -0.4], scaling: 'none', exact: true },
+      { stat: 'chargeRateMult', op: 'pct', range: [0.15, 0.3], scaling: 'none' },
+      { stat: 'fireRateMult', op: 'pct', range: [-0.06, -0.03], scaling: 'none' },
+    ],
+    module: { type: 'stabilizer', compatible: ['weapon'], socketCost: 1 }, affixes: ['crit', 'critdmg', 'dmg'], icon: 'cube',
+  },
+  // ---------------------------------------------------------------- M2 modules (no longer drop; owned ones stay installable)
+  {
+    id: 'barrel_module', category: 'module', name: 'Barrel Module', blurb: 'Early barrel insert (barrel socket). Its rolled affixes apply when installed.', weight: 0,
+    implicit: [], module: { type: 'barrel', compatible: ['weapon'], socketCost: 1 }, affixes: ['dmg', 'rate', 'crit', 'critdmg'], icon: 'cube',
+  },
+  {
+    id: 'coolant_module', category: 'module', name: 'Coolant Module', blurb: 'Early thermal insert (system socket). Its rolled affixes apply when installed.', weight: 0,
+    implicit: [], module: { type: 'coolant', compatible: ['weapon'], socketCost: 1 }, affixes: ['heat', 'cool', 'rate'], icon: 'cube',
+  },
+  {
+    id: 'capacitor_module', category: 'module', name: 'Capacitor Module', blurb: 'Early energy insert (power socket). Its rolled affixes apply when installed.', weight: 0,
+    implicit: [], module: { type: 'capacitor', compatible: ['weapon'], socketCost: 1 }, affixes: ['dmg', 'shieldcap', 'shieldregen'], icon: 'cube',
+  },
+  {
+    id: 'arc_module', category: 'module', name: 'Arc Module', blurb: 'Early arc-stabilised insert (barrel socket). Its rolled affixes apply when installed.', weight: 0,
+    implicit: [], module: { type: 'arc', compatible: ['weapon'], socketCost: 1 }, affixes: ['dmg', 'critdmg', 'crit', 'heat'], icon: 'cube',
   },
 ];
 

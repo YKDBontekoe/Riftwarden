@@ -1,5 +1,7 @@
 import { BASE_STATS, type CombatStats, computeStats, formatModifier, formatStat, fmtNum, type StatKey, STAT_DEFS, type StatModifier, STAT_KEYS, type StatOp } from '../combat/stats';
 import type { WeaponDef } from '../data/defs';
+import { buildMechanism, FAMILIES } from '../weapons/build';
+import { installedModules } from '../weapons/modules';
 import { baseDef } from './bases';
 import type { ItemInstance, RolledStat } from './types';
 
@@ -8,13 +10,20 @@ import type { ItemInstance, RolledStat } from './types';
  * modifiers and weapon parameters. Gameplay systems only ever see the results.
  */
 
-/** Modifiers an equipped item contributes. Modules contribute nothing until installation exists. */
+/**
+ * Modifiers an equipped item contributes. A weapon also contributes the modules installed
+ * in its sockets (exactly once: modules only exist inside their weapon). Loose modules
+ * contribute nothing.
+ */
 export function itemModifiers(item: ItemInstance): StatModifier[] {
   if (item.category === 'module') return [];
-  const src = item.uid;
   const out: StatModifier[] = [];
-  for (const s of item.base) out.push({ stat: s.stat, op: s.op, value: s.value, source: src });
-  for (const a of item.affixes) out.push({ stat: a.stat, op: a.op, value: a.value, source: src });
+  const push = (it: ItemInstance) => {
+    for (const s of it.base) out.push({ stat: s.stat, op: s.op, value: s.value, source: it.uid });
+    for (const a of it.affixes) out.push({ stat: a.stat, op: a.op, value: a.value, source: it.uid });
+  };
+  push(item);
+  if (item.category === 'weapon') for (const m of installedModules(item)) push(m);
   return out;
 }
 
@@ -24,13 +33,37 @@ export function equipmentModifiers(items: readonly (ItemInstance | null | undefi
   return out;
 }
 
-/** Effective weapon parameters for an equipped weapon item (null if it is not a usable weapon). */
+/**
+ * Effective weapon parameters for an equipped weapon item (null if it is not a usable
+ * weapon). Composition order: family template -> base roll (with component effects baked
+ * in at generation) -> mechanism from the build. Stat-block modifiers (affixes, modules,
+ * other equipment, run upgrades) are applied at fire time from CombatStats.
+ */
 export function weaponDefFor(item: ItemInstance | null | undefined): WeaponDef | null {
   if (!item || item.category !== 'weapon' || !item.weapon) return null;
   const b = baseDef(item.defId);
   if (!b?.weapon) return null;
   const w = item.weapon;
-  return { ...b.weapon.template, id: item.defId, name: item.name.toUpperCase(), damage: w.damage, fireRate: w.fireRate, heatPerShot: w.heatPerShot, coolRate: w.coolRate };
+  const t = FAMILIES[b.weapon.family]?.template ?? b.weapon.template;
+  const acc = w.accuracy ?? 1;
+  return {
+    ...t,
+    id: item.defId,
+    name: item.name.toUpperCase(),
+    mechanism: buildMechanism(item.build) ?? t.mechanism,
+    damage: w.damage,
+    fireRate: w.fireRate,
+    heatPerShot: w.heatPerShot,
+    coolRate: w.coolRate,
+    range: w.range ?? t.range,
+    spreadMin: t.spreadMin * acc,
+    spreadMax: t.spreadMax * acc,
+    spreadPerShot: t.spreadPerShot * acc,
+    pierce: w.pierce ?? t.pierce,
+    chargeTime: w.chargeTime ?? t.chargeTime,
+    beamWidth: w.beamWidth ?? t.beamWidth,
+    rampMax: w.rampMax ?? t.rampMax,
+  };
 }
 
 // ------------------------------------------------------------------ comparison
@@ -49,7 +82,9 @@ export interface CompareRow {
 export function statTotals(item: ItemInstance | null | undefined): Map<string, RolledStat> {
   const m = new Map<string, RolledStat>();
   if (!item) return m;
-  for (const s of [...item.base, ...item.affixes]) {
+  // Weapons include their installed modules.
+  const list = item.category === 'module' ? [...item.base, ...item.affixes] : itemModifiers(item);
+  for (const s of list) {
     const k = `${s.stat}|${s.op}`;
     const cur = m.get(k);
     if (cur) cur.value += s.value;
@@ -64,13 +99,47 @@ const verdictOf = (a: number, b: number, better: 'higher' | 'lower'): -1 | 0 | 1
   return (a > b) === (better === 'higher') ? 1 : -1;
 };
 
-/** Weapon fundamentals for display. */
+/** Rail charge-shot damage factor for a charge fraction (0..1). */
+export function chargeFactor(c: number): number {
+  const x = Math.max(0, Math.min(1, c));
+  return 0.3 + 0.7 * Math.pow(x, 1.3);
+}
+
+/**
+ * Weapon fundamentals for display, per family. `dps` is the sustained expectation while
+ * the trigger is held on target (beam: average over the ramp; rail charge: full charges).
+ */
 export function weaponSummary(w: WeaponDef, stats: CombatStats = BASE_STATS) {
   const heat = w.heatPerShot / stats.heatEfficiency;
   const rate = w.fireRate * stats.fireRateMult;
+  const proj = w.family === 'beam' ? 1 : Math.floor(stats.projectiles);
   const dmg = w.damage * stats.weaponDamageMult;
   const critFactor = 1 + stats.critChance * (stats.critMultiplier - 1);
-  return { damage: dmg, rate, dps: dmg * rate * critFactor, heat, shotsToOverheat: Math.ceil(100 / Math.max(0.01, heat)), cool: w.coolRate * stats.coolRateMult };
+  const chargeTime = w.chargeTime / stats.chargeRateMult;
+  let cycle = 1 / rate;
+  if (w.mechanism === 'charge') cycle = Math.max(1 / rate, chargeTime + 0.05);
+  const rampTime = w.rampTime / stats.chargeRateMult;
+  const rampAvg = w.mechanism === 'beam' ? (1 + w.rampMax) / 2 : 1;
+  const perShot = dmg * proj;
+  const dps = (perShot / cycle) * critFactor * rampAvg;
+  return {
+    damage: dmg,
+    projectiles: proj,
+    rate,
+    dps,
+    heat,
+    shotsToOverheat: Math.ceil(100 / Math.max(0.01, heat)),
+    cool: w.coolRate * stats.coolRateMult,
+    range: w.range * stats.rangeMult,
+    chargeTime,
+    rampTime,
+    rampMax: w.rampMax,
+    pierce: w.pierce + Math.floor(stats.pierce),
+    spread: w.spreadMin * stats.spreadMult,
+    beamWidth: w.beamWidth,
+    /** Seconds of continuous fire from cold to overheat. */
+    sustain: (100 / Math.max(0.01, heat)) / (w.mechanism === 'charge' ? 1 / cycle : rate),
+  };
 }
 
 /**
@@ -86,11 +155,16 @@ export function compareItems(a: ItemInstance, b: ItemInstance | null): CompareRo
     const sb = wb ? weaponSummary(wb) : null;
     const add = (key: string, label: string, va: number, vb: number | undefined, better: 'higher' | 'lower', fmt = fmtNum) =>
       rows.push({ key, label, a: fmt(va), b: vb === undefined ? '' : fmt(vb), verdict: vb === undefined ? 0 : verdictOf(va, vb, better) });
-    add('w.damage', 'Damage / shot', sa.damage, sb?.damage, 'higher');
-    add('w.rate', 'Fire rate', sa.rate, sb?.rate, 'higher', (v) => `${fmtNum(v)}/s`);
-    add('w.dps', 'Base DPS', sa.damage * sa.rate, sb ? sb.damage * sb.rate : undefined, 'higher');
-    add('w.heat', 'Heat / shot', sa.heat, sb?.heat, 'lower', (v) => `${fmtNum(v)}%`);
+    const same = !wb || wb.family === wa.family;
+    add('w.dps', 'Sustained DPS', sa.dps, sb?.dps, 'higher');
+    add('w.damage', wa.family === 'beam' ? 'Damage / tick' : 'Damage / shot', sa.damage, same ? sb?.damage : undefined, 'higher');
+    add('w.rate', wa.family === 'beam' ? 'Tick rate' : 'Fire rate', sa.rate, same ? sb?.rate : undefined, 'higher', (v) => `${fmtNum(v)}/s`);
+    add('w.range', 'Range', sa.range, sb?.range, 'higher', (v) => `${fmtNum(v)} m`);
+    add('w.sustain', 'Fire time to overheat', sa.sustain, sb?.sustain, 'higher', (v) => `${fmtNum(v)} s`);
     add('w.cool', 'Cooling', sa.cool, sb?.cool, 'higher', (v) => `${fmtNum(v)}/s`);
+    if (wa.family === 'rail' && same) add('w.pierce', 'Pierce', sa.pierce, sb?.pierce, 'higher', (v) => `${v} targets`);
+    if (wa.family === 'rail' && wa.mechanism === 'charge' && same) add('w.charge', 'Charge time', sa.chargeTime, sb?.chargeTime, 'lower', (v) => `${fmtNum(v)} s`);
+    if (wa.family === 'beam' && same) add('w.ramp', 'Ramp ceiling', sa.rampMax, sb?.rampMax, 'higher', (v) => `×${fmtNum(v)}`);
   }
   const ta = statTotals(a);
   const tb = statTotals(b);

@@ -24,7 +24,7 @@ export interface RarityDef {
   baseMult: number;
   /** Multiplier on every affix value ("overclocked" exotics). */
   affixMult: number;
-  /** Future module socket capacity (installation arrives with engineering, M3). */
+  /** Weapon module sockets (configurable; only weapons have sockets). */
   sockets: number;
   /** UI / world colours. */
   color: string;
@@ -37,10 +37,10 @@ export interface RarityDef {
 export const RARITIES: readonly RarityDef[] = [
   { id: 'common', index: 0, label: 'Common', weight: 620, affixes: [0, 1], quality: 0, tierBias: 0, minTopTier: 0, baseMult: 1, affixMult: 1, sockets: 0, color: '#c4d0d6', glow: [0.9, 1.0, 1.05], beam: 0 },
   { id: 'uncommon', index: 1, label: 'Uncommon', weight: 260, affixes: [1, 2], quality: 0.08, tierBias: 0.25, minTopTier: 0, baseMult: 1.04, affixMult: 1, sockets: 1, color: '#5fe07a', glow: [0.35, 2.2, 0.55], beam: 2.2 },
-  { id: 'rare', index: 2, label: 'Rare', weight: 95, affixes: [2, 3], quality: 0.16, tierBias: 0.55, minTopTier: 2, baseMult: 1.08, affixMult: 1, sockets: 1, color: '#46a8ff', glow: [0.4, 1.3, 3.2], beam: 4 },
-  { id: 'epic', index: 3, label: 'Epic', weight: 28, affixes: [3, 4], quality: 0.24, tierBias: 0.9, minTopTier: 3, baseMult: 1.12, affixMult: 1, sockets: 2, color: '#b866ff', glow: [1.9, 0.6, 3.6], beam: 6 },
-  { id: 'legendary', index: 4, label: 'Legendary', weight: 6, affixes: [4, 4], quality: 0.32, tierBias: 1.4, minTopTier: 4, baseMult: 1.16, affixMult: 1.05, sockets: 3, color: '#ffc23d', glow: [4.2, 2.4, 0.35], beam: 9 },
-  { id: 'exotic', index: 5, label: 'Exotic', weight: 1.2, affixes: [4, 5], quality: 0.4, tierBias: 2, minTopTier: 5, baseMult: 1.2, affixMult: 1.15, sockets: 3, color: '#ff4f86', glow: [4.6, 0.7, 2.2], beam: 12 },
+  { id: 'rare', index: 2, label: 'Rare', weight: 95, affixes: [2, 3], quality: 0.16, tierBias: 0.55, minTopTier: 2, baseMult: 1.08, affixMult: 1, sockets: 2, color: '#46a8ff', glow: [0.4, 1.3, 3.2], beam: 4 },
+  { id: 'epic', index: 3, label: 'Epic', weight: 28, affixes: [3, 4], quality: 0.24, tierBias: 0.9, minTopTier: 3, baseMult: 1.12, affixMult: 1, sockets: 3, color: '#b866ff', glow: [1.9, 0.6, 3.6], beam: 6 },
+  { id: 'legendary', index: 4, label: 'Legendary', weight: 6, affixes: [4, 4], quality: 0.32, tierBias: 1.4, minTopTier: 4, baseMult: 1.16, affixMult: 1.05, sockets: 4, color: '#ffc23d', glow: [4.2, 2.4, 0.35], beam: 9 },
+  { id: 'exotic', index: 5, label: 'Exotic', weight: 1.2, affixes: [4, 5], quality: 0.4, tierBias: 2, minTopTier: 5, baseMult: 1.2, affixMult: 1.15, sockets: 4, color: '#ff4f86', glow: [4.6, 0.7, 2.2], beam: 12 },
 ];
 
 export const RARITY_IDS: readonly RarityId[] = RARITIES.map((r) => r.id);

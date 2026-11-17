@@ -202,7 +202,12 @@ export class Player {
       const k = 0.0022 * this.sensitivity;
       this.yaw += input.mouseDx * k;
       this.pitch += input.mouseDy * k;
+      this.lookDx = input.mouseDx * k;
+      this.lookDy = input.mouseDy * k;
       this.pitch = Math.max(-1.52, Math.min(1.52, this.pitch));
+    } else {
+      this.lookDx = 0;
+      this.lookDy = 0;
     }
     this.recoil *= Math.exp(-dt * 14);
 
@@ -358,6 +363,14 @@ export class Player {
     const sprintFov = this.sprinting ? 0.05 : 0;
     this.camera.fov += (this.baseFov + this.fovKick + sprintFov - this.camera.fov) * Math.min(1, dt * 12);
   }
+
+  /** Vertical velocity (m/s), for viewmodel jump/landing response. */
+  get verticalSpeed(): number {
+    return this.vy;
+  }
+  /** Look deltas applied this frame (radians), for weapon sway. */
+  lookDx = 0;
+  lookDy = 0;
 
   get dashing(): boolean {
     return this.dashT > 0;
