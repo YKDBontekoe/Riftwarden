@@ -56,6 +56,8 @@ export class Flow {
   /** True while the old scene is being torn down and the next built (nothing to render). */
   private building = false;
   transitions = 0;
+  /** Timing of the most recent scene swap (profiling aid, also shown in automation). */
+  lastTransition: { disposeMs: number; buildMs: number; readyMs: number; timedOut: boolean } | null = null;
   private loopStopped = false;
 
   constructor(
@@ -247,13 +249,23 @@ export class Flow {
     hudStore.set({ screen: 'transit', transit: { title, sub } });
     try {
       await nextPaint();
+      const t0 = performance.now();
       this.building = true;
       this.disposeWorld();
+      const t1 = performance.now();
       const scene = build();
       this.building = false;
       if (this.loopStopped) scene.useConstantAnimationDeltaTime = true;
       this.transitions++;
-      await Promise.race([scene.whenReadyAsync().catch(() => {}), new Promise((r) => setTimeout(r, 8000))]);
+      const t2 = performance.now();
+      const ready = await Promise.race([
+        scene.whenReadyAsync().then(
+          () => true,
+          () => true,
+        ),
+        new Promise<boolean>((r) => setTimeout(() => r(false), 8000)),
+      ]);
+      this.lastTransition = { disposeMs: Math.round(t1 - t0), buildMs: Math.round(t2 - t1), readyMs: Math.round(performance.now() - t2), timedOut: !ready };
     } finally {
       this.building = false;
       this.busy = false;

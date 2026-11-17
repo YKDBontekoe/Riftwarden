@@ -281,7 +281,7 @@ export class Game {
   setScreen(s: Screen): void {
     this.screen = s;
     this.weapon.setVisible(s !== 'menu' && s !== 'loading');
-    hudStore.set({ screen: s });
+    hudStore.set({ screen: s, location: 'arena' });
   }
 
   applySettings(s: Settings): void {

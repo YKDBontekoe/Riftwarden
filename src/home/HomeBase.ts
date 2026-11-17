@@ -145,13 +145,19 @@ export class HomeBase {
     glass.useSpecularOverAlpha = true;
     glass.usePhysicalLightFalloff = false;
     glass.backFaceCulling = false;
-    const plant = pal.white.clone('hqPlant') as PBRMaterial;
-    plant.albedoTexture = null;
-    plant.albedoColor = new Color3(0.12, 0.42, 0.3);
-    plant.clearCoat.isEnabled = false;
-    plant.roughness = 0.7;
-    const screenFrame = pal.graphite.clone('hqScreenFrame') as PBRMaterial;
-    screenFrame.albedoColor = new Color3(0.03, 0.035, 0.04);
+    // Fresh materials, never clone(): cloning copies DynamicTextures, which come out blank
+    // and never report ready (that would stall scene readiness on every transition).
+    const plain = (name: string, albedo: [number, number, number], metallic: number, rough: number) => {
+      const m = new PBRMaterial(name, scene);
+      m.albedoColor = new Color3(...albedo);
+      m.metallic = metallic;
+      m.roughness = rough;
+      m.usePhysicalLightFalloff = false;
+      m.maxSimultaneousLights = 8;
+      return m;
+    };
+    const plant = plain('hqPlant', [0.12, 0.42, 0.3], 0, 0.7);
+    const screenFrame = plain('hqScreenFrame', [0.03, 0.035, 0.04], 0.6, 0.35);
     for (const m of [floor, ceiling, wall, plant, screenFrame]) m.environmentIntensity = 1.2;
     const M: HqMaterials & { plant: PBRMaterial; screenFrame: PBRMaterial } = {
       floor,

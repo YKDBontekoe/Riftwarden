@@ -33,6 +33,7 @@ export function TerminalHost({ flow, home }: { flow: Flow; home: HomeBase }) {
 function Shell({ code, title, sub, close, children, accent = 'cyan', wide }: { code: string; title: string; sub: string; close: () => void; children: ReactNode; accent?: 'cyan' | 'amber'; wide?: boolean }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (e.repeat) return;
       if (e.code === 'Escape' || e.code === 'KeyE') {
         e.preventDefault();
         close();

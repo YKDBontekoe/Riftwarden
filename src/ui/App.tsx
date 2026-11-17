@@ -353,7 +353,7 @@ export function RunSummary({ result, extra }: { result: RunResult; extra?: { tur
   const cards: [string, string, string?][] = [
     ['FINAL WAVE', String(result.finalWave)],
     ['WAVES CLEARED', String(result.wavesCleared)],
-    ['THREAT TIER', `${tier.roman} · ${tier.name}`],
+    [`TIER · ${tier.name}`, tier.roman],
     ['HOSTILES DESTROYED', String(result.kills)],
     ['RUN DURATION', fmtTime(result.duration)],
     ['SALVAGE SECURED', String(result.salvageSecured), 'good'],
