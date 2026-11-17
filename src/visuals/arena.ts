@@ -20,6 +20,7 @@ import { boxProjectUVs } from './uv';
 import { createBeveledBox } from './bevel';
 import { createPathLight } from './pathLighting';
 import { segmentedRing } from './rings';
+import { ArenaDecals } from './arenaDecals';
 
 interface GateVisual {
   lane: ReturnType<typeof createPathLight>;
@@ -106,7 +107,18 @@ export class ArenaBuilder {
 
     for (const r of L.ramps) this.buildRamp(r);
     this.buildConduits();
-    this.buildGates();
+    const decals = new ArenaDecals(this.scene);
+    this.buildGates(decals);
+    for (const b of L.boxes) {
+      if (b.kind === 'machine') decals.floor(0, (b.min[0] + b.max[0]) * 0.5, (b.min[2] + b.max[2]) * 0.5, 11, 9, 0.6);
+    }
+    for (const route of Object.values(L.routes)) {
+      const p = route.points[2];
+      decals.floor(2, p.x, p.z, 5.7, 4.6, Math.atan2(p.x, p.z));
+      const q = route.points[3];
+      decals.floor(1, q.x, q.z, 7.4, 5.1, Math.atan2(q.x, q.z) + 0.55);
+    }
+    decals.finish();
     this.buildSkyline();
 
     this.merge();
@@ -138,10 +150,21 @@ export class ArenaBuilder {
         }
         break;
       }
-      case 'gate':
-        this.box(x0, y0, z0, x1, y1, z1, P.graphite, 'wall');
-        this.box(x0 - 0.04, 2.0, z0 - 0.04, x1 + 0.04, 2.15, z1 + 0.04, P.orangeDim, null);
+      case 'gate': {
+        // The perimeter already supplies the first two metres of each tunnel side.
+        // Trim just the render pieces so two materials never share the same inner face.
+        const trim = (a: number, b: number): [number, number] => {
+          const h = this.layout.half;
+          return a === h && b > h + 2 ? [h + 2, b] : b === -h && a < -h - 2 ? [a, -h - 2] : [a, b];
+        };
+        const [left, right] = trim(x0, x1);
+        const [front, back] = trim(z0, z1);
+        this.box(left, y0, front, right, y1, back, P.graphite, 'wall');
+        const extendX = right - left < back - front ? 0.045 : 0;
+        const extendZ = extendX > 0 ? 0 : 0.045;
+        this.box(left - extendX, 2.0, front - extendZ, right + extendX, 2.15, back + extendZ, P.orangeDim, null);
         break;
+      }
       case 'platform': {
         this.box(x0, y0, z0, x1, y1 - 0.12, z1, P.graphite, 'wall');
         this.box(x0, y1 - 0.12, z0, x1, y1, z1, P.white, 'platform');
@@ -267,7 +290,7 @@ export class ArenaBuilder {
     this.add(ring, P.cyanDim, null);
   }
 
-  private buildGates(): void {
+  private buildGates(decals: ArenaDecals): void {
     const P = this.pal;
     const H = this.layout.half;
     const frames: { id: GateId; pos: Vector3; yaw: number }[] = [
@@ -289,14 +312,18 @@ export class ArenaBuilder {
         return m;
       };
       // massive frame
-      mk(1.4, 9.4, 2.6, -5.2, 4.7, 0.2, P.graphite);
-      mk(1.4, 9.4, 2.6, 5.2, 4.7, 0.2, P.graphite);
+      mk(1.4, 9.4, 2.6, -5.12, 4.7, 0.2, P.graphite);
+      mk(1.4, 9.4, 2.6, 5.12, 4.7, 0.2, P.graphite);
       mk(11.8, 1.6, 2.6, 0, 8.6, 0.2, P.graphite);
-      mk(9.0, 0.18, 0.1, 0, 7.6, -1.12, lights);
-      mk(0.18, 6.8, 0.1, -4.45, 3.6, -1.12, lights);
-      mk(0.18, 6.8, 0.1, 4.45, 3.6, -1.12, lights);
-      // hazard chevrons on the floor at the threshold
-      for (let i = -3; i <= 3; i++) mk(0.6, 0.02, 0.6, i * 1.2, 0.015, -1.6, i % 2 ? P.orangeDim : P.graphite);
+      mk(9.0, 0.18, 0.1, 0, 7.6, -1.17, lights);
+      mk(0.18, 6.8, 0.1, -4.33, 3.6, -1.17, lights);
+      mk(0.18, 6.8, 0.1, 4.33, 3.6, -1.17, lights);
+      const stencilPosition = Vector3.TransformCoordinates(new Vector3(0, 8.65, -1.128), root.getWorldMatrix());
+      decals.gate(f.id, stencilPosition, f.yaw);
+      for (const side of [-1, 1]) {
+        const threshold = Vector3.TransformCoordinates(new Vector3(side * 3.5, 0, -1.55), root.getWorldMatrix());
+        decals.floor(3, threshold.x, threshold.z, 1.2, 2.1, f.yaw);
+      }
       // Rift portal at the back of the tunnel
       root.computeWorldMatrix(true);
       const portalPos = Vector3.TransformCoordinates(new Vector3(0, 3.6, 11.2), root.getWorldMatrix());
@@ -351,7 +378,7 @@ export class ArenaBuilder {
       else if (g.mat === this.pal.white || g.mat === this.pal.graphite || g.mat === this.pal.metal) boxProjectUVs(merged, 2.5);
       this.meshes.push(merged);
       merged.isPickable = g.surface !== null;
-      merged.metadata = g.surface ? { surface: g.surface } : null;
+      merged.metadata = g.surface ? { surface: g.surface, impact: g.mat === this.pal.white || g.mat === this.pal.panel ? 'ceramic' : 'alloy' } : null;
       merged.receiveShadows = g.surface !== null;
       merged.freezeWorldMatrix();
       merged.doNotSyncBoundingInfo = true;

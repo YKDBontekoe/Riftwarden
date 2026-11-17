@@ -8,6 +8,7 @@ import type { Kit } from '../visuals/kit';
 import type { Palette } from '../visuals/materials';
 import { buildRusher, buildWalker, type DroneRig, type WalkerRig } from '../visuals/models';
 import type { ArenaLayout, GateId, Vec2 } from '../world/layout';
+import { WalkerMotion } from './walkerMotion';
 
 export interface EnemyContext {
   player: Player;
@@ -55,13 +56,16 @@ export class Enemy implements Health {
   /** performance.now() of the last damage taken (drives the HUD health bar). */
   lastHit = 0;
   readonly hitboxes: Mesh[] = [];
+  readonly motion: WalkerMotion | null;
 
   constructor(
     readonly def: EnemyDef,
     readonly root: TransformNode,
     readonly walker: WalkerRig | null,
     readonly drone: DroneRig | null,
-  ) {}
+  ) {
+    this.motion = walker ? new WalkerMotion(walker, def.scale) : null;
+  }
 
   get kind(): EnemyKind {
     return this.def.kind;
@@ -142,6 +146,7 @@ export class EnemyManager {
     e.yaw = Math.atan2(dir.x, dir.z);
     e.root.position.copyFrom(e.pos);
     e.root.rotation.y = e.yaw;
+    e.motion?.reset(e.pos, e.yaw);
     e.root.setEnabled(true);
     if (e.walker?.shield) e.walker.shield.setEnabled(e.maxShield > 0);
     e.remaining = pathLength(e.path, 1, e.pos);
@@ -159,6 +164,13 @@ export class EnemyManager {
     if (res.toShield > 0) {
       e.shieldFlash = 1;
       fx.burst('shield', hitPoint, 6);
+      const center = e.center(TMP);
+      const normal = TMP2.copyFrom(hitPoint).subtractInPlace(center);
+      if (normal.lengthSquared() > 0.0001) {
+        normal.normalize();
+        center.addInPlaceFromFloats(normal.x * 1.83, normal.y * 1.98, normal.z * 1.83);
+        fx.shieldRipple(center, normal);
+      }
     }
     if (res.shieldBroken) {
       fx.burst('shield', e.center(TMP), 40, undefined, 2);
@@ -292,6 +304,8 @@ export class EnemyManager {
         if (e.attackT <= 0) {
           e.attackT = def.attackInterval;
           const muzzle = this.muzzlePos(e, TMP);
+          e.motion?.fire();
+          ctx.effects.burst('flash', muzzle, 1, undefined, 0.22);
           const target = TMP2.set(ctx.layout.reactor.x, 3, ctx.layout.reactor.z);
           target.subtractInPlace(muzzle).normalize().scaleInPlace(2.2).addInPlace(muzzle);
           ctx.effects.tracer(muzzle, target.set(ctx.layout.reactor.x, 3 + Math.random(), ctx.layout.reactor.z), 2, 0.12, 0.12);
@@ -312,6 +326,8 @@ export class EnemyManager {
             aim.y -= 0.35;
             aim.subtractInPlace(muzzle).normalize().scaleInPlace(e.kind === 'bulwark' ? 24 : 21);
             ctx.effects.spawnProjectile(muzzle, aim, def.playerDamage * e.damageMult);
+            e.motion?.fire();
+            ctx.effects.burst('flash', muzzle, 1, undefined, e.kind === 'bulwark' ? 0.3 : 0.23);
             const a = ctx.panFor(muzzle);
             sfx.play('enemyShot', { volume: a.volume, pan: a.pan });
           }
@@ -326,7 +342,7 @@ export class EnemyManager {
         }
       }
 
-      this.animate(e, hdt, ppos);
+      this.animate(e, hdt, ppos, ctx.effects);
     }
   }
 
@@ -338,31 +354,20 @@ export class EnemyManager {
     return e.center(out);
   }
 
-  private animate(e: Enemy, hdt: number, ppos: Vector3): void {
+  private animate(e: Enemy, hdt: number, ppos: Vector3, fx: Effects): void {
     e.root.position.copyFrom(e.pos);
     e.root.rotation.y = e.yaw;
     e.phase += hdt;
     if (e.walker) {
       const w = e.walker;
-      const moving = e.state === 'move';
-      const cadence = e.kind === 'bulwark' ? 5 : 6.5;
-      const t = e.phase * cadence;
-      const sw = moving ? Math.sin(t) * 0.55 : 0;
-      w.thighL.rotation.x = sw;
-      w.thighR.rotation.x = -sw;
-      w.kneeL.rotation.x = moving ? Math.max(0, -Math.sin(t)) * 0.8 + 0.1 : 0.1;
-      w.kneeR.rotation.x = moving ? Math.max(0, Math.sin(t)) * 0.8 + 0.1 : 0.1;
-      w.hips.position.y = 1.35 + (moving ? Math.abs(Math.cos(t)) * 0.07 : 0);
-      w.torso.rotation.z = moving ? Math.sin(t) * 0.04 : 0;
-      w.torso.rotation.x = e.flinch * -0.35 + (moving ? 0.08 : 0.15);
-      // Track the player with the head when close
       const dx = ppos.x - e.pos.x;
       const dz = ppos.z - e.pos.z;
       const look = Math.atan2(dx, dz) - e.yaw;
       w.head.rotation.y = clampAngle(look, 0.7);
-      const charge = e.chargeT > 0 ? 1 + (0.55 - e.chargeT) * 3.5 : 1;
-      w.muzzleGlow.scaling.setAll(0.3 * charge);
-      w.cannon.rotation.x = e.state === 'attack' ? 0.25 : e.chargeT > 0 ? -0.1 : 0;
+      const charge = e.chargeT > 0 ? 1 - e.chargeT / 0.55 : 0;
+      const aimPitch = e.state === 'attack' ? 0.10 : Math.max(-0.15, Math.min(0.22, (e.pos.y + 1.9 - ppos.y) / Math.max(2, Math.hypot(dx, dz))));
+      const planted = e.motion!.pose(e.pos, e.yaw, hdt, e.state === 'move', charge, e.flinch, aimPitch);
+      if (planted && (dx * dx + dz * dz) < 18 * 18) fx.burst('puff', planted, e.kind === 'bulwark' ? 3 : 1, undefined, 0.6);
       if (w.shield) {
         const s = e.shieldFlash;
         w.shield.scaling.set(3.6 + s * 0.3, 3.9 + s * 0.3, 3.6 + s * 0.3);

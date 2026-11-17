@@ -45,6 +45,7 @@ import {
   launchRing,
   makeScreen,
   makeSign,
+  stationWayfinding,
   MONO_FONT,
   planeBuilder,
   SCREEN_FONT,
@@ -206,6 +207,7 @@ export class HomeBase {
     builder.finish();
     this.buildBackdrop();
     this.buildSignage(ctx);
+    stationWayfinding(ctx);
 
     // ---- lighting: cool fill, moonlight through the window, cyan/teal accents, warm workshop
     const hemi = new HemisphericLight('hqFill', new Vector3(0, 1, 0), scene);
@@ -230,9 +232,9 @@ export class HomeBase {
     point('hqCommand', [0, 6.2, -2], [0.9, 0.97, 1], 2.65, 26);
     point('hqHolo', [0, 2.2, 0], [0.25, 0.85, 1], 0.95, 8, true);
     point('hqLaunch', [0, 6.5, 16.5], [0.45, 0.9, 1], 3.0, 18, true);
-    point('hqBay', [-16.5, 4.4, 0], [0.55, 1, 0.95], 2.6, 13);
+    point('hqBay', [-16.5, 4.4, 0], [0.42, 1, 0.76], 2.65, 12);
     point('hqStorage', [17, 4.4, 4.5], [0.9, 0.95, 1], 2.5, 12);
-    point('hqWorkshop', [17, 4.4, -5], [1, 0.84, 0.66], 2.5, 12);
+    point('hqWorkshop', [17, 4.4, -5], [1, 0.71, 0.42], 2.7, 11);
     point('hqMarket', [30, 5.2, 0], [0.86, 0.94, 1], 2.8, 14);
     point('hqReclaim', [-27, 5.2, 0], [1, 0.8, 0.55], 2.6, 13, true);
     // Ten lights in total: let the interior materials see all of them.

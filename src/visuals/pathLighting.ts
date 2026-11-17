@@ -109,6 +109,7 @@ export function createPathLight(
   data.indices = indices;
   data.applyToMesh(mesh);
   mesh.isPickable = false;
+  mesh.alphaIndex = 2;
   mesh.freezeWorldMatrix();
 
   const material = new ShaderMaterial(name, scene, 'rwPath', {

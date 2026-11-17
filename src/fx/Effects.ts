@@ -12,11 +12,13 @@ import {
   StandardMaterial,
   Vector3,
 } from '@babylonjs/core';
+import type { SurfaceImpact } from '../combat/Weapon';
+import { softenParticles } from './softParticles';
 import type { Kit } from '../visuals/kit';
 import type { ArenaLayout } from '../world/layout';
 import { BounceSparks, CollisionBoxes } from './sparks';
 import { type Palette, unlit } from '../visuals/materials';
-import { flareSprite, plumeSprite, ringSprite, scorchSprite, sparkSprite, starSprite } from '../visuals/textures';
+import { flareSprite, plumeSprite, ringSprite, scorchSprite, SMOKE_CELL, SMOKE_FRAMES, sparkSprite, starSprite } from '../visuals/textures';
 
 export type BurstKind =
   | 'spark'
@@ -31,7 +33,9 @@ export type BurstKind =
   | 'fire'
   | 'sparks'
   | 'embers'
-  | 'puff';
+  | 'puff'
+  | 'mist';
+
 
 type TexKey = 'flare' | 'fire' | 'smoke' | 'spark' | 'star';
 
@@ -95,14 +99,34 @@ const BURSTS: Record<BurstKind, BurstConfig> = {
     sizes: [[0, 0.15], [1, 0.8]],
     minSize: 1, maxSize: 1, minLife: 0.5, maxLife: 0.9, minPower: 0.3, maxPower: 1.2, gravity: 0.6, blend: STD, spread: 0.4, drag: 2, spin: 0.8,
   },
+  mist: {
+    tex: 'smoke', capacity: 70,
+    colors: [[0, c4(0.48, 0.69, 0.78, 0.23)], [0.24, c4(0.4, 0.54, 0.63, 0.36)], [1, c4(0.34, 0.45, 0.51, 0)]],
+    sizes: [[0, 0.18], [0.32, 0.45], [1, 0.93]],
+    minSize: 1, maxSize: 1, minLife: 0.36, maxLife: 0.69, minPower: 0.8, maxPower: 2.4,
+    gravity: 0.36, blend: STD, spread: 0.77, drag: 2.1, spin: 0.9,
+  },
+
 };
+
+function configureSmoke(ps: ParticleSystem): void {
+  ps.spriteCellWidth = ps.spriteCellHeight = SMOKE_CELL;
+  ps.endSpriteCellID = SMOKE_FRAMES - 1;
+  ps.spriteCellChangeSpeed = 1;
+  ps.spriteRandomStartCell = true;
+}
 
 class BurstPool {
   private systems: ParticleSystem[] = [];
   private next = 0;
   constructor(scene: Scene, tex: DynamicTexture, private cfg: BurstConfig, count: number) {
     for (let i = 0; i < count; i++) {
-      const ps = new ParticleSystem('burst', cfg.capacity, scene);
+      const smoke = cfg.tex === 'smoke';
+      const ps = new ParticleSystem('burst', cfg.capacity, scene, undefined, smoke);
+      if (smoke) {
+        configureSmoke(ps);
+        softenParticles(scene, ps, cfg.capacity === BURSTS.smoke.capacity ? 0.6 : 0.26);
+      }
       ps.particleTexture = tex;
       ps.emitter = Vector3.Zero();
       const r = cfg.emitRadius ?? 0;
@@ -212,6 +236,7 @@ interface FlashLight {
 
 const TMP = new Vector3();
 const TMP2 = new Vector3();
+const SHIELD_RIPPLE = new Color3(2.8, 1.4, 0.42);
 
 export interface ExplosionOpts {
   /** Overall size multiplier (1 = walker). */
@@ -265,7 +290,7 @@ export class Effects {
     this.world = new CollisionBoxes(layout);
     this.hotSparks = new BounceSparks(scene, tex.spark, this.world);
 
-    const poolSizes: Record<BurstKind, number> = { spark: 10, crit: 6, enemySpark: 8, impact: 10, explosion: 6, smoke: 8, shield: 5, build: 3, flash: 6, fire: 8, sparks: 8, embers: 6, puff: 8 };
+    const poolSizes: Record<BurstKind, number> = { spark: 10, crit: 6, enemySpark: 8, impact: 10, explosion: 6, smoke: 8, shield: 5, build: 3, flash: 6, fire: 8, sparks: 8, embers: 6, puff: 8, mist: 5 };
     for (const k of Object.keys(BURSTS) as BurstKind[]) this.bursts.set(k, new BurstPool(scene, tex[BURSTS[k].tex], BURSTS[k], poolSizes[k]));
 
     const root = kit.node('fxRoot', null);
@@ -354,7 +379,7 @@ export class Effects {
       const n = this.liveDebris.length;
       if (!n) return;
       out.copyFrom(this.liveDebris[(Math.random() * n) | 0].mesh.position);
-    });
+    }, true);
     for (const [t, c] of [[0, c4(1.6, 0.6, 0.15, 0.5)], [0.15, c4(0.2, 0.16, 0.14, 0.45)], [1, c4(0.12, 0.12, 0.13, 0)]] as [number, Color4][]) this.trail.addColorGradient(t, c);
     this.trail.addSizeGradient(0, 0.25);
     this.trail.addSizeGradient(1, 1.1);
@@ -375,8 +400,12 @@ export class Effects {
     this.plasmaTrail.blendMode = ADD;
   }
 
-  private makeTrail(tex: DynamicTexture, name: string, cap: number, pick: (out: Vector3) => void): ParticleSystem {
-    const ps = new ParticleSystem(name, cap, this.scene);
+  private makeTrail(tex: DynamicTexture, name: string, cap: number, pick: (out: Vector3) => void, smoke = false): ParticleSystem {
+    const ps = new ParticleSystem(name, cap, this.scene, undefined, smoke);
+    if (smoke) {
+      configureSmoke(ps);
+      softenParticles(this.scene, ps, 0.35);
+    }
     ps.particleTexture = tex;
     ps.emitter = Vector3.Zero();
     ps.startPositionFunction = (_wm, out) => pick(out);
@@ -428,13 +457,15 @@ export class Effects {
     this.onShake?.(pos, Math.min(1, 0.35 * s + 0.15));
   }
 
-  /** Shot hitting level geometry: sparks, a small dust puff and a burn mark. */
-  impact(pos: Vector3, normal: Vector3): void {
-    const contact = TMP.copyFrom(normal).scaleInPlace(0.05).addInPlace(pos);
-    this.burst('impact', contact, this.high ? 8 : 5, normal);
-    this.burst('puff', contact, 2, normal);
-    if (this.high) this.burst('flash', contact, 1, normal, 0.13);
-    this.hotSparks.emit(pos, normal, 5, 6, 0.65);
+  /** Contacts keep a distinct silhouette even when the particle budget is tight. */
+  impact(pos: Vector3, normal: Vector3, surface: SurfaceImpact = 'alloy', light = false): void {
+    const contact = TMP.copyFrom(normal).scaleInPlace(0.065).addInPlace(pos);
+    const sparks = surface === 'alloy' ? (this.high ? 9 : 6) : 3;
+    this.burst('impact', contact, light ? 2 : sparks, normal);
+    this.burst(surface === 'wetDeck' ? 'mist' : 'puff', contact, light ? 1 : surface === 'alloy' ? 1 : 4, normal);
+    if (light) return;
+    if (this.high && surface === 'alloy') this.burst('flash', contact, 1, normal, 0.13);
+    if (surface === 'alloy') this.hotSparks.emit(pos, normal, 7, 6.8, 0.5);
     const h = this.holes[this.holeNext];
     this.holeNext = (this.holeNext + 1) % this.holes.length;
     h.setEnabled(true);
@@ -444,7 +475,11 @@ export class Effects {
     h.scaling.setAll(0.16 + Math.random() * 0.1);
   }
 
-  ring(pos: Vector3, size: number, life: number, color: Color3, ground: boolean): void {
+  shieldRipple(pos: Vector3, normal: Vector3): void {
+    this.ring(pos, 1.3, 0.33, SHIELD_RIPPLE, false, normal);
+  }
+
+  ring(pos: Vector3, size: number, life: number, color: Color3, ground: boolean, normal?: Vector3): void {
     const r = this.rings[this.ringNext];
     this.ringNext = (this.ringNext + 1) % this.rings.length;
     r.mesh.setEnabled(true);
@@ -453,6 +488,9 @@ export class Effects {
       r.mesh.position.y = 0.06;
       r.mesh.billboardMode = Mesh.BILLBOARDMODE_NONE;
       r.mesh.rotation.set(Math.PI / 2, 0, 0);
+    } else if (normal) {
+      r.mesh.billboardMode = Mesh.BILLBOARDMODE_NONE;
+      r.mesh.lookAt(TMP.copyFrom(r.mesh.position).addInPlace(normal));
     } else {
       r.mesh.billboardMode = Mesh.BILLBOARDMODE_ALL;
       r.mesh.rotation.set(0, 0, 0);

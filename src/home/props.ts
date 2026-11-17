@@ -116,20 +116,31 @@ export function screenLine(s: ScreenTex, y: number, label: string, value: string
   ctx.fillRect(34, y + 16, w - 68, 1);
 }
 
-/** Floating sign with large lettering (unlit, transparent background). */
+/** Backed wayfinding sign with a high-contrast face under the room lighting. */
 export function makeSign(ctx: PropCtx, text: string, pos: [number, number, number], yaw: number, width: number, color = '#bff6ff'): void {
   const W = 1024;
   const H = 128;
   const { c, ctx: g } = canvas(W, H);
-  g.clearRect(0, 0, W, H);
-  g.font = `700 74px ${SCREEN_FONT}`;
+  g.fillStyle = '#101d26';
+  g.beginPath();
+  g.roundRect(5, 8, W - 10, H - 16, 14);
+  g.fill();
+  g.globalAlpha = 0.64;
+  g.strokeStyle = color;
+  g.lineWidth = 2;
+  g.strokeRect(19, 17, W - 38, H - 34);
+  g.fillStyle = color;
+  g.fillRect(30, 32, 12, H - 64);
+  g.fillRect(W - 42, 32, 12, H - 64);
+  g.globalAlpha = 1;
+  g.font = `700 65px ${SCREEN_FONT}`;
   g.textAlign = 'center';
   g.textBaseline = 'middle';
   g.fillStyle = color;
   g.shadowColor = color;
-  g.shadowBlur = 18;
+  g.shadowBlur = 7;
   // Letter spacing by drawing glyphs individually.
-  const spacing = 14;
+  const spacing = 12;
   const glyphs = [...text];
   const widths = glyphs.map((ch) => g.measureText(ch).width + spacing);
   let x = W / 2 - widths.reduce((a, b) => a + b, 0) / 2 + spacing / 2;
@@ -140,7 +151,7 @@ export function makeSign(ctx: PropCtx, text: string, pos: [number, number, numbe
   const tex = toTexture(`sign_${text}`, c, ctx.scene, { aniso: 4 });
   tex.hasAlpha = true;
   tex.wrapU = tex.wrapV = 0;
-  const mat = unlit(ctx.scene, `signMat_${text}`, [1.25, 1.25, 1.25], { tex, opacity: tex });
+  const mat = unlit(ctx.scene, `signMat_${text}`, [1.0, 1.0, 1.0], { tex, opacity: tex });
   mat.useAlphaFromAlbedoTexture = false;
   const plane = planeBuilder(ctx.scene, `sign_${text}`, width, (width * H) / W);
   plane.material = mat;
@@ -248,6 +259,18 @@ export function launchRing(ctx: PropCtx): void {
 
 }
 
+/** Color-coded traffic guides on the actual portal approaches. */
+export function stationWayfinding(ctx: PropCtx): void {
+  const routes = [
+    { name: 'droneBayGuide', color: new Color3(0.16, 1.63, 1.22), ends: [[-3.25, -4.15], [-6, -2.8], [-9.9, -0.85], [-13.75, -0.85]] },
+    { name: 'workshopGuide', color: new Color3(1.72, 0.83, 0.25), ends: [[3.25, -4.15], [6, -2.8], [9.8, -0.85], [13.9, -0.85], [16.1, -3.0]] },
+  ];
+  for (const { name, color, ends } of routes) {
+    const guide = createPathLight(ctx.scene, name, ends.map(([x, z]) => ({ x, z })), 0.45, color);
+    ctx.animators.push((dt) => guide.update(dt * 0.72, 0.57));
+  }
+}
+
 /** Central holo-table with a slowly turning miniature of the arena and orbiting rings. */
 export function commandTable(ctx: PropCtx): void {
   const { kit, M, scene } = ctx;
@@ -279,6 +302,15 @@ export function commandTable(ctx: PropCtx): void {
       kit.part('box', M.amber, holo, { pos: [((a.x + b.x) / 2) * k, 0.005, ((a.z + b.z) / 2) * k], rot: [0, Math.atan2(b.x - a.x, b.z - a.z), 0], scale: [0.025, 0.008, len] });
     }
   }
+  // Segmented emitter around the table and a scan plane that climbs through the map.
+  const emitter = segmentedRing(scene, 'tableEmitter', 1.87, 0.09, 16, 0.55);
+  emitter.parent = root;
+  emitter.position.y = 1.045;
+  emitter.material = holoEdge;
+  const scanDisc = segmentedRing(scene, 'tableScan', 1.37, 0.034, 24, 0.38);
+  scanDisc.parent = root;
+  const scanLight = unlit(scene, 'tableScanLight', [0.08, 0.55, 0.67], { additive: true, twoSided: true });
+  scanDisc.material = scanLight;
   const ringA = kit.node('ringA', root, [0, 2.1, 0]);
   kit.part('torusThin', holoEdge, ringA, { scale: [2.6, 2.6, 2.6] });
   const ringB = kit.node('ringB', root, [0, 2.1, 0]);
@@ -296,6 +328,11 @@ export function commandTable(ctx: PropCtx): void {
     ringA.rotation.set(0.25 + Math.sin(t * 0.5) * 0.1, t * 0.4, 0);
     ringB.rotation.set(-0.3, -t * 0.55, Math.sin(t * 0.7) * 0.15);
     holoMat.emissiveColor.set(0.05, 0.4 + Math.sin(t * 3.1) * 0.04, 0.5);
+    emitter.rotation.y -= dt * 0.25;
+    const pass = (t * 0.32) % 1;
+    scanDisc.position.y = 1.38 + pass * 0.45;
+    scanDisc.rotation.y = t * 0.21;
+    scanLight.alpha = Math.sin(pass * Math.PI) * 0.75;
   });
 }
 

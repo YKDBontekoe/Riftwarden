@@ -19,7 +19,7 @@ import {
 import { sfx } from '../audio/Sfx';
 import { mulberry32, rollDamage } from '../combat/damage';
 import { BASE_STATS, type CombatStats, computeStats, type StatModifier } from '../combat/stats';
-import { type ShotOutcome, type ShotRequest, Weapon, type WeaponFxHooks } from '../combat/Weapon';
+import { type ShotOutcome, type ShotRequest, type SurfaceImpact, Weapon, type WeaponFxHooks } from '../combat/Weapon';
 import type { WeaponFamily } from '../data/defs';
 import { WeaponFx } from '../fx/WeaponFx';
 import { ECONOMY, SENTINEL, towerCost } from '../data/defs';
@@ -48,6 +48,7 @@ import { PostFx } from '../visuals/postfx';
 import { Kit } from '../visuals/kit';
 import { createPalette, type Palette } from '../visuals/materials';
 import { buildReactor, type ReactorRig } from '../visuals/models';
+import { arenaDeckWetness } from '../visuals/textures';
 import { WaveManager } from '../waves/WaveManager';
 import { ARENA, type GateId } from '../world/layout';
 import { ENV_QUERY } from '../world/physicsGroups';
@@ -208,6 +209,7 @@ export class Game {
     if (!weaponDef) throw new Error('deployment requires an equipped weapon');
     this.weapon = new Weapon(scene, weaponDef, this.player, cfg.loadout.weapon);
     scene.setRenderingAutoClearDepthStencil(1, true, true, true);
+    this.post = new PostFx(scene, engine, this.player.camera, high);
 
     this.fx = new Effects(scene, this.kit, this.pal, ARENA, high);
     this.wfx = new WeaponFx(scene);
@@ -253,8 +255,6 @@ export class Game {
 
     // Reflections/ambient: capture the finished static scene once into a prefiltered cube map.
     this.atmosphere.captureEnvironment([...arena.meshes, ...this.reactor.root.getChildMeshes()], this.pal.lit, high);
-
-    this.post = new PostFx(scene, engine, this.player.camera, high);
 
     this.enemyCtx = {
       player: this.player,
@@ -901,7 +901,10 @@ export class Game {
     if (first) return { point: first.point, normal: null, target: first.target, enemyId: struck[0].id };
     if (wall) {
       const n = wall.getNormal(true, true) ?? Vector3.Up();
-      return { point: wall.pickedPoint!.clone(), normal: n, target: 'surface', enemyId: null };
+      const point = wall.pickedPoint!.clone();
+      const meta = wall.pickedMesh!.metadata as { surface: string; impact?: SurfaceImpact };
+      const surface = meta.surface === 'floor' && arenaDeckWetness(point.x, point.z) > 0.48 ? 'wetDeck' : meta.impact ?? 'alloy';
+      return { point, normal: n, target: 'surface', surface, enemyId: null };
     }
     return { point: r.origin.add(r.dir.scale(r.range)), normal: null, target: 'none', enemyId: null };
   };
@@ -933,15 +936,12 @@ export class Game {
     const p = out.point;
     if (out.target === 'surface' && out.normal) {
       const pos = p.add(out.normal.scale(0.03));
+      this.fx.impact(pos, out.normal, out.surface, family === 'beam');
       if (family === 'rail') {
-        this.fx.impact(pos, out.normal);
         this.fx.burst('sparks', pos, Math.round(8 + 10 * power), out.normal, 0.7);
         this.fx.ring(pos, 1.6 * power + 0.6, 0.25, this.weapon.rig.energyBase.scale(0.5), false);
         this.fx.flashLight(pos, 3 * power, 0.18, this.weapon.rig.energyBase.scale(0.4));
-      } else if (family === 'beam') {
-        this.fx.burst('impact', pos, 3, out.normal);
-        this.fx.burst('puff', pos, 1, out.normal);
-      } else this.fx.impact(pos, out.normal);
+      }
     } else if (out.target === 'shield') {
       this.fx.burst('shield', p, family === 'rail' ? 24 : 8, undefined, family === 'rail' ? 1.5 : 1);
       if (family === 'rail') this.fx.ring(p, 2.4, 0.25, new Color3(2.6, 0.9, 0.2), false);

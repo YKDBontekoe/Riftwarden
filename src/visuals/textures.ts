@@ -122,6 +122,17 @@ function ormPixel(d: Uint8ClampedArray, i: number, ao: number, rough: number, me
   d[i + 3] = 255;
 }
 
+function deckWetness(stain: number, grime: number): number {
+  return smooth(Math.max(0, Math.min(1, (stain + grime * 0.16 - 0.59) * 7)));
+}
+
+/** Read the same 12 m tiling and wetness field used by the arena deck material. */
+export function arenaDeckWetness(x: number, z: number): number {
+  const u = (x + 60) / 12;
+  const v = (z + 60) / 12;
+  return deckWetness(fbm(u, v, 5, 3, 21), fbm(u, v, 12, 2, 11));
+}
+
 /** Steel deck plates with recessed fasteners, grip strips and worn paint. */
 export function floorSet(scene: Scene, high: boolean, indoor: boolean): PbrSet {
   const size = (indoor ? 512 : 1024) * (high ? 2 : 1);
@@ -165,7 +176,7 @@ export function floorSet(scene: Scene, high: boolean, indoor: boolean): PbrSet {
       const stain = fbm(u, v, 5, 3, 21);
       const i = (y * size + x) * 4;
       const nick = scuffs[i + 3] / 255;
-      const wet = indoor ? 0 : smooth(Math.max(0, Math.min(1, (stain + grime * 0.16 - 0.59) * 7)));
+      const wet = indoor ? 0 : deckWetness(stain, grime);
       const dirt = (indoor ? 0.05 : 0.13) * grime * Math.max(0, 1 - edge * 9);
       let base = (indoor ? 0.55 : 0.47) + panelTint[panel] + grain * 0.045 + (stain - 0.5) * 0.10;
       base += nick * 0.09 - dirt - wet * 0.065;
@@ -415,32 +426,46 @@ export function flareSprite(scene: Scene): DynamicTexture {
 }
 
 /** Billowing smoke or a hotter, filamented flame using the same soft-edge density field. */
+/** Smoke uses a looping 4×4 sheet. Every cell is transparent at the border. */
+export const SMOKE_CELL = 128;
+export const SMOKE_FRAMES = 16;
+
 export function plumeSprite(scene: Scene, fire = false): DynamicTexture {
-  const size = 192;
+  const cell = fire ? 192 : SMOKE_CELL;
+  const atlas = fire ? 1 : 4;
+  const size = cell * atlas;
   const { c, ctx } = canvas(size);
   const img = ctx.createImageData(size, size);
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      const u = x / size;
-      const v = y / size;
-      const dx = u * 2 - 1;
-      const dy = v * 2 - 1;
-      const radius = Math.hypot(dx, dy);
-      const clouds = fbm(u, v, 4, 5, fire ? 31 : 40);
-      const detail = fbm(u + 0.10 * clouds, v - 0.14 * clouds, 8, 4, 80);
-      const falloff = Math.max(0, 1 - radius * 1.07);
-      const density = Math.max(0, Math.min(1, falloff * 1.23 + (clouds - 0.64) * 0.86));
-      const edge = Math.min(1, Math.max(0, (0.99 - radius) * 9));
-      const veins = Math.max(0, 1 - Math.abs(detail - 0.52) * 7);
-      const shade = fire ? 0.65 + veins * 0.35 : 0.66 + (detail - 0.5) * 0.75 - dy * 0.18;
-      const i = (y * size + x) * 4;
-      img.data[i] = img.data[i + 1] = img.data[i + 2] = shade * 255;
-      const opacity = fire ? density ** 1.75 * (0.32 + veins * 0.68) : density ** 1.55;
-      img.data[i + 3] = opacity * edge * 255;
+  for (let frame = 0; frame < atlas * atlas; frame++) {
+    const angle = frame * Math.PI * 2 / (atlas * atlas);
+    const driftX = fire ? 0 : Math.sin(angle) * 0.09;
+    const driftY = fire ? 0 : Math.cos(angle) * 0.10;
+    const left = (frame % atlas) * cell;
+    const top = Math.floor(frame / atlas) * cell;
+    for (let y = 0; y < cell; y++) {
+      for (let x = 0; x < cell; x++) {
+        const u = x / cell;
+        const v = y / cell;
+        const dx = u * 2 - 1;
+        const dy = v * 2 - 1;
+        const radius = Math.hypot(dx, dy);
+        if (radius >= 0.99) continue;
+        const clouds = fbm(u + driftX, v + driftY, 4, 5, fire ? 31 : 40);
+        const detail = fbm(u + 0.10 * clouds - driftY, v - 0.14 * clouds + driftX, 8, 4, 80);
+        const falloff = Math.max(0, 1 - radius * 1.07);
+        const density = Math.max(0, Math.min(1, falloff * 1.23 + (clouds - 0.64) * 0.86));
+        const edge = Math.min(1, (0.99 - radius) * 9);
+        const veins = Math.max(0, 1 - Math.abs(detail - 0.52) * 7);
+        const shade = fire ? 0.65 + veins * 0.35 : 0.66 + (detail - 0.5) * 0.75 - dy * 0.18;
+        const i = ((top + y) * size + left + x) * 4;
+        img.data[i] = img.data[i + 1] = img.data[i + 2] = shade * 255;
+        const opacity = fire ? density ** 1.75 * (0.32 + veins * 0.68) : density ** 1.55;
+        img.data[i + 3] = opacity * edge * 255;
+      }
     }
   }
   ctx.putImageData(img, 0, 0);
-  return spriteTex(fire ? 'flameSprite' : 'smokeSprite', c, scene);
+  return spriteTex(fire ? 'flameSprite' : 'smokeFlipbook', c, scene);
 }
 
 /** A bright spark head and tapering trail for velocity-aligned billboards. */

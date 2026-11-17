@@ -4,6 +4,7 @@ import {
   Color3,
   MeshBuilder,
   PBRMaterial,
+  Quaternion,
   type Scene,
   TransformNode,
 } from '@babylonjs/core';
@@ -22,10 +23,16 @@ export interface WalkerRig {
   thighR: TransformNode;
   kneeL: TransformNode;
   kneeR: TransformNode;
+  ankleL: TransformNode;
+  ankleR: TransformNode;
   cannon: TransformNode;
+  barrel: TransformNode;
   muzzleGlow: AbstractMesh;
   shield: AbstractMesh | null;
 }
+
+export const WALKER_THIGH = 0.69;
+export const WALKER_SHIN = 0.65;
 
 /** Strider walker (and the heavier Bulwark variant). Root sits on the ground, faces +Z. */
 export function buildWalker(kit: Kit, P: Palette, heavy: boolean): WalkerRig {
@@ -41,7 +48,11 @@ export function buildWalker(kit: Kit, P: Palette, heavy: boolean): WalkerRig {
   const torso = kit.node('torso', hips, [0, 0.58, 0]);
   kit.part('box', P.enemyArmor, torso, { scale: [1.25, 0.82, 0.88], rot: [0.08, 0, 0] });
   kit.part('box', P.enemyArmor, torso, { pos: [0, 0.08, 0.46], scale: [0.86, 0.56, 0.16], rot: [-0.18, 0, 0] });
-  kit.part('box', P.enemyDark, torso, { pos: [0, -0.2, 0.5], scale: [0.5, 0.16, 0.1] });
+  kit.part('box', P.enemyDark, torso, { pos: [0, -0.2, 0.5], scale: [0.56, 0.17, 0.11] });
+  for (const side of [-1, 1]) {
+    kit.part('box', P.graphite, torso, { pos: [side * 0.46, 0.07, 0.43], scale: [0.13, 0.48, 0.25], rot: [-0.18, 0, side * 0.12] });
+    kit.part('box', P.orangeDim, torso, { pos: [side * 0.41, -0.1, 0.565], scale: [0.084, 0.042, 0.018], shadow: false });
+  }
   kit.part('box', P.enemyDark, torso, { pos: [0, 0.05, -0.56], scale: [0.85, 0.66, 0.36] });
   kit.part('box', P.orangeGlow, torso, { pos: [-0.2, 0.08, -0.75], scale: [0.1, 0.4, 0.04] });
   kit.part('box', P.orangeGlow, torso, { pos: [0.2, 0.08, -0.75], scale: [0.1, 0.4, 0.04] });
@@ -50,16 +61,21 @@ export function buildWalker(kit: Kit, P: Palette, heavy: boolean): WalkerRig {
   const head = kit.node('head', torso, [0, 0.62, 0.12]);
   kit.part('box', P.enemyDark, head, { scale: [0.56, 0.36, 0.62] });
   kit.part('box', P.enemyArmor, head, { pos: [0, 0.2, -0.05], scale: [0.5, 0.08, 0.56] });
-  kit.part('box', P.orangeGlow, head, { pos: [0, 0.0, 0.31], scale: [0.44, 0.11, 0.05] });
+  kit.part('box', P.graphite, head, { pos: [0, 0, 0.31], scale: [0.54, 0.22, 0.075] });
+  kit.part('box', P.orangeGlow, head, { pos: [0, 0.01, 0.353], scale: [0.39, 0.075, 0.02], shadow: false });
   kit.part('cyl8', P.metal, head, { pos: [0.22, 0.32, -0.15], scale: [0.04, 0.35, 0.04] });
 
   // Right arm: plasma cannon
   const cannon = kit.node('cannon', torso, [0.82, 0.05, 0.1]);
   kit.part('sphere', P.enemyArmor, cannon, { scale: [0.5, 0.5, 0.5] });
-  kit.part('cyl', P.enemyDark, cannon, { pos: [0.05, -0.05, 0.5], rot: [Math.PI / 2, 0, 0], scale: [0.26, 1.0, 0.26] });
-  kit.part('box', P.enemyArmor, cannon, { pos: [0.08, 0.08, 0.3], scale: [0.18, 0.12, 0.7] });
+  const barrel = kit.node('barrelSlide', cannon);
+  kit.part('cyl', P.metal, cannon, { pos: [0.05, -0.05, 0.27], rot: [Math.PI / 2, 0, 0], scale: [0.34, 0.30, 0.34] });
+  kit.part('cyl', P.enemyArmor, barrel, { pos: [0.05, -0.05, 0.82], rot: [Math.PI / 2, 0, 0], scale: [0.32, 0.14, 0.32] });
+  kit.part('box', P.orangeDim, barrel, { pos: [0.05, 0.145, 0.35], scale: [0.07, 0.025, 0.42], shadow: false });
+  kit.part('cyl', P.enemyDark, barrel, { pos: [0.05, -0.05, 0.5], rot: [Math.PI / 2, 0, 0], scale: [0.26, 1.0, 0.26] });
+  kit.part('box', P.enemyArmor, barrel, { pos: [0.08, 0.08, 0.3], scale: [0.18, 0.12, 0.7] });
   if (heavy) kit.part('cyl', P.enemyDark, cannon, { pos: [-0.12, -0.18, 0.45], rot: [Math.PI / 2, 0, 0], scale: [0.2, 0.9, 0.2] });
-  const muzzleGlow = kit.part('torus', P.orangeGlow, cannon, { pos: [0.05, -0.05, 1.0], rot: [Math.PI / 2, 0, 0], scale: [0.3, 0.3, 0.3] });
+  const muzzleGlow = kit.part('torus', P.orangeGlow, barrel, { pos: [0.05, -0.05, 1.0], rot: [Math.PI / 2, 0, 0], scale: [0.3, 0.3, 0.3] });
 
   // Left arm: armored blade plate
   const arm = kit.node('armL', torso, [-0.82, 0.05, 0.05]);
@@ -76,16 +92,24 @@ export function buildWalker(kit: Kit, P: Palette, heavy: boolean): WalkerRig {
 
   const legs: TransformNode[] = [];
   const knees: TransformNode[] = [];
+  const ankles: TransformNode[] = [];
   for (const side of [-1, 1]) {
     const thigh = kit.node('thigh', hips, [side * 0.42, -0.05, 0]);
     kit.part('box', P.enemyArmor, thigh, { pos: [0, -0.36, 0.05], scale: [0.3, 0.78, 0.36], rot: [-0.15, 0, 0] });
     kit.part('sphere', P.enemyDark, thigh, { scale: [0.34, 0.34, 0.34] });
-    const knee = kit.node('knee', thigh, [0, -0.72, 0.12]);
+    const knee = kit.node('knee', thigh, [0, -WALKER_THIGH, 0]);
     kit.part('sphere', P.metal, knee, { scale: [0.24, 0.24, 0.24] });
     kit.part('box', P.enemyDark, knee, { pos: [0, -0.32, -0.12], scale: [0.22, 0.7, 0.24], rot: [0.35, 0, 0] });
-    kit.part('box', P.enemyArmor, knee, { pos: [0, -0.62, 0.0], scale: [0.36, 0.1, 0.62] });
+    kit.part('cyl', P.metal, knee, { pos: [side * 0.105, -0.26, -0.13], scale: [0.08, 0.42, 0.08] });
+    const ankle = kit.node('ankle', knee, [0, -WALKER_SHIN, 0]);
+    kit.part('box', P.enemyDark, ankle, { pos: [0, -0.026, 0.09], scale: [0.39, 0.09, 0.69] });
+    kit.part('box', P.enemyArmor, ankle, { pos: [0, 0.045, 0.1], scale: [0.36, 0.10, 0.61] });
+    thigh.rotationQuaternion = Quaternion.Identity();
+    knee.rotationQuaternion = Quaternion.Identity();
+    ankle.rotationQuaternion = Quaternion.Identity();
     legs.push(thigh);
     knees.push(knee);
+    ankles.push(ankle);
   }
 
   let shield: AbstractMesh | null = null;
@@ -93,7 +117,7 @@ export function buildWalker(kit: Kit, P: Palette, heavy: boolean): WalkerRig {
     shield = kit.part('sphere', P.shield, root, { pos: [0, 2.05, 0.1], scale: [3.6, 3.9, 3.6] });
   }
 
-  return { root, hips, torso, head, thighL: legs[0], thighR: legs[1], kneeL: knees[0], kneeR: knees[1], cannon, muzzleGlow, shield };
+  return { root, hips, torso, head, thighL: legs[0], thighR: legs[1], kneeL: knees[0], kneeR: knees[1], ankleL: ankles[0], ankleR: ankles[1], cannon, barrel, muzzleGlow, shield };
 }
 
 export interface DroneRig {

@@ -24,11 +24,13 @@ export interface ShotRequest {
 }
 
 export type ShotTarget = 'enemy' | 'shield' | 'surface' | 'none';
+export type SurfaceImpact = 'alloy' | 'ceramic' | 'wetDeck';
 
 export interface ShotOutcome {
   point: Vector3;
   normal: Vector3 | null;
   target: ShotTarget;
+  surface?: SurfaceImpact;
   /** Stable id of the first enemy hit (beam ramp tracking), null if none. */
   enemyId: number | null;
 }
@@ -41,7 +43,7 @@ export interface WeaponFxHooks {
 
 /** Fill optional outcome fields (callers may return only a point). */
 function normalize(o: Partial<ShotOutcome> & { point: Vector3 }): ShotOutcome {
-  return { point: o.point, normal: o.normal ?? null, target: o.target ?? 'none', enemyId: o.enemyId ?? null };
+  return { point: o.point, normal: o.normal ?? null, target: o.target ?? 'none', surface: o.surface, enemyId: o.enemyId ?? null };
 }
 
 /** Presentation no-op (automation / headless callers). */
