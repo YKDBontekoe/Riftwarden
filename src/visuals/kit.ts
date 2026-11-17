@@ -8,6 +8,8 @@ export interface PartOpts {
   rot?: [number, number, number];
   scale?: [number, number, number];
   name?: string;
+  /** false: never register as a shadow caster (glows, holograms). */
+  shadow?: boolean;
 }
 
 /**
@@ -85,7 +87,7 @@ export class Kit {
     m.position.set(...(o.pos ?? [0, 0, 0]));
     if (o.rot) m.rotation.set(...o.rot);
     m.scaling.set(...(o.scale ?? [1, 1, 1]));
-    if (this.shadowSink && !unique) this.shadowSink(m);
+    if (this.shadowSink && !unique && o.shadow !== false) this.shadowSink(m);
     return m;
   }
 

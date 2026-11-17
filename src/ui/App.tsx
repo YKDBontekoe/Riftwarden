@@ -9,6 +9,8 @@ import { HomeHud } from './HomeHud';
 import { Hud } from './Hud';
 import { useHud } from './store';
 import { TerminalHost } from './Terminals';
+import { ArenaInventory } from './LootHud';
+import { BriefList } from './items';
 
 interface Props {
   getFlow: () => Flow | null;
@@ -23,7 +25,7 @@ export function fmtTime(s: number): string {
   return `${m}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 }
 
-const ARENA_SCREENS = new Set(['playing', 'paused', 'checkpoint', 'defeat']);
+const ARENA_SCREENS = new Set(['playing', 'paused', 'checkpoint', 'defeat', 'inventory']);
 const HOME_HUD_SCREENS = new Set(['home', 'terminal', 'paused']);
 
 export function App({ getFlow }: Props) {
@@ -41,6 +43,7 @@ export function App({ getFlow }: Props) {
       {screen === 'terminal' && flow && home && <TerminalHost key={`term${flow.transitions}`} flow={flow} home={home} />}
       {screen === 'paused' && flow && <PauseMenu flow={flow} />}
       {screen === 'checkpoint' && flow && arena && <CheckpointPanel flow={flow} game={arena} />}
+      {screen === 'inventory' && arena && <ArenaInventory key={`inv${flow?.transitions}`} game={arena} />}
       {screen === 'defeat' && flow && <DefeatScreen flow={flow} />}
       {screen === 'summary' && flow && <SummaryScreen flow={flow} />}
       {screen === 'transit' && <Transit />}
@@ -150,7 +153,8 @@ const CONTROLS: [string, string][] = [
   ['MOUSE', 'Aim · LMB fire'],
   ['SPACE', 'Jump · again to boost'],
   ['SHIFT', 'Dash · hold to sprint'],
-  ['E', 'Use terminal (HQ)'],
+  ['E', 'Use terminal (HQ) · pick up loot'],
+  ['I / TAB', 'Drone cargo / inventory'],
   ['2 / B', 'Build Sentinel'],
   ['Q', 'Tactical slow-time'],
   ['HOLD X', 'Recycle turret'],
@@ -209,7 +213,7 @@ function MainMenu({ flow }: { flow: Flow }) {
                 <li>
                   <i className="o" />
                   <span>
-                    Kills earn <b className="o">salvage</b>. It is only <b>secured</b> at checkpoints every 5 waves.
+                    Machines drop <b className="o">equipment</b> and salvage. Pick loot up with <kbd>E</kbd>; it is only <b>secured</b> at checkpoints every 5 waves.
                   </span>
                 </li>
                 <li>
@@ -239,7 +243,7 @@ function MainMenu({ flow }: { flow: Flow }) {
           THREAT TIER {tier.roman} · {tier.name}
         </div>
       </div>
-      <div className="menu-foot">BUILD 0.3 · M1 · BABYLON.JS · HAVOK</div>
+      <div className="menu-foot">BUILD 0.4 · M2 · BABYLON.JS · HAVOK</div>
     </div>
   );
 }
@@ -263,7 +267,7 @@ function PauseMenu({ flow }: { flow: Flow }) {
         {inArena &&
           (confirm ? (
             <div className="confirm">
-              <div className="confirm-text">Abandon the run? Unsecured salvage is lost. Secured salvage and your gear are kept.</div>
+              <div className="confirm-text">Abandon the run? Unsecured salvage and items are lost. Secured loot and the gear you deployed with are kept.</div>
               <div className="row2">
                 <button className="danger" onClick={() => void flow.abandonRun()}>
                   ABANDON
@@ -299,7 +303,7 @@ function CheckpointPanel({ flow, game }: { flow: Flow; game: Game }) {
       <div className="modal wide panel-frame">
         <div className="cp-kicker">CHECKPOINT · THREAT TIER {tier.roman}</div>
         <div className="cp-title">WAVE {wave} SECURED</div>
-        <div className="cp-sub">All collected salvage has been banked to headquarters.</div>
+        <div className="cp-sub">{game.lastBankSaved ? 'All collected salvage and equipment has been banked to headquarters.' : 'Warning: the save could not be written. Rewards are held in memory and will be written with the next successful save.'}</div>
         <div className="stat-cards cyan">
           {(
             [
@@ -316,6 +320,18 @@ function CheckpointPanel({ flow, game }: { flow: Flow; game: Game }) {
             </div>
           ))}
         </div>
+        {game.lastCache.length > 0 && (
+          <>
+            <div className="cp-label">CHECKPOINT CACHE · SECURED</div>
+            <BriefList items={game.lastCache} tone="secured" />
+          </>
+        )}
+        {game.cfg.run.secured.items.length > game.lastCache.length && (
+          <>
+            <div className="cp-label">EQUIPMENT SECURED THIS RUN · {game.cfg.run.secured.items.length}</div>
+            <BriefList items={game.cfg.run.secured.items.filter((i) => !game.lastCache.includes(i)).slice(-8)} tone="secured" />
+          </>
+        )}
         <div className="cp-progress">
           <span>NEXT CHECKPOINT</span>
           <div className="cp-track">
@@ -359,7 +375,7 @@ export function RunSummary({ result, extra }: { result: RunResult; extra?: { tur
     ['SALVAGE SECURED', String(result.salvageSecured), 'good'],
     ['UNSECURED LOST', String(result.salvageLost), result.salvageLost > 0 ? 'bad' : ''],
   ];
-  if (result.itemsSecured || result.itemsLost) cards.push(['ITEMS SECURED / LOST', `${result.itemsSecured} / ${result.itemsLost}`]);
+  cards.push(['ITEMS SECURED / LOST', `${result.itemsSecured} / ${result.itemsLost}`, result.itemsLost > 0 ? 'bad' : result.itemsSecured > 0 ? 'good' : '']);
   if (extra) cards.push(['TURRETS DEPLOYED', String(extra.turretsBuilt)]);
   return (
     <div className="summary">
@@ -372,6 +388,18 @@ export function RunSummary({ result, extra }: { result: RunResult; extra?: { tur
           </div>
         ))}
       </div>
+      {!!result.securedItems?.length && (
+        <>
+          <div className="cp-label">SECURED EQUIPMENT</div>
+          <BriefList items={result.securedItems} tone="secured" />
+        </>
+      )}
+      {!!result.lostItems?.length && (
+        <>
+          <div className="cp-label lost">LOST · NOT SECURED</div>
+          <BriefList items={result.lostItems} tone="lost" />
+        </>
+      )}
     </div>
   );
 }
@@ -392,7 +420,7 @@ function DefeatScreen({ flow }: { flow: Flow }) {
           REACTOR LOST
         </div>
         <div className="defeat-sub">
-          Containment failed. {result.salvageLost > 0 ? `${result.salvageLost} unsecured salvage was lost.` : 'No unsecured salvage was lost.'} Secured salvage and equipped gear are safe.
+          Containment failed. {result.salvageLost > 0 || result.itemsLost > 0 ? `${result.salvageLost} unsecured salvage and ${result.itemsLost} unsecured item${result.itemsLost === 1 ? '' : 's'} were lost.` : 'Nothing unsecured was lost.'} Secured loot and the gear you deployed with are safe.
         </div>
         <RunSummary result={result} extra={stats} />
         <div className="row2">

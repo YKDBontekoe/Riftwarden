@@ -1,6 +1,6 @@
 # Riftwarden: project notes for future sessions
 
-Browser FPS + tower-defense roguelite. Current milestone: **M1 complete** (see "Milestones"). Read this before changing code.
+Browser FPS + tower-defense roguelite. Current milestone: **M2 complete** (see "Milestones"). Read this before changing code.
 
 ## Stack
 
@@ -25,7 +25,17 @@ src/home/interaction.ts    pickInteractable: view cone + range + occlusion callb
 src/home/placeables.ts     persistent customisable HQ objects + defaults               [pure]
 src/progression/save.ts    versioned/checksummed SaveData, sanitize, migrations, game-rule mutations [pure]
 src/progression/run.ts     RunLedger: unsecured/secured/lost rewards, idempotent finalize [pure]
-src/progression/items.ts   slot defs, item defs (point at real WeaponDefs), item instances [pure]
+src/progression/items.ts   equipment slots (7, structured) + slot/category compatibility [pure]
+src/loot/types.ts          Category, ItemInstance (persisted, fully rolled), RolledStat/Affix [pure]
+src/loot/rarity.ts         6 rarities: weights, affix counts, quality floor, tier bias, sockets, colours; rollRarity [pure]
+src/loot/affixes.ts        affix pool: one real stat each, per-category weights, groups, tier multipliers [pure]
+src/loot/bases.ts          base item definitions (weapon family variants, armor, shields, reactors...) [pure]
+src/loot/generate.ts       seeded generator, level scaling, naming, validation, starter weapon [pure]
+src/loot/drops.ts          drop sources (walker/rusher/bulwark/wave/checkpoint/boss), item level, luck [pure]
+src/loot/equipment.ts      items -> StatModifiers / WeaponDef, item comparison, stat preview [pure]
+src/loot/runInventory.ts   run loadout + cargo + carried/secured/unsecured status, prep-only changes [pure]
+src/loot/economy.ts        scrap value, storage expansion cost [pure]
+src/loot/LootField.ts      physical pickups (instanced holograms, beams, rings), lifetime + saturation rules
 src/progression/tiers.ts   threat tiers + checkpoint interval                          [pure]
 src/progression/Profile.ts owns the SaveData; mutate() persists + publishes a snapshot store
 src/visuals/envCapture.ts  one-shot reflection-probe IBL capture (shared by arena and HQ)
@@ -57,12 +67,30 @@ src/waves/WaveManager.ts   prep/combat/cleared lifecycle, spawn cap   [pure, hoo
 src/fx/Effects.ts          pooled tracers, debris, enemy projectiles, particle bursts, flash light
 src/audio/Sfx.ts           procedural WebAudio bank
 src/ui/                    React App (menus, pause, checkpoint, defeat, summary, transit), Hud (arena), HomeHud,
-                           Terminals (deploy/loadout/storage/workshop/command), store + uiEvents, CSS
+                           Terminals (deploy/loadout/storage/workshop/command), items.tsx (shared inventory view,
+                           item detail, comparison), LootHud (prompt, feed, world labels, arena cargo), store + uiEvents
 tests/                     Vitest suites for the [pure] modules
-scripts/e2e-m1.cjs         browser acceptance suite (70 checks: scenarios A-G, tiers, leaks, persistence)
+scripts/e2e-m1.cjs         M1 browser acceptance suite (70 checks: scenarios A-G, tiers, leaks, persistence)
+scripts/e2e-m2.cjs         M2 browser acceptance suite (loot scenarios A-I, migration, leaks)
 ```
 
 ## Key design decisions
+
+### M2: loot, equipment and inventory
+
+- **Definitions vs instances.** `bases.ts` + `affixes.ts` + `rarity.ts` are data; `generateItem(spec)` turns a (seed, base/category, level, rarity) into an `ItemInstance` that stores *every* rolled number (implicit stats, affixes with tier/roll, weapon roll, sockets, seed, generator version). Loading never rerolls; formula changes only affect new drops. Same seed + spec + `GENERATOR_VERSION` reproduces an item.
+- **Every stat is real.** Affixes and implicits only target `CombatStats` keys that a system reads (weapon damage/rate/crit/heat/cooling, hull, armor, resist, shield cap/regen/delay, move, dash recharge, turret dmg/rate/range, Sentinel cost, tactical recharge). `STAT_DEFS` holds base, clamps, labels. Stacking: `(base + Σadd) × (1 + Σpct) × Π(1+mul)`, then clamp.
+- **Single pipeline.** `equipment.ts` turns the equipped items into modifiers and the weapon item into a `WeaponDef`; `Game.refreshEquipment()` rebuilds stats from scratch on every equipment change (never per frame), so swapping/unequipping cannot leave bonuses behind. Player gets hull/shield/mitigation via `Player.applyStats`; armor is measured against `flatScale(wave + tier bonus)` so its value tracks enemy level.
+- **Scaling.** Flat values grow with `flatScale(L) = 1 + 0.08(L-1) + 0.0009(L-1)²`; percentages with `pctScale` (log2); chances/delays do not scale (stat clamps bound them). Affix tiers unlock with level (`maxTierFor`). Item level = wave + tier `lootLevelBonus` (0/8/18) + source bonus + (-1..+2). Rarity luck = source × tier `lootLuck` × (1 + 1.2%/wave), capped (`MAX_LUCK`). `MAX_ITEM_LEVEL` (1e6) is a numeric safety bound only.
+- **Rarity** sets affix count, roll floor (`quality`), tier bias, guaranteed top tier, base multiplier, future sockets, colours and beam height. Ranges overlap so rolls and tiers matter as much as rarity. Legendary/exotic have no signature effects yet (`signature: null` is reserved in the save shape).
+- **Drop tables** (`drops.ts`): walker 8.5%, rusher 5%, bulwark (elite) 55% + uncommon floor + exclusive Bulwark Plating (target farming), wave clear 40% (guaranteed on wave 1), checkpoint cache 2× rare+ (granted *with* banking), boss (data only). Category weights per source.
+- **Physical loot** (`LootField`): instanced hologram per category icon, rarity ground ring, halo (epic+), additive beam (uncommon+), landing pulse/flash/chime for rare+, banner for legendary+. Loot shaders are force-compiled at arena build and awaited by the transition. Lifetime (`lifetime.ts`): dropped in wave W → expires when W+2 is cleared; evaluated only on wave clears (pauses/inspection never age loot). Saturation: at 40 pickups, sub-rare drops become salvage at drop time (never deleted after appearing); rare+ always spawn (hard guard 120).
+- **Interaction**: `pickInteractable` (same as HQ) over landed pickups within 3.4 m + Havok occlusion; E collects into the run cargo. Prompt shows rarity/category/level and a quick level comparison; nearby pickups get projected name tags (imperative DOM pool).
+- **Ownership is decided by the ledger, not slots** (`RunInventory`): `carried` (equipped at deploy, never lost), `secured` (banked this run, in the save), `unsecured` (cargo, cap 20). The arena gets *clones* of the equipped items; arena equip/unequip/discard only touch the run loadout and are allowed only in the `prep` phase (`Game.equipAllowed`). At run end `Flow.endRun` records the run and then `applyLoadout(save, inventory.ownedLoadout())`: slots holding lost items are skipped, so the profile keeps its previous secured gear.
+- **Banking** reuses M1: kills/pickups → `RunLedger.collect` (idempotent by uid) → `bank(wave)` → `bankRewards` validates every item (`sanitizeItem`) then applies in one step; guarded by `bankedThroughWave`. The checkpoint UI says "secured" only if the write succeeded (`Profile.lastWriteOk`). Banking never drops items: storage may exceed capacity, which blocks deployment until the player scraps items or buys an expansion.
+- **HQ**: storage terminal = shared `InventoryView` (filter by category, sort rarity/level/newest/name, detail, raw comparison + "drone stats if equipped" via the real stat pipeline, equip/unequip, scrap for salvage, +10 bays for salvage = first salvage sink). Drone configuration = slots, calculated stats, 3 saved presets (references into owned items; missing items skipped). Workshop = module archive + sockets readout; no install buttons (M3).
+- **Modules** are `category: 'module'` items with `module {type, compatible, socketCost}` and at least one affix; `itemModifiers` returns nothing for them and the UI states they are inactive.
+- **Save v2**: `MIGRATIONS[1]` drops the unused `module` slot, adds `presets` and `storage.expansions`; `sanitizeItem` upgrades M1 items to the deterministic level-1 common roll (same 13 damage repeater), keeps unknown-base items (inert, unequippable), validates every number. Capacity = 50 + 10 × expansions.
 
 ### M1: sessions, scenes and persistence
 
@@ -93,8 +121,9 @@ scripts/e2e-m1.cjs         browser acceptance suite (70 checks: scenarios A-G, t
 
 ## Testing
 
-- `npm test`: unit tests for damage, stats, tactical/wallet, layout lane clearance, placement rules, wave generation and the wave lifecycle, settings, save format/migration/corruption, run ledger + banking rules, tiers, HQ layout and interaction targeting.
-- `node scripts/e2e-m1.cjs` (dev server on :5173, Playwright): M1 acceptance scenarios A-G, tiers, interrupted runs, 4 deploy/return cycles with resource/listener/heap leak checks. Last run: 70/70 passed.
+- `npm test` (85): loot generation/rarity/drops/equipment/lifetime (`loot.test.ts`), save v2 migration, banking and ownership scenarios D/E/F, presets/scrap/expansion (`save-m2.test.ts`), plus the M1 suites: damage, stats, tactical/wallet, layout lane clearance, placement rules, wave generation and the wave lifecycle, settings, save format/migration/corruption, run ledger + banking rules, tiers, HQ layout and interaction targeting.
+- `node scripts/e2e-m1.cjs` (dev server on :5173, Playwright): M1 acceptance scenarios A-G, tiers, interrupted runs, 4 deploy/return cycles with resource/listener/heap leak checks. Last run (after M2): ALL PASSED.
+- `node scripts/e2e-m2.cjs` (last run: 54/54 passed): M2 scenarios A-I in the browser (drops near kills, targeting + E pickup, live roll validity, real shot damage/cooling/shield/movement/Sentinel cost changes, combat lock, banking + storage UI + reload, unsecured loss, equip-before-bank exploit via the inventory UI, lifetime, M1-save migration + reloads, leak cycles with loot). Extra debug API: `spawnLoot`, `pickups`, `approach(id)`, `teleport`, `makeItem`, `grant`, `damageReactor`; `game.dropChanceMult`, `game.rollItems(source)`. Do not edit `src/` while an e2e runs against the dev server (Vite HMR reloads the page).
 - Browser automation: open `/?test`. This sets `input.forceCapture` (no pointer lock needed) and exposes `window.__rift` (`Flow.debugApi()`) with `state()` (location, screen, profile summary + current world snapshot), `look(yaw, pitch)`, `advance(seconds)` (fixed 60 Hz simulation of the current world, no rendering), `stopLoop()`, `render(frames)`, `killAll()` (through the real damage pipeline), `leakStats()`, and `flow`, `profile`, `game` (current arena or null), `home`. Drive the loop with `flow.enterHq()`, `flow.deploy(tier)`, `flow.returnHome()`, `flow.abandonRun()`, `flow.leaveArena()`. Note: a real Playwright mouse move feeds `mouseDx` while `forceCapture` is on; `advance(1/60)` before `look()` after DOM clicks. In SwiftShader the high preset takes ~1 s per frame: call `stopLoop()`, wait for `game.scene.environmentTexture`, then interleave `advance(1/60)` + `render(1)` and screenshot with a long timeout. Drive input with `game.input.simulateKey(code, down)` / `simulateMouse(button, down)`. Headless Chromium uses SwiftShader (very low FPS), so verify gameplay with `advance()` and take screenshots between calls.
 
 ## Measured (headless SwiftShader, so GPU numbers are not representative)
@@ -104,6 +133,8 @@ scripts/e2e-m1.cjs         browser acceptance suite (70 checks: scenarios A-G, t
 - 4 deploy -> wave 5 -> return cycles: 1 scene alive; HQ textures/meshes/materials/lights identical every cycle (35/392/56/8 on the low preset), arena identical (31/556/61/8), listener counts flat, JS heap flat (133 MB).
 
 - Simulation: ~0.8 ms/frame with 42 enemies + 6 turrets, ~1.5 ms while firing.
+- M2 loot: one drop roll + generation ~13-15 µs; 30 live pickups (far above normal, ~5-10) add ~0.5 ms/frame of simulation in SwiftShader (hologram animation + targeting). Each pickup is ~10 GPU instances of shared templates; no per-drop materials. Arena with loot: meshes/materials/textures flat over 3 deploy cycles (e2e I3).
+- Bundle: app chunk 292 kB (98 kB gzip) after M2.
 - Draw calls: ~87 baseline, ~130 with 40 enemies + 6 turrets (instancing works).
 - Production bundle: ~1.4 MB gzip JS (Babylon barrel import) + 0.66 MB gzip Havok WASM.
 
@@ -112,7 +143,9 @@ scripts/e2e-m1.cjs         browser acceptance suite (70 checks: scenarios A-G, t
 - Real-GPU frame rate not measured in this environment; use F3 on target hardware.
 - Babylon is imported from the barrel (`@babylonjs/core`), so the bundle is large. Switching to deep imports would cut startup size.
 - Turrets cannot be damaged and have no upgrades; core income outpaces spending in later waves (needs sinks later).
-- Salvage has no sink yet (workshop/merchants come later). No item drops exist, so storage stays empty in normal play (item path verified with fixtures).
+- Module installation, rerolling, crafting, selling and legendary signature effects are not implemented (M3/M4); modules are stored only.
+- Only one weapon family (plasma repeater: standard/heavy/light bases) exists; no elemental damage types are generated because none exist in combat yet.
+- Balance is first-pass: enemy HP grows quadratically with waves while item power grows roughly linearly + affixes, so very deep endless runs still get harder. Drop rates/weights are in `drops.ts`/`rarity.ts`.
 - Transitions wait for `whenReadyAsync` (cap 8 s); real-GPU transition time is unmeasured. The arena scene sometimes reports not-ready again after the first resolve (render targets); harmless.
 - Closing a terminal with Esc cannot re-acquire pointer lock (browser rule): the pause overlay asks for a click. E closes and re-locks.
 - Graphics quality applies immediately in the HQ (rebuild), on the next scene in the arena.
@@ -121,11 +154,12 @@ scripts/e2e-m1.cjs         browser acceptance suite (70 checks: scenarios A-G, t
 - No per-enemy hit flash yet (instanced PBR parts would need an instanced colour buffer).
 - Enemies do not attack turrets; walkers only target the reactor and shoot the player.
 - Gate frame pillars near the openings are visual only (no collider).
-- No loot drops, run upgrades, bosses, music, or multiplayer yet (by design).
+- No run upgrades, bosses, music, or multiplayer yet (by design).
 
 ## Milestones
 
 - **M0 (done):** arena, movement, plasma repeater, Sentinel turret + placement, tactical mode, walker + rush drone (+ Bulwark elite), 3 hand waves + endless generator, HUD/menus, restart.
 - **M1 (done):** explorable HQ with interactive stations, deployment with threat tiers I-III, 5-wave checkpoints with automatic banking and continue/return choice, defeat/abandon handling, versioned persistent save (records, salvage, loadout, storage, placeables), repeated scene transitions without leaks.
-- **M2 next:** loot: equipment drops (physical pickups, collected -> unsecured -> banked into storage via the existing ledger), item generation/rarity, more weapon archetypes to make the loadout/storage UI meaningful, a first salvage sink.
+- **M2 (done):** procedural loot (6 rarities, 20 affixes, 19 bases over 7 categories, seeded generator, level scaling), drop tables per source incl. elite/target-farm and checkpoint cache, physical pickups with lifetime rules, run cargo + prep-only equipping, functional armor/shield/reactor/processor/accessory stats, comparison UI, banking/loss/ownership rules, HQ storage (scrap, expansion sink), presets, module drops (stored), save v2 migration.
+- **M3 next:** procedural weapon families/components, module installation into sockets, run upgrades.
 - Later: combat depth (second tower, turret upgrades, enemy variety, hit flash, audio pass, deep-import bundle split), M3 run upgrades, M4 modular towers, M5 advanced endless (bosses/events), M6 content, M7 co-op evaluation.

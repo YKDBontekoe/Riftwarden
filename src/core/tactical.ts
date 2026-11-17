@@ -16,6 +16,8 @@ export class TacticalEnergy {
   private sinceActive = 99;
   /** Smoothed time scale applied to hostile simulation. */
   hostileScale = 1;
+  /** Recharge speed multiplier (equipment). */
+  rechargeMult = 1;
 
   reset(): void {
     this.energy = TacticalEnergy.MAX;
@@ -53,7 +55,7 @@ export class TacticalEnergy {
     } else {
       this.sinceActive += realDt;
       if (this.sinceActive >= TacticalEnergy.RECHARGE_DELAY) {
-        this.energy = Math.min(TacticalEnergy.MAX, this.energy + TacticalEnergy.RECHARGE * realDt);
+        this.energy = Math.min(TacticalEnergy.MAX, this.energy + TacticalEnergy.RECHARGE * this.rechargeMult * realDt);
       }
     }
     const target = this.active ? TacticalEnergy.HOSTILE_SCALE : 1;

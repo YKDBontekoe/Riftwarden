@@ -38,6 +38,8 @@ export class Turret {
   barrel = 0;
   kills = 0;
   damageDealt = 0;
+  /** Cores actually spent (construction efficiency can make it cheaper); refunds use this. */
+  paid: number;
   yaw = 0;
   pitch = 0;
   scanT = Math.random() * 10;
@@ -45,6 +47,7 @@ export class Turret {
   hitbox: Mesh;
 
   constructor(readonly def: TowerDef, readonly rig: TurretRig, readonly pos: Vector3, scene: Scene) {
+    this.paid = def.cost;
     rig.root.position.copyFrom(pos);
     this.head.set(pos.x, pos.y + 1.45, pos.z);
     this.hitbox = MeshBuilder.CreateCylinder('turretHit', { diameter: def.radius * 2, height: 2.2 }, scene);

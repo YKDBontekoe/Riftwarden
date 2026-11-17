@@ -440,7 +440,7 @@ export class Effects {
     h.scaling.setAll(0.16 + Math.random() * 0.1);
   }
 
-  private ring(pos: Vector3, size: number, life: number, color: Color3, ground: boolean): void {
+  ring(pos: Vector3, size: number, life: number, color: Color3, ground: boolean): void {
     const r = this.rings[this.ringNext];
     this.ringNext = (this.ringNext + 1) % this.rings.length;
     r.mesh.setEnabled(true);

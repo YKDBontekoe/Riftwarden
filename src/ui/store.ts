@@ -6,7 +6,7 @@ import type { RunResult } from '../progression/run';
  * report after returning). Arena: playing, checkpoint (bank/continue/return choice),
  * defeat. Shared: loading, transit (scene swap), paused.
  */
-export type Screen = 'loading' | 'menu' | 'home' | 'terminal' | 'summary' | 'transit' | 'playing' | 'paused' | 'checkpoint' | 'defeat';
+export type Screen = 'loading' | 'menu' | 'home' | 'terminal' | 'summary' | 'transit' | 'playing' | 'paused' | 'checkpoint' | 'defeat' | 'inventory';
 export type Location = 'home' | 'arena';
 export type TerminalId = 'deploy' | 'loadout' | 'storage' | 'workshop' | 'command';
 
@@ -37,6 +37,22 @@ export interface InspectInfo {
   recycle: number; // 0..1 hold progress
 }
 
+/** The pickup currently targeted in the arena (interaction prompt). */
+export interface LootTargetInfo {
+  uid: string;
+  name: string;
+  rarity: string;
+  level: number;
+  category: string;
+  expiresAfterWave: number;
+  expiring: boolean;
+  cargoFull: boolean;
+  /** Item currently in the slot this would go to (quick comparison). */
+  equippedName: string | null;
+  equippedLevel: number;
+  equippedRarity: string | null;
+}
+
 export interface HudState {
   screen: Screen;
   location: Location;
@@ -56,7 +72,15 @@ export interface HudState {
   reactorUnderAttack: boolean;
   playerHp: number;
   playerMax: number;
+  playerShield: number;
+  playerShieldMax: number;
   respawnIn: number; // 0 when alive
+  lootTarget: LootTargetInfo | null;
+  cargo: number;
+  cargoMax: number;
+  /** Equipment changes allowed right now (arena: preparation phase). */
+  equipAllowed: boolean;
+  inventoryVersion: number;
   cores: number;
   weaponName: string;
   heat: number; // 0..1
@@ -96,7 +120,14 @@ export const initialHud: HudState = {
   reactorUnderAttack: false,
   playerHp: 100,
   playerMax: 100,
+  playerShield: 0,
+  playerShieldMax: 0,
   respawnIn: 0,
+  lootTarget: null,
+  cargo: 0,
+  cargoMax: 0,
+  equipAllowed: false,
+  inventoryVersion: 0,
   cores: 0,
   weaponName: '',
   heat: 0,
@@ -180,7 +211,18 @@ type EventMap = {
   coresGained: number;
   /** Salvage collected (unsecured) during a run. */
   salvageGained: number;
+  /** Loot feed: drops landing, pickups, full cargo, expiry. */
+  loot: LootEvent;
 };
+
+export interface LootEvent {
+  kind: 'drop' | 'pickup' | 'full' | 'expired';
+  name: string;
+  rarity: string;
+  level: number;
+  category: string;
+  count: number;
+}
 
 export class Emitter {
   private map = new Map<keyof EventMap, Set<(v: never) => void>>();

@@ -31,11 +31,24 @@ export interface RunResult {
   salvageLost: number;
   itemsSecured: number;
   itemsLost: number;
+  /** Names of lost / secured items for the summary screens (capped). */
+  lostItems?: ItemBrief[];
+  securedItems?: ItemBrief[];
   checkpoints: number;
   endedAt: number;
   /** Filled by the profile when the run is recorded. */
   newRecord?: boolean;
 }
+
+export interface ItemBrief {
+  uid: string;
+  name: string;
+  rarity: string;
+  level: number;
+  category: string;
+}
+
+export const brief = (i: ItemInstance): ItemBrief => ({ uid: i.uid, name: i.name, rarity: i.rarity, level: i.level, category: i.category });
 
 export const emptyRewards = (): Rewards => ({ salvage: 0, items: [] });
 
@@ -68,13 +81,40 @@ export class RunLedger {
     if (!this.ended) this.kills++;
   }
 
-  /** Collect a reward into the unsecured pool. Ignored after the run ended. */
+  /** Collect a reward into the unsecured pool. Ignored after the run ended; items are idempotent by uid. */
   collect(r: Partial<Rewards>): boolean {
     if (this.ended) return false;
     const s = Math.max(0, Math.floor(r.salvage ?? 0));
     this.unsecured.salvage += s;
-    if (r.items?.length) this.unsecured.items.push(...r.items);
-    return s > 0 || !!r.items?.length;
+    let added = 0;
+    for (const it of r.items ?? []) {
+      if (this.has(it.uid)) continue;
+      this.unsecured.items.push(it);
+      this.itemsCollected++;
+      added++;
+    }
+    return s > 0 || added > 0;
+  }
+
+  /** Items collected so far (for statistics). */
+  itemsCollected = 0;
+  itemsDiscarded = 0;
+
+  has(uid: string): boolean {
+    return this.unsecured.items.some((i) => i.uid === uid) || this.secured.items.some((i) => i.uid === uid);
+  }
+
+  isSecured(uid: string): boolean {
+    return this.secured.items.some((i) => i.uid === uid);
+  }
+
+  /** Throw away an unsecured item (never a secured one). */
+  discard(uid: string): ItemInstance | null {
+    if (this.ended) return null;
+    const idx = this.unsecured.items.findIndex((i) => i.uid === uid);
+    if (idx < 0) return null;
+    this.itemsDiscarded++;
+    return this.unsecured.items.splice(idx, 1)[0];
   }
 
   waveReached(n: number): void {
@@ -121,6 +161,8 @@ export class RunLedger {
       salvageLost: this.unsecured.salvage,
       itemsSecured: this.secured.items.length,
       itemsLost: this.unsecured.items.length,
+      lostItems: this.unsecured.items.slice(0, 12).map(brief),
+      securedItems: this.secured.items.slice(0, 12).map(brief),
       checkpoints: this.checkpoints,
       endedAt: now,
     };

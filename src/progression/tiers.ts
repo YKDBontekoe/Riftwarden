@@ -1,7 +1,8 @@
 /**
  * Threat tiers: configurable difficulty multipliers layered on top of the wave
  * generator. Higher tiers are unlocked by securing a checkpoint on the tier below.
- * Loot-table effects belong to M2; `salvageMult` only scales the M1 salvage reward.
+ * Loot: `lootLevelBonus` raises every item level (a tier-II wave beats the same tier-I
+ * wave) and `lootLuck` improves rarity odds; `salvageMult` scales salvage rewards.
  */
 export interface WaveScaling {
   /** Enemy health and shield multiplier. */
@@ -21,6 +22,10 @@ export interface ThreatTier extends WaveScaling {
   blurb: string;
   /** Salvage reward multiplier. */
   salvageMult: number;
+  /** Added to every dropped item level. */
+  lootLevelBonus: number;
+  /** Rarity luck multiplier for every drop. */
+  lootLuck: number;
 }
 
 export const THREAT_TIERS: readonly ThreatTier[] = [
@@ -34,6 +39,8 @@ export const THREAT_TIERS: readonly ThreatTier[] = [
     speedMult: 1,
     countMult: 1,
     salvageMult: 1,
+    lootLevelBonus: 0,
+    lootLuck: 1,
   },
   {
     id: 2,
@@ -45,6 +52,8 @@ export const THREAT_TIERS: readonly ThreatTier[] = [
     speedMult: 1.06,
     countMult: 1.2,
     salvageMult: 1.6,
+    lootLevelBonus: 8,
+    lootLuck: 1.35,
   },
   {
     id: 3,
@@ -56,6 +65,8 @@ export const THREAT_TIERS: readonly ThreatTier[] = [
     speedMult: 1.12,
     countMult: 1.4,
     salvageMult: 2.4,
+    lootLevelBonus: 18,
+    lootLuck: 1.8,
   },
 ];
 

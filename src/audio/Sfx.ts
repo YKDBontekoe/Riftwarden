@@ -19,7 +19,11 @@ export type SfxName =
   | 'waveClear'
   | 'tacticalOn'
   | 'tacticalOff'
-  | 'ui';
+  | 'ui'
+  | 'pickup'
+  | 'lootDrop'
+  | 'equip'
+  | 'bank';
 
 interface PlayOpts {
   volume?: number;
@@ -288,6 +292,29 @@ export class Sfx {
         break;
       case 'ui':
         this.osc('sine', 1200, 1400, 0.05, 0.08 * v, out);
+        break;
+      case 'pickup':
+        // Rising two-note chirp; pitch carries rarity.
+        this.osc('triangle', 660 * p, 990 * p, 0.09, 0.13 * v, out);
+        this.osc('sine', 990 * p, 1480 * p, 0.14, 0.09 * v, out, 0.07);
+        this.noiseBurst(0.12, 0.04 * v, 6000, 9000, out, 'highpass');
+        break;
+      case 'lootDrop':
+        // Shimmering chime for rare+ drops landing.
+        this.osc('sine', 1320 * p, 1320 * p, 0.5, 0.07 * v, out);
+        this.osc('sine', 1760 * p, 1760 * p, 0.6, 0.05 * v, out, 0.08);
+        this.osc('triangle', 2640 * p, 2640 * p, 0.4, 0.03 * v, out, 0.16);
+        break;
+      case 'equip':
+        this.noiseBurst(0.06, 0.12 * v, 2500, 800, out, 'bandpass', 2);
+        this.osc('square', 220, 330, 0.08, 0.07 * v, out, 0.03);
+        this.osc('sine', 880, 1320, 0.1, 0.06 * v, out, 0.06);
+        break;
+      case 'bank':
+        this.osc('triangle', 392, 392, 0.2, 0.1 * v, out);
+        this.osc('triangle', 523, 523, 0.2, 0.1 * v, out, 0.1);
+        this.osc('triangle', 784, 784, 0.5, 0.11 * v, out, 0.2);
+        this.osc('sine', 1568, 1568, 0.5, 0.04 * v, out, 0.3);
         break;
     }
   }

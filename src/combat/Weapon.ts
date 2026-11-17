@@ -53,7 +53,7 @@ export class Weapon {
   private readonly tmpDir = new Vector3();
   private readonly tmpPos = new Vector3();
 
-  constructor(scene: Scene, P: Palette, readonly def: WeaponDef, private player: Player) {
+  constructor(scene: Scene, P: Palette, public def: WeaponDef, private player: Player) {
     this.spread = def.spreadMin;
     const cam = player.camera;
     this.vm = new TransformNode('viewmodel', scene);
@@ -123,6 +123,12 @@ export class Weapon {
     return out.copyFrom(this.muzzle.getAbsolutePosition());
   }
 
+  /** Swap the weapon parameters (equipment change during preparation). */
+  setDef(def: WeaponDef): void {
+    this.def = def;
+    this.spread = Math.max(def.spreadMin, Math.min(def.spreadMax, this.spread));
+  }
+
   reset(): void {
     this.heat = 0;
     this.overheated = false;
@@ -188,7 +194,8 @@ export class Weapon {
     if (!fired) {
       this.spread = Math.max(d.spreadMin, this.spread - d.spreadRecover * dt);
       if (this.sinceShot > d.coolDelay || this.overheated) {
-        const rate = this.overheated ? d.coolRate * 0.75 : d.coolRate;
+        const cool = d.coolRate * stats.coolRateMult;
+        const rate = this.overheated ? cool * 0.75 : cool;
         this.heat = Math.max(0, this.heat - rate * dt);
         if (this.overheated && this.heat <= d.overheatRecover) this.overheated = false;
       }

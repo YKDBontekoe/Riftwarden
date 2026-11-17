@@ -18,7 +18,8 @@ import { sfx } from '../audio/Sfx';
 import type { Input } from '../core/Input';
 import type { Settings } from '../core/settings';
 import { Player } from '../player/Player';
-import { itemDef } from '../progression/items';
+import { SLOT_IDS } from '../progression/items';
+import { rarity } from '../loot/rarity';
 import type { Profile } from '../progression/Profile';
 import { equippedItem, type SaveData } from '../progression/save';
 import { getTier, THREAT_TIERS } from '../progression/tiers';
@@ -392,24 +393,26 @@ export class HomeBase {
           screenLine(s, 250, 'LAUNCH RING', 'READY');
           break;
         case 'loadout': {
-          const w = itemDef(equippedItem(save, 'weapon'));
+          const w = equippedItem(save, 'weapon');
+          const gear = SLOT_IDS.filter((id) => save.loadout[id]).length;
           drawScreenFrame(s, 'DRONE CONFIG');
           screenLine(s, 100, 'CHASSIS', 'WARDEN MK-I');
-          screenLine(s, 150, 'PRIMARY', (w?.name ?? 'NONE').toUpperCase());
-          screenLine(s, 200, 'MODULE SLOTS', '6 EMPTY', '#cdd9df');
+          screenLine(s, 150, 'PRIMARY', (w?.name ?? 'NONE').toUpperCase().slice(0, 22), w ? rarity(w.rarity).color : undefined);
+          screenLine(s, 200, 'EQUIPPED', `${gear} / ${SLOT_IDS.length} SLOTS`, '#cdd9df');
           screenLine(s, 250, 'STATUS', 'NOMINAL');
           break;
         }
         case 'storage':
           drawScreenFrame(s, 'STORAGE');
-          screenLine(s, 100, 'BAYS IN USE', `${save.storage.uids.length} / ${save.storage.capacity}`);
+          screenLine(s, 100, 'BAYS IN USE', `${save.storage.uids.length} / ${save.storage.capacity}`, save.storage.uids.length > save.storage.capacity ? '#ff6a55' : undefined);
           screenLine(s, 150, 'SALVAGE', String(save.resources.salvage), '#ffb547');
-          screenLine(s, 200, 'LOCK', 'SECURED');
+          screenLine(s, 200, 'ITEMS OWNED', String(save.items.length));
+          screenLine(s, 250, 'LOCK', 'SECURED');
           break;
         case 'workshop':
           drawScreenFrame(s, 'FABRICATION', '#ffb547');
-          screenLine(s, 100, 'FABRICATOR', 'STANDBY', '#ffb547');
-          screenLine(s, 150, 'SCHEMATICS', 'NONE ON FILE', '#cdd9df');
+          screenLine(s, 100, 'ENGINEERING', 'OFFLINE', '#ffb547');
+          screenLine(s, 150, 'MODULES', String(save.items.filter((i) => i.category === 'module').length), '#cdd9df');
           screenLine(s, 200, 'SALVAGE', String(save.resources.salvage), '#ffb547');
           break;
       }

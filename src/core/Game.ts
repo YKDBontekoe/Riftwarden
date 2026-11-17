@@ -17,16 +17,26 @@ import {
   Vector3,
 } from '@babylonjs/core';
 import { sfx } from '../audio/Sfx';
-import { rollDamage } from '../combat/damage';
+import { mulberry32, rollDamage } from '../combat/damage';
 import { BASE_STATS, type CombatStats, computeStats, type StatModifier } from '../combat/stats';
 import { type ShotOutcome, type ShotRequest, Weapon } from '../combat/Weapon';
-import { ECONOMY, SENTINEL, type WeaponDef } from '../data/defs';
+import { ECONOMY, SENTINEL, towerCost } from '../data/defs';
+import { pickInteractable } from '../home/interaction';
+import { DROP_SOURCES, type DropSourceId, rollDrops } from '../loot/drops';
+import { equipmentModifiers, weaponDefFor } from '../loot/equipment';
+import { flatScale, generateItem, hashSeed } from '../loot/generate';
+import { convertsToSalvage, expiresAfterWave, LootField, type Pickup, PICKUP_RANGE } from '../loot/LootField';
+import { rarity } from '../loot/rarity';
+import { scrapValue } from '../loot/economy';
+import { RunInventory } from '../loot/runInventory';
+import type { ItemInstance } from '../loot/types';
+import type { SlotId } from '../progression/items';
 import { Construction } from '../defense/Construction';
 import { type Turret, type TurretContext, type TurretHitboxMeta, TurretManager } from '../defense/Turrets';
 import { type Enemy, type EnemyContext, type EnemyHitboxMeta, EnemyManager } from '../enemies/EnemyManager';
 import { Effects } from '../fx/Effects';
 import { Player } from '../player/Player';
-import { type HitKind, hudStore, type Screen, uiEvents } from '../ui/store';
+import { type HitKind, hudStore, type LootTargetInfo, type Screen, uiEvents } from '../ui/store';
 import type { Rewards, RunLedger } from '../progression/run';
 import { isCheckpointWave, nextCheckpoint, type ThreatTier } from '../progression/tiers';
 import { ArenaBuilder } from '../visuals/arena';
@@ -49,8 +59,8 @@ const TMP2 = new Vector3();
 
 /** Callbacks into the session flow (persistence and scene transitions live there). */
 export interface ArenaHooks {
-  /** A checkpoint wave was cleared and these rewards were just secured by the run. */
-  bank(wave: number, rewards: Rewards): void;
+  /** A checkpoint wave was cleared and these rewards were just secured by the run. Returns true once persisted. */
+  bank(wave: number, rewards: Rewards): boolean;
   /** Checkpoint preparation started: offer continue / return home. */
   checkpoint(): void;
   /** Reactor destroyed. */
@@ -59,7 +69,8 @@ export interface ArenaHooks {
 
 export interface ArenaConfig {
   tier: ThreatTier;
-  weapon: WeaponDef;
+  /** Equipment the drone deploys with (owned by the profile: can never be lost). */
+  loadout: Partial<Record<SlotId, ItemInstance | null>>;
   run: RunLedger;
   hooks: ArenaHooks;
 }
@@ -93,9 +104,28 @@ export class Game {
   private lastFlash = 0;
   private animated: { node: { rotation: Vector3 }; spin: Vector3 }[] = [];
 
-  /** Modifier list; future equipment and run upgrades push into this. */
+  /** Extra modifiers (future run upgrades); equipment modifiers are derived from the run loadout. */
   modifiers: StatModifier[] = [];
   stats: CombatStats = { ...BASE_STATS };
+
+  /** Run inventory + loadout (ownership rules live in RunInventory/RunLedger). */
+  readonly inventory: RunInventory;
+  readonly loot: LootField;
+  private lootRand: () => number;
+  private lootCounter = 0;
+  lootTarget: Pickup | null = null;
+  /** Bumped on every inventory/loadout change so UI can refresh without polling. */
+  inventoryVersion = 0;
+  /** Items granted by the most recent checkpoint cache (checkpoint panel). */
+  lastCache: ItemInstance[] = [];
+  /** Whether the most recent checkpoint was written to storage successfully. */
+  lastBankSaved = true;
+  /** Debug/automation: multiplies every source's drop chance (1 = normal). */
+  dropChanceMult = 1;
+  dropsSpawned = 0;
+  dropsConverted = 0;
+  dropsExpired = 0;
+  private screenBeforeInventory: Screen = 'playing';
 
   screen: Screen = 'loading';
   private runTime = 0;
@@ -166,7 +196,9 @@ export class Game {
 
     this.player = new Player(scene, ARENA.playerSpawn);
     scene.activeCamera = this.player.camera;
-    this.weapon = new Weapon(scene, this.pal, cfg.weapon, this.player);
+    const weaponDef = weaponDefFor(cfg.loadout.weapon);
+    if (!weaponDef) throw new Error('deployment requires an equipped weapon');
+    this.weapon = new Weapon(scene, this.pal, weaponDef, this.player);
     scene.setRenderingAutoClearDepthStencil(1, true, true, true);
 
     this.fx = new Effects(scene, this.kit, this.pal, ARENA);
@@ -204,6 +236,10 @@ export class Game {
     this.enemies = new EnemyManager(scene, this.kit, this.pal);
     this.turrets = new TurretManager(scene, this.kit, this.pal);
     this.construction = new Construction(scene, this.kit, this.pal, ARENA);
+    this.loot = new LootField(scene, this.kit, this.pal);
+    this.loot.onLand = (p) => this.onLootLanded(p);
+    this.inventory = new RunInventory(cfg.loadout, cfg.run);
+    this.lootRand = mulberry32(hashSeed(cfg.run.id));
 
     // Reflections/ambient: capture the finished static scene once into a prefiltered cube map.
     this.atmosphere.captureEnvironment([...arena.meshes, ...this.reactor.root.getChildMeshes()], this.pal.lit);
@@ -233,6 +269,8 @@ export class Game {
       aliveCount: () => this.enemies.count,
       onWaveStart: (w) => {
         this.checkpointOpen = false;
+        // Armor is measured against the incoming wave's level.
+        this.player.applyStats(this.stats, this.attackerScale);
         sfx.play('waveStart');
         uiEvents.emit('banner', { title: `WAVE ${w.number}`, sub: `${w.spawns.length} hostiles inbound`, tone: 'orange' });
       },
@@ -245,10 +283,30 @@ export class Game {
         run.collect({ salvage });
         uiEvents.emit('salvageGained', salvage);
         run.waveCleared(w.number);
-        const banked = isCheckpointWave(w.number) ? run.bank(w.number) : null;
+        // Wave reward drop lands on the reactor apron.
+        this.dropLoot('wave', new Vector3(0, 3, -4.2), w.number);
+        // Lifetime rule: uncollected loot from wave N expires once wave N+2 is cleared.
+        const expired = this.loot.expire(w.number);
+        if (expired.length) {
+          this.dropsExpired += expired.length;
+          if (this.lootTarget && expired.includes(this.lootTarget)) this.lootTarget = null;
+          uiEvents.emit('loot', { kind: 'expired', count: expired.length, name: expired.length === 1 ? expired[0].item.name : `${expired.length} uncollected drops`, rarity: expired.reduce((m, p) => (rarity(p.item.rarity).index > rarity(m).index ? p.item.rarity : m), expired[0].item.rarity), level: 0, category: '' });
+        }
+        let banked = null;
+        if (isCheckpointWave(w.number)) {
+          // Milestone cache: granted with the checkpoint and banked together with everything collected.
+          this.lastCache = this.rollItems('checkpoint', w.number);
+          run.collect({ items: this.lastCache });
+          banked = run.bank(w.number);
+        }
         if (banked) {
-          cfg.hooks.bank(w.number, banked);
-          uiEvents.emit('banner', { title: 'CHECKPOINT SECURED', sub: `Wave ${w.number} cleared · ${banked.salvage} salvage banked to HQ`, tone: 'cyan' });
+          this.lastBankSaved = cfg.hooks.bank(w.number, banked);
+          this.inventoryVersion++;
+          const n = banked.items.length;
+          if (this.lastBankSaved) {
+            sfx.play('bank');
+            uiEvents.emit('banner', { title: 'CHECKPOINT SECURED', sub: `Wave ${w.number} cleared · ${banked.salvage} salvage${n ? ` · ${n} item${n === 1 ? '' : 's'}` : ''} banked to HQ`, tone: 'cyan' });
+          } else uiEvents.emit('banner', { title: 'CHECKPOINT · SAVE FAILED', sub: 'Rewards are held by the run but could not be written to storage yet', tone: 'red' });
         } else uiEvents.emit('banner', { title: `WAVE ${w.number} CLEARED`, sub: `+${w.clearReward} cores · +${salvage} salvage · reactor repaired`, tone: 'cyan' });
       },
       onPrepStart: (w) => {
@@ -273,7 +331,7 @@ export class Game {
       if (!locked && this.screen === 'playing') this.setScreen('paused');
     };
     this.applySettings(settings);
-    this.recomputeStats();
+    this.refreshEquipment();
   }
 
   // ---------------------------------------------------------------- lifecycle
@@ -294,10 +352,198 @@ export class Game {
     saveSettings(s);
   }
 
-  recomputeStats(): void {
-    const s = computeStats(this.modifiers);
+  /** Enemy level scale for armor (same growth as flat item stats at this wave/tier). */
+  get attackerScale(): number {
+    return flatScale(this.waves.number + this.cfg.tier.lootLevelBonus);
+  }
+
+  /**
+   * Recompute every derived stat from the run loadout. Called only when equipment
+   * changes (never per frame); replacing an item removes its old modifiers by
+   * construction because the list is rebuilt from scratch.
+   */
+  refreshEquipment(): void {
+    const s = computeStats([...equipmentModifiers(this.inventory.equippedItems()), ...this.modifiers]);
     Object.assign(this.stats, s);
-    this.player.maxHp = ECONOMY.playerMaxHp + s.maxHealthBonus;
+    const w = weaponDefFor(this.inventory.equipped('weapon'));
+    if (w && (w.damage !== this.weapon.def.damage || w.name !== this.weapon.def.name || w.fireRate !== this.weapon.def.fireRate)) this.weapon.setDef(w);
+    this.player.applyStats(this.stats, this.attackerScale);
+    this.tactical.rechargeMult = this.stats.tacticalRechargeMult;
+    this.inventoryVersion++;
+  }
+
+  /** Equipment changes are allowed only between waves (preparation phase). */
+  get equipAllowed(): boolean {
+    return this.waves.phase === 'prep' && !this.cfg.run.ended && this.screen !== 'defeat';
+  }
+
+  equip(uid: string, slot?: SlotId): boolean {
+    const r = this.inventory.equip(uid, this.equipAllowed, slot);
+    if (r !== 'ok') {
+      sfx.play('buildDeny');
+      return false;
+    }
+    this.refreshEquipment();
+    sfx.play('equip');
+    return true;
+  }
+
+  unequip(slot: SlotId): boolean {
+    const r = this.inventory.unequip(slot, this.equipAllowed);
+    if (r !== 'ok') {
+      sfx.play('buildDeny');
+      return false;
+    }
+    this.refreshEquipment();
+    sfx.play('ui');
+    return true;
+  }
+
+  /** Discard an unsecured item (preparation only). */
+  discard(uid: string): boolean {
+    if (!this.inventory.discard(uid, this.equipAllowed)) {
+      sfx.play('buildDeny');
+      return false;
+    }
+    this.inventoryVersion++;
+    sfx.play('recycle');
+    return true;
+  }
+
+  // ---------------------------------------------------------------- loot
+
+  private lootContext(wave: number) {
+    return { wave, tierLevelBonus: this.cfg.tier.lootLevelBonus, tierLuck: this.cfg.tier.lootLuck };
+  }
+
+  /** Roll a source's drops and generate the items (deterministic per run seed). */
+  rollItems(source: DropSourceId, wave = this.waves.number): ItemInstance[] {
+    const src = DROP_SOURCES[source];
+    const table = this.dropChanceMult === 1 ? src : { ...src, chance: Math.min(1, src.chance * this.dropChanceMult) };
+    const run = this.cfg.run;
+    return rollDrops(table, this.lootContext(wave), this.lootRand).map((d) =>
+      generateItem({ uid: `${run.id}.${++this.lootCounter}`, seed: d.seed, level: d.level, rarity: d.rarity, category: d.category, baseId: d.baseId, allowExclusive: d.baseId ? [d.baseId] : [], source: run.id }),
+    );
+  }
+
+  /** Roll drops for a source and place them physically around `at`. */
+  dropLoot(source: DropSourceId, at: Vector3, wave = this.waves.number): Pickup[] {
+    const out: Pickup[] = [];
+    for (const item of this.rollItems(source, wave)) {
+      const p = this.spawnPickup(item, at, wave);
+      if (p) out.push(p);
+    }
+    return out;
+  }
+
+  /** Place one generated item in the world (or convert it under the saturation rule). */
+  spawnPickup(item: ItemInstance, at: Vector3, wave = this.waves.number): Pickup | null {
+    if (convertsToSalvage(this.loot.count, item.rarity)) {
+      const v = scrapValue(item);
+      this.cfg.run.collect({ salvage: v });
+      uiEvents.emit('salvageGained', v);
+      this.dropsConverted++;
+      return null;
+    }
+    const ground = this.groundPoint(at);
+    const p = this.loot.spawn(item, at, ground, wave);
+    this.dropsSpawned++;
+    return p;
+  }
+
+  /** A walkable landing point near `at` (Havok ray down; never on top of tall geometry). */
+  private groundPoint(at: Vector3): Vector3 {
+    const physics = this.scene.getPhysicsEngine() as PhysicsEngineV2 | null;
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const a = Math.random() * Math.PI * 2;
+      const d = attempt === 5 ? 0 : 1 + Math.random() * 1.8;
+      const x = at.x + Math.cos(a) * d;
+      const z = at.z + Math.sin(a) * d;
+      if (!physics) return new Vector3(x, 0, z);
+      physics.raycastToRef(TMP.set(x, Math.max(at.y, 0) + 2.5, z), TMP2.set(x, -3, z), this.physResult, ENV_QUERY);
+      if (!this.physResult.hasHit) continue;
+      const y = this.physResult.hitPointWorld.y;
+      if (y > at.y + 1.2 || this.physResult.hitNormalWorld.y < 0.7) continue;
+      // Not inside a wall: the hologram's focus must be visible from slightly above.
+      return new Vector3(x, y, z);
+    }
+    return new Vector3(at.x, 0, at.z);
+  }
+
+  private onLootLanded(p: Pickup): void {
+    const r = rarity(p.item.rarity);
+    const c = LootField.color(p.item.rarity);
+    this.fx.ring(p.ground.add(new Vector3(0, 0.08, 0)), 1.2 + r.index * 0.5, 0.45 + r.index * 0.08, c.scale(0.8), true);
+    if (r.index >= 2) {
+      this.fx.flashLight(p.focus, 1.5 + r.index, 0.5 + r.index * 0.12, c.scale(0.4));
+      const a = this.panFor(p.ground);
+      sfx.play('lootDrop', { pitch: 0.8 + r.index * 0.12, volume: Math.max(0.5, a.volume), pan: a.pan });
+    }
+    uiEvents.emit('loot', { kind: 'drop', name: p.item.name, rarity: p.item.rarity, level: p.item.level, category: p.item.category, count: 1 });
+    if (r.index >= 4) uiEvents.emit('banner', { title: `${r.label.toUpperCase()} SIGNAL`, sub: p.item.name, tone: r.index >= 5 ? 'red' : 'orange' });
+  }
+
+  /** Pick up a pickup: into the run cargo (unsecured), or refuse when the hold is full. */
+  collectPickup(p: Pickup): boolean {
+    if (!this.loot.landed(p) || !this.player.alive) return false;
+    if (!this.inventory.collect(p.item)) {
+      sfx.play('buildDeny');
+      uiEvents.emit('loot', { kind: 'full', name: p.item.name, rarity: p.item.rarity, level: p.item.level, category: p.item.category, count: 1 });
+      return false;
+    }
+    const r = rarity(p.item.rarity);
+    const c = LootField.color(p.item.rarity);
+    this.fx.burst('build', p.focus, 14 + r.index * 8);
+    this.fx.ring(p.ground.add(new Vector3(0, 0.1, 0)), 2 + r.index * 0.6, 0.35, c, true);
+    if (r.index >= 3) this.fx.flashLight(p.focus, 2 + r.index, 0.35, c.scale(0.5));
+    sfx.play('pickup', { pitch: 1 + r.index * 0.1, volume: 0.8 + r.index * 0.05 });
+    this.loot.remove(p);
+    if (this.lootTarget === p) this.lootTarget = null;
+    this.inventoryVersion++;
+    uiEvents.emit('loot', { kind: 'pickup', name: p.item.name, rarity: p.item.rarity, level: p.item.level, category: p.item.category, count: 1 });
+    return true;
+  }
+
+  private updateLootTarget(controls: boolean): void {
+    this.lootTarget = null;
+    if (!this.player.alive || this.construction.active || this.loot.count === 0) return;
+    const eye = this.player.eye;
+    const dir = this.player.forward(TMP);
+    // Distance prefilter first: only pickups within reach go through the cone/occlusion test.
+    const r2 = (PICKUP_RANGE + 0.5) * (PICKUP_RANGE + 0.5);
+    const cands: { id: string; point: Vector3; range: number; p: Pickup }[] = [];
+    for (const p of this.loot.pickups) {
+      if (!this.loot.landed(p)) continue;
+      const dx = p.focus.x - eye.x;
+      const dz = p.focus.z - eye.z;
+      if (dx * dx + dz * dz <= r2) cands.push({ id: '', point: p.focus, range: PICKUP_RANGE, p });
+    }
+    if (!cands.length) return;
+    const hit = pickInteractable(cands, eye, dir, { maxAngle: 0.42, targetRadius: 0.6 }, (c) => !this.los(eye, c.point));
+    this.lootTarget = hit?.p ?? null;
+    if (controls && this.lootTarget && this.input.pressed('KeyE')) this.collectPickup(this.lootTarget);
+  }
+
+  /** Arena inventory (I / Tab). Inspection is always allowed; changes only in preparation. */
+  openInventory(): void {
+    if (this.screen !== 'playing') return;
+    this.screenBeforeInventory = this.screen;
+    this.setBuildMode(false);
+    this.tactical.deactivate();
+    this.setScreen('inventory');
+    this.publishHud(true);
+    this.input.releaseLock();
+  }
+
+  async closeInventory(): Promise<void> {
+    if (this.screen !== 'inventory') return;
+    sfx.play('ui');
+    this.setScreen(this.screenBeforeInventory === 'playing' ? 'paused' : this.screenBeforeInventory);
+    await this.resume();
+  }
+
+  recomputeStats(): void {
+    this.refreshEquipment();
   }
 
   /** Enter the arena: fresh run state, preparation phase of wave 1. */
@@ -351,8 +597,11 @@ export class Game {
     this.weapon.reset();
     this.tactical.reset();
     this.wallet.reset();
+    this.loot.clear();
+    this.lootTarget = null;
     this.modifiers = [];
-    this.recomputeStats();
+    this.refreshEquipment();
+    this.player.reset();
     this.reactorHp = ECONOMY.reactorMaxHp;
     this.runTime = 0;
     this.kills = 0;
@@ -397,6 +646,10 @@ export class Game {
       if (input.pressed('Digit1')) this.setBuildMode(false);
       if (this.construction.active && input.mousePressed(2)) this.setBuildMode(false);
       if (input.pressed('KeyH') && this.canReturnHome) this.openCheckpoint();
+      if (input.pressed('KeyI') || input.pressed('Tab')) {
+        this.openInventory();
+        return;
+      }
     }
 
     this.tactical.update(dt);
@@ -424,8 +677,10 @@ export class Game {
     this.weapon.update(dt, trigger, this.stats, this.shoot);
     if (this.weapon.lastShot) this.fx.tracer(this.weapon.lastShot.from, this.weapon.lastShot.to, 0, 0.045, 0.06);
 
-    // ---- inspect / recycle
+    // ---- inspect / recycle, loot
     this.updateInspect(dt, controls);
+    this.updateLootTarget(controls);
+    this.loot.update(dt);
 
     // ---- simulation (hostile time)
     if (this.screen === 'playing') this.waves.update(dt, hdt);
@@ -495,11 +750,12 @@ export class Game {
 
   private tryPlace(): void {
     const c = this.construction;
-    if (!c.valid || !this.wallet.spend(SENTINEL.cost)) {
+    const cost = towerCost(SENTINEL, this.stats.buildCostMult);
+    if (!c.valid || !this.wallet.spend(cost)) {
       sfx.play('buildDeny');
       return;
     }
-    this.turrets.add(c.point, this.player.yaw);
+    this.turrets.add(c.point, this.player.yaw).paid = cost;
     this.turretsBuilt++;
     this.fx.burst('build', c.point.add(new Vector3(0, 0.5, 0)), 40);
     // Rapid multi-placement while tactical mode is active.
@@ -523,7 +779,7 @@ export class Game {
     if (t && this.input.isDown('KeyX')) {
       this.recycleT += dt / 0.6;
       if (this.recycleT >= 1) {
-        const refund = Math.round(t.def.cost * t.def.refundRatio);
+        const refund = Math.round(t.paid * t.def.refundRatio);
         this.wallet.earn(refund);
         uiEvents.emit('coresGained', refund);
         this.fx.burst('build', t.head, 30);
@@ -599,7 +855,13 @@ export class Game {
     const salvage = Math.round(e.def.salvage * this.cfg.tier.salvageMult);
     if (this.cfg.run.collect({ salvage })) uiEvents.emit('salvageGained', salvage);
     this.cfg.run.addKill();
+    this.dropLoot(e.kind as DropSourceId, e.center().clone());
     this.enemies.kill(e, this.fx, this.enemyCtx);
+  }
+
+  /** Automation hook: same path as enemy attacks. */
+  debugDamageReactor(amount: number): void {
+    this.damageReactor(amount, new Vector3(0, 2, 0));
   }
 
   private damageReactor(amount: number, at: Vector3): void {
@@ -733,7 +995,32 @@ export class Game {
     }
     if (!this.player.alive || c.active) hint = '';
     const run = this.cfg.run;
+    const lt = this.lootTarget;
+    let lootTarget: LootTargetInfo | null = null;
+    if (lt && this.screen === 'playing') {
+      const cur = this.inventory.equipped(this.inventory.targetSlot(lt.item) ?? 'weapon');
+      lootTarget = {
+        uid: lt.item.uid,
+        name: lt.item.name,
+        rarity: lt.item.rarity,
+        level: lt.item.level,
+        category: lt.item.category,
+        expiresAfterWave: expiresAfterWave(lt.droppedWave),
+        expiring: lt.expiring,
+        cargoFull: this.inventory.cargoFull,
+        equippedName: lt.item.category === 'module' ? null : (cur?.name ?? null),
+        equippedLevel: cur?.level ?? 0,
+        equippedRarity: cur?.rarity ?? null,
+      };
+    }
     hudStore.set({
+      lootTarget,
+      cargo: this.inventory.cargoUsed,
+      cargoMax: this.inventory.cargoCapacity,
+      equipAllowed: this.equipAllowed,
+      inventoryVersion: this.inventoryVersion,
+      playerShield: this.player.shield,
+      playerShieldMax: this.player.maxShield,
       location: 'arena',
       run: {
         tier: this.cfg.tier.id,
@@ -768,8 +1055,8 @@ export class Game {
       buildMode: c.active,
       buildValid: c.valid,
       buildMessage: c.message,
-      buildCost: SENTINEL.cost,
-      inspect: t ? { name: t.def.name, kills: t.kills, damage: Math.round(t.damageDealt), refund: Math.round(t.def.cost * t.def.refundRatio), recycle: this.recycleT } : null,
+      buildCost: towerCost(SENTINEL, this.stats.buildCostMult),
+      inspect: t ? { name: t.def.name, kills: t.kills, damage: Math.round(t.damageDealt), refund: Math.round(t.paid * t.def.refundRatio), recycle: this.recycleT } : null,
       hint,
       spread: 6 + this.weapon.spread * 900,
       perf: this.perfOn
@@ -801,6 +1088,17 @@ export class Game {
       salvageSecured: this.cfg.run.secured.salvage,
       tier: this.cfg.tier.id,
       wavesCleared: this.cfg.run.wavesCleared,
+      pickups: this.loot.count,
+      lootTarget: this.lootTarget?.item.uid ?? null,
+      cargo: this.inventory.cargoUsed,
+      itemsUnsecured: this.cfg.run.unsecured.items.length,
+      itemsSecured: this.cfg.run.secured.items.length,
+      equipped: Object.fromEntries(Object.entries(this.inventory.loadout)),
+      playerShield: this.player.shield,
+      playerMaxShield: this.player.maxShield,
+      playerMaxHp: this.player.maxHp,
+      weaponDamage: this.weapon.def.damage,
+      stats: { ...this.stats },
     };
   }
 }

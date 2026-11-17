@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_PLACEABLES } from '../src/home/placeables';
 import type { ItemInstance } from '../src/progression/items';
+import { generateItem } from '../src/loot/generate';
 import { RunLedger } from '../src/progression/run';
 import {
   BACKUP_KEY,
@@ -38,7 +39,7 @@ class MemStorage implements KeyValueStorage {
 }
 
 /** Minimal test fixture standing in for an M2 equipment drop. */
-const fixtureItem = (uid: string): ItemInstance => ({ uid, defId: 'plasma_repeater', acquiredAt: 1, source: 'test' });
+const fixtureItem = (uid: string): ItemInstance => generateItem({ uid, seed: 1, level: 3, rarity: 'rare', baseId: 'plasma_repeater', source: 'test', now: 1 });
 
 describe('save format', () => {
   it('fresh save has the starter weapon equipped and safe defaults', () => {

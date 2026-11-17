@@ -153,6 +153,11 @@ export const SENTINEL: TowerDef = {
   refundRatio: 0.75,
 };
 
+/** Sentinel cost after construction-efficiency modifiers. */
+export function towerCost(def: TowerDef, costMult: number): number {
+  return Math.max(1, Math.round(def.cost * (Number.isFinite(costMult) ? costMult : 1)));
+}
+
 export const ECONOMY = {
   startingCores: 150,
   reactorMaxHp: 1000,

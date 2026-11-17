@@ -1,6 +1,6 @@
 import { type AbstractMesh, type Mesh, MeshBuilder, Ray, type Scene, Vector3 } from '@babylonjs/core';
 import type { CombatStats } from '../combat/stats';
-import { SENTINEL } from '../data/defs';
+import { SENTINEL, towerCost } from '../data/defs';
 import type { Player } from '../player/Player';
 import type { Kit } from '../visuals/kit';
 import type { Palette } from '../visuals/materials';
@@ -93,7 +93,7 @@ export class Construction {
       playerZ: player.position.z,
       maxRange: BUILD_REACH,
       cores,
-      cost: SENTINEL.cost,
+      cost: towerCost(SENTINEL, stats.buildCostMult),
       towers: turrets.map((t) => ({ x: t.pos.x, z: t.pos.z, radius: t.def.radius })),
     });
     this.valid = this.reason === 'ok';

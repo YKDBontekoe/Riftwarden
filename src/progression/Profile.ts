@@ -33,6 +33,11 @@ export class Profile {
     if (dirty) this.persist();
   }
 
+  /** Result of the most recent storage write. */
+  get lastWriteOk(): boolean {
+    return this.store.get().lastWriteOk;
+  }
+
   get save(): Readonly<SaveData> {
     return this.data;
   }

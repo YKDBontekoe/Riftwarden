@@ -8,6 +8,7 @@ import {
 } from '@babylonjs/core';
 import { sfx } from '../audio/Sfx';
 import { ECONOMY } from '../data/defs';
+import { BASE_STATS, type CombatStats, maxHull, mitigation } from '../combat/stats';
 import type { Input } from '../core/Input';
 import { PHYS_PLAYER } from '../world/physicsGroups';
 
@@ -65,6 +66,15 @@ export class Player {
 
   hp: number = ECONOMY.playerMaxHp;
   maxHp: number = ECONOMY.playerMaxHp;
+  /** Energy shield from equipment: absorbs (mitigated) damage before the hull. */
+  shield = 0;
+  maxShield = 0;
+  private shieldRegen = 0;
+  private shieldDelay = 3;
+  private sinceShieldHit = 99;
+  /** Fraction of incoming damage removed by armor + resistance. */
+  mitigation = 0;
+  private dashRechargeMult = 1;
   alive = true;
   respawnT = 0;
   private sinceHurt = 99;
@@ -110,6 +120,8 @@ export class Player {
     this.pitch = 0;
     this.recoil = 0;
     this.hp = this.maxHp;
+    this.shield = this.maxShield;
+    this.sinceShieldHit = 99;
     this.alive = true;
     this.respawnT = 0;
     this.dashCharges = MOVE.dashCharges;
@@ -123,9 +135,45 @@ export class Player {
   /** Called for every hit taken; `from` is the damage source position when known. */
   onHurt: ((amount: number, from: Vector3 | null) => void) | null = null;
 
+  /**
+   * Apply equipment-derived stats. Max hull/shield changes keep current values in
+   * proportion (gaining capacity never heals beyond the gain, losing it clamps).
+   * `attackerScale` is the enemy level scale armor is measured against.
+   */
+  applyStats(stats: CombatStats = BASE_STATS, attackerScale = 1): void {
+    const newMax = maxHull(ECONOMY.playerMaxHp, stats);
+    if (newMax !== this.maxHp) {
+      this.hp = Math.min(newMax, Math.max(0, this.hp + Math.max(0, newMax - this.maxHp)));
+      if (this.alive && this.hp <= 0) this.hp = 1;
+      this.maxHp = newMax;
+    }
+    if (stats.shieldCapacity !== this.maxShield) {
+      this.shield = Math.min(stats.shieldCapacity, this.shield + Math.max(0, stats.shieldCapacity - this.maxShield));
+      this.maxShield = stats.shieldCapacity;
+    }
+    this.shieldRegen = stats.shieldRegen;
+    this.shieldDelay = stats.shieldDelay;
+    this.mitigation = mitigation(stats, attackerScale);
+    this.dashRechargeMult = stats.dashRechargeMult;
+  }
+
+  /** Last hit breakdown (HUD feedback / tests). */
+  lastHit = { raw: 0, mitigated: 0, toShield: 0, toHull: 0 };
+
   damage(amount: number, from: Vector3 | null = null): void {
     if (!this.alive || amount <= 0) return;
-    this.onHurt?.(amount, from);
+    const raw = amount;
+    amount *= 1 - this.mitigation;
+    const toShield = Math.min(this.shield, amount);
+    this.shield -= toShield;
+    amount -= toShield;
+    this.sinceShieldHit = 0;
+    this.lastHit = { raw, mitigated: raw - raw * (1 - this.mitigation), toShield, toHull: amount };
+    this.onHurt?.(raw, from);
+    if (amount <= 0) {
+      sfx.play('shieldHit', { volume: 0.7 });
+      return;
+    }
     this.hp -= amount;
     this.sinceHurt = 0;
     this.hurtFlash = Math.min(1, this.hurtFlash + 0.35 + amount / 40);
@@ -169,6 +217,10 @@ export class Player {
     } else if (this.sinceHurt > 4 && this.hp < this.maxHp) {
       this.hp = Math.min(this.maxHp, this.hp + 18 * dt);
     }
+    this.sinceShieldHit += dt;
+    if (this.alive && this.shield < this.maxShield && this.sinceShieldHit >= this.shieldDelay) {
+      this.shield = Math.min(this.maxShield, this.shield + this.shieldRegen * dt);
+    }
 
     // --- Movement intent ---
     let fx = 0;
@@ -201,7 +253,7 @@ export class Player {
 
     // Dash charges
     if (this.dashCharges < MOVE.dashCharges) {
-      this.dashRecharge += dt / MOVE.dashRecharge;
+      this.dashRecharge += (dt * this.dashRechargeMult) / MOVE.dashRecharge;
       if (this.dashRecharge >= 1) {
         this.dashCharges++;
         this.dashRecharge = this.dashCharges < MOVE.dashCharges ? this.dashRecharge - 1 : 0;

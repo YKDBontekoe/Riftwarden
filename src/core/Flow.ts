@@ -1,10 +1,13 @@
-import type { Engine, Scene } from '@babylonjs/core';
+import { type Engine, type Scene, Vector3 } from '@babylonjs/core';
+import { generateItem } from '../loot/generate';
+import type { RarityId } from '../loot/rarity';
+import type { Category } from '../loot/types';
 import { sfx } from '../audio/Sfx';
 import { HomeBase } from '../home/HomeBase';
-import { itemDef, newUid } from '../progression/items';
+import { newUid, SLOT_IDS } from '../progression/items';
 import { Profile } from '../progression/Profile';
 import { RunLedger, type RunOutcome } from '../progression/run';
-import { bankRewards, beginRun, equippedItem, recordRun, selectTier } from '../progression/save';
+import { applyLoadout, bankRewards, beginRun, deployBlocker, equippedItem, recordRun, selectTier } from '../progression/save';
 import { getTier } from '../progression/tiers';
 import { hudStore, type Location, uiEvents } from '../ui/store';
 import { Game } from './Game';
@@ -135,8 +138,9 @@ export class Flow {
     if (this.busy || (this.run && !this.run.ended)) return false;
     const save = this.profile.save;
     if (tierId < 1 || tierId > save.threat.unlocked) return false;
-    const weapon = itemDef(equippedItem(save, 'weapon'))?.weapon;
-    if (!weapon) return false;
+    if (deployBlocker(save)) return false;
+    // The arena gets its own copies: run-side changes can never touch profile objects.
+    const loadout = Object.fromEntries(SLOT_IDS.map((slot) => [slot, structuredClone(equippedItem(save, slot))]));
     sfx.init();
     sfx.play('ui');
     // Request pointer lock inside the click gesture; the canvas keeps it across scenes.
@@ -152,10 +156,11 @@ export class Flow {
       this.run = run;
       this.arena = new Game(this.engine, this.canvas, this.havok, this.settings, this.input, {
         tier,
-        weapon,
+        loadout,
         run,
         hooks: {
-          bank: (wave, rewards) => this.profile.mutate((d) => bankRewards(d, run.id, wave, rewards)),
+          // Reported as secured only once the write succeeded.
+          bank: (wave, rewards) => this.profile.mutate((d) => bankRewards(d, run.id, wave, rewards)) && this.profile.lastWriteOk,
           checkpoint: () => {},
           defeat: () => this.endRun('defeat'),
         },
@@ -173,7 +178,15 @@ export class Flow {
     if (!run) return null;
     const first = !run.ended;
     const result = run.finalize(outcome);
-    if (first) this.profile.mutate((d) => recordRun(d, result));
+    // Record the run, then let the profile adopt the run loadout for items it owns
+    // (unsecured items were just lost, so their slots keep the previous secured gear).
+    const owned = this.arena?.inventory.ownedLoadout() ?? {};
+    if (first)
+      this.profile.mutate((d) => {
+        const recorded = recordRun(d, result);
+        applyLoadout(d, owned, { ignoreActiveRun: true });
+        return recorded;
+      });
     hudStore.set({ lastRun: { ...result } });
     return result;
   }
@@ -259,7 +272,7 @@ export class Flow {
       this.transitions++;
       const t2 = performance.now();
       const ready = await Promise.race([
-        scene.whenReadyAsync().then(
+        Promise.all([scene.whenReadyAsync(), this.arena?.loot.warmup]).then(
           () => true,
           () => true,
         ),
@@ -332,6 +345,63 @@ export class Flow {
         const list = [...a.enemies.active];
         for (const e of list) a.damageEnemy('player', e, 1e6, e.center(), false);
         return list.length;
+      },
+      /** Move the player (arena or HQ) to x/z on the floor. */
+      teleport: (x: number, z: number, y = 1) => {
+        const p = flow.arena?.player ?? flow.home?.player;
+        if (!p) return;
+        p.controller.setPosition(new Vector3(x, y, z));
+        p.controller.setVelocity(Vector3.Zero());
+      },
+      /** Spawn a generated drop at x/z (arena). Returns the item uid. */
+      spawnLoot: (o: { x?: number; z?: number; rarity?: RarityId; category?: Category; baseId?: string; level?: number; seed?: number } = {}) => {
+        const a = flow.arena;
+        if (!a) return null;
+        const item = generateItem({
+          uid: `${a.cfg.run.id}.dbg${Math.floor(Math.random() * 1e9)}`,
+          seed: o.seed ?? Math.floor(Math.random() * 4294967296),
+          level: o.level ?? a.waves.number + a.cfg.tier.lootLevelBonus,
+          rarity: o.rarity ?? 'rare',
+          category: o.category ?? 'weapon',
+          baseId: o.baseId,
+          allowExclusive: o.baseId ? [o.baseId] : [],
+          source: a.cfg.run.id,
+        });
+        const p = a.spawnPickup(item, new Vector3(o.x ?? 0, 1.5, o.z ?? -12), a.waves.number);
+        return p ? item.uid : null;
+      },
+      /** Generate an item without placing it (tests search seeds for specific affixes). */
+      makeItem: (o: { seed: number; rarity?: RarityId; category?: Category; baseId?: string; level?: number; fixedRoll?: number }) =>
+        generateItem({ uid: `dbg_${o.seed}_${Math.floor(Math.random() * 1e9)}`, seed: o.seed, level: o.level ?? 5, rarity: o.rarity ?? 'rare', category: o.category, baseId: o.baseId, source: flow.arena?.cfg.run.id ?? 'debug', fixedRoll: o.fixedRoll }),
+      /** Put an item straight into the run cargo (as if picked up). */
+      grant: (item: ReturnType<typeof generateItem>) => {
+        const a = flow.arena;
+        if (!a || !a.inventory.collect(item)) return false;
+        a.inventoryVersion++;
+        return true;
+      },
+      /** Damage the reactor through the real path (defeat when it reaches 0). */
+      damageReactor: (amount: number) => flow.arena?.debugDamageReactor(amount),
+      /** Pickups currently in the arena (id, uid, rarity, distance to the player, landed). */
+      pickups: () => {
+        const a = flow.arena;
+        if (!a) return [];
+        const pp = a.player.position;
+        return a.loot.pickups.map((p) => ({ id: p.id, uid: p.item.uid, name: p.item.name, rarity: p.item.rarity, category: p.item.category, droppedWave: p.droppedWave, x: p.ground.x, z: p.ground.z, dist: Math.hypot(p.ground.x - pp.x, p.ground.z - pp.z), landed: a.loot.landed(p), expiring: p.expiring }));
+      },
+      /** Stand next to a pickup and face its hologram. */
+      approach: (id: number) => {
+        const a = flow.arena;
+        const p = a?.loot.pickups.find((q) => q.id === id);
+        if (!a || !p) return false;
+        const pl = a.player;
+        const x = p.ground.x;
+        const z = p.ground.z - 2;
+        pl.controller.setPosition(new Vector3(x, p.ground.y + 1, z));
+        pl.controller.setVelocity(Vector3.Zero());
+        pl.yaw = Math.atan2(p.focus.x - x, p.focus.z - z);
+        pl.pitch = 0.05;
+        return true;
       },
       /** Resource counters for leak checks across transitions. */
       leakStats: () => {

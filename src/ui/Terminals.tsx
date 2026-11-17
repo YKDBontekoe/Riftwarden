@@ -1,14 +1,30 @@
-import { type ReactNode, useEffect, useState } from 'react';
-import { BASE_STATS } from '../combat/stats';
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
+import { sfx } from '../audio/Sfx';
+import { BASE_STATS, computeStats, fmtNum, formatStat, maxHull, mitigation, STAT_DEFS } from '../combat/stats';
 import type { Flow } from '../core/Flow';
-import { ECONOMY } from '../data/defs';
+import { ECONOMY, SENTINEL, towerCost } from '../data/defs';
 import type { HomeBase } from '../home/HomeBase';
+import { scrapValue, STORAGE_EXPANSION, storageExpansionCost } from '../loot/economy';
+import { equipmentModifiers, weaponDefFor, weaponSummary } from '../loot/equipment';
+import { rarity } from '../loot/rarity';
 import { MOVE } from '../player/Player';
-import { type ItemInstance, itemDef, SLOTS } from '../progression/items';
-import { equipFromStorage, equippedItem, type SaveData, storedItems } from '../progression/save';
+import { type ItemInstance, type SlotId, SLOTS } from '../progression/items';
+import {
+  deployBlocker,
+  equipFromStorage,
+  equippedItem,
+  expandStorage,
+  loadPreset,
+  type SaveData,
+  savePreset,
+  scrapItem,
+  storedItems,
+  unequipToStorage,
+} from '../progression/save';
 import { CHECKPOINT_INTERVAL, THREAT_TIERS, type ThreatTier } from '../progression/tiers';
 import { fmtTime, useSave } from './App';
 import { useHud } from './store';
+import { type InvEntry, InventoryView, ItemCard, ItemDetail, RarityLegend, sortEntries } from './items';
 
 /** Routes the open station to its interface. */
 export function TerminalHost({ flow, home }: { flow: Flow; home: HomeBase }) {
@@ -69,7 +85,9 @@ function DeployTerminal({ flow, close }: { flow: Flow; close: () => void }) {
   const save = useSave(flow);
   const [busy, setBusy] = useState(false);
   const selected = THREAT_TIERS.find((t) => t.id === save.threat.selected) ?? THREAT_TIERS[0];
-  const weapon = itemDef(equippedItem(save, 'weapon'));
+  const weapon = equippedItem(save, 'weapon');
+  const blocker = deployBlocker(save);
+  const gearCount = SLOTS.filter((s) => save.loadout[s.id]).length;
   const deploy = () => {
     if (busy) return;
     setBusy(true);
@@ -96,24 +114,26 @@ function DeployTerminal({ flow, close }: { flow: Flow; close: () => void }) {
           <p>Hold the reactor against endless machine waves arriving through three rift gates. Build Sentinel turrets beside the orange lanes.</p>
           <ul className="rules">
             <li>
-              Salvage from kills and cleared waves is <b className="o">unsecured</b> until a checkpoint.
+              Enemies drop <b>equipment</b>. Collected loot and salvage are <b className="o">unsecured</b> until a checkpoint.
             </li>
             <li>
-              Every <b>{CHECKPOINT_INTERVAL} waves</b> it is <b className="c">banked</b> to HQ and you may return home.
+              Every <b>{CHECKPOINT_INTERVAL} waves</b> everything collected is <b className="c">banked</b> to HQ storage, plus a checkpoint cache, and you may return home.
             </li>
-            <li>Reactor loss forfeits unsecured salvage. Secured salvage and equipped gear are never lost.</li>
+            <li>Reactor loss forfeits unsecured loot, even if equipped. Gear you deploy with and secured items are never lost.</li>
+            <li>Higher threat tiers raise item levels and rarity odds.</li>
           </ul>
           <div className="loadout-line">
-            <span>LOADOUT</span>
-            <b>{weapon?.name.toUpperCase() ?? 'NO WEAPON'}</b>
+            <span>LOADOUT · {gearCount}/{SLOTS.length} SLOTS</span>
+            <b style={weapon ? { color: rarity(weapon.rarity).color } : undefined}>{weapon?.name.toUpperCase() ?? 'NO WEAPON'}</b>
           </div>
+          {blocker && <div className="deploy-block">{blocker}</div>}
         </div>
         <div className="tier-col">
           <div className="col-label">SELECT THREAT TIER</div>
           {THREAT_TIERS.map((t) => (
             <TierCard key={t.id} tier={t} save={save} selected={t.id === selected.id} onSelect={() => flow.selectTier(t.id)} />
           ))}
-          <button className="primary deploy" disabled={busy || !weapon} onClick={deploy}>
+          <button className="primary deploy" disabled={busy || !!blocker} onClick={deploy}>
             <span>{busy ? 'LAUNCHING…' : `DEPLOY · TIER ${selected.roman}`}</span>
             <i>▶</i>
           </button>
@@ -150,6 +170,12 @@ function TierCard({ tier, save, selected, onSelect }: { tier: ThreatTier; save: 
         <span className="o">
           SALVAGE <b>{pct(tier.salvageMult)}</b>
         </span>
+        <span className="c">
+          ITEM LV <b>+{tier.lootLevelBonus}</b>
+        </span>
+        <span className="c">
+          LOOT LUCK <b>{pct(tier.lootLuck)}</b>
+        </span>
       </div>
     </button>
   );
@@ -157,137 +183,198 @@ function TierCard({ tier, save, selected, onSelect }: { tier: ThreatTier; save: 
 
 // ------------------------------------------------------------------ drone configuration
 
-function Stat({ k, v }: { k: string; v: string }) {
+function Stat({ k, v, tone }: { k: string; v: string; tone?: 'up' | 'down' }) {
   return (
-    <div className="stat">
+    <div className={`stat ${tone ?? ''}`}>
       <span>{k}</span>
       <b>{v}</b>
     </div>
   );
 }
 
+function useEquipped(save: SaveData): Record<SlotId, ItemInstance | null> {
+  return useMemo(() => Object.fromEntries(SLOTS.map((s) => [s.id, equippedItem(save, s.id)])) as Record<SlotId, ItemInstance | null>, [save]);
+}
+
+/** Calculated drone statistics from the real stat pipeline. */
+function DroneStats({ equipped }: { equipped: Record<SlotId, ItemInstance | null> }) {
+  const items = Object.values(equipped).filter((i): i is ItemInstance => !!i);
+  const st = computeStats(equipmentModifiers(items));
+  const w = weaponDefFor(equipped.weapon);
+  const ws = w ? weaponSummary(w, st) : null;
+  const b = BASE_STATS;
+  const d = (k: keyof typeof st): 'up' | 'down' | undefined => {
+    const def = STAT_DEFS[k];
+    if (Math.abs(st[k] - b[k]) < 1e-9) return undefined;
+    return (st[k] > b[k]) === (def.better === 'higher') ? 'up' : 'down';
+  };
+  return (
+    <>
+      {w && ws && (
+        <>
+          <div className="col-label">PRIMARY · {w.name}</div>
+          <div className="stat-grid">
+            <Stat k="DAMAGE / SHOT" v={fmtNum(ws.damage)} tone={d('weaponDamageMult')} />
+            <Stat k="FIRE RATE" v={`${fmtNum(ws.rate)}/s`} tone={d('fireRateMult')} />
+            <Stat k="EXPECTED DPS (CRITS)" v={fmtNum(ws.dps)} />
+            <Stat k="RANGE" v={`${w.range} m`} />
+            <Stat k="HEAT / SHOT" v={`${fmtNum(ws.heat)}%`} tone={d('heatEfficiency')} />
+            <Stat k="SHOTS TO OVERHEAT" v={String(ws.shotsToOverheat)} tone={d('heatEfficiency')} />
+            <Stat k="COOLING" v={`${fmtNum(ws.cool)}%/s`} tone={d('coolRateMult')} />
+            <Stat k="CRIT CHANCE" v={`${formatStat('critChance', st.critChance)} · weakpoints 100%`} tone={d('critChance')} />
+            <Stat k="CRIT DAMAGE" v={formatStat('critMultiplier', st.critMultiplier)} tone={d('critMultiplier')} />
+          </div>
+        </>
+      )}
+      <div className="col-label">DRONE</div>
+      <div className="stat-grid">
+        <Stat k="HULL INTEGRITY" v={fmtNum(maxHull(ECONOMY.playerMaxHp, st))} tone={st.maxHealthBonus !== 0 || st.maxHealthMult !== 1 ? 'up' : undefined} />
+        <Stat k="SELF-REPAIR" v="18/s after 4 s" />
+        <Stat k="SHIELD" v={st.shieldCapacity > 0 ? `${fmtNum(st.shieldCapacity)} · +${fmtNum(st.shieldRegen)}/s` : 'NONE'} tone={d('shieldCapacity')} />
+        <Stat k="SHIELD DELAY" v={st.shieldCapacity > 0 ? formatStat('shieldDelay', st.shieldDelay) : '—'} tone={st.shieldCapacity > 0 ? d('shieldDelay') : undefined} />
+        <Stat k="ARMOR · RESIST" v={`${fmtNum(st.armor)} · ${formatStat('damageResist', st.damageResist)}`} tone={d('armor') ?? d('damageResist')} />
+        <Stat k="DAMAGE REDUCTION (W1)" v={`${fmtNum(mitigation(st) * 100)}%`} />
+        <Stat k="SPEED · SPRINT" v={`${fmtNum(MOVE.runSpeed * st.moveSpeedMult)} · ${fmtNum(MOVE.sprintSpeed * st.moveSpeedMult)} m/s`} tone={d('moveSpeedMult')} />
+        <Stat k="DASH RECHARGE" v={`${MOVE.dashCharges} × ${fmtNum(MOVE.dashRecharge / st.dashRechargeMult)} s`} tone={d('dashRechargeMult')} />
+      </div>
+      <div className="col-label">DEFENSES & TACTICAL</div>
+      <div className="stat-grid">
+        <Stat k="TURRET DAMAGE" v={formatStat('turretDamageMult', st.turretDamageMult)} tone={d('turretDamageMult')} />
+        <Stat k="TURRET FIRE RATE" v={formatStat('turretFireRateMult', st.turretFireRateMult)} tone={d('turretFireRateMult')} />
+        <Stat k="TURRET RANGE" v={`${fmtNum(SENTINEL.range * st.turretRangeMult)} m`} tone={d('turretRangeMult')} />
+        <Stat k="SENTINEL COST" v={`${towerCost(SENTINEL, st.buildCostMult)} cores`} tone={d('buildCostMult')} />
+        <Stat k="TACTICAL RECHARGE" v={formatStat('tacticalRechargeMult', st.tacticalRechargeMult)} tone={d('tacticalRechargeMult')} />
+      </div>
+    </>
+  );
+}
+
 function LoadoutTerminal({ flow, close }: { flow: Flow; close: () => void }) {
   const save = useSave(flow);
-  const weaponItem = equippedItem(save, 'weapon');
-  const w = itemDef(weaponItem)?.weapon;
-  const compatible = storedItems(save).filter((i) => itemDef(i)?.slot === 'weapon');
+  const equipped = useEquipped(save);
+  const [msg, setMsg] = useState('');
+  const mutate = (fn: (d: SaveData) => boolean, ok: string, fail: string) => {
+    const done = flow.profile.mutate(fn);
+    setMsg(done ? ok : fail);
+    sfx.play(done ? 'equip' : 'buildDeny');
+  };
   return (
-    <Shell code="DC-02" title="DRONE CONFIGURATION" sub="Warden Mk-I · current loadout" close={close} wide>
+    <Shell code="DC-02" title="DRONE CONFIGURATION" sub="Warden Mk-I · loadout & calculated statistics" close={close} wide>
       <div className="loadout-grid">
         <div className="slots-col">
           <div className="col-label">EQUIPMENT SLOTS</div>
           {SLOTS.map((slot) => {
-            const it = equippedItem(save, slot.id);
-            const d = itemDef(it);
+            const it = equipped[slot.id];
+            const r = it ? rarity(it.rarity) : null;
             return (
-              <div key={slot.id} className={`slot ${d ? 'filled' : ''} ${slot.functional ? '' : 'offline'}`}>
+              <div key={slot.id} className={`slot ${it ? 'filled' : ''}`} style={r ? { ['--rc' as string]: r.color } : undefined}>
                 <span className="slot-label">{slot.label}</span>
-                <b>{d ? d.name.toUpperCase() : 'EMPTY'}</b>
-                <em>{d ? (slot.required ? 'EQUIPPED · REQUIRED' : 'EQUIPPED') : slot.functional ? 'NO ITEM' : 'NO COMPATIBLE EQUIPMENT'}</em>
+                <b>{it ? it.name : 'EMPTY'}</b>
+                <em>
+                  {it ? `${r!.label.toUpperCase()} · LV ${fmtNum(it.level)} · ${it.affixes.length} affix${it.affixes.length === 1 ? '' : 'es'}` : 'Equip from the storage terminal'}
+                  {it && !slot.required && (
+                    <button className="mini" onClick={() => mutate((d) => unequipToStorage(d, slot.id), 'Moved to storage', 'Storage full')}>
+                      UNEQUIP
+                    </button>
+                  )}
+                </em>
               </div>
             );
           })}
+          <div className="col-label">SAVED CONFIGURATIONS</div>
+          <div className="presets">
+            {save.presets.map((p, i) => {
+              const n = Object.values(p.slots).filter(Boolean).length;
+              const missing = Object.values(p.slots).filter((u) => u && !save.items.some((it) => it.uid === u)).length;
+              const active = n > 0 && SLOTS.every((s) => (p.slots[s.id] ?? null) === (save.loadout[s.id] ?? null));
+              return (
+                <div key={i} className={`preset ${active ? 'on' : ''}`}>
+                  <b>{p.name}</b>
+                  <em>{n ? `${n} item${n === 1 ? '' : 's'}${missing ? ` · ${missing} missing` : ''}${active ? ' · ACTIVE' : ''}` : 'EMPTY'}</em>
+                  <button className="mini" onClick={() => mutate((d) => savePreset(d, i), `Saved to ${p.name}`, 'Cannot save')}>
+                    SAVE
+                  </button>
+                  <button className="mini" disabled={!n || active} onClick={() => mutate((d) => loadPreset(d, i), `${p.name} equipped`, 'Nothing to change')}>
+                    LOAD
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+          {msg && <div className="term-msg">{msg}</div>}
         </div>
         <div className="stats-col">
-          {w && (
-            <>
-              <div className="col-label">PRIMARY · {w.name}</div>
-              <p className="desc">{itemDef(weaponItem)?.description}</p>
-              <div className="stat-grid">
-                <Stat k="DAMAGE / SHOT" v={String(w.damage)} />
-                <Stat k="FIRE RATE" v={`${w.fireRate}/s`} />
-                <Stat k="SUSTAINED DPS" v={String(Math.round(w.damage * w.fireRate))} />
-                <Stat k="RANGE" v={`${w.range} m`} />
-                <Stat k="HEAT / SHOT" v={`${w.heatPerShot}%`} />
-                <Stat k="SHOTS TO OVERHEAT" v={String(Math.ceil(100 / w.heatPerShot))} />
-                <Stat k="CRIT CHANCE" v={`${Math.round(BASE_STATS.critChance * 100)}% · weakpoints 100%`} />
-                <Stat k="CRIT DAMAGE" v={`×${BASE_STATS.critMultiplier}`} />
-              </div>
-            </>
-          )}
-          <div className="col-label">DRONE</div>
-          <div className="stat-grid">
-            <Stat k="HULL INTEGRITY" v={String(ECONOMY.playerMaxHp + BASE_STATS.maxHealthBonus)} />
-            <Stat k="SELF-REPAIR" v="18/s after 4 s" />
-            <Stat k="SPEED · SPRINT" v={`${MOVE.runSpeed} · ${MOVE.sprintSpeed} m/s`} />
-            <Stat k="DASH" v={`${MOVE.dashCharges} charges · ${MOVE.dashRecharge}s`} />
-            <Stat k="AIR BOOST" v="1 per jump" />
-            <Stat k="REBOOT AFTER LOSS" v={`${ECONOMY.playerRespawnTime} s`} />
-          </div>
-          {compatible.length > 0 && (
-            <>
-              <div className="col-label">IN STORAGE · COMPATIBLE</div>
-              {compatible.map((it) => (
-                <ItemRow key={it.uid} item={it} action="EQUIP" onAction={() => flow.profile.mutate((d) => equipFromStorage(d, it.uid))} />
-              ))}
-            </>
-          )}
+          <DroneStats equipped={equipped} />
         </div>
       </div>
     </Shell>
   );
 }
 
-function ItemRow({ item, action, onAction }: { item: ItemInstance; action?: string; onAction?: () => void }) {
-  const d = itemDef(item);
-  return (
-    <div className="item-row">
-      <span className="item-ico">◆</span>
-      <div>
-        <b>{d?.name ?? item.defId}</b>
-        <em>{d ? d.slot.toUpperCase() : 'UNKNOWN ITEM'} · from {item.source === 'starter' ? 'starter kit' : 'operation'}</em>
-      </div>
-      {action && d && <button onClick={onAction}>{action}</button>}
-    </div>
-  );
-}
-
 // ------------------------------------------------------------------ storage
+
+export function saveEntries(save: SaveData): InvEntry[] {
+  const out: InvEntry[] = [];
+  for (const s of SLOTS) {
+    const it = equippedItem(save, s.id);
+    if (it) out.push({ item: it, status: 'equipped', equippedIn: s.id });
+  }
+  for (const it of storedItems(save)) out.push({ item: it, status: 'stored', equippedIn: null });
+  return out;
+}
 
 function StorageTerminal({ flow, close }: { flow: Flow; close: () => void }) {
   const save = useSave(flow);
-  const items = storedItems(save);
+  const equipped = useEquipped(save);
+  const entries = useMemo(() => saveEntries(save), [save]);
+  const used = save.storage.uids.length;
+  const over = used > save.storage.capacity;
+  const cost = storageExpansionCost(save.storage.expansions);
+  const act = (fn: (d: SaveData) => boolean | number) => {
+    const ok = flow.profile.mutate((d) => !!fn(d));
+    sfx.play(ok ? 'equip' : 'buildDeny');
+  };
   return (
-    <Shell code="ST-03" title="SECURE STORAGE" sub="Persistent equipment & resources" close={close} wide>
-      <div className="storage-grid">
-        <div>
-          <div className="col-label">RESOURCES</div>
-          <div className="resource">
-            <span className="res-ico">⬢</span>
-            <div>
-              <b>{save.resources.salvage}</b>
-              <span>SALVAGE · secured at checkpoints</span>
+    <Shell code="ST-03" title="SECURE STORAGE" sub="Persistent equipment · secured at checkpoints" close={close} wide>
+      <InventoryView
+        entries={entries}
+        equipped={equipped}
+        actions={{
+          canChange: true,
+          lockedReason: '',
+          equip: (uid, slot) => act((d) => equipFromStorage(d, uid, slot)),
+          unequip: (slot) => act((d) => unequipToStorage(d, slot)),
+          remove: {
+            label: (e) => `SCRAP · +${scrapValue(e.item)} SALVAGE`,
+            allowed: (e) => e.status === 'stored',
+            run: (uid) => act((d) => scrapItem(d, uid)),
+            confirm: 'Dismantle permanently?',
+          },
+        }}
+        header={
+          <div className="storage-bar">
+            <div className="resource small">
+              <span className="res-ico">⬢</span>
+              <div>
+                <b>{save.resources.salvage}</b>
+                <span>SALVAGE</span>
+              </div>
             </div>
-          </div>
-          <div className="col-label">
-            EQUIPMENT BAYS · {items.length} / {save.storage.capacity}
-          </div>
-          <div className="bays">
-            {Array.from({ length: save.storage.capacity }, (_, i) => (
-              <div key={i} className={`bay ${items[i] ? 'full' : ''}`} title={items[i] ? itemDef(items[i])?.name : ''} />
-            ))}
-          </div>
-        </div>
-        <div>
-          <div className="col-label">STORED EQUIPMENT</div>
-          {items.length === 0 ? (
-            <div className="empty-state">
-              <div className="empty-ico">∅</div>
-              <b>No equipment in storage</b>
-              <p>Equipment recovered during operations is stored here once it has been secured at a checkpoint. Gear you have equipped is listed at the drone configuration station.</p>
+            <div className={`cap ${over ? 'over' : ''}`}>
+              <span>
+                BAYS {used} / {save.storage.capacity} {over && '· OVER CAPACITY: DEPLOYMENT LOCKED'}
+              </span>
+              <div className="cap-bar">
+                <i style={{ width: `${Math.min(100, (used / save.storage.capacity) * 100)}%` }} />
+              </div>
             </div>
-          ) : (
-            items.map((it) => (
-              <ItemRow
-                key={it.uid}
-                item={it}
-                action={itemDef(it) && SLOTS.find((s) => s.id === itemDef(it)!.slot)?.functional ? 'EQUIP' : undefined}
-                onAction={() => flow.profile.mutate((d) => equipFromStorage(d, it.uid))}
-              />
-            ))
-          )}
-        </div>
-      </div>
+            <button className="mini expand" disabled={save.resources.salvage < cost} onClick={() => act((d) => expandStorage(d))}>
+              +{STORAGE_EXPANSION} BAYS · {cost} SALVAGE
+            </button>
+            <RarityLegend />
+          </div>
+        }
+      />
     </Shell>
   );
 }
@@ -296,20 +383,52 @@ function StorageTerminal({ flow, close }: { flow: Flow; close: () => void }) {
 
 function WorkshopTerminal({ flow, close }: { flow: Flow; close: () => void }) {
   const save = useSave(flow);
+  const modules = useMemo(() => sortEntries(saveEntries(save).filter((e) => e.item.category === 'module'), 'rarity'), [save]);
+  const [sel, setSel] = useState<string | null>(null);
+  const cur = modules.find((m) => m.item.uid === sel) ?? modules[0] ?? null;
+  const socketed = SLOTS.map((s) => equippedItem(save, s.id)).filter((i): i is ItemInstance => !!i);
   return (
-    <Shell code="WS-04" title="WORKSHOP" sub="Fabrication bench · standby" close={close} accent="amber">
-      <div className="workshop-body">
-        <div className="offline-badge">FABRICATOR OFFLINE · NO SCHEMATICS ON FILE</div>
-        <p>
-          This bench will handle weapon engineering, module installation and fabrication. It needs recovered equipment schematics before it can do any of that, and none have been recovered yet.
-        </p>
-        <div className="resource">
-          <span className="res-ico">⬢</span>
-          <div>
-            <b>{save.resources.salvage}</b>
-            <span>SALVAGE IN RESERVE · held for fabrication</span>
+    <Shell code="WS-04" title="WORKSHOP" sub="Engineering bench · module archive" close={close} accent="amber" wide>
+      <div className="workshop-grid">
+        <div>
+          <div className="offline-badge">MODULE INSTALLATION OFFLINE · ENGINEERING NOT YET AVAILABLE</div>
+          <p>Upgrade modules recovered in the field are archived here. They cannot be installed yet, so they have no effect on your drone. Their rolls are kept exactly as found.</p>
+          <div className="col-label">MODULE ARCHIVE · {modules.length}</div>
+          {modules.length === 0 ? (
+            <div className="empty-state small">
+              <b>No modules recovered</b>
+              <p>Enemies occasionally drop upgrade modules. Collect them and secure them at a checkpoint.</p>
+            </div>
+          ) : (
+            <div className="inv-list short">
+              {modules.map((e) => (
+                <ItemCard key={e.item.uid} e={e} selected={e.item.uid === cur?.item.uid} onSelect={() => setSel(e.item.uid)} />
+              ))}
+            </div>
+          )}
+          <div className="col-label">SOCKETS ON EQUIPPED GEAR</div>
+          <div className="socket-list">
+            {socketed.map((it) => (
+              <div key={it.uid} className="socket-row" style={{ ['--rc' as string]: rarity(it.rarity).color }}>
+                <b>{it.name}</b>
+                <span>
+                  {Array.from({ length: Math.max(1, it.sockets) }, (_, i) => (
+                    <i key={i} className={i < it.sockets ? 'free' : 'none'} />
+                  ))}
+                  {it.sockets} SOCKET{it.sockets === 1 ? '' : 'S'}
+                </span>
+              </div>
+            ))}
+          </div>
+          <div className="resource">
+            <span className="res-ico">⬢</span>
+            <div>
+              <b>{save.resources.salvage}</b>
+              <span>SALVAGE IN RESERVE</span>
+            </div>
           </div>
         </div>
+        <div>{cur ? <ItemDetail item={cur.item} status="stored" /> : null}</div>
       </div>
     </Shell>
   );

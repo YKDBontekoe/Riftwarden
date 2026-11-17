@@ -3,6 +3,8 @@ import type { Game } from '../core/Game';
 import { ARENA } from '../world/layout';
 import { getTier } from '../progression/tiers';
 import { type BannerEvent, type HitKind, uiEvents, useHud } from './store';
+import { LootFeed, LootLabels, LootPrompt } from './LootHud';
+import { rarity } from '../loot/rarity';
 
 export function Hud({ game }: { game: Game }) {
   return (
@@ -10,9 +12,12 @@ export function Hud({ game }: { game: Game }) {
       <Overlays />
       <HealthBars game={game} />
       <DamageNumbers game={game} />
+      <LootLabels game={game} />
       <DamageDirection />
       <Crosshair />
       <Hitmarker />
+      <LootPrompt />
+      <LootFeed />
       <Radar game={game} />
       <TopCenter />
       <Cores />
@@ -396,6 +401,17 @@ function Radar({ game }: { game: Game }) {
         ctx.arc(x, y, r, 0, Math.PI * 2);
         ctx.fill();
       }
+      // Loot: rarity-coloured squares (rare+ pulse)
+      for (const p of game.loot.pickups) {
+        const r = rarity(p.item.rarity);
+        const x = X(p.ground.x);
+        const y = Y(p.ground.z);
+        const sz = (r.index >= 2 ? 3.2 : 2.2) * dpr;
+        ctx.globalAlpha = r.index >= 2 ? 0.6 + 0.4 * pulse : 0.75;
+        ctx.fillStyle = r.color;
+        ctx.fillRect(x - sz / 2, y - sz / 2, sz, sz);
+        ctx.globalAlpha = 1;
+      }
       // Player: view cone + arrow
       const pp = game.player.position;
       const yaw = game.player.yaw;
@@ -523,6 +539,8 @@ function Cores() {
 /** Threat tier, salvage (unsecured vs secured) and checkpoint progress. */
 function RunPanel() {
   const run = useHud((s) => s.run);
+  const cargo = useHud((s) => s.cargo);
+  const cargoMax = useHud((s) => s.cargoMax);
   const [gains, setGains] = useState<{ id: number; v: number }[]>([]);
   useEffect(() => {
     let id = 0;
@@ -557,6 +575,11 @@ function RunPanel() {
         <b className="sec">{run.salvageSecured}</b>
         <em>SECURED</em>
       </div>
+      <div className="rp-row">
+        <span>CARGO</span>
+        <b className="unsec">{cargo}</b>
+        <em>/ {cargoMax} ITEMS · <kbd>I</kbd></em>
+      </div>
       <div className={`rp-cp ${run.checkpointOpen ? 'open' : ''}`}>{run.checkpointOpen ? <>CHECKPOINT · <kbd>H</kbd> RETURN TO HQ</> : `CHECKPOINT AT WAVE ${run.nextCheckpoint}`}</div>
     </div>
   );
@@ -565,6 +588,8 @@ function RunPanel() {
 function PlayerPanel() {
   const hp = useHud((s) => s.playerHp);
   const max = useHud((s) => s.playerMax);
+  const sh = useHud((s) => s.playerShield);
+  const shMax = useHud((s) => s.playerShieldMax);
   const charges = useHud((s) => s.dashCharges);
   const dashMax = useHud((s) => s.dashMax);
   const rech = useHud((s) => s.dashRecharge);
@@ -581,6 +606,13 @@ function PlayerPanel() {
           <SegBar value={f} tone={f < 0.35 ? 'red' : 'white'} segments={10} className="big" />
         </div>
       </div>
+      {shMax > 0 && (
+        <div className="shield-row">
+          <span className="label">SHIELD</span>
+          <SegBar value={sh / shMax} tone="cyan" segments={12} />
+          <b>{Math.ceil(sh)}</b>
+        </div>
+      )}
       <div className="dash">
         <span className="label">
           DASH <Key k="SHIFT" />
