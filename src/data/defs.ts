@@ -1,4 +1,4 @@
-/** Data-driven content definitions for M0. */
+/** Data-driven content definitions. */
 
 export interface WeaponDef {
   id: string;
@@ -56,6 +56,8 @@ export interface EnemyDef {
   playerShotInterval: number;
   playerShotRange: number;
   reward: number;
+  /** Persistent salvage collected on kill (unsecured until banked). */
+  salvage: number;
   scale: number;
 }
 
@@ -78,6 +80,7 @@ export const ENEMIES: Record<EnemyKind, EnemyDef> = {
     playerShotInterval: 2.6,
     playerShotRange: 26,
     reward: 7,
+    salvage: 2,
     scale: 1,
   },
   rusher: {
@@ -98,6 +101,7 @@ export const ENEMIES: Record<EnemyKind, EnemyDef> = {
     playerShotInterval: 0,
     playerShotRange: 0,
     reward: 4,
+    salvage: 1,
     scale: 1,
   },
   bulwark: {
@@ -118,6 +122,7 @@ export const ENEMIES: Record<EnemyKind, EnemyDef> = {
     playerShotInterval: 2.2,
     playerShotRange: 30,
     reward: 20,
+    salvage: 8,
     scale: 1.32,
   },
 };
@@ -154,4 +159,7 @@ export const ECONOMY = {
   reactorRepairPerWave: 0.06,
   playerMaxHp: 100,
   playerRespawnTime: 4,
+  /** Salvage for clearing wave n: base + n * perWave (before tier multiplier). */
+  salvageWaveBase: 4,
+  salvagePerWave: 1,
 };

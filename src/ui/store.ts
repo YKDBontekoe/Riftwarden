@@ -1,6 +1,32 @@
 import { useSyncExternalStore } from 'react';
+import type { RunResult } from '../progression/run';
 
-export type Screen = 'loading' | 'menu' | 'playing' | 'paused' | 'defeat';
+/**
+ * Screens. HQ: menu (title), home (walking), terminal (station UI open), summary (run
+ * report after returning). Arena: playing, checkpoint (bank/continue/return choice),
+ * defeat. Shared: loading, transit (scene swap), paused.
+ */
+export type Screen = 'loading' | 'menu' | 'home' | 'terminal' | 'summary' | 'transit' | 'playing' | 'paused' | 'checkpoint' | 'defeat';
+export type Location = 'home' | 'arena';
+export type TerminalId = 'deploy' | 'loadout' | 'storage' | 'workshop' | 'command';
+
+export interface PromptInfo {
+  key: string;
+  title: string;
+  action: string;
+}
+
+export interface RunHud {
+  tier: number;
+  salvageUnsecured: number;
+  salvageSecured: number;
+  nextCheckpoint: number;
+  /** Return-home option open (checkpoint preparation phase). */
+  checkpointOpen: boolean;
+  lastBankedWave: number;
+  kills: number;
+  duration: number;
+}
 export type WavePhase = 'prep' | 'combat' | 'cleared';
 
 export interface InspectInfo {
@@ -13,6 +39,14 @@ export interface InspectInfo {
 
 export interface HudState {
   screen: Screen;
+  location: Location;
+  terminal: TerminalId | null;
+  prompt: PromptInfo | null;
+  area: string;
+  transit: { title: string; sub: string } | null;
+  run: RunHud | null;
+  /** Result of the run that just ended (summary / defeat screens). */
+  lastRun: RunResult | null;
   wave: number;
   phase: WavePhase;
   phaseTimer: number;
@@ -46,6 +80,13 @@ export interface HudState {
 
 export const initialHud: HudState = {
   screen: 'loading',
+  location: 'home',
+  terminal: null,
+  prompt: null,
+  area: '',
+  transit: null,
+  run: null,
+  lastRun: null,
   wave: 1,
   phase: 'prep',
   phaseTimer: 0,
@@ -96,6 +137,9 @@ export class Store<T extends object> {
     this.state = { ...this.state, ...patch };
     this.listeners.forEach((l) => l());
   }
+  get listenerCount(): number {
+    return this.listeners.size;
+  }
   subscribe = (l: Listener): (() => void) => {
     this.listeners.add(l);
     return () => this.listeners.delete(l);
@@ -134,14 +178,22 @@ type EventMap = {
   /** severity 0..1; angle = source direction relative to view (radians, 0 = ahead, + = right), null if unknown. */
   hurt: { severity: number; angle: number | null };
   coresGained: number;
+  /** Salvage collected (unsecured) during a run. */
+  salvageGained: number;
 };
 
-class Emitter {
+export class Emitter {
   private map = new Map<keyof EventMap, Set<(v: never) => void>>();
   on<K extends keyof EventMap>(k: K, fn: (v: EventMap[K]) => void): () => void {
     if (!this.map.has(k)) this.map.set(k, new Set());
     this.map.get(k)!.add(fn as (v: never) => void);
     return () => this.map.get(k)!.delete(fn as (v: never) => void);
+  }
+  /** Listener count (leak checks across scene transitions). */
+  listenerCount(): number {
+    let n = 0;
+    this.map.forEach((s) => (n += s.size));
+    return n;
   }
   emit<K extends keyof EventMap>(k: K, v: EventMap[K]): void {
     this.map.get(k)?.forEach((fn) => (fn as (v: EventMap[K]) => void)(v));

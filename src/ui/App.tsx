@@ -1,23 +1,49 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
+import type { Flow } from '../core/Flow';
 import type { Game } from '../core/Game';
 import type { Settings } from '../core/settings';
+import type { RunResult } from '../progression/run';
+import type { SaveData } from '../progression/save';
+import { getTier, nextCheckpoint } from '../progression/tiers';
+import { HomeHud } from './HomeHud';
 import { Hud } from './Hud';
 import { useHud } from './store';
+import { TerminalHost } from './Terminals';
 
 interface Props {
-  getGame: () => Game | null;
+  getFlow: () => Flow | null;
 }
 
-export function App({ getGame }: Props) {
+export function useSave(flow: Flow): SaveData {
+  return useSyncExternalStore(flow.profile.store.subscribe, () => flow.profile.store.get().save);
+}
+
+export function fmtTime(s: number): string {
+  const m = Math.floor(s / 60);
+  return `${m}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+}
+
+const ARENA_SCREENS = new Set(['playing', 'paused', 'checkpoint', 'defeat']);
+const HOME_HUD_SCREENS = new Set(['home', 'terminal', 'paused']);
+
+export function App({ getFlow }: Props) {
   const screen = useHud((s) => s.screen);
-  const game = getGame();
+  const location = useHud((s) => s.location);
+  const flow = getFlow();
+  const arena = flow?.arena ?? null;
+  const home = flow?.home ?? null;
   return (
     <>
-      {(screen === 'playing' || screen === 'paused' || screen === 'defeat') && game && <Hud game={game} />}
+      {flow && location === 'arena' && arena && ARENA_SCREENS.has(screen) && <Hud key={`hud${flow.transitions}`} game={arena} />}
+      {flow && location === 'home' && home && HOME_HUD_SCREENS.has(screen) && <HomeHud key={`home${flow.transitions}`} flow={flow} />}
       {screen === 'loading' && <Loading />}
-      {screen === 'menu' && game && <MainMenu game={game} />}
-      {screen === 'paused' && game && <PauseMenu game={game} />}
-      {screen === 'defeat' && game && <DefeatScreen game={game} />}
+      {screen === 'menu' && flow && <MainMenu flow={flow} />}
+      {screen === 'terminal' && flow && home && <TerminalHost key={`term${flow.transitions}`} flow={flow} home={home} />}
+      {screen === 'paused' && flow && <PauseMenu flow={flow} />}
+      {screen === 'checkpoint' && flow && arena && <CheckpointPanel flow={flow} game={arena} />}
+      {screen === 'defeat' && flow && <DefeatScreen flow={flow} />}
+      {screen === 'summary' && flow && <SummaryScreen flow={flow} />}
+      {screen === 'transit' && <Transit />}
     </>
   );
 }
@@ -30,13 +56,32 @@ function Loading() {
         <div className="load-bar">
           <i />
         </div>
-        <div className="load-text">Initializing reactor containment…</div>
+        <div className="load-text">Initializing headquarters systems…</div>
       </div>
     </div>
   );
 }
 
-function Logo({ small }: { small?: boolean }) {
+function Transit() {
+  const t = useHud((s) => s.transit);
+  return (
+    <div className="screen transit">
+      <div className="transit-box">
+        <div className="transit-ring">
+          <i />
+          <i />
+        </div>
+        <div className="transit-title">{t?.title ?? 'TRANSFERRING'}</div>
+        <div className="transit-sub">{t?.sub ?? ''}</div>
+        <div className="load-bar">
+          <i />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function Logo({ small }: { small?: boolean }) {
   return (
     <div className={`logo ${small ? 'small' : ''}`}>
       <div className="logo-mark">
@@ -56,14 +101,14 @@ function Logo({ small }: { small?: boolean }) {
   );
 }
 
-function SettingsPanel({ game, compact }: { game: Game; compact?: boolean }) {
-  const [s, setS] = useState<Settings>(game.settings);
+function SettingsPanel({ flow, compact }: { flow: Flow; compact?: boolean }) {
+  const [s, setS] = useState<Settings>(flow.settings);
   const update = (patch: Partial<Settings>) => {
     const next = { ...s, ...patch };
     setS(next);
-    game.applySettings(next);
-    if (patch.quality && patch.quality !== s.quality) location.reload();
+    flow.applySettings(next);
   };
+  const inArena = flow.location === 'arena';
   return (
     <div className="settings">
       <label>
@@ -71,13 +116,11 @@ function SettingsPanel({ game, compact }: { game: Game; compact?: boolean }) {
         <input type="range" min={0.2} max={3} step={0.05} value={s.sensitivity} onChange={(e) => update({ sensitivity: +e.target.value })} />
         <em>{s.sensitivity.toFixed(2)}</em>
       </label>
-      {!compact && (
-        <label>
-          <span>Field of view</span>
-          <input type="range" min={70} max={110} step={1} value={s.fov} onChange={(e) => update({ fov: +e.target.value })} />
-          <em>{s.fov}°</em>
-        </label>
-      )}
+      <label>
+        <span>Field of view</span>
+        <input type="range" min={70} max={110} step={1} value={s.fov} onChange={(e) => update({ fov: +e.target.value })} />
+        <em>{s.fov}°</em>
+      </label>
       <label>
         <span>Volume</span>
         <input type="range" min={0} max={1} step={0.05} value={s.volume} onChange={(e) => update({ volume: +e.target.value })} />
@@ -85,7 +128,7 @@ function SettingsPanel({ game, compact }: { game: Game; compact?: boolean }) {
       </label>
       {!compact && (
         <div className="quality">
-          <span>Graphics</span>
+          <span>Graphics{inArena ? ' (applies on return to HQ)' : ''}</span>
           <div className="seg">
             <button className={s.quality === 'high' ? 'on' : ''} onClick={() => update({ quality: 'high' })}>
               CINEMATIC
@@ -107,11 +150,13 @@ const CONTROLS: [string, string][] = [
   ['MOUSE', 'Aim · LMB fire'],
   ['SPACE', 'Jump · again to boost'],
   ['SHIFT', 'Dash · hold to sprint'],
+  ['E', 'Use terminal (HQ)'],
   ['2 / B', 'Build Sentinel'],
   ['Q', 'Tactical slow-time'],
   ['HOLD X', 'Recycle turret'],
   ['G', 'Start wave early'],
-  ['ESC', 'Pause'],
+  ['H', 'Return to HQ (checkpoint)'],
+  ['ESC', 'Pause / close terminal'],
   ['F3', 'Performance stats'],
 ];
 
@@ -128,15 +173,17 @@ function Controls() {
   );
 }
 
-function MainMenu({ game }: { game: Game }) {
+function MainMenu({ flow }: { flow: Flow }) {
   const [tab, setTab] = useState<'briefing' | 'settings' | 'controls'>('briefing');
+  const save = useSave(flow);
+  const tier = getTier(save.threat.selected);
   return (
     <div className="screen menu">
       <div className="menu-col">
         <Logo />
-        <div className="tagline">Defend the reactor. Hold the line. There is no last wave.</div>
-        <button className="primary deploy" onClick={() => void game.deploy()}>
-          <span>DEPLOY</span>
+        <div className="tagline">Defend the reactor. Secure the salvage. Come home.</div>
+        <button className="primary deploy" onClick={() => void flow.enterHq()}>
+          <span>ENTER HEADQUARTERS</span>
           <i>▶</i>
         </button>
         <div className="tabs">
@@ -150,51 +197,58 @@ function MainMenu({ game }: { game: Game }) {
           {tab === 'briefing' && (
             <div className="briefing">
               <p>
-                A rift has torn open above the city. Machines pour through three gates toward the <b className="c">reactor</b>.
+                A rift has torn open above the city. From headquarters you deploy your drone to hold the <b className="c">reactor</b> against endless machine waves.
               </p>
               <ul>
                 <li>
-                  <i className="o" />
+                  <i className="c" />
                   <span>
-                    Hostiles follow the <b className="o">orange lanes</b>. Build turrets beside them.
+                    Walk the HQ and use the <b className="c">deployment terminal</b> <kbd>E</kbd> to pick a threat tier.
                   </span>
                 </li>
                 <li>
-                  <i className="c" />
+                  <i className="o" />
                   <span>
-                    Shoot <b>glowing visors</b> for guaranteed critical hits.
+                    Kills earn <b className="o">salvage</b>. It is only <b>secured</b> at checkpoints every 5 waves.
                   </span>
                 </li>
                 <li>
                   <i className="v" />
                   <span>
-                    <b className="v">Tactical mode</b> slows hostiles while you build.
+                    At a checkpoint, <b>continue</b> or <b className="v">return home</b>. Lose the reactor and unsecured salvage is gone.
                   </span>
                 </li>
               </ul>
             </div>
           )}
-          {tab === 'settings' && <SettingsPanel game={game} />}
+          {tab === 'settings' && <SettingsPanel flow={flow} />}
           {tab === 'controls' && <Controls />}
         </div>
       </div>
       <div className="menu-status">
-        <div className="chip red">
+        <div className="chip amber">
           <i />
-          RIFT ACTIVITY · SEVERE
+          SALVAGE · {save.resources.salvage}
         </div>
         <div className="chip cyan">
           <i />
-          REACTOR ONLINE
+          OPERATIONS · {save.totals.runs}
+        </div>
+        <div className="chip red">
+          <i />
+          THREAT TIER {tier.roman} · {tier.name}
         </div>
       </div>
-      <div className="menu-foot">BUILD 0.2 · BABYLON.JS · HAVOK</div>
+      <div className="menu-foot">BUILD 0.3 · M1 · BABYLON.JS · HAVOK</div>
     </div>
   );
 }
 
-function PauseMenu({ game }: { game: Game }) {
+function PauseMenu({ flow }: { flow: Flow }) {
   const [tab, setTab] = useState<'settings' | 'controls'>('settings');
+  const [confirm, setConfirm] = useState(false);
+  const inArena = flow.location === 'arena';
+  const resume = () => (inArena ? void flow.arena?.resume() : void flow.home?.takeControl());
   return (
     <div className="screen dim">
       <div className="modal panel-frame">
@@ -202,10 +256,24 @@ function PauseMenu({ game }: { game: Game }) {
           <span className="tick" />
           PAUSED
         </div>
-        <button className="primary" onClick={() => void game.resume()}>
+        <div className="pause-loc">{inArena ? `SECTOR 07 · THREAT TIER ${getTier(flow.run?.tier ?? 1).roman}` : 'HEADQUARTERS'}</div>
+        <button className="primary" onClick={resume}>
           RESUME
         </button>
-        <button onClick={() => game.restart()}>RESTART RUN</button>
+        {inArena &&
+          (confirm ? (
+            <div className="confirm">
+              <div className="confirm-text">Abandon the run? Unsecured salvage is lost. Secured salvage and your gear are kept.</div>
+              <div className="row2">
+                <button className="danger" onClick={() => void flow.abandonRun()}>
+                  ABANDON
+                </button>
+                <button onClick={() => setConfirm(false)}>CANCEL</button>
+              </div>
+            </div>
+          ) : (
+            <button onClick={() => setConfirm(true)}>ABANDON RUN</button>
+          ))}
         <div className="tabs">
           {(['settings', 'controls'] as const).map((t) => (
             <button key={t} className={tab === t ? 'on' : ''} onClick={() => setTab(t)}>
@@ -213,53 +281,148 @@ function PauseMenu({ game }: { game: Game }) {
             </button>
           ))}
         </div>
-        {tab === 'settings' ? <SettingsPanel game={game} compact /> : <Controls />}
+        {tab === 'settings' ? <SettingsPanel flow={flow} compact={inArena} /> : <Controls />}
       </div>
     </div>
   );
 }
 
-function fmtTime(s: number): string {
-  const m = Math.floor(s / 60);
-  return `${m}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+function CheckpointPanel({ flow, game }: { flow: Flow; game: Game }) {
+  const run = useHud((s) => s.run);
+  const save = useSave(flow);
+  const [busy, setBusy] = useState(false);
+  if (!run) return null;
+  const tier = getTier(run.tier);
+  const wave = run.lastBankedWave;
+  return (
+    <div className="screen dim checkpoint">
+      <div className="modal wide panel-frame">
+        <div className="cp-kicker">CHECKPOINT · THREAT TIER {tier.roman}</div>
+        <div className="cp-title">WAVE {wave} SECURED</div>
+        <div className="cp-sub">All collected salvage has been banked to headquarters.</div>
+        <div className="stat-cards cyan">
+          {(
+            [
+              ['WAVES CLEARED', String(wave)],
+              ['SECURED THIS RUN', String(run.salvageSecured)],
+              ['HQ RESERVE', String(save.resources.salvage)],
+              ['HOSTILES', String(run.kills)],
+              ['TIME', fmtTime(run.duration)],
+            ] as const
+          ).map(([k, v], i) => (
+            <div key={k} className="card" style={{ animationDelay: `${0.06 * i}s` }}>
+              <b>{v}</b>
+              <span>{k}</span>
+            </div>
+          ))}
+        </div>
+        <div className="cp-progress">
+          <span>NEXT CHECKPOINT</span>
+          <div className="cp-track">
+            {Array.from({ length: 5 }, (_, i) => (
+              <i key={i} className={i === 0 ? 'now' : ''} />
+            ))}
+          </div>
+          <b>WAVE {nextCheckpoint(wave + 1)}</b>
+        </div>
+        <div className="row2">
+          <button className="primary" disabled={busy} onClick={() => void game.continueRun()}>
+            CONTINUE SURVIVAL
+          </button>
+          <button
+            className="home-btn"
+            disabled={busy}
+            onClick={() => {
+              setBusy(true);
+              void flow.returnHome().finally(() => setBusy(false));
+            }}
+          >
+            RETURN TO HQ
+          </button>
+        </div>
+        <div className="sub">
+          Returning ends the run. You can still return during this preparation phase with <kbd>H</kbd>.
+        </div>
+      </div>
+    </div>
+  );
 }
 
-function DefeatScreen({ game }: { game: Game }) {
+export function RunSummary({ result, extra }: { result: RunResult; extra?: { turretsBuilt: number; coresEarned: number } | null }) {
+  const tier = getTier(result.tier);
+  const cards: [string, string, string?][] = [
+    ['FINAL WAVE', String(result.finalWave)],
+    ['WAVES CLEARED', String(result.wavesCleared)],
+    ['THREAT TIER', `${tier.roman} · ${tier.name}`],
+    ['HOSTILES DESTROYED', String(result.kills)],
+    ['RUN DURATION', fmtTime(result.duration)],
+    ['SALVAGE SECURED', String(result.salvageSecured), 'good'],
+    ['UNSECURED LOST', String(result.salvageLost), result.salvageLost > 0 ? 'bad' : ''],
+  ];
+  if (result.itemsSecured || result.itemsLost) cards.push(['ITEMS SECURED / LOST', `${result.itemsSecured} / ${result.itemsLost}`]);
+  if (extra) cards.push(['TURRETS DEPLOYED', String(extra.turretsBuilt)]);
+  return (
+    <div className="summary">
+      {result.newRecord && <div className="record-badge">NEW PERSONAL RECORD · TIER {tier.roman}</div>}
+      <div className="summary-grid">
+        {cards.map(([k, v, tone], i) => (
+          <div key={k} className={`card ${tone ?? ''}`} style={{ animationDelay: `${0.05 * i}s` }}>
+            <b>{v}</b>
+            <span>{k}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DefeatScreen({ flow }: { flow: Flow }) {
+  const result = useHud((s) => s.lastRun);
   const stats = useHud((s) => s.stats);
   const [ready, setReady] = useState(false);
   useEffect(() => {
     const t = setTimeout(() => setReady(true), 1800);
     return () => clearTimeout(t);
   }, []);
-  if (!ready) return null;
-  const cards: [string, string][] = [
-    ['WAVE REACHED', String(stats.wave)],
-    ['HOSTILES DESTROYED', String(stats.kills)],
-    ['TURRETS DEPLOYED', String(stats.turretsBuilt)],
-    ['CORES EARNED', String(stats.coresEarned)],
-    ['TIME SURVIVED', fmtTime(stats.time)],
-  ];
+  if (!ready || !result) return null;
   return (
     <div className="screen dim defeat">
       <div className="modal wide panel-frame red">
         <div className="defeat-title" data-text="REACTOR LOST">
           REACTOR LOST
         </div>
-        <div className="defeat-sub">Containment failed. The rift claims Sector 07.</div>
-        <div className="stat-cards">
-          {cards.map(([k, v], i) => (
-            <div key={k} className="card" style={{ animationDelay: `${0.08 * i}s` }}>
-              <b>{v}</b>
-              <span>{k}</span>
-            </div>
-          ))}
+        <div className="defeat-sub">
+          Containment failed. {result.salvageLost > 0 ? `${result.salvageLost} unsecured salvage was lost.` : 'No unsecured salvage was lost.'} Secured salvage and equipped gear are safe.
         </div>
-        <button className="primary" onClick={() => game.restart()}>
-          REDEPLOY
+        <RunSummary result={result} extra={stats} />
+        <div className="row2">
+          <button className="primary" onClick={() => void flow.leaveArena()}>
+            RETURN TO HQ
+          </button>
+          <button onClick={() => void flow.redeploy()}>REDEPLOY · TIER {getTier(result.tier).roman}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SummaryScreen({ flow }: { flow: Flow }) {
+  const result = useHud((s) => s.lastRun);
+  const save = useSave(flow);
+  if (!result) return null;
+  const extracted = result.outcome === 'returned';
+  return (
+    <div className="screen dim summary-screen">
+      <div className="modal wide panel-frame">
+        <div className="cp-kicker">{extracted ? 'OPERATION COMPLETE' : 'OPERATION ABANDONED'}</div>
+        <div className="cp-title">{extracted ? 'DRONE RECOVERED' : 'RUN FORFEITED'}</div>
+        <div className="cp-sub">
+          {extracted ? 'Checkpoint extraction successful.' : 'The run was abandoned; unsecured salvage did not make it back.'} HQ salvage reserve: <b className="o">{save.resources.salvage}</b>
+        </div>
+        <RunSummary result={result} />
+        <button className="primary" onClick={() => void flow.home?.takeControl()}>
+          CONTINUE
         </button>
-        <div className="sub">
-          or press <kbd>R</kbd>
-        </div>
       </div>
     </div>
   );

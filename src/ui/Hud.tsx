@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Game } from '../core/Game';
 import { ARENA } from '../world/layout';
+import { getTier } from '../progression/tiers';
 import { type BannerEvent, type HitKind, uiEvents, useHud } from './store';
 
 export function Hud({ game }: { game: Game }) {
@@ -15,6 +16,7 @@ export function Hud({ game }: { game: Game }) {
       <Radar game={game} />
       <TopCenter />
       <Cores />
+      <RunPanel />
       <PlayerPanel />
       <CenterPanel />
       <WeaponPanel />
@@ -29,7 +31,7 @@ export function Hud({ game }: { game: Game }) {
 // ---------------------------------------------------------------- primitives
 
 /** Segmented bar with a delayed "damage trail" that drains after the real value. */
-function SegBar({ value, tone, segments = 20, marker, className = '' }: { value: number; tone: string; segments?: number; marker?: number; className?: string }) {
+export function SegBar({ value, tone, segments = 20, marker, className = '' }: { value: number; tone: string; segments?: number; marker?: number; className?: string }) {
   const v = Math.max(0, Math.min(1, value));
   const [trail, setTrail] = useState(v);
   useEffect(() => {
@@ -50,7 +52,7 @@ function SegBar({ value, tone, segments = 20, marker, className = '' }: { value:
   );
 }
 
-function Key({ k }: { k: string }) {
+export function Key({ k }: { k: string }) {
   return <kbd>{k}</kbd>;
 }
 
@@ -518,6 +520,48 @@ function Cores() {
   );
 }
 
+/** Threat tier, salvage (unsecured vs secured) and checkpoint progress. */
+function RunPanel() {
+  const run = useHud((s) => s.run);
+  const [gains, setGains] = useState<{ id: number; v: number }[]>([]);
+  useEffect(() => {
+    let id = 0;
+    return uiEvents.on('salvageGained', (v) => {
+      const my = ++id;
+      setGains((g) => [...g.slice(-2), { id: my, v }]);
+      setTimeout(() => setGains((g) => g.filter((x) => x.id !== my)), 900);
+    });
+  }, []);
+  if (!run) return null;
+  const tier = getTier(run.tier);
+  return (
+    <div className="run-panel panel-frame">
+      <div className="rp-head">
+        <span className="rp-tier">TIER {tier.roman}</span>
+        <span className="rp-name">{tier.name}</span>
+      </div>
+      <div className="rp-row">
+        <span>SALVAGE</span>
+        <b className="unsec">{run.salvageUnsecured}</b>
+        <em>UNSECURED</em>
+        <div className="gains">
+          {gains.map((g) => (
+            <div key={g.id} className="gain">
+              +{g.v}
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="rp-row">
+        <span />
+        <b className="sec">{run.salvageSecured}</b>
+        <em>SECURED</em>
+      </div>
+      <div className={`rp-cp ${run.checkpointOpen ? 'open' : ''}`}>{run.checkpointOpen ? <>CHECKPOINT · <kbd>H</kbd> RETURN TO HQ</> : `CHECKPOINT AT WAVE ${run.nextCheckpoint}`}</div>
+    </div>
+  );
+}
+
 function PlayerPanel() {
   const hp = useHud((s) => s.playerHp);
   const max = useHud((s) => s.playerMax);
@@ -646,7 +690,7 @@ function WeaponPanel() {
   );
 }
 
-function Banner() {
+export function Banner() {
   const [b, setB] = useState<(BannerEvent & { id: number }) | null>(null);
   useEffect(() => {
     let id = 0;
@@ -700,7 +744,7 @@ function Respawn() {
   );
 }
 
-function Perf() {
+export function Perf() {
   const p = useHud((s) => s.perf);
   if (!p) return null;
   return (

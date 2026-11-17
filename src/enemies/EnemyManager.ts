@@ -47,6 +47,7 @@ export class Enemy implements Health {
   stuckT = 0;
   bestDist = Infinity;
   damageMult = 1;
+  speedMult = 1;
   /** Remaining path length to the reactor: lower = more dangerous (turret priority). */
   remaining = 0;
   shieldFlash = 0;
@@ -110,13 +111,14 @@ export class EnemyManager {
     return e;
   }
 
-  spawn(kind: EnemyKind, gate: GateId, layout: ArenaLayout, hpMult: number, dmgMult: number): Enemy {
+  spawn(kind: EnemyKind, gate: GateId, layout: ArenaLayout, hpMult: number, dmgMult: number, speedMult = 1): Enemy {
     const free = this.pool.get(kind);
     const e = free && free.length ? free.pop()! : this.create(kind);
     const def = e.def;
     e.maxHp = e.hp = def.hp * hpMult;
     e.maxShield = e.shield = def.shield * hpMult;
     e.damageMult = dmgMult;
+    e.speedMult = speedMult;
     e.alive = true;
     e.state = 'move';
     e.attackT = def.attackInterval * Math.random();
@@ -236,7 +238,7 @@ export class EnemyManager {
         const dx = target.x - e.pos.x;
         const dz = target.z - e.pos.z;
         const dist = Math.hypot(dx, dz);
-        const step = def.speed * slow * hdt;
+        const step = def.speed * e.speedMult * slow * hdt;
         if (dist <= step + 0.05) {
           e.pos.x = target.x;
           e.pos.z = target.z;

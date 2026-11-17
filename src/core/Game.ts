@@ -20,13 +20,15 @@ import { sfx } from '../audio/Sfx';
 import { rollDamage } from '../combat/damage';
 import { BASE_STATS, type CombatStats, computeStats, type StatModifier } from '../combat/stats';
 import { type ShotOutcome, type ShotRequest, Weapon } from '../combat/Weapon';
-import { ECONOMY, PLASMA_REPEATER, SENTINEL } from '../data/defs';
+import { ECONOMY, SENTINEL, type WeaponDef } from '../data/defs';
 import { Construction } from '../defense/Construction';
 import { type Turret, type TurretContext, type TurretHitboxMeta, TurretManager } from '../defense/Turrets';
 import { type Enemy, type EnemyContext, type EnemyHitboxMeta, EnemyManager } from '../enemies/EnemyManager';
 import { Effects } from '../fx/Effects';
 import { Player } from '../player/Player';
 import { type HitKind, hudStore, type Screen, uiEvents } from '../ui/store';
+import type { Rewards, RunLedger } from '../progression/run';
+import { isCheckpointWave, nextCheckpoint, type ThreatTier } from '../progression/tiers';
 import { ArenaBuilder } from '../visuals/arena';
 import { Atmosphere } from '../visuals/atmosphere';
 import { PostFx } from '../visuals/postfx';
@@ -36,7 +38,7 @@ import { buildReactor, type ReactorRig } from '../visuals/models';
 import { WaveManager } from '../waves/WaveManager';
 import { ARENA } from '../world/layout';
 import { ENV_QUERY } from '../world/physicsGroups';
-import { Input } from './Input';
+import type { Input } from './Input';
 import { type Settings, saveSettings } from './settings';
 import { TacticalEnergy, Wallet } from './tactical';
 
@@ -45,9 +47,29 @@ const TMP = new Vector3();
 const SUN = 3.4;
 const TMP2 = new Vector3();
 
+/** Callbacks into the session flow (persistence and scene transitions live there). */
+export interface ArenaHooks {
+  /** A checkpoint wave was cleared and these rewards were just secured by the run. */
+  bank(wave: number, rewards: Rewards): void;
+  /** Checkpoint preparation started: offer continue / return home. */
+  checkpoint(): void;
+  /** Reactor destroyed. */
+  defeat(): void;
+}
+
+export interface ArenaConfig {
+  tier: ThreatTier;
+  weapon: WeaponDef;
+  run: RunLedger;
+  hooks: ArenaHooks;
+}
+
+/**
+ * One survival run in the arena. Built fresh for every deployment and disposed when
+ * the run ends, so no towers, enemies, wave or effect state can leak between runs.
+ */
 export class Game {
   readonly scene: Scene;
-  readonly input: Input;
   private pal: Palette;
   private kit: Kit;
   readonly player: Player;
@@ -92,7 +114,18 @@ export class Game {
   private enemyCtx: EnemyContext;
   private turretCtx: TurretContext;
 
-  constructor(private engine: Engine, private canvas: HTMLCanvasElement, havok: unknown, public settings: Settings) {
+  /** Return-home window: open from checkpoint prep until the next wave starts. */
+  checkpointOpen = false;
+  private disposed = false;
+
+  constructor(
+    private engine: Engine,
+    private canvas: HTMLCanvasElement,
+    havok: unknown,
+    public settings: Settings,
+    readonly input: Input,
+    readonly cfg: ArenaConfig,
+  ) {
     const scene = new Scene(engine);
     this.scene = scene;
     scene.clearColor = new Color4(0.55, 0.55, 0.56, 1);
@@ -100,7 +133,6 @@ export class Game {
     scene.skipPointerMovePicking = true;
     scene.enablePhysics(new Vector3(0, -26, 0), new HavokPlugin(true, havok));
 
-    this.input = new Input(canvas);
     this.pal = createPalette(scene);
     this.kit = new Kit(scene);
     const high = settings.quality === 'high';
@@ -134,7 +166,7 @@ export class Game {
 
     this.player = new Player(scene, ARENA.playerSpawn);
     scene.activeCamera = this.player.camera;
-    this.weapon = new Weapon(scene, this.pal, PLASMA_REPEATER, this.player);
+    this.weapon = new Weapon(scene, this.pal, cfg.weapon, this.player);
     scene.setRenderingAutoClearDepthStencil(1, true, true, true);
 
     this.fx = new Effects(scene, this.kit, this.pal, ARENA);
@@ -195,10 +227,12 @@ export class Game {
       panFor: (p) => this.panFor(p),
     };
 
+    const run = cfg.run;
     this.waves = new WaveManager({
-      spawn: (s, w) => this.enemies.spawn(s.kind, s.gate, ARENA, w.hpMult, w.damageMult),
+      spawn: (s, w) => this.enemies.spawn(s.kind, s.gate, ARENA, w.hpMult, w.damageMult, w.speedMult),
       aliveCount: () => this.enemies.count,
       onWaveStart: (w) => {
+        this.checkpointOpen = false;
         sfx.play('waveStart');
         uiEvents.emit('banner', { title: `WAVE ${w.number}`, sub: `${w.spawns.length} hostiles inbound`, tone: 'orange' });
       },
@@ -207,10 +241,24 @@ export class Game {
         uiEvents.emit('coresGained', w.clearReward);
         this.reactorHp = Math.min(ECONOMY.reactorMaxHp, this.reactorHp + ECONOMY.reactorMaxHp * ECONOMY.reactorRepairPerWave);
         sfx.play('waveClear');
-        uiEvents.emit('banner', { title: `WAVE ${w.number} CLEARED`, sub: `+${w.clearReward} cores · reactor repaired`, tone: 'cyan' });
+        const salvage = Math.round((ECONOMY.salvageWaveBase + w.number * ECONOMY.salvagePerWave) * cfg.tier.salvageMult);
+        run.collect({ salvage });
+        uiEvents.emit('salvageGained', salvage);
+        run.waveCleared(w.number);
+        const banked = isCheckpointWave(w.number) ? run.bank(w.number) : null;
+        if (banked) {
+          cfg.hooks.bank(w.number, banked);
+          uiEvents.emit('banner', { title: 'CHECKPOINT SECURED', sub: `Wave ${w.number} cleared · ${banked.salvage} salvage banked to HQ`, tone: 'cyan' });
+        } else uiEvents.emit('banner', { title: `WAVE ${w.number} CLEARED`, sub: `+${w.clearReward} cores · +${salvage} salvage · reactor repaired`, tone: 'cyan' });
       },
-      onPrepStart: () => {},
-    });
+      onPrepStart: (w) => {
+        run.waveReached(w.number);
+        if (w.number > 1 && run.atCheckpoint) {
+          this.checkpointOpen = true;
+          this.openCheckpoint();
+        }
+      },
+    }, cfg.tier);
 
     this.player.onHurt = (amount, from) => {
       let angle: number | null = null;
@@ -226,7 +274,6 @@ export class Game {
     };
     this.applySettings(settings);
     this.recomputeStats();
-    this.setScreen('menu');
   }
 
   // ---------------------------------------------------------------- lifecycle
@@ -253,11 +300,10 @@ export class Game {
     this.player.maxHp = ECONOMY.playerMaxHp + s.maxHealthBonus;
   }
 
-  async deploy(): Promise<void> {
-    sfx.init();
-    await this.input.requestLock();
+  /** Enter the arena: fresh run state, preparation phase of wave 1. */
+  start(): void {
     this.newRun();
-    this.setScreen('playing');
+    this.setScreen(this.input.captured || this.input.isLockedNow() ? 'playing' : 'paused');
     this.canvas.focus();
   }
 
@@ -267,7 +313,37 @@ export class Game {
     if (this.input.captured) this.setScreen('playing');
   }
 
-  newRun(): void {
+  /** Checkpoint choice: release the mouse and freeze the (prep-phase) simulation. */
+  openCheckpoint(): void {
+    if (!this.checkpointOpen || this.screen === 'defeat') return;
+    this.setBuildMode(false);
+    this.tactical.deactivate();
+    this.setScreen('checkpoint');
+    this.publishHud(true);
+    this.input.releaseLock();
+  }
+
+  /** Continue survival from the checkpoint (return option stays available during prep). */
+  async continueRun(): Promise<void> {
+    if (this.screen !== 'checkpoint') return;
+    sfx.play('ui');
+    await this.resume();
+    if (this.screen === 'checkpoint') this.setScreen('paused');
+  }
+
+  get canReturnHome(): boolean {
+    return this.checkpointOpen && this.cfg.run.atCheckpoint && this.waves.phase === 'prep' && this.screen !== 'defeat';
+  }
+
+  dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
+    this.input.onLockChange = () => {};
+    sfx.setTactical(false);
+    this.scene.dispose();
+  }
+
+  private newRun(): void {
     this.enemies.clear();
     this.turrets.clear();
     this.fx.reset();
@@ -290,25 +366,14 @@ export class Game {
     this.publishHud(true);
   }
 
-  restart(): void {
-    sfx.play('ui');
-    void this.deploy();
-  }
-
   // ---------------------------------------------------------------- frame
 
-  frame(): void {
-    const dt = Math.min(this.engine.getDeltaTime() / 1000, 1 / 20);
-    const fps = this.engine.getFps();
+  /** Advance one frame of simulation (rendering is done by the flow). */
+  step(dt: number, fps = 60): void {
+    if (this.disposed) return;
     if (Number.isFinite(fps)) this.fpsSmooth += (fps - this.fpsSmooth) * 0.05;
-    this.step(dt);
-    this.scene.render();
-  }
-
-  private step(dt: number): void {
     if (this.screen === 'playing' || this.screen === 'defeat') this.update(dt);
     else this.idleAnimate(dt);
-    this.input.endFrame();
   }
 
   private idleAnimate(dt: number): void {
@@ -316,15 +381,6 @@ export class Game {
     this.post.update(dt, 0, 0, flash);
     this.updateReactor(dt, false);
     for (const a of this.animated) a.node.rotation.addInPlace(a.spin.scale(dt));
-    if (this.screen === 'menu') {
-      // Slow cinematic orbit behind the menu, low over the deck so reflections read.
-      const t = performance.now() * 0.00006;
-      const a = 2.45 + Math.sin(t) * 0.35;
-      const cam = this.player.camera;
-      cam.position.set(Math.sin(a) * 21, 3.4 + Math.sin(t * 1.7) * 0.5, Math.cos(a) * 21);
-      cam.setTarget(new Vector3(-6, 5.5, 4));
-      cam.fov = 0.9;
-    }
   }
 
   private update(dt: number): void {
@@ -340,8 +396,8 @@ export class Game {
       if (input.pressed('Digit2') || input.pressed('KeyB')) this.setBuildMode(!this.construction.active);
       if (input.pressed('Digit1')) this.setBuildMode(false);
       if (this.construction.active && input.mousePressed(2)) this.setBuildMode(false);
+      if (input.pressed('KeyH') && this.canReturnHome) this.openCheckpoint();
     }
-    if (this.screen === 'defeat' && input.pressed('KeyR')) this.restart();
 
     this.tactical.update(dt);
     if (!this.tactical.active && this.wasTactical) {
@@ -351,7 +407,10 @@ export class Game {
     }
     const hdt = this.screen === 'defeat' ? dt * 0.15 : dt * this.tactical.hostileScale;
 
-    if (playing) this.runTime += dt;
+    if (playing) {
+      this.runTime += dt;
+      this.cfg.run.tick(dt);
+    }
     this.player.update(dt, input, this.stats.moveSpeedMult, controls);
 
     // ---- building
@@ -537,6 +596,9 @@ export class Game {
     this.kills++;
     this.wallet.earn(e.def.reward);
     uiEvents.emit('coresGained', e.def.reward);
+    const salvage = Math.round(e.def.salvage * this.cfg.tier.salvageMult);
+    if (this.cfg.run.collect({ salvage })) uiEvents.emit('salvageGained', salvage);
+    this.cfg.run.addKill();
     this.enemies.kill(e, this.fx, this.enemyCtx);
   }
 
@@ -564,6 +626,12 @@ export class Game {
     this.fx.flashLight(c, 14, 1.8, new Color3(0.4, 0.9, 1));
     sfx.play('explosion', { volume: 1, pitch: 0.5 });
     hudStore.set({ stats: { kills: this.kills, time: this.runTime, wave: this.waves.number, coresEarned: this.wallet.earned, turretsBuilt: this.turretsBuilt } });
+    this.cfg.hooks.defeat();
+  }
+
+  /** Run statistics shown on the summary screens. */
+  get runStats() {
+    return { kills: this.kills, time: this.runTime, wave: this.waves.number, coresEarned: this.wallet.earned, turretsBuilt: this.turretsBuilt };
   }
 
   private updateProjectiles(hdt: number): void {
@@ -661,9 +729,22 @@ export class Game {
       else if (w.phase === 'prep') hint = 'Preparation: build and reposition. Press G to start early.';
       else if (w.number === 1 && w.phase === 'combat' && this.kills < 3) hint = 'Aim for the glowing visors: weakpoints always crit.';
       else if (w.number === 2 && w.phase === 'combat' && this.tactical.energy >= 99 && !this.tactical.active) hint = 'Q: tactical slow-time lets you place several turrets mid-fight.';
+      if (this.canReturnHome) hint = 'Checkpoint secured. Press H to return to HQ, or start the next wave with G.';
     }
     if (!this.player.alive || c.active) hint = '';
+    const run = this.cfg.run;
     hudStore.set({
+      location: 'arena',
+      run: {
+        tier: this.cfg.tier.id,
+        salvageUnsecured: run.unsecured.salvage,
+        salvageSecured: run.secured.salvage,
+        nextCheckpoint: nextCheckpoint(run.wavesCleared + 1),
+        checkpointOpen: this.canReturnHome,
+        lastBankedWave: run.lastBankedWave,
+        kills: run.kills,
+        duration: run.duration,
+      },
       wave: w.number,
       phase: w.phase,
       phaseTimer: Math.max(0, w.timer),
@@ -698,44 +779,28 @@ export class Game {
     void force;
   }
 
-  /** Debug/test surface (used by automated browser checks). */
-  debugApi() {
+  /** Compact state for automation/debugging. */
+  snapshot() {
     return {
-      game: this,
-      state: () => ({
-        screen: this.screen,
-        wave: this.waves.number,
-        phase: this.waves.phase,
-        enemies: this.enemies.count,
-        reactorHp: this.reactorHp,
-        cores: this.wallet.cores,
-        turrets: this.turrets.turrets.length,
-        kills: this.kills,
-        playerPos: this.player.position.asArray(),
-        playerHp: this.player.hp,
-        tactical: this.tactical.energy,
-        hostileScale: this.tactical.hostileScale,
-        fps: Math.round(this.fpsSmooth),
-      }),
-      /** Run the simulation at a fixed 60 Hz for `seconds` without rendering. */
-      advance: (seconds: number) => {
-        const n = Math.round(seconds * 60);
-        for (let i = 0; i < n; i++) this.step(1 / 60);
-      },
-      /** Stop the free-running render loop (screenshots in slow software GL). */
-      stopLoop: () => {
-        this.engine.stopRenderLoop();
-        // Particles/animations advance a fixed 1/60 s per rendered frame (deterministic captures).
-        this.scene.useConstantAnimationDeltaTime = true;
-      },
-      /** Render `frames` frames without advancing the simulation. */
-      render: (frames = 1) => {
-        for (let i = 0; i < frames; i++) this.scene.render();
-      },
-      look: (yaw: number, pitch: number) => {
-        this.player.yaw = yaw;
-        this.player.pitch = pitch;
-      },
+      screen: this.screen,
+      wave: this.waves.number,
+      phase: this.waves.phase,
+      enemies: this.enemies.count,
+      reactorHp: this.reactorHp,
+      cores: this.wallet.cores,
+      turrets: this.turrets.turrets.length,
+      kills: this.kills,
+      playerPos: this.player.position.asArray(),
+      playerHp: this.player.hp,
+      tactical: this.tactical.energy,
+      hostileScale: this.tactical.hostileScale,
+      fps: Math.round(this.fpsSmooth),
+      checkpointOpen: this.checkpointOpen,
+      canReturnHome: this.canReturnHome,
+      salvageUnsecured: this.cfg.run.unsecured.salvage,
+      salvageSecured: this.cfg.run.secured.salvage,
+      tier: this.cfg.tier.id,
+      wavesCleared: this.cfg.run.wavesCleared,
     };
   }
 }

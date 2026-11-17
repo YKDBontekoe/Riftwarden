@@ -1,6 +1,7 @@
 import { mulberry32 } from '../combat/damage';
 import type { EnemyKind } from '../data/defs';
 import type { GateId } from '../world/layout';
+import { NO_SCALING, type WaveScaling } from '../progression/tiers';
 
 export interface SpawnEntry {
   time: number; // seconds after combat starts (hostile time)
@@ -13,6 +14,7 @@ export interface WaveDef {
   spawns: SpawnEntry[];
   hpMult: number;
   damageMult: number;
+  speedMult: number;
   prepTime: number;
   clearReward: number;
 }
@@ -25,9 +27,14 @@ interface Group {
   interval: number;
 }
 
-function expand(groups: Group[]): SpawnEntry[] {
+function expand(groups: Group[], countMult = 1): SpawnEntry[] {
   const out: SpawnEntry[] = [];
-  for (const g of groups) for (let i = 0; i < g.count; i++) out.push({ time: g.start + i * g.interval, kind: g.kind, gate: g.gate });
+  for (const g of groups) {
+    const count = Math.max(1, Math.round(g.count * countMult));
+    // Extra spawns from tier scaling keep the group's duration (tighter interval).
+    const interval = count > g.count && g.count > 0 ? (g.interval * g.count) / count : g.interval;
+    for (let i = 0; i < count; i++) out.push({ time: g.start + i * interval, kind: g.kind, gate: g.gate });
+  }
   out.sort((a, b) => a.time - b.time);
   return out;
 }
@@ -118,14 +125,15 @@ function generateGroups(n: number): Group[] {
   return groups;
 }
 
-export function getWave(n: number): WaveDef {
+export function getWave(n: number, scaling: WaveScaling = NO_SCALING): WaveDef {
   if (n < 1) throw new Error('wave numbers start at 1');
   const groups = n <= HAND_WAVES.length ? HAND_WAVES[n - 1] : generateGroups(n);
   return {
     number: n,
-    spawns: expand(groups),
-    hpMult: hpMultiplier(n),
-    damageMult: damageMultiplier(n),
+    spawns: expand(groups, scaling.countMult),
+    hpMult: hpMultiplier(n) * scaling.hpMult,
+    damageMult: damageMultiplier(n) * scaling.damageMult,
+    speedMult: scaling.speedMult,
     prepTime: n === 1 ? 30 : 18,
     clearReward: 60 + n * 15,
   };

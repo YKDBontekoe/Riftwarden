@@ -1,18 +1,14 @@
 import {
   type AbstractMesh,
-  BaseTexture,
   Color3,
   Color4,
   Constants,
   Effect,
-  HDRFiltering,
   Mesh,
   MeshBuilder,
   ParticleSystem,
   PBRMaterial,
   PointLight,
-  ReflectionProbe,
-  RenderTargetTexture,
   type Scene,
   ShaderMaterial,
   Vector3,
@@ -21,6 +17,7 @@ import type { ArenaLayout } from '../world/layout';
 import { type Palette, unlit } from './materials';
 import { canvas, flareSprite, rng, toTexture, windowsTexture } from './textures';
 import { boxProjectUVs } from './uv';
+import { captureEnvironment } from './envCapture';
 
 // ---------------------------------------------------------------- shaders
 
@@ -551,41 +548,6 @@ export class Atmosphere {
    * it for roughness, and use it as the PBR environment (reflections + ambient light).
    */
   captureEnvironment(extra: AbstractMesh[], lit: { realTimeFiltering: boolean }[]): void {
-    const scene = this.scene;
-    scene.executeWhenReady(() => {
-      const probe = new ReflectionProbe('envProbe', 256, scene, false, true, true);
-      probe.position.set(0, 7, -8);
-      probe.refreshRate = RenderTargetTexture.REFRESHRATE_RENDER_ONCE;
-      const list = probe.renderList!;
-      for (const m of [...this.envMeshes, ...extra]) if (!list.includes(m)) list.push(m);
-      const rtt = probe.cubeTexture;
-      // Probes only render when referenced; force a single capture as a custom target.
-      scene.customRenderTargets.push(rtt);
-      let faces = 0;
-      const obs = rtt.onAfterRenderObservable.add(() => {
-        if (++faces < 6) return;
-        rtt.onAfterRenderObservable.remove(obs);
-        scene.onAfterRenderObservable.addOnce(() => {
-          const i = scene.customRenderTargets.indexOf(rtt);
-          if (i >= 0) scene.customRenderTargets.splice(i, 1);
-          // Wrap the captured cube in a plain texture so no material ever references the
-          // render target itself (which would make it re-render while being sampled).
-          const env = new BaseTexture(scene, rtt.getInternalTexture());
-          env.gammaSpace = false;
-          env.name = 'capturedEnvironment';
-          const filter = new HDRFiltering(scene.getEngine(), { quality: Constants.TEXTURE_FILTERING_QUALITY_HIGH, hdrScale: 1 });
-          filter
-            .prefilter(env)
-            .then(() => {
-              scene.environmentTexture = env;
-            })
-            .catch((e) => {
-              console.warn('Environment prefilter failed, using realtime filtering', e);
-              for (const m of lit) m.realTimeFiltering = true;
-              scene.environmentTexture = env;
-            });
-        });
-      });
-    });
+    captureEnvironment(this.scene, [...this.envMeshes, ...extra], lit, new Vector3(0, 7, -8));
   }
 }

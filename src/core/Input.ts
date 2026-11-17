@@ -64,6 +64,11 @@ export class Input {
     }
   }
 
+  /** Direct pointer-lock query (the change event can lag a request's promise). */
+  isLockedNow(): boolean {
+    return document.pointerLockElement === this.canvas;
+  }
+
   releaseLock(): void {
     if (document.pointerLockElement) document.exitPointerLock();
   }

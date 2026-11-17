@@ -23,7 +23,9 @@ export class PostFx {
   private ssao: SSAO2RenderingPipeline | null = null;
   private ssr: SSRRenderingPipeline | null = null;
   private aberration = 0;
-  private baseExposure = 0.95;
+  /** Per-location grade baselines (the HQ uses a calmer, brighter look). */
+  baseExposure = 0.95;
+  baseGrain = 2.5;
 
   constructor(scene: Scene, private engine: Engine, camera: Camera, high: boolean) {
     const supportsGBuffer = engine.getCaps().drawBuffersExtension && engine.webGLVersion >= 2;
@@ -132,7 +134,7 @@ export class PostFx {
     cc.globalDensity = 18 * tactical;
     p.chromaticAberration.aberrationAmount = 1 + 30 * this.aberration + 6 * tactical + 14 * hurt;
     p.imageProcessing.exposure = this.baseExposure + lightning * 0.05;
-    p.grain.intensity = 2.5 + tactical * 6;
+    p.grain.intensity = this.baseGrain + tactical * 6;
     void this.engine;
   }
 

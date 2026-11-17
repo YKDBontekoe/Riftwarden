@@ -1,6 +1,7 @@
 import type { SpawnEntry, WaveDef } from './waves';
 import { getWave } from './waves';
 import type { WavePhase } from '../ui/store';
+import { NO_SCALING, type WaveScaling } from '../progression/tiers';
 
 export interface WaveHooks {
   spawn(entry: SpawnEntry, wave: WaveDef): void;
@@ -26,11 +27,11 @@ export class WaveManager {
   private cursor = 0;
   spawnedTotal = 0;
 
-  constructor(private hooks: WaveHooks) {}
+  constructor(private hooks: WaveHooks, public scaling: WaveScaling = NO_SCALING) {}
 
   reset(): void {
     this.number = 1;
-    this.wave = getWave(1);
+    this.wave = getWave(1, this.scaling);
     this.enterPrep();
   }
 
@@ -86,7 +87,7 @@ export class WaveManager {
         this.timer -= realDt;
         if (this.timer <= 0) {
           this.number++;
-          this.wave = getWave(this.number);
+          this.wave = getWave(this.number, this.scaling);
           this.enterPrep();
         }
         break;

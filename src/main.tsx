@@ -2,32 +2,33 @@ import HavokPhysics from '@babylonjs/havok';
 import havokWasmUrl from '@babylonjs/havok/lib/esm/HavokPhysics.wasm?url';
 import { Engine } from '@babylonjs/core';
 import { createRoot } from 'react-dom/client';
-import { Game } from './core/Game';
+import { Flow } from './core/Flow';
 import { loadSettings } from './core/settings';
 import { App } from './ui/App';
-import { hudStore } from './ui/store';
 import './ui/style.css';
 
 async function boot(): Promise<void> {
   const root = createRoot(document.getElementById('ui')!);
-  let game: Game | null = null;
-  root.render(<App getGame={() => game} />);
+  let flow: Flow | null = null;
+  root.render(<App getFlow={() => flow} />);
 
   const canvas = document.getElementById('game') as HTMLCanvasElement;
   const engine = new Engine(canvas, true, { stencil: true, preserveDrawingBuffer: false, powerPreference: 'high-performance' }, true);
   const havok = await HavokPhysics({ locateFile: () => havokWasmUrl });
-  game = new Game(engine, canvas, havok, loadSettings());
+  // In-world screens and signs are drawn to canvases: make sure the UI fonts are ready (bounded wait).
+  await Promise.race([document.fonts?.ready ?? Promise.resolve(), new Promise((r) => setTimeout(r, 2500))]);
+  flow = new Flow(engine, canvas, havok, loadSettings());
 
-  const params = new URLSearchParams(location.search);
-  if (params.has('test')) {
+  if (new URLSearchParams(location.search).has('test')) {
     // Automation mode: no real pointer lock required.
-    game.input.forceCapture = true;
-    (window as unknown as { __rift: unknown }).__rift = game.debugApi();
+    flow.input.forceCapture = true;
+    (window as unknown as { __rift: unknown }).__rift = flow.debugApi();
   }
 
-  engine.runRenderLoop(() => game!.frame());
+  flow.boot();
+  // The only render loop for the whole session; worlds are swapped underneath it.
+  engine.runRenderLoop(() => flow!.frame());
   window.addEventListener('resize', () => engine.resize());
-  hudStore.set({ screen: 'menu' });
 }
 
 boot().catch((err) => {

@@ -87,6 +87,10 @@ export function unlit(scene: Scene, name: string, e: [number, number, number] | 
   const m = new PBRMaterial(name, scene);
   m.unlit = true;
   m.albedoColor = Color3.Black();
+  // Zero reflectance so screen-space reflections never paint over glows, screens or signs.
+  m.metallic = 0;
+  m.roughness = 1;
+  m.metallicF0Factor = 0;
   m.emissiveColor = e instanceof Color3 ? e.clone() : new Color3(...e);
   if (o.tex) m.emissiveTexture = o.tex;
   if (o.opacity) m.opacityTexture = o.opacity;
