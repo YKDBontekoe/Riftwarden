@@ -29,7 +29,7 @@ export const MODULE_TYPES: readonly ModuleTypeDef[] = [
   { type: 'crit', name: 'Critical Processor', socket: 'system', families: ALL, visual: 'chip', blurb: 'Higher critical chance and critical damage.' },
   { type: 'overcharge', name: 'Overcharge Capacitor', socket: 'power', families: ALL, visual: 'capacitor', blurb: 'Much more damage, at the cost of heat efficiency.' },
   { type: 'splitter', name: 'Projectile Splitter', socket: 'barrel', families: ['plasma'], visual: 'fork', blurb: 'Fires an extra plasma bolt per shot; each bolt is weaker and spread widens.' },
-  { type: 'arc', name: 'Arc Conductor', socket: 'barrel', families: ALL, visual: 'coil', blurb: 'Hits can arc to a nearby enemy for part of the damage. Slightly more heat.' },
+  { type: 'arc', name: 'Arc Conductor', socket: 'barrel', families: ALL, visual: 'coil', blurb: 'Hits can arc to another enemy within 12 m for part of the damage. Slightly more heat.' },
   { type: 'thermal', name: 'Thermal Converter', socket: 'power', families: ALL, visual: 'exchanger', blurb: 'Converts heat into damage: the hotter the weapon, the harder it hits. Slower cooling.' },
   { type: 'stabilizer', name: 'Precision Stabilizer', socket: 'barrel', families: ALL, visual: 'gyro', blurb: 'Less spread and recoil, faster charge/ramp; slightly slower fire rate.' },
   // M2 modules (still installable; their stored affixes apply as rolled)

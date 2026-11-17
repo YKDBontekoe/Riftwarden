@@ -39,6 +39,14 @@ export interface WeaponFxHooks {
   beam(on: boolean, from: Vector3, to: Vector3, intensity: number, contact: boolean): void;
 }
 
+/** Fill optional outcome fields (callers may return only a point). */
+function normalize(o: Partial<ShotOutcome> & { point: Vector3 }): ShotOutcome {
+  return { point: o.point, normal: o.normal ?? null, target: o.target ?? 'none', enemyId: o.enemyId ?? null };
+}
+
+/** Presentation no-op (automation / headless callers). */
+const NO_FX: WeaponFxHooks = { shot: () => {}, beam: () => {} };
+
 /** Vertical FOV the viewmodel layout is tuned for (90° horizontal at 16:9). */
 const REF_FOV = 2 * Math.atan(Math.tan(Math.PI / 4) / (16 / 9));
 /** Viewmodel anchor relative to the camera (metres). */
@@ -167,6 +175,7 @@ export class Weapon {
   }
 
   reset(): void {
+    this.switchT = 0;
     this.heat = 0;
     this.overheated = false;
     this.cooldown = 0;
@@ -219,7 +228,7 @@ export class Weapon {
       // Split projectiles fan out around the aim point.
       const extra = proj > 1 ? 0.012 + 0.006 * proj : 0;
       const dir = this.aimDir(stats, i === 0 && proj > 1 ? extra * 0.3 : extra);
-      const out = shoot({ origin, dir, range: this.range(stats), damage: dmg, family: d.family, pierce: d.pierce + Math.floor(stats.pierce), width: 0 });
+      const out = normalize(shoot({ origin, dir, range: this.range(stats), damage: dmg, family: d.family, pierce: d.pierce + Math.floor(stats.pierce), width: 0 }));
       fx.shot(d.family, from, out, power, d.boltSpeed);
       if (i === 0) this.lastShot = { from, to: out.point };
     }
@@ -247,7 +256,7 @@ export class Weapon {
   }
 
   /** Returns true if a shot (or beam tick) was fired this frame. */
-  update(dt: number, trigger: boolean, stats: CombatStats, shoot: (r: ShotRequest) => ShotOutcome, fx: WeaponFxHooks): boolean {
+  update(dt: number, trigger: boolean, stats: CombatStats, shoot: (r: ShotRequest) => ShotOutcome, fx: WeaponFxHooks = NO_FX): boolean {
     const d = this.def;
     this.cooldown -= dt;
     this.sinceShot += dt;
@@ -321,7 +330,7 @@ export class Weapon {
             const rampTime = d.rampTime / stats.chargeRateMult;
             this.ramp = 1 + (d.rampMax - 1) * Math.min(1, this.rampT / Math.max(0.05, rampTime));
             const dir = this.aimDir(stats);
-            const out = shoot({ origin: this.player.camera.position.clone(), dir, range: this.range(stats), damage: d.damage * stats.weaponDamageMult * thermal * this.ramp, family: 'beam', pierce: 0, width: d.beamWidth });
+            const out = normalize(shoot({ origin: this.player.camera.position.clone(), dir, range: this.range(stats), damage: d.damage * stats.weaponDamageMult * thermal * this.ramp, family: 'beam', pierce: 0, width: d.beamWidth }));
             if (out.enemyId !== null && out.enemyId === this.rampTarget) this.rampT += tick;
             else this.rampT = 0;
             this.rampTarget = out.enemyId;

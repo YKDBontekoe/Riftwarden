@@ -606,7 +606,7 @@ const savedItems = (p) => p.evaluate(() => JSON.parse(JSON.stringify(window.__ri
   const body = JSON.stringify(m1save);
   ({ b, ctx, p, errs } = await launch({ 'riftwarden.save': `{"v":1,"sum":"${fnv(body)}","data":${body}}` }));
   let h = await p.evaluate(() => ({ status: window.__rift.profile.loadStatus, save: window.__rift.profile.save }));
-  check('H1 M1 save loads and migrates', h.status === 'loaded' && h.save.version === 2 && h.save.profile.callsign === 'VETERAN' && h.save.resources.salvage === 640 && h.save.threat.unlocked === 2, h.status);
+  check('H1 M1 save loads and migrates', h.status === 'loaded' && h.save.version >= 2 && h.save.profile.callsign === 'VETERAN' && h.save.resources.salvage === 640 && h.save.threat.unlocked === 2, h.status);
   const st1 = h.save.items.find((i) => i.uid === 'it_m1_starter');
   check('H2 legacy weapon became a level-1 common repeater with the same damage', st1 && st1.level === 1 && st1.rarity === 'common' && st1.weapon.damage === 13 && h.save.loadout.weapon === 'it_m1_starter');
   check('H3 storage expanded to the M2 capacity, presets added', h.save.storage.capacity === 50 && h.save.presets.length === 3);

@@ -106,6 +106,18 @@ class Assembler {
   readonly meshes: Mesh[] = [];
   constructor(readonly scene: Scene, readonly root: TransformNode, private opts: ModelOpts) {}
 
+  private statics = new Set<TransformNode>();
+
+  /**
+   * A placement frame that never moves on its own: its parts are baked into the parent's
+   * merged meshes at finalize (keeps the draw-call count low). Must not get child nodes.
+   */
+  frame(name: string, parent: TransformNode, pos: V3 = [0, 0, 0], rot: V3 = [0, 0, 0]): TransformNode {
+    const n = this.node(name, parent, pos, rot);
+    this.statics.add(n);
+    return n;
+  }
+
   node(name: string, parent: TransformNode, pos: V3 = [0, 0, 0], rot: V3 = [0, 0, 0]): TransformNode {
     const n = new TransformNode(name, this.scene);
     n.parent = parent;
@@ -149,6 +161,21 @@ class Assembler {
   }
 
   finalize(): void {
+    // Bake static frames into their parent's buckets.
+    for (const [key, b] of [...this.buckets]) {
+      if (!this.statics.has(b.node)) continue;
+      const n = b.node;
+      const parent = n.parent as TransformNode;
+      const m = Matrix.Compose(n.scaling, Quaternion.FromEulerAngles(n.rotation.x, n.rotation.y, n.rotation.z), n.position);
+      for (const v of b.parts) v.transform(m);
+      const pk = `${parent.uniqueId}|${b.mat.uniqueId}`;
+      const pb = this.buckets.get(pk);
+      if (pb) pb.parts.push(...b.parts);
+      else this.buckets.set(pk, { node: parent, mat: b.mat, parts: b.parts });
+      this.buckets.delete(key);
+    }
+    for (const n of this.statics) n.dispose();
+    this.statics.clear();
     for (const b of this.buckets.values()) {
       const [first, ...rest] = b.parts;
       if (rest.length) first.merge(rest, true);
@@ -317,8 +344,9 @@ function beamChassis(c: Ctx): Mounts {
   // Side radiator grilles on both flanks (heat-reactive edges).
   for (const s of [-1, 1]) {
     for (let i = 0; i < 6; i++) {
-      const f = a.node('beamFin', root, [s * (W / 2 + 0.004), y(0.04), z(-0.18 + i * 0.026)]);
-      a.add(boxData(0.008, y(0.05), 0.006, 0.0015), M.dark, f);
+      const f = s < 0 ? a.node('beamFin', root, [s * (W / 2 + 0.004), y(0.04), z(-0.18 + i * 0.026)]) : a.frame('beamFin', root, [s * (W / 2 + 0.004), y(0.04), z(-0.18 + i * 0.026)]);
+      // Whole fin in heat-reactive metal: one draw per animated fin, glows as a unit when hot.
+      a.add(boxData(0.008, y(0.05), 0.006, 0.0015), s < 0 ? c.heat : M.dark, f);
       a.add(boxData(0.0085, y(0.006), 0.0062, 0.001), c.heat, f, [0, y(0.026), 0]);
       if (s < 0) c.rig.fins.push({ node: f, max: 0.35 });
     }
@@ -398,7 +426,7 @@ function barrel(c: Ctx, m: Mounts): number {
       const shroud = b.barrel === 'rb_shroud';
       const rails: [number, number, number][] = quad ? [[-0.026, 0.026, 0.785], [0.026, 0.026, -0.785], [-0.026, -0.026, -0.785], [0.026, -0.026, 0.785]] : [[0, 0.03, 0], [0, -0.03, 0]];
       for (const [rx, ry, rz] of rails) {
-        const n = a.node('rail', slide, [rx, ay + ry, 0], [0, 0, rz]);
+        const n = a.frame('rail', slide, [rx, ay + ry, 0], [0, 0, rz]);
         const outer = ry > 0 ? 1 : -1;
         // Rail bar: tapered front, inner face lit by charge.
         a.add(prismData([[z0, -0.011], [z0 + L, -0.008], [z0 + L + 0.025, 0.0], [z0 + L, 0.008], [z0, 0.011]], quad ? 0.012 : 0.02, 0.003), c.trim, n);
@@ -436,7 +464,7 @@ function barrel(c: Ctx, m: Mounts): number {
         // Three prongs around the axis with energy tips.
         for (let i = 0; i < 3; i++) {
           const ang = (i / 3) * Math.PI * 2 + Math.PI / 2;
-          const n = a.node('prong', slide, [0, ay, 0], [0, 0, ang]);
+          const n = a.frame('prong', slide, [0, ay, 0], [0, 0, ang]);
           a.add(prismData([[z0 + L * 0.3, 0.02], [z0 + L + 0.03, 0.038], [z0 + L + 0.06, 0.032], [z0 + L + 0.04, 0.022], [z0 + L * 0.6, 0.014]], 0.012, 0.003), c.shell, n);
           a.add(boxData(0.006, 0.006, 0.02, 0.001), c.chargeGlow, n, [0, 0.03, z0 + L + 0.045]);
         }
@@ -485,7 +513,7 @@ function core(c: Ctx, m: Mounts): void {
     }
     case 'co_dense': {
       // Vertical canister on the top rear: glass sleeve, energy column, satin caps.
-      const n = a.node('coreDense', root, [0, m.top.y + 0.004, Math.min(m.top.z0, -0.08) - 0.04]);
+      const n = a.frame('coreDense', root, [0, m.top.y + 0.004, Math.min(m.top.z0, -0.08) - 0.04]);
       a.add(lathe(cylProfile(0.026, 0, 0.012, 0.003)), M.satin, n);
       a.add(lathe([[0.02, 0.012], [0.02, 0.06]], 24), M.glass, n);
       a.add(lathe(cylProfile(0.012, 0.012, 0.06, 0.002), 16), c.energy, n);
@@ -508,7 +536,7 @@ function core(c: Ctx, m: Mounts): void {
     default: {
       // co_cell: horizontal cell on the visible flank behind a glass window.
       const len = Math.min(0.15, m.core.len);
-      const n = a.node('coreCell', root, [cx - 0.014, cy + 0.03, cz]);
+      const n = a.frame('coreCell', root, [cx - 0.014, cy + 0.03, cz]);
       a.add(cylZ(0.019, -len / 2, -len / 2 + 0.016, 0.003), M.satin, n);
       a.add(cylZ(0.019, len / 2 - 0.016, len / 2, 0.003), M.satin, n);
       a.add(alongZ(latheData([[0.0175, -len / 2 + 0.016], [0.0175, len / 2 - 0.016]], 24)), M.glass, n);
@@ -527,7 +555,7 @@ function cooling(c: Ctx, m: Mounts): void {
   switch (b.cooling) {
     case 'cl_jacket': {
       // Ribbed jacket around the barrel root with heat bands.
-      const n = a.node('jacket', c.rig.slide!, [0, m.axisY, m.barrelZ]);
+      const n = a.frame('jacket', c.rig.slide!, [0, m.axisY, m.barrelZ]);
       a.add(cylZ(c.b.family === 'rail' ? 0.024 : 0.03, 0, 0.07, 0.003), M.graphite, n);
       for (let i = 0; i < 6; i++) a.add(tubeZ(c.b.family === 'rail' ? 0.028 : 0.035, 0.022, 0.006 + i * 0.011, 0.01 + i * 0.011), i % 2 ? c.heat : M.dark, n);
       break;
@@ -547,7 +575,7 @@ function cooling(c: Ctx, m: Mounts): void {
       const n = 6;
       for (let i = 0; i < n; i++) {
         const node = a.node('fin', root, [0, t.y + 0.002, t.z0 + 0.012 + (i * (t.z1 - t.z0 - 0.02)) / (n - 1)]);
-        a.add(prismData([[-0.004, 0], [0.004, 0], [0.003, 0.02], [-0.002, 0.022]], 0.05, 0.0012), M.dark, node);
+        a.add(prismData([[-0.004, 0], [0.004, 0], [0.003, 0.02], [-0.002, 0.022]], 0.05, 0.0012), c.heat, node);
         a.add(boxData(0.051, 0.003, 0.0045, 0.0006), c.heat, node, [0, 0.021, -0.0005]);
         c.rig.fins.push({ node, max: -0.55 });
       }
@@ -566,7 +594,7 @@ function attachments(c: Ctx, m: Mounts, front: number): void {
       case 'at_sight': {
         const zs = b.family === 'rail' ? -0.05 : b.family === 'beam' ? 0.1 : -0.06;
         const ys = m.top.y + (b.family === 'rail' ? 0.004 : 0.012);
-        const n = a.node('sight', root, [0, ys, zs]);
+        const n = a.frame('sight', root, [0, ys, zs]);
         a.add(boxData(0.03, 0.01, 0.07, 0.003), M.dark, n);
         a.add(prismData([[-0.03, 0.005], [0.03, 0.005], [0.024, 0.04], [-0.022, 0.04]], 0.006, 0.0015), M.graphite, n, [-0.018, 0, 0]);
         a.add(prismData([[-0.03, 0.005], [0.03, 0.005], [0.024, 0.04], [-0.022, 0.04]], 0.006, 0.0015), M.graphite, n, [0.018, 0, 0]);
@@ -597,7 +625,7 @@ function attachments(c: Ctx, m: Mounts, front: number): void {
       case 'at_capacitor': {
         const f = m.flank;
         for (let k = 0; k < 2; k++) {
-          const n = a.node('auxCap', root, [-f.x - 0.014, f.y - 0.012, f.z1 - 0.02 - k * 0.04]);
+          const n = a.frame('auxCap', root, [-f.x - 0.014, f.y - 0.012, f.z1 - 0.02 - k * 0.04]);
           a.add(lathe(cylProfile(0.012, -0.022, 0.022, 0.003), 18), M.satin, n);
           a.add(lathe(tubeProfile(0.0128, 0.011, -0.003, 0.003), 18), c.chargeGlow, n);
         }
@@ -634,7 +662,8 @@ function moduleHardware(c: Ctx, m: Mounts, front: number, installed: (ItemInstan
   mounts.forEach((mt, i) => {
     const mod = installed[i];
     const parent = mt.kind === 'barrel' ? c.rig.slide! : a.root;
-    const n = a.node(`socket${i}`, parent, mt.pos);
+    const vis0: ModuleVisual | null = installed[i] ? (moduleTypeDef(installed[i]!.module?.type)?.visual ?? 'chip') : null;
+    const n = vis0 === 'gyro' ? a.node(`socket${i}`, parent, mt.pos) : a.frame(`socket${i}`, parent, mt.pos);
     if (!mod) {
       // Empty socket: a capped port so sockets read as hardware even when unused.
       if (mt.kind !== 'barrel') {

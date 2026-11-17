@@ -58,6 +58,8 @@ const TMP = new Vector3();
 /** Sun intensity (directional, range-free). */
 const SUN = 3.4;
 const TMP2 = new Vector3();
+/** Arc Conductor reach (m): enemies on the lanes are spread a few metres apart. */
+export const ARC_RANGE = 12;
 
 /** Callbacks into the session flow (persistence and scene transitions live there). */
 export interface ArenaHooks {
@@ -957,11 +959,11 @@ export class Game {
     }
   }
 
-  /** Arc to the nearest other living enemy within 8 m of the struck one. */
+  /** Arc to the nearest other living enemy within ARC_RANGE of the struck one. */
   private arcFrom(src: Enemy, point: Vector3, amount: number): void {
     if (amount <= 0) return;
     let best: Enemy | null = null;
-    let bestD = 8 * 8;
+    let bestD = ARC_RANGE * ARC_RANGE;
     for (const o of this.enemies.active) {
       if (o === src || !o.alive) continue;
       const d = Vector3.DistanceSquared(o.pos, src.pos);

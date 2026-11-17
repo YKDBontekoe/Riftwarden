@@ -1,6 +1,6 @@
 # Riftwarden: project notes for future sessions
 
-Browser FPS + tower-defense roguelite. Current milestone: **M2 complete** (see "Milestones"). Read this before changing code.
+Browser FPS + tower-defense roguelite. Current milestone: **M3 complete** (see "Milestones"). Read this before changing code.
 
 ## Stack
 
@@ -55,7 +55,17 @@ src/visuals/atmosphere.ts  storm sky shader + rift tear + lightning, rift portal
                            distant skyline, dust/ash/gate embers, one-shot reflection-probe environment capture
 src/visuals/postfx.ts      SSAO2 + SSR (high), HDR bloom, ACES, colour grade, grain, chromatic aberration kicks
 src/player/Player.ts       hover drone movement on PhysicsCharacterController, camera, health/respawn
-src/combat/Weapon.ts       plasma repeater: heat, spread, recoil, viewmodel (rendering group 1)
+src/combat/Weapon.ts       equipped weapon: mechanisms (auto/burst/charge/cycle/beam), heat, spread, viewmodel (group 1)
+src/weapons/components.ts  weapon components (barrels/emitters, cores, cooling, mechanisms, attachments) + effects [pure]
+src/weapons/build.ts       WeaponBuild (persisted config), FAMILIES, rollBuild, socket kinds, buildEffects     [pure]
+src/weapons/modules.ts     module types (socket kind, families, visual), canInstall, removalCost              [pure]
+src/weapons/geometry.ts    chamfered lathe / profile-prism / box vertex generators (ear clipping)            [pure]
+src/weapons/materials.ts   weapon material library per scene (graphite, satin, dark, polymer, glass, finishes)
+src/weapons/model.ts       buildWeaponModel(build, installed): chassis per family + mounts, merged meshes, anim hooks
+src/weapons/animator.ts    WeaponAnimator: springs for recoil/sway/sprint/dash/jump/land, heat/charge visuals
+src/fx/WeaponFx.ts         plasma bolts, rail trails, continuous beam, arc lightning (camera-facing ribbons)
+src/home/WeaponPreview.ts  HQ 3D inspection: small dedicated engine on its own canvas (studio env, ArcRotate)
+src/ui/WeaponViewer.tsx    React wrapper for WeaponPreview (created/disposed with the terminal)
 src/combat/damage.ts       rollDamage / applyDamage / mulberry32     [pure]
 src/combat/stats.ts        CombatStats + StatModifier stacking         [pure]
 src/enemies/EnemyManager.ts pooled enemies, route following, attacks, separation, stuck watchdog
@@ -72,9 +82,24 @@ src/ui/                    React App (menus, pause, checkpoint, defeat, summary,
 tests/                     Vitest suites for the [pure] modules
 scripts/e2e-m1.cjs         M1 browser acceptance suite (70 checks: scenarios A-G, tiers, leaks, persistence)
 scripts/e2e-m2.cjs         M2 browser acceptance suite (loot scenarios A-I, migration, leaks)
+scripts/e2e-m3.cjs         M3 browser acceptance suite (families, generation, engineering UI, variation, loot, v2 migration, leaks)
 ```
 
 ## Key design decisions
+
+### M3: weapon families, procedural weapons, modules, engineering
+
+- **Families** (`data/defs.ts` templates, `weapons/build.ts` FAMILIES): Plasma Repeater (hitscan + travelling bolt visuals, `auto`/`burst`), Railgun (`charge`: hold to charge, release fires 30..100% damage, partial charge = less heat; or `cycle`: automatic full slugs; slugs pierce `pierce` extra enemies at -15% each), Beam Emitter (`beam`: 15 damage ticks/s, damage ramps to `rampMax` while the beam stays on the same enemy, `beamWidth` aim-assist radius, shorter range). All damage still goes through `Game.shoot` -> `damageEnemy` -> `rollDamage` -> `EnemyManager.damage`.
+- **Bases are chassis**: 3 per family (`plasma_repeater/heavy/light`, `rail_lancer/siege/striker`, `beam_prism/lattice/focus`). `generateItem` rolls the base numbers, then `rollBuild` (own seeded stream: `seed ^ 0x5bd1e995`) picks barrel, core, cooling, mechanism, 0-3 attachments (by rarity), finish (legendary = gilded, exotic = iridescent) and appearance params; component multipliers (`buildEffects`) are **baked into the stored `WeaponRoll`** (+ `range/accuracy/pierce/chargeTime/beamWidth/rampMax`). Only components offered for the family (and rarity: prism core = legendary+) can roll, and every one has geometry for that family, so no invalid combination exists. `GENERATOR_VERSION = 2`.
+- **Stat composition** (`loot/equipment.ts`): `weaponDefFor` = family template -> stored roll -> build mechanism. Everything else is StatModifiers in `CombatStats` (affixes, installed modules, other gear, run modifiers), applied at fire time: damage × weaponDamageMult × thermal (1 + heatDamage × heat), rate × fireRateMult, heat / heatEfficiency, spread/recoil × spreadMult, charge/ramp × chargeRateMult, range × rangeMult, projectiles (floor), pierce (+). New stat keys: `projectiles, spreadMult, chargeRateMult, arcChance, arcDamage, heatDamage, pierce, rangeMult` (only modules/components produce them).
+- **Sockets**: weapons only; count per rarity in `rarity.ts` (0/1/2/3/4/4); kinds (`barrel`/`power`/`system`) follow a per-family pattern and are stored in `build.sockets`. Module types (8 + 3 legacy M2 inserts) each fit one socket kind and a family list (splitter = plasma only). `canInstall` is the single rule.
+- **Ownership**: installed modules live **inside** the weapon item (`socketed: (ItemInstance|null)[]`), not in `items`/storage, so a module can never be in two places and always shares the weapon's carried/secured/unsecured status. `itemModifiers(weapon)` includes its modules (exactly once); loose modules contribute nothing. `allOwnedUids` covers nested uids (banking duplicate guard).
+- **Engineering transactions** (`save.ts`): `installModule` (free), `uninstallModule` (salvage = `removalCost`, needs a free storage bay), `transferModule` (same cost, no bay needed). HQ only (`activeRun` blocks), owned weapons only (equipped or stored), validate everything before mutating. Scrapping a weapon returns its modules to storage.
+- **Save v3**: `MIGRATIONS[2]` sets M3 socket counts (weapons) / 0 (others) and drops the old `modules` uid list; `sanitizeItem` validates builds (invalid -> `defaultBuild(chassis)`: stats untouched), validates nested modules against their socket (incompatible ones are evicted to storage, never deleted) and de-duplicates uids across nesting. M2 module bases stay (weight 0) and install into barrel/system/power sockets.
+- **Viewmodel**: `buildWeaponModel` builds per-family chassis that expose mount points (barrel axis/z, core bay, top, flank, sockets); components attach to those mounts, so parts never float. Static parts merge per (animated node, material) => ~25-35 meshes per weapon. Animated hooks: slide (recoil), spinners (coils, rings, prism core), fins (open with heat), charge nodes (rail capacitors/rings), 5 heat LEDs (material swap), per-model energy/charge/heat materials. A drone hardpoint arm (viewmodel only) runs off-screen. The animator is spring based and dt driven (deterministic under `advance()`).
+- **First person**: anchored at `Weapon.ts` `ANCHOR`; x/y offsets and scale are multiplied by `tan(fov/2)/tan(ref/2)` so the weapon keeps its screen footprint under FOV changes (sprint kick, settings). Shots are resolved from the camera ray (crosshair accurate); visuals start at the muzzle and end at the resolved hit point.
+- **Effects** (`WeaponFx`): streak quads are rotated around their axis to face the camera (crossed quads vanish when viewed along their length). Plasma bolts have a tail toward the muzzle and run their impact effect on arrival; rail trails fade/widen; the beam is one persistent ribbon pair + endpoint flare + light; arcs are 6 jagged segments. Impacts differ per target (surface, shield, armour) and family.
+- **Preview**: `WeaponPreview` uses a second small `Engine` on its own canvas because the terminal overlay blurs the main canvas; it captures a studio env once, rebuilds the model only when uid/build/installed modules change, and disposes engine+scene on terminal close (`window.__preview` while open, for tests). Debug: `__rift.lab(items, opts)` renders models in front of the camera for visual QA.
 
 ### M2: loot, equipment and inventory
 
@@ -88,7 +113,7 @@ scripts/e2e-m2.cjs         M2 browser acceptance suite (loot scenarios A-I, migr
 - **Interaction**: `pickInteractable` (same as HQ) over landed pickups within 3.4 m + Havok occlusion; E collects into the run cargo. Prompt shows rarity/category/level and a quick level comparison; nearby pickups get projected name tags (imperative DOM pool).
 - **Ownership is decided by the ledger, not slots** (`RunInventory`): `carried` (equipped at deploy, never lost), `secured` (banked this run, in the save), `unsecured` (cargo, cap 20). The arena gets *clones* of the equipped items; arena equip/unequip/discard only touch the run loadout and are allowed only in the `prep` phase (`Game.equipAllowed`). At run end `Flow.endRun` records the run and then `applyLoadout(save, inventory.ownedLoadout())`: slots holding lost items are skipped, so the profile keeps its previous secured gear.
 - **Banking** reuses M1: kills/pickups → `RunLedger.collect` (idempotent by uid) → `bank(wave)` → `bankRewards` validates every item (`sanitizeItem`) then applies in one step; guarded by `bankedThroughWave`. The checkpoint UI says "secured" only if the write succeeded (`Profile.lastWriteOk`). Banking never drops items: storage may exceed capacity, which blocks deployment until the player scraps items or buys an expansion.
-- **HQ**: storage terminal = shared `InventoryView` (filter by category, sort rarity/level/newest/name, detail, raw comparison + "drone stats if equipped" via the real stat pipeline, equip/unequip, scrap for salvage, +10 bays for salvage = first salvage sink). Drone configuration = slots, calculated stats, 3 saved presets (references into owned items; missing items skipped). Workshop = module archive + sockets readout; no install buttons (M3).
+- **HQ**: storage terminal = shared `InventoryView` (filter by category, sort rarity/level/newest/name, detail, raw comparison + "drone stats if equipped" via the real stat pipeline, equip/unequip, scrap for salvage, +10 bays for salvage = first salvage sink). Drone configuration = slots, calculated stats, 3 saved presets (references into owned items; missing items skipped). Workshop became weapon engineering in M3 (see above).
 - **Modules** are `category: 'module'` items with `module {type, compatible, socketCost}` and at least one affix; `itemModifiers` returns nothing for them and the UI states they are inactive.
 - **Save v2**: `MIGRATIONS[1]` drops the unused `module` slot, adds `presets` and `storage.expansions`; `sanitizeItem` upgrades M1 items to the deterministic level-1 common roll (same 13 damage repeater), keeps unknown-base items (inert, unequippable), validates every number. Capacity = 50 + 10 × expansions.
 
@@ -121,9 +146,10 @@ scripts/e2e-m2.cjs         M2 browser acceptance suite (loot scenarios A-I, migr
 
 ## Testing
 
-- `npm test` (85): loot generation/rarity/drops/equipment/lifetime (`loot.test.ts`), save v2 migration, banking and ownership scenarios D/E/F, presets/scrap/expansion (`save-m2.test.ts`), plus the M1 suites: damage, stats, tactical/wallet, layout lane clearance, placement rules, wave generation and the wave lifecycle, settings, save format/migration/corruption, run ledger + banking rules, tiers, HQ layout and interaction targeting.
+- `npm test` (104): M3 weapon generation/compatibility/engineering transactions/v2->v3 migration (`weapons.test.ts`), plus loot generation/rarity/drops/equipment/lifetime (`loot.test.ts`), save v2 migration, banking and ownership scenarios D/E/F, presets/scrap/expansion (`save-m2.test.ts`), plus the M1 suites: damage, stats, tactical/wallet, layout lane clearance, placement rules, wave generation and the wave lifecycle, settings, save format/migration/corruption, run ledger + banking rules, tiers, HQ layout and interaction targeting.
 - `node scripts/e2e-m1.cjs` (dev server on :5173, Playwright): M1 acceptance scenarios A-G, tiers, interrupted runs, 4 deploy/return cycles with resource/listener/heap leak checks. Last run (after M2): ALL PASSED.
-- `node scripts/e2e-m2.cjs` (last run: 54/54 passed): M2 scenarios A-I in the browser (drops near kills, targeting + E pickup, live roll validity, real shot damage/cooling/shield/movement/Sentinel cost changes, combat lock, banking + storage UI + reload, unsecured loss, equip-before-bank exploit via the inventory UI, lifetime, M1-save migration + reloads, leak cycles with loot). Extra debug API: `spawnLoot`, `pickups`, `approach(id)`, `teleport`, `makeItem`, `grant`, `damageReactor`; `game.dropChanceMult`, `game.rollItems(source)`. Do not edit `src/` while an e2e runs against the dev server (Vite HMR reloads the page).
+- `node scripts/e2e-m3.cjs` (last run: 35/35 passed, ~2 min): A families (plasma bolts, rail charge/release/pierce/trail, beam ticks/ramp, visible overheat), B generation (108 weapons, determinism, sockets, geometry budget), F visual variation, G loot drop -> equip -> fire -> bank -> HQ, C/D/E workshop install/preview/remove/incompatible through the UI + reload, H M2 save migration + install, I splitter/arc/movement/perf + leak cycles. M1 (all) and M2 (54/54) suites were re-run after M3 and pass.
+- `node scripts/e2e-m2.cjs` (last run after M3: 54/54 passed): M2 scenarios A-I in the browser (drops near kills, targeting + E pickup, live roll validity, real shot damage/cooling/shield/movement/Sentinel cost changes, combat lock, banking + storage UI + reload, unsecured loss, equip-before-bank exploit via the inventory UI, lifetime, M1-save migration + reloads, leak cycles with loot). Extra debug API: `spawnLoot`, `pickups`, `approach(id)`, `teleport`, `makeItem`, `grant`, `damageReactor`; `game.dropChanceMult`, `game.rollItems(source)`. Do not edit `src/` while an e2e runs against the dev server (Vite HMR reloads the page).
 - Browser automation: open `/?test`. This sets `input.forceCapture` (no pointer lock needed) and exposes `window.__rift` (`Flow.debugApi()`) with `state()` (location, screen, profile summary + current world snapshot), `look(yaw, pitch)`, `advance(seconds)` (fixed 60 Hz simulation of the current world, no rendering), `stopLoop()`, `render(frames)`, `killAll()` (through the real damage pipeline), `leakStats()`, and `flow`, `profile`, `game` (current arena or null), `home`. Drive the loop with `flow.enterHq()`, `flow.deploy(tier)`, `flow.returnHome()`, `flow.abandonRun()`, `flow.leaveArena()`. Note: a real Playwright mouse move feeds `mouseDx` while `forceCapture` is on; `advance(1/60)` before `look()` after DOM clicks. In SwiftShader the high preset takes ~1 s per frame: call `stopLoop()`, wait for `game.scene.environmentTexture`, then interleave `advance(1/60)` + `render(1)` and screenshot with a long timeout. Drive input with `game.input.simulateKey(code, down)` / `simulateMouse(button, down)`. Headless Chromium uses SwiftShader (very low FPS), so verify gameplay with `advance()` and take screenshots between calls.
 
 ## Measured (headless SwiftShader, so GPU numbers are not representative)
@@ -134,7 +160,8 @@ scripts/e2e-m2.cjs         M2 browser acceptance suite (loot scenarios A-I, migr
 
 - Simulation: ~0.8 ms/frame with 42 enemies + 6 turrets, ~1.5 ms while firing.
 - M2 loot: one drop roll + generation ~13-15 µs; 30 live pickups (far above normal, ~5-10) add ~0.5 ms/frame of simulation in SwiftShader (hologram animation + targeting). Each pickup is ~10 GPU instances of shared templates; no per-drop materials. Arena with loot: meshes/materials/textures flat over 3 deploy cycles (e2e I3).
-- Bundle: app chunk 292 kB (98 kB gzip) after M2.
+- Bundle: app chunk 373 kB (125 kB gzip) after M3.
+- M3 weapons: 25-42 meshes per procedural weapon (static parts merged per animated node/material), 8-15k vertices; model build is a few ms and happens only on equipment change. Firing simulation ~2.3 ms/frame in SwiftShader incl. picking; HQ resources flat over 4 workshop+deploy cycles (412 meshes / 56 materials / 30 textures, one canvas).
 - Draw calls: ~87 baseline, ~130 with 40 enemies + 6 turrets (instancing works).
 - Production bundle: ~1.4 MB gzip JS (Babylon barrel import) + 0.66 MB gzip Havok WASM.
 
@@ -143,8 +170,11 @@ scripts/e2e-m2.cjs         M2 browser acceptance suite (loot scenarios A-I, migr
 - Real-GPU frame rate not measured in this environment; use F3 on target hardware.
 - Babylon is imported from the barrel (`@babylonjs/core`), so the bundle is large. Switching to deep imports would cut startup size.
 - Turrets cannot be damaged and have no upgrades; core income outpaces spending in later waves (needs sinks later).
-- Module installation, rerolling, crafting, selling and legendary signature effects are not implemented (M3/M4); modules are stored only.
-- Only one weapon family (plasma repeater: standard/heavy/light bases) exists; no elemental damage types are generated because none exist in combat yet.
+- Rerolling, crafting, selling and legendary signature effects are not implemented; no elemental damage types exist (Arc Conductor arcs are energy damage).
+- Only the weapon has sockets; armor/shield/etc. sockets were never functional and were removed in save v3.
+- Weapon component swapping is not offered (components are fixed per weapon); engineering is modules only.
+- The HQ preview has its own WebGL context while a terminal is open (released on close).
+- Dropped weapons use the shared rifle hologram (no per-family world model).
 - Balance is first-pass: enemy HP grows quadratically with waves while item power grows roughly linearly + affixes, so very deep endless runs still get harder. Drop rates/weights are in `drops.ts`/`rarity.ts`.
 - Transitions wait for `whenReadyAsync` (cap 8 s); real-GPU transition time is unmeasured. The arena scene sometimes reports not-ready again after the first resolve (render targets); harmless.
 - Closing a terminal with Esc cannot re-acquire pointer lock (browser rule): the pause overlay asks for a click. E closes and re-locks.
@@ -161,5 +191,6 @@ scripts/e2e-m2.cjs         M2 browser acceptance suite (loot scenarios A-I, migr
 - **M0 (done):** arena, movement, plasma repeater, Sentinel turret + placement, tactical mode, walker + rush drone (+ Bulwark elite), 3 hand waves + endless generator, HUD/menus, restart.
 - **M1 (done):** explorable HQ with interactive stations, deployment with threat tiers I-III, 5-wave checkpoints with automatic banking and continue/return choice, defeat/abandon handling, versioned persistent save (records, salvage, loadout, storage, placeables), repeated scene transitions without leaks.
 - **M2 (done):** procedural loot (6 rarities, 20 affixes, 19 bases over 7 categories, seeded generator, level scaling), drop tables per source incl. elite/target-farm and checkpoint cache, physical pickups with lifetime rules, run cargo + prep-only equipping, functional armor/shield/reactor/processor/accessory stats, comparison UI, banking/loss/ownership rules, HQ storage (scrap, expansion sink), presets, module drops (stored), save v2 migration.
-- **M3 next:** procedural weapon families/components, module installation into sockets, run upgrades.
-- Later: combat depth (second tower, turret upgrades, enemy variety, hit flash, audio pass, deep-import bundle split), M3 run upgrades, M4 modular towers, M5 advanced endless (bosses/events), M6 content, M7 co-op evaluation.
+- **M3 (done):** three weapon families with distinct mechanics/effects/sound, procedural components baked into rolls, procedural first-person models with mechanical animation and heat visuals, 8 functional module types in rarity-based typed sockets, HQ weapon engineering (install/remove/transfer for salvage) with live 3D inspection, save v3 migration.
+- **Next:** run upgrades, legendary signature effects (`signature` is still reserved), module upgrading.
+- Later: combat depth (second tower, turret upgrades, enemy variety, hit flash, audio pass, deep-import bundle split), run upgrades, M4 modular towers, M5 advanced endless (bosses/events), M6 content, M7 co-op evaluation.

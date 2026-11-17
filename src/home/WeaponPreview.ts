@@ -171,11 +171,37 @@ export class WeaponPreview {
     return this.scene.meshes.length;
   }
 
+  /**
+   * Release engine + scene. If shaders are still compiling (the terminal was closed right
+   * after opening), wait for readiness first (bounded): disposing mid-compile makes the
+   * pending compile callbacks touch a dead scene.
+   */
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
     this.engine.stopRenderLoop();
-    this.scene.dispose();
-    this.engine.dispose();
+    let done = false;
+    const kill = () => {
+      if (done) return;
+      done = true;
+      this.scene.dispose();
+      this.engine.dispose();
+    };
+    if (this.scene.isReady()) kill();
+    else {
+      this.scene.executeWhenReady(kill);
+      setTimeout(kill, 8000);
+      // Keep the scene compiling while it waits (the render loop is stopped).
+      const pump = () => {
+        if (done) return;
+        try {
+          this.scene.render();
+        } catch {
+          /* best effort */
+        }
+        setTimeout(pump, 50);
+      };
+      pump();
+    }
   }
 }
