@@ -1031,3 +1031,38 @@ button.comp-card.on { border-color: var(--amber); background: rgba(255, 181, 71,
 .tech-card h4 { margin: 0 0 4px; font-family: var(--display); font-size: 16px; letter-spacing: 0.05em; }
 .tech-card .req { font-size: 12px; color: var(--faint); margin: 6px 0; }
 @media (max-width: 900px) { .upgrade-cards { grid-template-columns: 1fr; } .build-grid, .tp-grid { grid-template-columns: 1fr; } }
+
+/* ---------------------------------------------------------------- M6 survival HUD */
+.boss-bar { position: fixed; top: 112px; left: 50%; transform: translateX(-50%); width: 620px; font-family: var(--mono, monospace); pointer-events: none; }
+.boss-head { display: flex; justify-content: space-between; align-items: baseline; letter-spacing: 0.18em; }
+.boss-name { color: #ffd2b0; font-size: 15px; font-weight: 700; text-shadow: 0 0 12px rgba(255, 90, 40, 0.6); }
+.boss-name em { color: var(--orange); font-style: normal; }
+.boss-phase { color: rgba(255, 210, 180, 0.75); font-size: 11px; }
+.boss-track { position: relative; height: 10px; margin-top: 4px; background: rgba(10, 4, 4, 0.7); outline: 1px solid rgba(255, 120, 70, 0.5); overflow: hidden; }
+.boss-track i { position: absolute; inset: 0; transform-origin: left; background: linear-gradient(90deg, #a8170c, #ff4b2a 70%, #ffb07a); box-shadow: 0 0 12px rgba(255, 70, 30, 0.8); transition: transform 0.12s linear; }
+.boss-track b { position: absolute; top: -2px; bottom: -2px; width: 2px; background: rgba(255, 240, 220, 0.85); }
+.boss-bar.immune .boss-track i { background: linear-gradient(90deg, #4a2a8a, #9b6bff 70%, #d8c4ff); box-shadow: 0 0 12px rgba(150, 100, 255, 0.8); }
+.boss-bar.phase3 .boss-track { animation: bossPulse 0.9s ease-in-out infinite; }
+@keyframes bossPulse { 50% { outline-color: rgba(255, 60, 30, 1); } }
+.boss-foot { display: flex; justify-content: space-between; margin-top: 4px; font-size: 11px; letter-spacing: 0.14em; }
+.boss-state { color: rgba(255, 220, 200, 0.8); }
+.boss-state.imm { color: #c6a8ff; }
+.boss-state.vuln { color: #7ff3ff; text-shadow: 0 0 8px rgba(80, 230, 245, 0.8); }
+.boss-attack { color: #ffcf4a; animation: blink 0.5s steps(2) infinite; }
+@keyframes blink { 50% { opacity: 0.45; } }
+.event-chips { position: fixed; top: 112px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; pointer-events: none; }
+.event-chip { display: flex; align-items: center; gap: 8px; padding: 4px 10px; background: rgba(20, 10, 4, 0.72); border: 1px solid rgba(255, 140, 60, 0.6); font-size: 11px; letter-spacing: 0.14em; color: #ffd8b0; }
+.event-chip span { color: rgba(255, 190, 140, 0.7); }
+.event-chip.incoming { border-color: rgba(255, 75, 58, 0.8); animation: blink 1s steps(2) infinite; }
+.event-chip.ev-instability { border-color: rgba(110, 180, 255, 0.8); color: #cfe6ff; }
+.event-chip.hvt { border-color: rgba(255, 210, 90, 0.9); color: #ffe7a6; }
+.event-chip.hvt i { display: block; width: 70px; height: 4px; background: rgba(0, 0, 0, 0.6); }
+.event-chip.hvt u { display: block; height: 100%; background: #ffd25a; transform-origin: left; }
+.alert-feed { position: fixed; top: 168px; left: 50%; transform: translateX(-50%); display: grid; gap: 4px; justify-items: center; pointer-events: none; }
+.alert-line { padding: 3px 12px; font-size: 12px; letter-spacing: 0.16em; background: rgba(6, 10, 14, 0.7); border-left: 3px solid var(--orange); color: #ffe3c8; animation: alertIn 3.8s ease-out forwards; white-space: nowrap; }
+.alert-line.red { border-color: var(--red); color: #ffd0c8; }
+.alert-line.blue { border-color: #6fb8ff; color: #d8ecff; }
+.alert-line.white { border-color: #e8eef2; color: #f4f8fa; }
+@keyframes alertIn { 0% { opacity: 0; transform: translateY(-6px); } 8% { opacity: 1; transform: none; } 85% { opacity: 1; } 100% { opacity: 0; } }
+.ehp .ename { font-size: 9px; letter-spacing: 0.1em; white-space: nowrap; text-align: center; color: #ffe0a0; text-shadow: 0 0 4px #000, 0 0 2px #000; transform: translateX(-25%); }
+.ehp .ename.support { color: #7dffc0; }

@@ -328,7 +328,8 @@ export class Director {
       if (s.disrupted) this.g.fx.burst('zap', e.center(TMP), 4);
     }
     if (p.chill && p.chill > 0) {
-      const c = applyChill(e.status, p.chill * ep);
+      // Bosses and heavy targets resist crowd control (chill builds slower, so freezes are rare).
+      const c = applyChill(e.status, p.chill * ep * e.def.statusResist);
       if (c === 'freeze') {
         emit('freeze');
         this.g.fx.burst('frost', e.center(TMP), 18, undefined, 1.3);

@@ -1083,7 +1083,7 @@ export class Game {
     // ---- simulation (hostile time)
     if (this.screen === 'playing') this.waves.update(dt, hdt);
     this.hostileT += hdt;
-    this.enemies.update(hdt, this.enemyCtx);
+    this.enemies.update(hdt, this.enemyCtx, dt);
     this.ordnance.update(hdt, this.ordnanceCtx, this.hostileT);
     this.tele.update(hdt);
     this.dynamics.update(dt, hdt);

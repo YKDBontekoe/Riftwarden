@@ -108,7 +108,7 @@ export const BEAM_EMITTER: WeaponDef = {
   rampTime: 1.6,
 };
 
-export type EnemyKind = 'walker' | 'rusher' | 'bulwark' | 'enforcer' | 'artillery' | 'engineer' | 'courier' | 'colossus' | 'overseer';
+export type EnemyKind = 'walker' | 'rusher' | 'bulwark' | 'enforcer' | 'artillery' | 'engineer' | 'courier' | 'colossus' | 'overseer' | 'pylon';
 /** Targeting role: reactor attackers march on the objective, hunters pressure the drone, support buffs allies. */
 export type EnemyRole = 'reactor' | 'hunter' | 'support' | 'ranged' | 'hvt' | 'boss';
 
@@ -351,6 +351,32 @@ export const ENEMIES: Record<EnemyKind, EnemyDef> = {
     topY: 9.5,
     statusResist: 0.3,
     credits: 160,
+  },
+  /** Overseer shield emitter: orbits its core; while any emitter lives the core is shielded. */
+  pylon: {
+    kind: 'pylon',
+    name: 'Shield Emitter',
+    hp: 240,
+    shield: 0,
+    speed: 0,
+    radius: 0.9,
+    bodyY: 0,
+    bodyR: 0.85,
+    weakY: 0,
+    weakR: 0.35,
+    weakForward: 0.6,
+    reactorDamage: 0,
+    attackInterval: 0,
+    playerDamage: 0,
+    playerShotInterval: 0,
+    playerShotRange: 0,
+    reward: 10,
+    salvage: 0,
+    scale: 1,
+    role: 'support',
+    topY: 1.4,
+    statusResist: 0.6,
+    credits: 0,
   },
   /** Boss: floating command core behind shield emitters. */
   overseer: {

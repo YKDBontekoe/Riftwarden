@@ -6,6 +6,7 @@ import { getTier } from '../progression/tiers';
 import { type BannerEvent, type HitKind, uiEvents, useHud } from './store';
 import { LootFeed, LootLabels, LootPrompt } from './LootHud';
 import { rarity } from '../loot/rarity';
+import { SurvivalHud } from './SurvivalHud';
 
 export function Hud({ game }: { game: Game }) {
   return (
@@ -21,6 +22,7 @@ export function Hud({ game }: { game: Game }) {
       <LootFeed />
       <Radar game={game} />
       <TopCenter />
+      <SurvivalHud />
       <Cores />
       <RunPanel />
       <PlayerPanel />
@@ -258,11 +260,15 @@ function HealthBars({ game }: { game: Game }) {
       const seen = new Set<number>();
       const pp = game.player.position;
       for (const e of game.enemies.active) {
-        if (!e.alive || !e.lastHit || now - e.lastHit > 2600) continue;
+        if (!e.alive || e.def.role === 'boss') continue;
         const dx = e.pos.x - pp.x;
         const dz = e.pos.z - pp.z;
-        if (dx * dx + dz * dz > 70 * 70) continue;
-        const top = e.kind === 'rusher' ? 2.1 : e.kind === 'bulwark' ? 4.6 : 3.5;
+        const d2 = dx * dx + dz * dz;
+        // Elites, support units and the courier keep their bar + name in view (priority targets); others after a hit.
+        const priority = (e.elite || e.def.role === 'support' || e.def.role === 'hvt') && d2 < 45 * 45;
+        if (!priority && (!e.lastHit || now - e.lastHit > 2600)) continue;
+        if (d2 > 70 * 70) continue;
+        const top = e.def.topY + (e.threat ? 0.9 : 0);
         const p = game.project(e.pos.x, e.pos.y + top, e.pos.z);
         if (!p) continue;
         seen.add(e.id);
@@ -270,15 +276,21 @@ function HealthBars({ game }: { game: Game }) {
         if (!el) {
           el = document.createElement('div');
           el.className = 'ehp';
-          el.innerHTML = '<div class="hp"><i></i></div><div class="sh"><i></i></div>';
+          el.innerHTML = '<div class="ename"></div><div class="hp"><i></i></div><div class="sh"><i></i></div>';
           host.current?.appendChild(el);
           els.set(e.id, el);
         }
-        const fade = Math.min(1, (2600 - (now - e.lastHit)) / 400);
+        const nm = el.children[0] as HTMLElement;
+        const label = e.elite || e.def.role === 'support' || e.def.role === 'hvt' ? e.displayName.toUpperCase() : '';
+        if (nm.textContent !== label) {
+          nm.textContent = label;
+          nm.className = `ename ${e.def.role === 'support' ? 'support' : ''}`;
+        }
+        const fade = priority ? 1 : Math.min(1, (2600 - (now - e.lastHit)) / 400);
         el.style.opacity = String(fade);
         el.style.transform = `translate(${p.x}px, ${p.y}px) translate(-50%, -100%)`;
-        (el.children[0].firstChild as HTMLElement).style.transform = `scaleX(${Math.max(0, e.hp / e.maxHp)})`;
-        const sh = el.children[1] as HTMLElement;
+        (el.children[1].firstChild as HTMLElement).style.transform = `scaleX(${Math.max(0, e.hp / e.maxHp)})`;
+        const sh = el.children[2] as HTMLElement;
         sh.style.display = e.maxShield > 0 ? 'block' : 'none';
         if (e.maxShield > 0) (sh.firstChild as HTMLElement).style.transform = `scaleX(${Math.max(0, e.shield / e.maxShield)})`;
       }
@@ -398,8 +410,9 @@ function Radar({ game }: { game: Game }) {
         if (!e.alive) continue;
         const x = X(e.pos.x);
         const y = Y(e.pos.z);
-        const r = (e.kind === 'bulwark' ? 4 : e.kind === 'rusher' ? 2.2 : 3) * dpr;
-        ctx.fillStyle = e.kind === 'rusher' ? '#ffcf4a' : '#ff5a2a';
+        const boss = e.def.role === 'boss';
+        const r = (boss ? 7 : e.def.radius > 1.1 ? 4 : e.kind === 'rusher' || e.kind === 'pylon' ? 2.2 : 3) * dpr;
+        ctx.fillStyle = boss ? '#ff2a2a' : e.def.role === 'hvt' ? '#ffd25a' : e.def.role === 'support' ? (e.kind === 'pylon' ? '#b48cff' : '#5effb0') : e.elite ? '#ffffff' : e.kind === 'rusher' ? '#ffcf4a' : e.kind === 'artillery' ? '#ff3a7a' : '#ff5a2a';
         ctx.globalAlpha = 0.25 + 0.25 * pulse;
         ctx.beginPath();
         ctx.arc(x, y, r * 2, 0, Math.PI * 2);
@@ -840,6 +853,9 @@ export function Perf() {
       {p.fps} FPS · {p.enemies} enemies · {p.towers ?? 0} towers · {p.projectiles ?? 0} proj · {p.draws} draws · {p.particles} particles
       <br />
       fx queue {p.pending ?? 0} · {p.effects ?? 0} effects · {p.triggers ?? 0} triggers/s · {p.statuses ?? 0} statuses · dropped {p.dropped ?? 0} · dps player {p.dpsPlayer ?? 0} / tower {p.dpsTower ?? 0}
+      <br />
+      sim {p.frameMs ?? 0} ms · AI {p.aiMs ?? 0} ms · telegraphs {p.telegraphs ?? 0} · ordnance {p.ordnance ?? 0} · wave {p.wave} · tier {p.tier} · event {p.event} · boss {p.boss} · budget {p.budget} · spawn queue {p.spawnQueue} · elites {p.elites} · hp ×{p.hpMult} · dmg ×{p.dmgMult}
+      {p.dev ? ' · DEV SESSION' : ''}
     </div>
   );
 }

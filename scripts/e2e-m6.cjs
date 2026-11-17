@@ -262,6 +262,159 @@ async function home(p) {
     check('C6 elites drop noticeably more equipment than regular kills', r.eliteDrops > r.plainDrops * 2, JSON.stringify(r));
   }
 
+  // ------------------------------------------------------------------ D: boss encounters
+  if (want('D')) {
+    // Colossus: spawn, telegraphs, attacks hurting the drone / towers / reactor, phases, core exposure, beam, kill + rewards.
+    let r = await ev(p, () => {
+      const R = window.__rift, g = R.game, V = R.V3;
+      R.dev.reset();
+      g.reactorHp = 1000;
+      const e = R.dev.spawn('colossus');
+      e.pos.set(10, 0, 22); e.seg = 3;
+      R.teleport(4, 10);
+      const t = g.turrets.add(new V(5.5, 0, 20), 0, g.turretCtx); t.building = false;
+      const hp0 = g.player.hp + g.player.shield;
+      let tele = 0, towerDmg0 = t.damageDealt, disabled = false, hurt = 0, prevHp = hp0;
+      for (let i = 0; i < 60 * 30; i++) {
+        R.advance(1 / 60);
+        tele = Math.max(tele, g.tele.active);
+        if (t.disabledT > 0) disabled = true;
+        const now = g.player.hp + g.player.shield;
+        if (now < prevHp) hurt += prevHp - now;
+        prevHp = now;
+        if (!g.player.alive) { g.player.respawnT = 0; }
+      }
+      const attacks = { ...e.ai.attacks };
+      const towerHits = t.damageDealt - towerDmg0;
+      // Phase 2: plates eject, missiles/summons unlock, core exposes after attacks.
+      e.hp = e.maxHp * 0.6; R.advance(0.1);
+      const p2 = e.ai.phase, plates = e.ai.rig.plates.some((m) => m.isEnabled());
+      for (let i = 0; i < 60 * 25; i++) R.advance(1 / 60);
+      const attacks2 = { ...e.ai.attacks };
+      // Exposed core takes boosted damage (weakpoint).
+      e.ai.doorT = 5; e.ai.door = 1; e.ai.atk = null; e.ai.gcd = 99;
+      g.stats.critChance = 0;
+      const behind = e.center().add(new V(-Math.sin(e.yaw) * 3.5, 0, -Math.cos(e.yaw) * 3.5));
+      let b = e.hp; g.damageEnemy('player', e, 100, behind, true); const core = b - e.hp;
+      b = e.hp; g.damageEnemy('player', e, 100, e.center(), false); const body = b - e.hp;
+      // Phase 3: siege beam at the reactor; interrupted by damage during the charge.
+      e.hp = e.maxHp * 0.3; e.ai.gcd = 0; e.pos.set(6, 0, 10); R.advance(0.2);
+      for (let i = 0; i < 60 * 4 && e.ai.atk?.kind !== 'beam'; i++) { R.advance(1 / 60); e.ai.gcd = Math.min(e.ai.gcd, 0); e.ai.cd.beam = Math.min(e.ai.cd.beam, 0); }
+      const beamStarted = e.ai.atk?.kind === 'beam';
+      g.damageEnemy('player', e, e.maxHp * 0.08, e.center(), false);
+      R.advance(0.1);
+      const interrupted = e.ai.interrupts;
+      // Uninterrupted beam hits the reactor.
+      for (let i = 0; i < 60 * 30 && (e.ai.atk?.kind !== 'beam'); i++) { R.advance(1 / 60); e.ai.cd.beam = Math.min(e.ai.cd.beam, 0); e.ai.gcd = Math.min(e.ai.gcd, 0.01); }
+      const r0 = g.reactorHp;
+      for (let i = 0; i < 60 * 4; i++) R.advance(1 / 60);
+      const beamHit = r0 - g.reactorHp;
+      g.turrets.remove(t);
+      return { attacks, attacks2, tele, disabled, hurt: Math.round(hurt), towerHits: Math.round(towerHits), p2, plates, p3: e.ai.phase, core: Math.round(core), body: Math.round(body), beamStarted, interrupted, beamHit: Math.round(beamHit), id: e.id };
+    });
+    check('D1 colossus spawns, telegraphs and attacks (volley/stomp/mortar), hurting the drone and suppressing towers', (r.attacks.volley ?? 0) >= 1 && r.tele > 0 && r.hurt > 0 && r.disabled, JSON.stringify(r));
+    check('D2 towers damage the colossus', r.towerHits > 0, JSON.stringify(r.towerHits));
+    check('D3 colossus phase 2: plates eject, missiles and summons unlock', r.p2 === 2 && !r.plates && (r.attacks2.missiles ?? 0) >= 1 && (r.attacks2.summon ?? 0) >= 1, JSON.stringify(r));
+    check('D4 exposed rear core takes boosted weakpoint damage', r.core > r.body * 2.5, JSON.stringify({ core: r.core, body: r.body }));
+    check('D5 phase 3 siege beam: interruptible, and hits the reactor when ignored', r.p3 === 3 && r.beamStarted && r.interrupted >= 1 && r.beamHit > 50, JSON.stringify(r));
+
+    r = await ev(p, async () => {
+      const R = window.__rift, g = R.game;
+      const e = g.enemies.active.find((x) => x.kind === 'colossus');
+      const kills = g.cfg.run.survival.bossesKilled, comps = g.cfg.run.unsecured.components, items = g.loot.count;
+      g.damageEnemy('player', e, 1e9, e.center(), false);
+      const out = { inActive: g.enemies.active.includes(e), wreck: g.enemies.dyingCount };
+      for (let i = 0; i < 60 * 4; i++) R.advance(1 / 60);
+      const drops = g.loot.pickups.slice(items).map((p) => p.item);
+      return { ...out, after: g.enemies.dyingCount, bosses: g.cfg.run.survival.bossesKilled - kills, names: g.cfg.run.survival.bosses, comps: g.cfg.run.unsecured.components - comps, drops: drops.length, rarities: drops.map((d) => d.rarity), exclusive: drops.filter((d) => ['colossus_plating', 'siege_module'].includes(d.baseId)).length };
+    });
+    check('D6 colossus death: destruction sequence, boss counted, epic+ boss loot and components', !r.inActive && r.wreck === 1 && r.after === 0 && r.bosses === 1 && r.comps >= 4 && r.drops >= 3 && r.rarities.every((x) => ['epic', 'legendary', 'exotic'].includes(x)), JSON.stringify(r));
+
+    // Overseer: emitters shield the core, exposure window, relocation, sweep vulnerability, lances, discharge needs cover.
+    r = await ev(p, () => {
+      const R = window.__rift, g = R.game;
+      R.dev.reset();
+      g.loot.clear?.();
+      const e = R.dev.spawn('overseer');
+      R.teleport(0, -12);
+      for (let i = 0; i < 60 * 14 && !e.ai.deployed; i++) R.advance(1 / 60);
+      const pylons = e.ai.pylons.length;
+      let b = e.hp; g.damageEnemy('player', e, 200, e.center(), false); const shielded = b - e.hp;
+      // Towers and statuses keep working on emitters: kill them through the pipeline.
+      for (const p of [...e.ai.pylons]) g.damageEnemy('player', p, 1e7, p.center(), false);
+      R.advance(0.1);
+      const exposed = e.ai.exposedT;
+      b = e.hp; g.damageEnemy('player', e, 200, e.center(), false); const open = b - e.hp;
+      // Elemental: burn ticks hurt it, chill builds slowly (status resistance).
+      g.director.inflict(e, { burn: 30, chill: 100 }, { kind: 'weapon', id: 'test' }, g.director.bus.newChain(), e.center());
+      b = e.hp; R.advance(1.2); const burn = b - e.hp; const chill = e.status.chill;
+      // Phase 2 behaviours.
+      e.hp = e.maxHp * 0.55; R.advance(0.1);
+      const seen = {};
+      const playerY = [];
+      for (let i = 0; i < 60 * 40; i++) { R.advance(1 / 60); if (e.ai.atk) seen[e.ai.atk.kind] = true; if (!g.player.alive) g.player.respawnT = 0; }
+      return { pylons, shielded: Math.round(shielded), exposed: +exposed.toFixed(1), open: Math.round(open), burn: Math.round(burn), chill: Math.round(chill), phase: e.ai.phase, seen, sweepMult: 0 };
+    });
+    check('D7 overseer deploys emitters; the core is immune while they live', r.pylons >= 3 && r.shielded === 0, JSON.stringify(r));
+    check('D8 destroying the emitters exposes the core', r.exposed > 5 && r.open > 100, JSON.stringify(r));
+    check('D9 elemental statuses work on bosses (burn ticks, resisted chill)', r.burn > 0 && r.chill > 0 && r.chill < 60, JSON.stringify(r));
+    check('D10 overseer phase 2 relocates, casts grid lances and the vulnerable prism sweep', r.phase === 2 && r.seen.relocate && r.seen.lances && r.seen.sweep, JSON.stringify(r));
+
+    r = await ev(p, () => {
+      const R = window.__rift, g = R.game;
+      const e = g.enemies.active.find((x) => x.kind === 'overseer');
+      // Sweep doubles damage.
+      e.ai.atk = null; e.ai.gcd = 0; e.ai.cd.sweep = 0; e.ai.cd.relocate = 99; e.ai.cd.lances = 99; e.ai.cd.redeploy = 99; e.ai.cd.summon = 99; e.ai.cd.orbs = 99;
+      for (let i = 0; i < 60 && e.ai.atk?.kind !== 'sweep'; i++) R.advance(1 / 60);
+      e.ai.exposedT = 0;
+      let b = e.hp; g.damageEnemy('player', e, 100, e.center(), false); const sweepDmg = b - e.hp;
+      // Phase 3: discharge. Exposed drone gets hit; behind the reactor it is safe.
+      e.hp = e.maxHp * 0.25; e.ai.atk = null; R.advance(0.1);
+      for (let i = 0; i < 60 * 3; i++) R.advance(1 / 60);
+      e.ai.atk = null; e.ai.gcd = 0; e.ai.cd.discharge = 0; e.ai.cd.relocate = 99;
+      e.pos.set(0, 12, 20);
+      R.teleport(0, -11);
+      const hpA = g.player.hp + g.player.shield;
+      for (let i = 0; i < 60 * 4; i++) { R.advance(1 / 60); e.pos.set(0, 12, 20); R.teleport(0, -11); }
+      const covered = hpA - (g.player.hp + g.player.shield);
+      e.ai.atk = null; e.ai.gcd = 0; e.ai.cd.discharge = 0;
+      R.teleport(14, 10);
+      const hpB = g.player.hp + g.player.shield;
+      for (let i = 0; i < 60 * 4; i++) { R.advance(1 / 60); e.pos.set(0, 12, 20); R.teleport(14, 10); }
+      const open = hpB - (g.player.hp + g.player.shield);
+      // Kill: emitters despawn with it, wreck sequence, rewards.
+      const items = g.loot.count;
+      g.damageEnemy('player', e, 1e9, e.center(), false);
+      for (let i = 0; i < 60 * 4; i++) R.advance(1 / 60);
+      const left = g.enemies.active.filter((x) => x.kind === 'pylon').length;
+      const drops = g.loot.pickups.slice(items).map((p) => p.item);
+      return { sweepDmg: Math.round(sweepDmg), phase: e.ai.phase, covered: Math.round(covered), open: Math.round(open), left, drops: drops.length, bosses: g.cfg.run.survival.bossesKilled };
+    });
+    check('D11 prism sweep exposes the core for double damage', r.sweepDmg >= 190, JSON.stringify(r));
+    check('D12 overload discharge is avoidable behind cover and punishing in the open', r.phase === 3 && r.covered === 0 && r.open > 0, JSON.stringify(r));
+    check('D13 overseer death removes its emitters and drops boss loot', r.left === 0 && r.drops >= 3 && r.bosses === 2, JSON.stringify(r));
+
+    // Boss waves complete through the normal wave lifecycle (planner-forced boss wave).
+    r = await ev(p, () => {
+      const R = window.__rift, g = R.game;
+      R.dev.reset();
+      R.dev.jump(12);
+      R.dev.force({ boss: 'colossus' });
+      const plan = g.waves.wave.plan;
+      g.startWave(); R.advance(0.5);
+      let bossSeen = false;
+      for (let i = 0; i < 60 * 120 && g.waves.phase === 'combat'; i++) {
+        R.advance(1 / 30);
+        if (g.enemies.active.some((e) => e.kind === 'colossus')) bossSeen = true;
+        if (i % 30 === 0) R.killAll();
+        if (!g.player.alive) g.player.respawnT = 0;
+      }
+      for (let i = 0; i < 60 * 6 && g.waves.phase !== 'prep'; i++) R.advance(1 / 30);
+      return { boss: plan.boss, theme: plan.theme, bossSeen, phase: g.waves.phase, wave: g.waves.number };
+    });
+    check('D14 a boss wave spawns its boss and completes normally', r.boss?.id === 'colossus' && r.theme === 'boss' && r.bossSeen && r.phase === 'prep' && r.wave === 13, JSON.stringify(r));
+  }
+
   console.log(errs.length ? 'ERRORS:\n' + errs.slice(0, 10).join('\n') : 'no page errors');
   check('Z page errors', errs.length === 0, String(errs.length));
   console.log(`\n${passes} passed, ${failures} failed`);

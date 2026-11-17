@@ -46,6 +46,7 @@ export const ENEMY_COST: Record<EnemyKind, number> = {
   courier: 0,
   colossus: 0,
   overseer: 0,
+  pylon: 0,
 };
 
 /** First wave each archetype can appear (tier `unlockShift` pulls these earlier, never below 4). */

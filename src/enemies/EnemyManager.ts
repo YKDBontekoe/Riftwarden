@@ -69,8 +69,13 @@ export interface Behavior {
   update(e: Enemy, hdt: number, ctx: EnemyContext, m: EnemyManager): void;
   /** Adjust incoming damage (returns the amount that should apply). */
   damageMod?(e: Enemy, amount: number, info: HitInfo, m: EnemyManager): number;
-  /** Death presentation beyond the default explosion. Return true to suppress the default. */
-  death?(e: Enemy, ctx: EnemyContext, m: EnemyManager): boolean;
+  /**
+   * Death presentation beyond the default explosion. Return true to suppress the default, or a number of
+   * seconds to keep the (no longer targetable) wreck animating through `dying` before it is released.
+   */
+  death?(e: Enemy, ctx: EnemyContext, m: EnemyManager): boolean | number;
+  /** Destruction sequence frames (wreck is not in `active`, cannot be hit or targeted). */
+  dying?(e: Enemy, dt: number, t: number, ctx: EnemyContext, m: EnemyManager): void;
   /** Released (killed, escaped or cleared): drop telegraphs, children, etc. */
   release?(e: Enemy, m: EnemyManager): void;
   /** Boss health-bar details (phase, state, current attack). */
@@ -210,6 +215,8 @@ export class EnemyManager {
   private markTemplate: Mesh;
   private behaviors: Partial<Record<EnemyKind, Behavior>> = {};
   private blasts: PendingBlast[] = [];
+  /** Wrecks playing a destruction sequence (bosses). */
+  private wrecks: { e: Enemy; t: number; dur: number }[] = [];
   private blastTemplate: Mesh;
   private aiAcc = 0;
   /** Diagnostics: last frame's AI update time (ms) and a smoothed average. */
@@ -442,6 +449,15 @@ export class EnemyManager {
     const c = e.center(new Vector3());
     if (e.has('volatile')) this.armVolatile(e, c, ctx);
     const handled = e.behavior?.death?.(e, ctx, this) ?? false;
+    if (typeof handled === 'number' && handled > 0) {
+      // Keep the wreck for its destruction sequence; it is already out of play.
+      e.alive = false;
+      const i = this.active.indexOf(e);
+      if (i >= 0) this.active.splice(i, 1);
+      for (const h of e.hitboxes) h.isPickable = false;
+      this.wrecks.push({ e, t: 0, dur: handled });
+      return;
+    }
     if (!handled) {
       const [big, debris, pitch] = BLAST[e.kind] ?? [1, 12, 1];
       fx.explode(c, { scale: detonated ? big * 1.25 : big, debris });
@@ -470,8 +486,16 @@ export class EnemyManager {
     this.release(e);
   }
 
+  /** Remove without kill rewards (owned parts of a dead boss, debug). */
+  despawn(e: Enemy, fx: Effects | null = null): void {
+    if (!this.active.includes(e)) return;
+    if (fx) fx.burst('sparks', e.center(TMP), 12, undefined, 0.8);
+    this.release(e);
+  }
+
   private release(e: Enemy): void {
     e.alive = false;
+    for (const h of e.hitboxes) h.isPickable = !!(h.metadata as EnemyHitboxMeta | null)?.enemy;
     resetStatus(e.status);
     e.mark?.setEnabled(false);
     e.markKind = '';
@@ -485,6 +509,8 @@ export class EnemyManager {
 
   clear(): void {
     for (const e of [...this.active]) this.release(e);
+    for (const w of this.wrecks) this.release(w.e);
+    this.wrecks.length = 0;
     for (const b of this.blasts) b.mesh.dispose();
     this.blasts.length = 0;
   }
@@ -581,9 +607,18 @@ export class EnemyManager {
     e.remaining = pathLength(e.path, e.seg, e.pos);
   }
 
-  update(hdt: number, ctx: EnemyContext): void {
+  update(hdt: number, ctx: EnemyContext, dt = hdt): void {
     const t0 = performance.now();
     this.updateBlasts(hdt, ctx);
+    for (let i = this.wrecks.length - 1; i >= 0; i--) {
+      const w = this.wrecks[i];
+      w.t += dt;
+      w.e.behavior?.dying?.(w.e, dt, w.t, ctx, this);
+      if (w.t >= w.dur) {
+        this.wrecks.splice(i, 1);
+        this.release(w.e);
+      }
+    }
     if (hdt <= 0) {
       this.aiMs = performance.now() - t0;
       return;
@@ -811,6 +846,10 @@ export class EnemyManager {
       sfx.play('explosion', { volume: 1, pitch: 0.7, pan: ctx.panFor(b.pos).pan });
       ctx.hostileBlast(b.pos, b.radius, { player: b.damage, reactor: b.damage * 0.6, disable: 3, enemies: 0.5 * b.damage, color: 'red' });
     }
+  }
+
+  get dyingCount(): number {
+    return this.wrecks.length;
   }
 
   get pendingBlasts(): number {
