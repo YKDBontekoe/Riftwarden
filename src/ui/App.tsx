@@ -151,7 +151,7 @@ function SettingsPanel({ flow, compact }: { flow: Flow; compact?: boolean }) {
 const CONTROLS: [string, string][] = [
   ['WASD', 'Move'],
   ['MOUSE', 'Aim · LMB fire'],
-  ['SPACE', 'Jump · again to boost'],
+  ['SPACE', 'Jump · again for a directional air boost'],
   ['SHIFT', 'Dash · hold to sprint'],
   ['E', 'Use terminal (HQ) · pick up loot'],
   ['I / TAB', 'Drone cargo / inventory'],

@@ -38,7 +38,7 @@ import { Construction } from '../defense/Construction';
 import { type Turret, type TurretContext, type TurretHitboxMeta, TurretManager } from '../defense/Turrets';
 import { type Enemy, type EnemyContext, type EnemyHitboxMeta, EnemyManager } from '../enemies/EnemyManager';
 import { Effects } from '../fx/Effects';
-import { Player } from '../player/Player';
+import { MOVE, Player } from '../player/Player';
 import { type HitKind, hudStore, type LootTargetInfo, type Screen, uiEvents } from '../ui/store';
 import type { Rewards, RunLedger } from '../progression/run';
 import { isCheckpointWave, nextCheckpoint, type ThreatTier } from '../progression/tiers';
@@ -1199,7 +1199,7 @@ export class Game {
       heat: this.weapon.heat / 100,
       overheated: this.weapon.overheated,
       dashCharges: this.player.dashCharges,
-      dashMax: 2,
+      dashMax: MOVE.dashCharges,
       dashRecharge: this.player.dashRecharge,
       tactical: this.tactical.energy / TacticalEnergy.MAX,
       tacticalActive: this.tactical.active,

@@ -127,15 +127,17 @@ export class WeaponAnimator {
     const rig = this.rig;
     const p = this.pose;
 
-    // --- movement: sway (lags look), bob (hover drift + stride), sprint, dash, jump/land
-    const sx = Math.max(-0.035, Math.min(0.035, -i.lookDx * 0.35));
-    const sy = Math.max(-0.03, Math.min(0.03, i.lookDy * 0.3));
+    // Drive sway from turn rate so mouse input does not kick the weapon harder on slow frames.
+    const sampleTime = Math.max(dt, 0.001);
+    const sx = Math.max(-0.018, Math.min(0.018, (-i.lookDx / sampleTime) * 0.0036));
+    const sy = Math.max(-0.016, Math.min(0.016, (i.lookDy / sampleTime) * 0.003));
     const kSway = 1 - Math.exp(-dt * 14);
     this.swayX += (sx - this.swayX) * kSway;
     this.swayY += (sy - this.swayY) * kSway;
-    const moving = i.grounded ? Math.min(1, i.speed / 11) : 0;
-    this.bobAmt += (moving - this.bobAmt) * (1 - Math.exp(-dt * 8));
-    this.bobPhase += dt * (5 + i.speed * 0.55);
+    const moving = i.grounded && !i.dashing ? Math.min(1, i.speed / 15) : 0;
+    this.bobAmt += (moving - this.bobAmt) * (1 - Math.exp(-dt * 10));
+    // A hover drone drifts gently. Sprinting or dashing should not speed up a footstep cycle.
+    this.bobPhase += dt * (3.5 + 4 * this.bobAmt);
     this.sprint += ((i.sprinting ? 1 : 0) - this.sprint) * (1 - Math.exp(-dt * 9));
     this.hol += (i.holster - this.hol) * (1 - Math.exp(-dt * 12));
     if (i.dashing && !this.wasDashing) {
@@ -145,7 +147,7 @@ export class WeaponAnimator {
     }
     this.wasDashing = i.dashing;
     if (!i.grounded && this.wasGrounded && i.verticalSpeed > 1) this.bobY.kick(-0.35);
-    if (i.grounded && !this.wasGrounded) this.bobY.kick(Math.max(-1.6, Math.min(0, this.lastVy * 0.07)));
+    if (i.grounded && !this.wasGrounded && this.lastVy < -4) this.bobY.kick(Math.max(-1.6, this.lastVy * 0.07));
     this.wasGrounded = i.grounded;
     this.lastVy = i.verticalSpeed;
 
@@ -157,17 +159,13 @@ export class WeaponAnimator {
     const slide = this.slide.step(dt);
 
     const bob = this.bobAmt * (1 - this.sprint * 0.3);
-    const hover = Math.sin(this.t * 1.7) * 0.0025 + Math.sin(this.t * 0.9 + 1.3) * 0.0015;
-    const bx = Math.sin(this.bobPhase) * 0.007 * bob;
-    const by = -Math.abs(Math.cos(this.bobPhase)) * 0.006 * bob;
-    // Charging rail: a fine tremble that grows with charge (reads as stored energy).
-    const tremble = i.charge > 0 ? i.charge * i.charge * 0.0012 * Math.sin(this.t * 83) : 0;
-    const beamShake = i.active > 0 && this.family === 'beam' ? 0.0007 * Math.sin(this.t * 61) * i.active : 0;
+    const bx = Math.sin(this.bobPhase) * 0.003 * bob;
+    const by = Math.cos(this.bobPhase) * 0.002 * bob;
     const oh = i.overheated ? 1 : 0;
     this.ohT += ((oh) - this.ohT) * (1 - Math.exp(-dt * 6));
 
     p.x = this.swayX + bx - this.sprint * 0.03 + this.ohT * 0.01;
-    p.y = -this.swayY + by + hover + bobY * 0.04 - this.sprint * 0.025 - this.hol * 0.22 - this.ohT * 0.02 + tremble + beamShake;
+    p.y = -this.swayY + by + bobY * 0.04 - this.sprint * 0.025 - this.hol * 0.22 - this.ohT * 0.02;
     p.z = -back * 0.03 - this.sprint * 0.02 + (this.family === 'beam' ? -i.active * 0.006 : 0);
     p.pitch = -pitch * 0.025 + this.swayY * 0.8 + this.sprint * 0.16 + this.hol * 0.7 + this.ohT * 0.06;
     p.yaw = yaw * 0.03 + this.swayX * 1.2 - this.sprint * 0.42 + this.ohT * 0.12;

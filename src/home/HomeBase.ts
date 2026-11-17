@@ -17,7 +17,7 @@ import {
 import { sfx } from '../audio/Sfx';
 import type { Input } from '../core/Input';
 import type { Settings } from '../core/settings';
-import { Player } from '../player/Player';
+import { HQ_MOVE, Player } from '../player/Player';
 import { SLOT_IDS } from '../progression/items';
 import { rarity } from '../loot/rarity';
 import type { Profile } from '../progression/Profile';
@@ -249,7 +249,7 @@ export class HomeBase {
     }
 
     // ---- player (same controller as the arena)
-    this.player = new Player(scene, HQ_SPAWN);
+    this.player = new Player(scene, HQ_SPAWN, HQ_MOVE);
     scene.activeCamera = this.player.camera;
     this.player.camera.maxZ = 260;
 

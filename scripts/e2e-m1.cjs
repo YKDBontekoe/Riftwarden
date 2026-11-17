@@ -104,6 +104,60 @@ async function clearThrough(p, wave) {
   check('G1 FPS movement in arena', Math.hypot(g1.playerPos[0] - g0.playerPos[0], g1.playerPos[2] - g0.playerPos[2]) > 4);
   check('G2 drone hover/jump leaves ground', g1.playerPos[1] > 1.3, `y=${g1.playerPos[1].toFixed(2)}`);
   await p.evaluate(() => window.__rift.advance(1.5));
+  const movement = await p.evaluate(() => {
+    const R = window.__rift;
+    const player = R.game.player;
+    const input = R.flow.input;
+    const frame = 1 / 60;
+    const tap = (key) => {
+      input.simulateKey(key, true);
+      R.advance(frame);
+      input.simulateKey(key, false);
+    };
+
+    player.reset();
+    input.simulateKey('KeyW', true);
+    R.advance(0.3);
+    const run = player.speed;
+    input.simulateKey('ShiftRight', true);
+    R.advance(frame);
+    const dash = player.speed;
+    R.advance(0.22);
+    const sprint = player.speed;
+    input.simulateKey('ShiftRight', false);
+    input.simulateKey('KeyW', false);
+
+    player.reset();
+    tap('Space');
+    tap('ShiftLeft');
+    const { x, z } = player.position;
+    input.simulateKey('KeyD', true);
+    tap('Space');
+    input.simulateKey('KeyD', false);
+    const boost = {
+      side: player.position.x - x,
+      forward: player.position.z - z,
+      vertical: player.verticalSpeed,
+      dashing: player.dashing,
+      charges: player.dashCharges,
+    };
+    R.advance(1.05);
+    const recharged = player.dashCharges;
+
+    player.reset();
+    R.teleport(40, -20, 0.95);
+    input.simulateKey('KeyD', true);
+    tap('ShiftLeft');
+    R.advance(0.25);
+    input.simulateKey('KeyD', false);
+    const wall = player.position.x;
+    player.reset();
+    R.advance(frame);
+    return { run, dash, sprint, boost, recharged, wall };
+  });
+  check('G2 arena run, dash and forward sprint reach their target speeds', movement.run > 14 && movement.dash > 40 && movement.sprint > 21, JSON.stringify(movement));
+  check('G2 air boost redirects a dash and recharges the spent dash charge', movement.boost.side > 0.35 && Math.abs(movement.boost.forward) < 0.1 && movement.boost.vertical > 11 && !movement.boost.dashing && movement.boost.charges === 1 && movement.recharged === 2);
+  check('G2 accelerated dash respects the arena wall', movement.wall > 43 && movement.wall < 44, `x=${movement.wall.toFixed(2)}`);
   // Build a turret in build mode (B), placed in front of the drone.
   const build = await p.evaluate(() => {
     const R = window.__rift; const g = R.game; const i = R.flow.input;
