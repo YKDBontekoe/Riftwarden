@@ -269,9 +269,21 @@ export class SurvivalRuntime {
   private checkMilestones(cleared = 0): void {
     const run = this.g.cfg.run;
     const got = newMilestones({ wavesCleared: Math.max(run.wavesCleared, cleared), tier: this.tier.id, survival: run.survival }, run.survival.milestones);
+    const known = this.g.cfg.milestones ?? [];
     for (const m of got) {
       run.survival.milestones.push(m.id);
       uiEvents.emit('alert', { text: `MILESTONE · ${milestoneLabel(m.id).toUpperCase()}`, tone: 'white' });
+      // First time on this profile: a milestone cache (unsecured until the next checkpoint; never in dev sessions).
+      if (!run.survival.dev && !known.includes(m.id)) {
+        const credits = Math.round(150 * this.tier.salvageMult);
+        const components = 2 + Math.floor(this.tier.id / 2);
+        if (run.collect({ credits, components })) {
+          uiEvents.emit('creditsGained', credits);
+          uiEvents.emit('componentsGained', components);
+        }
+        this.g.dropFrom(DROP_SOURCES.eliteCache, new Vector3(0, 3, -5), this.g.waves.number);
+        uiEvents.emit('banner', { title: 'MILESTONE REACHED', sub: `${milestoneLabel(m.id)} · first-time cache deployed at the reactor`, tone: 'white' });
+      }
     }
   }
 

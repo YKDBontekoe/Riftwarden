@@ -106,8 +106,8 @@ function buildLayout(): ArenaLayout {
     boxes.push(rotBox(rot, -g - WALL_T, H, -g, H + TUNNEL_LEN, 0, WALL_H, 'gate'));
     boxes.push(rotBox(rot, g, H, g + WALL_T, H + TUNNEL_LEN, 0, WALL_H, 'gate'));
     boxes.push(rotBox(rot, -g - WALL_T, H + TUNNEL_LEN, g + WALL_T, H + TUNNEL_LEN + WALL_T, 0, WALL_H, 'gate'));
-    // Partition block that bends the lane
-    boxes.push(rotBox(rot, -7, 21, 3, 27, 0, 4.5, 'block'));
+    // Partition block that bends the lane (not on the south side: the deck behind the drone's spawn stays open).
+    if (rot !== rotS) boxes.push(rotBox(rot, -7, 21, 3, 27, 0, 4.5, 'block'));
   }
 
   // Elevated defensive platforms. South pair (h=3) and north pair (h=4).

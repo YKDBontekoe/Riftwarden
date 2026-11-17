@@ -218,7 +218,7 @@ export const ENEMIES: Record<EnemyKind, EnemyDef> = {
     scale: 1.32,
     role: 'reactor',
     topY: 4.6,
-    statusResist: 0.85,
+    statusResist: 1,
     credits: 6,
   },
   /** Heavy chassis with a frontal energy shield; lowers it to slam. Breaks tower lines on its lane. */

@@ -186,6 +186,7 @@ export class Flow {
         run,
         seed: this.nextUpgradeSeed ?? undefined,
         towerTech: [...save.towers.unlocked],
+        milestones: [...save.milestones],
         hooks: {
           // Reported as secured only once the write succeeded.
           // Development sessions (M6 dev tools used) never commit permanent rewards.

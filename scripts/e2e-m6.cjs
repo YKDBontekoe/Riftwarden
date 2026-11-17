@@ -299,7 +299,7 @@ async function home(p) {
       for (let i = 0; i < 60 * 6; i++) R.advance(1 / 60);
       const openLos = g.dynamics['door'].filter((m) => m.body).length === 0 && bodies0 === 2;
       // Navigation: a machine from the new gate reaches the reactor ring.
-      const w = R.dev.spawn('walker', [], 'south'); w.speedMult = 3;
+      const w = R.dev.spawn('walker', [], 'south'); w.speedMult = 3; w.maxHp = w.hp = 1e9; // towers may shoot at it on the way
       let reached = false;
       for (let i = 0; i < 60 * 40 && w.alive; i++) { R.advance(1 / 60); if (w.state === 'attack') { reached = true; break; } }
       const plan = (() => { g.waves.recompose(); return g.waves.wave.plan; })();

@@ -448,7 +448,7 @@ const M = (p, fn, arg) => p.evaluate(fn, arg);
     const cards = [...document.querySelectorAll('.eng-col .ic, .eng-col .item-card, .eng-col [class*="card"]')];
     const d = window.__rift.profile.save;
     const w = d.items.find((i) => i.uid === u.uid);
-    const card = cards.find((c) => c.textContent.includes(w.name.slice(0, 12)));
+    const card = cards.find((c) => c.textContent.includes(w.name)) ?? cards.find((c) => c.textContent.includes(w.name.slice(0, 12)));
     card && card.click();
     await new Promise((r) => setTimeout(r, 400));
     const idx = w.build.sockets.indexOf('power');

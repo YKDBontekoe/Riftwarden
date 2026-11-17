@@ -251,6 +251,14 @@ const MAX_TIER = THREAT_TIERS.length;
 function sanitizeRecord(v: unknown): TierRecord {
   const r = obj(v);
   return {
+    bestWave: int(r.bestWave, 0),
+    bestKills: int(r.bestKills, 0),
+    runs: int(r.runs, 0),
+    checkpoints: int(r.checkpoints, 0),
+    salvageSecured: int(r.salvageSecured, 0),
+    longestRun: num(r.longestRun, 0, 0),
+    lastPlayedAt: num(r.lastPlayedAt, 0, 0),
+    // M6 (same key order as emptyRecord, so a reloaded save serializes identically)
     highestWave: int(r.highestWave, int(r.bestWave, 0)),
     bossesDefeated: int(r.bossesDefeated, 0),
     elitesDefeated: int(r.elitesDefeated, 0),
@@ -259,13 +267,6 @@ function sanitizeRecord(v: unknown): TierRecord {
     bestTowerDamage: num(r.bestTowerDamage, 0, 0, 1e300),
     deaths: int(r.deaths, 0),
     itemsBanked: int(r.itemsBanked, 0),
-    bestWave: int(r.bestWave, 0),
-    bestKills: int(r.bestKills, 0),
-    runs: int(r.runs, 0),
-    checkpoints: int(r.checkpoints, 0),
-    salvageSecured: int(r.salvageSecured, 0),
-    longestRun: num(r.longestRun, 0, 0),
-    lastPlayedAt: num(r.lastPlayedAt, 0, 0),
   };
 }
 

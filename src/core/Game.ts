@@ -99,6 +99,8 @@ export interface ArenaConfig {
   seed?: number;
   /** Permanently researched tower blueprints (`slot:id`), snapshotted at deployment. */
   towerTech?: readonly string[];
+  /** M6: milestones already reached on this profile (first-time milestone rewards). */
+  milestones?: readonly string[];
 }
 
 /**
