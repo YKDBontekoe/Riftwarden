@@ -6,7 +6,7 @@ import type { RunResult } from '../progression/run';
  * report after returning). Arena: playing, checkpoint (bank/continue/return choice),
  * defeat. Shared: loading, transit (scene swap), paused.
  */
-export type Screen = 'loading' | 'menu' | 'home' | 'terminal' | 'summary' | 'transit' | 'playing' | 'paused' | 'checkpoint' | 'defeat' | 'inventory' | 'upgrade' | 'build' | 'towers';
+export type Screen = 'loading' | 'menu' | 'home' | 'terminal' | 'summary' | 'transit' | 'playing' | 'paused' | 'checkpoint' | 'defeat' | 'inventory' | 'upgrade' | 'build' | 'towers' | 'dev';
 export type Location = 'home' | 'arena';
 export type TerminalId = 'deploy' | 'loadout' | 'storage' | 'workshop' | 'command' | 'merchant' | 'modules' | 'salvage' | 'fabricate';
 

@@ -317,7 +317,8 @@ export function composeSpawns(n: number, plan: WavePlan, t: ThreatTier, r: () =>
   if (plan.event === 'hvt') groups.push({ kind: 'courier', count: 1, gate: 'north', start: 8, interval: 0, tag: 'hvt' });
 
   const eligible = (kind: EnemyKind) => n >= unlockWave(kind, t);
-  const cap = Math.round(spawnCap(n) * (plan.theme === 'swarm' ? 1.35 : 1) * (plan.boss ? 0.5 : 1));
+  // The tier count multiplier is applied to groups later, so the cap accounts for it (total stays bounded).
+  const cap = Math.round((spawnCap(n) * (plan.theme === 'swarm' ? 1.35 : 1) * (plan.boss ? 0.5 : 1)) / Math.max(1, t.countMult));
   const maxMods = maxModsFor(n, t);
 
   if (plan.event === 'eliteAssault') {

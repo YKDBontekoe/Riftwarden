@@ -145,6 +145,8 @@ export class Game {
   private upgradeDue = false;
   /** Automation only: legacy milestone suites fight many waves without choosing upgrades. */
   skipUpgrades = false;
+  /** M6: development panel (F4) available. Set by Flow from the URL (?dev / ?test). */
+  devTools = false;
   /** Configuration new towers are built with (chosen in the tower panel / build mode). */
   buildConfig: TowerConfig = { ...DEFAULT_CONFIG };
   /** Researched blueprints for this run. */
@@ -326,7 +328,7 @@ export class Game {
       },
       shake: (pos, k) => this.fx.onShake?.(pos, k),
     });
-    this.planner = new SurvivalPlanner((cfg.seed ?? hashRunSeed(cfg.run.id)) ^ 0x6d2b79f5, cfg.tier);
+    this.planner = new SurvivalPlanner(((cfg.seed ?? hashRunSeed(cfg.run.id)) >>> 0) ^ 0x6d2b79f5, cfg.tier);
     this.survival = new SurvivalRuntime(this);
     this.turrets = new TurretManager(scene, this.kit, this.pal);
     this.construction = new Construction(scene, (cfg, u) => this.turrets.build(cfg, 1, u), this.pal, ARENA);
@@ -742,6 +744,16 @@ export class Game {
     if (this.screen === 'upgrade') this.setScreen('paused');
   }
 
+  /** Development panel (F4, dev builds only). */
+  openDevPanel(): void {
+    if (this.screen !== 'playing' || !this.devTools) return;
+    this.setBuildMode(false);
+    this.tactical.deactivate();
+    this.setScreen('dev');
+    this.publishHud(true);
+    this.input.releaseLock();
+  }
+
   /** Run build overview (U): upgrades, stacks, active buffs and key stats. */
   openBuildOverview(): void {
     if (this.screen !== 'playing') return;
@@ -768,7 +780,7 @@ export class Game {
   }
 
   async closePanel(): Promise<void> {
-    if (this.screen !== 'build' && this.screen !== 'towers') return;
+    if (this.screen !== 'build' && this.screen !== 'towers' && this.screen !== 'dev') return;
     sfx.play('ui');
     this.setScreen('paused');
     await this.resume();
@@ -1037,6 +1049,10 @@ export class Game {
       }
       if (input.pressed('KeyU')) {
         this.openBuildOverview();
+        return;
+      }
+      if (input.pressed('F4') && this.devTools) {
+        this.openDevPanel();
         return;
       }
       if (input.pressed('KeyT') && this.towerPanelAllowed) {
@@ -1626,6 +1642,13 @@ export class Game {
     this.survival.endEvent();
     this.reactorHp = ECONOMY.reactorMaxHp;
     for (const t of this.turrets.turrets) t.disabledT = 0;
+  }
+
+  /** Copy measured damage totals into the run ledger (before the run is finalized/recorded). */
+  syncStats(): void {
+    const sv = this.cfg.run.survival;
+    sv.playerDamage = this.director.dealt.player;
+    sv.towerDamage = this.director.dealt.tower;
   }
 
   /** Automation hook: same path as enemy attacks. */

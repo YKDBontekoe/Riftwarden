@@ -45,6 +45,7 @@ import {
   beginRun,
   checksum,
   createDefaultSave,
+  emptyRecord,
   installModule,
   parseSave,
   recordRun,
@@ -654,7 +655,7 @@ describe('H: fabrication', () => {
   it('crafting levels follow progression', () => {
     const d = setup([]);
     const r1 = craft(d, 'd_armor', 'standard');
-    d.records['2'] = { bestWave: 12, bestKills: 0, runs: 1, checkpoints: 2, salvageSecured: 0, longestRun: 0, lastPlayedAt: 0 };
+    d.records['2'] = { ...emptyRecord(), bestWave: 12, runs: 1, checkpoints: 2 };
     d.threat.unlocked = 2;
     const r2 = craft(d, 'd_armor', 'standard');
     expect(r1.ok && r1.item!.level).toBe(1);

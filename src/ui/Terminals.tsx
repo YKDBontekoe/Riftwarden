@@ -27,6 +27,7 @@ import {
   unequipToStorage,
 } from '../progression/save';
 import { CHECKPOINT_INTERVAL, THREAT_TIERS, type ThreatTier, unlockText } from '../progression/tiers';
+import { MILESTONES } from '../survival/records';
 import { fmtTime, useSave } from './App';
 import { Shell } from './shell';
 import { ResourceBar, useTx, TxMessage, CostLine } from './economy';
@@ -78,7 +79,8 @@ export function DeployTerminal({ flow, close }: { flow: Flow; close: () => void 
               Every <b>{CHECKPOINT_INTERVAL} waves</b> everything collected is <b className="c">banked</b> to HQ storage, plus a checkpoint cache, and you may return home.
             </li>
             <li>Reactor loss forfeits unsecured loot, even if equipped. Gear you deploy with and secured items are never lost.</li>
-            <li>Higher threat tiers raise item levels and rarity odds.</li>
+            <li>Higher threat tiers raise item levels and rarity odds, elite frequency, events and boss power.</li>
+            <li>The facility evolves during a run: new access routes open and containment machinery activates. Bosses and events are announced before their wave.</li>
           </ul>
           <div className="loadout-line">
             <span>LOADOUT · {gearCount}/{SLOTS.length} SLOTS</span>
@@ -133,6 +135,15 @@ function TierCard({ tier, save, selected, onSelect }: { tier: ThreatTier; save: 
         </span>
         <span className="c">
           LOOT LUCK <b>{pct(tier.lootLuck)}</b>
+        </span>
+        <span className="v">
+          ELITES <b>{pct(tier.eliteRate)}</b>
+        </span>
+        <span className="v">
+          MODS ≤ <b>{tier.maxMods}</b>
+        </span>
+        <span className="v">
+          BOSSES FROM W<b>{tier.bossFirstWave}</b>
         </span>
       </div>
     </button>
@@ -547,6 +558,16 @@ export function CommandTerminal({ flow, close }: { flow: Flow; close: () => void
             <Stat k="ABANDONED / INTERRUPTED" v={`${t.abandoned} / ${t.interrupted}`} />
             <Stat k="HOSTILES DESTROYED" v={String(t.kills)} />
             <Stat k="SALVAGE SECURED (TOTAL)" v={String(t.salvageSecured)} />
+            <Stat k="BOSSES · ELITES DESTROYED" v={`${t.bossesDefeated} · ${t.elitesDefeated}`} />
+            <Stat k="HIGHEST THREAT TIER UNLOCKED" v={THREAT_TIERS[save.threat.unlocked - 1]?.roman ?? 'I'} />
+          </div>
+          <div className="col-label">MILESTONES · {save.milestones.length}/{MILESTONES.length}</div>
+          <div className="milestones" data-testid="milestones">
+            {MILESTONES.map((m) => (
+              <span key={m.id} className={`ms ${save.milestones.includes(m.id) ? 'on' : ''}`} title={m.label}>
+                {m.label}
+              </span>
+            ))}
           </div>
           <div className="col-label">SURVIVAL RECORDS</div>
           <table className="rec-table">
@@ -554,8 +575,10 @@ export function CommandTerminal({ flow, close }: { flow: Flow; close: () => void
               <tr>
                 <th>TIER</th>
                 <th>BEST WAVE</th>
+                <th>REACHED</th>
+                <th>BOSSES</th>
+                <th>ELITES</th>
                 <th>RUNS</th>
-                <th>CHECKPOINTS</th>
                 <th>LONGEST</th>
               </tr>
             </thead>
@@ -568,9 +591,11 @@ export function CommandTerminal({ flow, close }: { flow: Flow; close: () => void
                     <td>
                       {tier.roman} · {tier.name}
                     </td>
-                    <td>{locked ? 'LOCKED' : (r?.bestWave ?? 0)}</td>
+                    <td className="hi">{locked ? 'LOCKED' : (r?.bestWave ?? 0)}</td>
+                    <td>{r?.highestWave ?? 0}</td>
+                    <td>{r ? `${r.bossesDefeated}${r.bestBossesRun > 1 ? ` (best ${r.bestBossesRun})` : ''}` : 0}</td>
+                    <td>{r?.elitesDefeated ?? 0}</td>
                     <td>{r?.runs ?? 0}</td>
-                    <td>{r?.checkpoints ?? 0}</td>
                     <td>{r ? fmtTime(r.longestRun) : '—'}</td>
                   </tr>
                 );
@@ -593,9 +618,12 @@ export function CommandTerminal({ flow, close }: { flow: Flow; close: () => void
                   <span>T{THREAT_TIERS[h.tier - 1]?.roman}</span>
                   <span>W{h.finalWave}</span>
                   <span>{h.kills} kills</span>
+                  {h.bosses.length > 0 && <span className="boss">{h.bosses.length} boss{h.bosses.length > 1 ? 'es' : ''}</span>}
+                  {h.elites > 0 && <span>{h.elites} elites</span>}
                   <span className="o">+{h.salvageSecured}</span>
                   {h.salvageLost > 0 && <span className="r">−{h.salvageLost}</span>}
-                  {h.newRecord && <span className="rec">RECORD</span>}
+                  {(h.newRecord || h.records.length > 0) && <span className="rec">RECORD</span>}
+                  {h.dev && <span className="dev">DEV</span>}
                 </div>
               ))}
             </div>

@@ -16,6 +16,7 @@ import { applyLoadout, bankRewards, beginRun, deployBlocker, equippedItem, recor
 import { getTier, THREAT_TIERS } from '../progression/tiers';
 import { hudStore, type Location, uiEvents } from '../ui/store';
 import { Game } from './Game';
+import { SurvivalPlanner } from '../survival/plan';
 import { Input } from './Input';
 import { type Settings, saveSettings } from './settings';
 
@@ -71,6 +72,8 @@ export class Flow {
   nextUpgradeSeed: number | null = null;
   /** Automation: legacy suites skip the mandatory upgrade screen. */
   skipUpgrades = false;
+  /** M6: development tools available (URL ?dev or ?test). Never shown in the ordinary player experience. */
+  devTools = false;
   private renderQuality: Settings['quality'];
 
   constructor(
@@ -191,6 +194,7 @@ export class Flow {
           defeat: () => this.endRun('defeat'),
         },
       });
+      this.arena.devTools = this.devTools;
       this.arena.skipUpgrades = this.skipUpgrades || !!(globalThis as { __skipUpgrades?: boolean }).__skipUpgrades;
       if (this.devNext) run.survival.dev = true;
       this.location = 'arena';
@@ -205,6 +209,7 @@ export class Flow {
     const run = this.run;
     if (!run) return null;
     const first = !run.ended;
+    if (first) this.arena?.syncStats();
     const result = run.finalize(outcome);
     // Record the run, then let the profile adopt the run loadout for items it owns
     // (unsecured items were just lost, so their slots keep the previous secured gear).
@@ -419,6 +424,8 @@ export class Flow {
         return true;
       },
       V3: Vector3,
+      /** Encounter plan a run with upgrade seed `seed` on `tier` will follow (same derivation as Game). */
+      planFor: (seed: number, tier: number, n: number) => new SurvivalPlanner((seed >>> 0) ^ 0x6d2b79f5, tier).plan(n),
       /** M6 development tools (every call marks the run as non-record-eligible). */
       dev: {
         jump: (n: number) => flow.arena?.devJump(n),

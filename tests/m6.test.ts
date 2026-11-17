@@ -181,3 +181,70 @@ describe('M6 arena evolution layout', () => {
     expect(validatePlacement(ARENA, { ...q, x: (b.min[0] + b.max[0]) / 2, z: (b.min[2] + b.max[2]) / 2, playerX: -10, playerZ: 0 })).toBe('reserved');
   });
 });
+
+import { createDefaultSave, recordRun, beginRun, migrate, sanitizeSave } from '../src/progression/save';
+import { RunLedger } from '../src/progression/run';
+import { newMilestones } from '../src/survival/records';
+
+describe('M6 survival records', () => {
+  const runWith = (tier: number, f: (r: RunLedger) => void, outcome: 'returned' | 'defeat' = 'defeat') => {
+    const d = createDefaultSave(1);
+    const r = new RunLedger('run_a', tier, 1);
+    beginRun(d, r.id, tier, 1);
+    f(r);
+    return { d, res: r.finalize(outcome, 2) };
+  };
+  it('per-tier records come from real run statistics', () => {
+    const { d, res } = runWith(2, (r) => {
+      r.waveReached(14);
+      r.waveCleared(13);
+      for (let i = 0; i < 40; i++) r.addKill();
+      Object.assign(r.survival, { bossesKilled: 1, bosses: ['Siege Colossus I'], elitesKilled: 7, deaths: 2, playerDamage: 12345.6, towerDamage: 777, reactorDamage: 300, milestones: ['w10', 'boss1'] });
+    });
+    expect(recordRun(d, res)).toBe(true);
+    const rec = d.records['2'];
+    expect(rec).toMatchObject({ bestWave: 13, highestWave: 14, bestKills: 40, bossesDefeated: 1, elitesDefeated: 7, bestBossesRun: 1, deaths: 2, bestTowerDamage: 777 });
+    expect(rec.bestPlayerDamage).toBe(12346);
+    expect(d.records['1']).toBeUndefined();
+    expect(d.milestones).toEqual(['w10', 'boss1']);
+    expect(d.totals.bossesDefeated).toBe(1);
+    expect(res.records).toContain('Bosses in one run');
+    expect(d.history[0]).toMatchObject({ bosses: ['Siege Colossus I'], elites: 7, deaths: 2, dev: false });
+    expect(recordRun(d, res)).toBe(false); // idempotent
+  });
+  it('development sessions never touch records, totals or milestones', () => {
+    const { d, res } = runWith(1, (r) => {
+      r.waveCleared(50);
+      r.survival.dev = true;
+      r.survival.bossesKilled = 3;
+      r.survival.milestones = ['w25'];
+    });
+    expect(recordRun(d, res)).toBe(true);
+    expect(d.records['1']).toBeUndefined();
+    expect(d.milestones).toEqual([]);
+    expect(d.totals.runs).toBe(0);
+    expect(d.totals.devRuns).toBe(1);
+    expect(d.history[0].dev).toBe(true);
+    expect(d.activeRun).toBeNull();
+  });
+  it('v5 saves migrate to v6 with derived defaults and survive a round trip', () => {
+    const d5: Record<string, unknown> = JSON.parse(JSON.stringify(createDefaultSave(1)));
+    delete d5.milestones;
+    d5.version = 5;
+    d5.records = { '1': { bestWave: 9, bestKills: 50, runs: 3, checkpoints: 1, salvageSecured: 10, longestRun: 100, lastPlayedAt: 1 } };
+    const m = migrate(d5, 5);
+    expect(m.ok).toBe(true);
+    const { data } = sanitizeSave(m.data);
+    expect(data.version).toBe(6);
+    expect(data.records['1']).toMatchObject({ bestWave: 9, highestWave: 9, bossesDefeated: 0 });
+    expect(data.milestones).toEqual([]);
+    expect(data.totals.bossesDefeated).toBe(0);
+  });
+  it('milestones are evaluated from statistics only', () => {
+    const s = { wavesCleared: 26, tier: 4, survival: { ...new RunLedger('x', 4, 0).survival, bossesKilled: 2, bosses: ['Siege Colossus I', 'Overseer Core I'], hvtKilled: 1 } };
+    const ids = newMilestones(s, ['w10']).map((m) => m.id);
+    expect(ids).toEqual(expect.arrayContaining(['w25', 'boss1', 'colossus', 'overseer', 'bossPair', 'hvt', 'tier4w10']));
+    expect(ids).not.toContain('w10');
+    expect(ids).not.toContain('w50');
+  });
+});

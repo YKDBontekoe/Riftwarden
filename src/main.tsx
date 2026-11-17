@@ -19,7 +19,9 @@ async function boot(): Promise<void> {
   await Promise.race([document.fonts?.ready ?? Promise.resolve(), new Promise((r) => setTimeout(r, 2500))]);
   flow = new Flow(engine, canvas, havok, loadSettings());
 
-  if (new URLSearchParams(location.search).has('test')) {
+  const params = new URLSearchParams(location.search);
+  flow.devTools = params.has('dev') || params.has('test');
+  if (params.has('test')) {
     // Automation mode: no real pointer lock required.
     flow.input.forceCapture = true;
     (window as unknown as { __rift: unknown }).__rift = flow.debugApi();

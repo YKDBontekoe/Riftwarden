@@ -12,6 +12,9 @@ import { TerminalHost } from './TerminalHost';
 import { ArenaInventory } from './LootHud';
 import { BriefList } from './items';
 import { BuildOverview, TowerPanel, UpgradePanel } from './Roguelite';
+import { DevPanel } from './DevPanel';
+import { milestoneLabel } from '../survival/records';
+import { EVENTS, type EventId } from '../survival/events';
 
 interface Props {
   getFlow: () => Flow | null;
@@ -46,6 +49,7 @@ export function App({ getFlow }: Props) {
       {screen === 'checkpoint' && flow && arena && <CheckpointPanel flow={flow} game={arena} />}
       {screen === 'upgrade' && arena && <UpgradePanel key={`up${arena.director.build.offers}`} game={arena} />}
       {screen === 'build' && arena && <BuildOverview game={arena} />}
+      {screen === 'dev' && arena && flow && <DevPanel game={arena} flow={flow} />}
       {screen === 'towers' && arena && <TowerPanel game={arena} />}
       {screen === 'inventory' && arena && <ArenaInventory key={`inv${flow?.transitions}`} game={arena} />}
       {screen === 'defeat' && flow && <DefeatScreen flow={flow} />}
@@ -376,6 +380,16 @@ function CheckpointPanel({ flow, game }: { flow: Flow; game: Game }) {
   );
 }
 
+export function fmtNum(n: number): string {
+  if (!Number.isFinite(n)) return '—';
+  const a = Math.abs(n);
+  if (a >= 1e15) return n.toExponential(2);
+  if (a >= 1e9) return `${(n / 1e9).toFixed(2)}B`;
+  if (a >= 1e6) return `${(n / 1e6).toFixed(2)}M`;
+  if (a >= 1e4) return `${(n / 1e3).toFixed(1)}k`;
+  return String(Math.round(n));
+}
+
 export function RunSummary({ result, extra }: { result: RunResult; extra?: { turretsBuilt: number; coresEarned: number } | null }) {
   const tier = getTier(result.tier);
   const cards: [string, string, string?][] = [
@@ -390,9 +404,21 @@ export function RunSummary({ result, extra }: { result: RunResult; extra?: { tur
   ];
   cards.push(['ITEMS SECURED / LOST', `${result.itemsSecured} / ${result.itemsLost}`, result.itemsLost > 0 ? 'bad' : result.itemsSecured > 0 ? 'good' : '']);
   if (extra) cards.push(['TURRETS DEPLOYED', String(extra.turretsBuilt)]);
+  const sv = result.survival;
+  if (sv) {
+    cards.push(['BOSSES DESTROYED', String(sv.bossesKilled), sv.bossesKilled ? 'good' : '']);
+    cards.push(['ELITES DESTROYED', String(sv.elitesKilled)]);
+    cards.push(['DRONE LOSSES', String(sv.deaths), sv.deaths ? 'bad' : '']);
+    cards.push(['REACTOR DAMAGE TAKEN', fmtNum(sv.reactorDamage), sv.reactorDamage > 0 ? 'bad' : 'good']);
+    cards.push(['DRONE DAMAGE DEALT', fmtNum(sv.playerDamage)]);
+    cards.push(['TOWER DAMAGE DEALT', fmtNum(sv.towerDamage)]);
+    cards.push(['EQUIPMENT COLLECTED', String(result.itemsCollected ?? 0)]);
+  }
   return (
     <div className="summary">
-      {result.newRecord && <div className="record-badge">NEW PERSONAL RECORD · TIER {tier.roman}</div>}
+      {sv?.dev && <div className="record-badge dev">DEVELOPMENT SESSION · NOT RECORD ELIGIBLE · NOTHING BANKED</div>}
+      {!sv?.dev && (result.records?.length ?? 0) > 0 && <div className="record-badge">NEW PERSONAL RECORD{result.records!.length > 1 ? 'S' : ''} · TIER {tier.roman} · {result.records!.join(' · ').toUpperCase()}</div>}
+      {!sv?.dev && !result.records && result.newRecord && <div className="record-badge">NEW PERSONAL RECORD · TIER {tier.roman}</div>}
       <div className="summary-grid">
         {cards.map(([k, v, tone], i) => (
           <div key={k} className={`card ${tone ?? ''}`} style={{ animationDelay: `${0.05 * i}s` }}>
@@ -401,6 +427,29 @@ export function RunSummary({ result, extra }: { result: RunResult; extra?: { tur
           </div>
         ))}
       </div>
+      {sv && (sv.bosses.length > 0 || sv.events.length > 0 || sv.milestones.length > 0) && (
+        <div className="run-notes" data-testid="run-notes">
+          {sv.bosses.length > 0 && (
+            <div>
+              <span>BOSSES</span>
+              {sv.bosses.join(' · ')}
+            </div>
+          )}
+          {sv.events.length > 0 && (
+            <div>
+              <span>EVENTS</span>
+              {sv.events.map((id) => EVENTS[id as EventId]?.name ?? id).join(' · ')}
+              {sv.hvtKilled + sv.hvtEscaped > 0 ? ` · couriers ${sv.hvtKilled} intercepted / ${sv.hvtEscaped} escaped` : ''}
+            </div>
+          )}
+          {sv.milestones.length > 0 && (
+            <div>
+              <span>MILESTONES</span>
+              {sv.milestones.map(milestoneLabel).join(' · ')}
+            </div>
+          )}
+        </div>
+      )}
       {!!result.securedItems?.length && (
         <>
           <div className="cp-label">SECURED EQUIPMENT</div>

@@ -1066,3 +1066,23 @@ button.comp-card.on { border-color: var(--amber); background: rgba(255, 181, 71,
 @keyframes alertIn { 0% { opacity: 0; transform: translateY(-6px); } 8% { opacity: 1; transform: none; } 85% { opacity: 1; } 100% { opacity: 0; } }
 .ehp .ename { font-size: 9px; letter-spacing: 0.1em; white-space: nowrap; text-align: center; color: #ffe0a0; text-shadow: 0 0 4px #000, 0 0 2px #000; transform: translateX(-25%); }
 .ehp .ename.support { color: #7dffc0; }
+.record-badge.dev { background: linear-gradient(90deg, #8a96a0, #dfe6ea); }
+.run-notes { display: grid; gap: 6px; margin: 12px 0 4px; text-align: left; font-size: 12px; color: var(--white); }
+.run-notes span { display: inline-block; min-width: 96px; margin-right: 8px; font-family: var(--mono); font-size: 10px; letter-spacing: 0.18em; color: var(--muted); }
+.summary-grid { grid-template-columns: repeat(4, 1fr); }
+.rec-table td.hi { color: var(--cyan-2); }
+.milestones { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 14px; }
+.milestones .ms { padding: 3px 8px; font-size: 10.5px; letter-spacing: 0.1em; border: 1px solid var(--line); color: var(--muted); }
+.milestones .ms.on { border-color: rgba(255, 181, 71, 0.6); color: #ffe0a8; box-shadow: 0 0 10px rgba(255, 181, 71, 0.2); }
+.hist .dev { color: #c8d2d8; border: 1px solid #8a96a0; padding: 0 4px; font-size: 9px; }
+.hist .boss { color: #ff9a88; }
+.tc-mods .v { color: #c6a8ff; }
+.dev-panel .dev-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; text-align: left; margin: 10px 0; }
+.dev-panel h4 { margin: 10px 0 6px; font-size: 10.5px; letter-spacing: 0.2em; color: var(--muted); }
+.dev-panel .row { display: flex; gap: 6px; margin-bottom: 6px; align-items: center; }
+.dev-panel .row.wrap { flex-wrap: wrap; }
+.dev-panel button { padding: 5px 9px; font-size: 11px; }
+.dev-panel input, .dev-panel select { background: rgba(0, 0, 0, 0.4); color: var(--white); border: 1px solid var(--line); padding: 4px 6px; font-family: var(--mono); }
+.dev-panel .chk { font-size: 11px; display: flex; gap: 4px; align-items: center; color: var(--white); }
+.dev-panel .rec-table.small td, .dev-panel .rec-table.small th { font-size: 11px; padding: 2px 6px; }
+.dev-note { margin: 6px 0 10px; font-family: var(--mono); font-size: 11px; color: var(--cyan-2); }

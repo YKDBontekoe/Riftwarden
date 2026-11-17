@@ -103,7 +103,7 @@ export class SurvivalRuntime {
       uiEvents.emit('alert', { text: hvtOk ? `${def.name.toUpperCase()} SURVIVED · BONUS SECURED FOR CHECKPOINT` : `${def.name.toUpperCase()} · TARGET LOST`, tone: hvtOk ? 'blue' : 'orange' });
     }
     this.endEvent();
-    this.checkMilestones();
+    this.checkMilestones(w.number);
   }
 
   /** Clean every temporary event effect (wave cleared, defeat, run reset). */
@@ -260,9 +260,9 @@ export class SurvivalRuntime {
     return { ...base, chance: Math.min(1, base.chance + 0.12 * n + (e.tag === 'squad' ? 0.15 : 0)), luck: base.luck + n * 0.35 };
   }
 
-  private checkMilestones(): void {
+  private checkMilestones(cleared = 0): void {
     const run = this.g.cfg.run;
-    const got = newMilestones({ wavesCleared: run.wavesCleared, tier: this.tier.id, survival: run.survival }, run.survival.milestones);
+    const got = newMilestones({ wavesCleared: Math.max(run.wavesCleared, cleared), tier: this.tier.id, survival: run.survival }, run.survival.milestones);
     for (const m of got) {
       run.survival.milestones.push(m.id);
       uiEvents.emit('alert', { text: `MILESTONE · ${milestoneLabel(m.id).toUpperCase()}`, tone: 'white' });

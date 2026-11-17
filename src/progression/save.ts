@@ -25,7 +25,7 @@ import { generateMarket, type MarketEntry, type MarketState, progressLevel } fro
  *   under CORRUPT_KEY and the last good backup (BACKUP_KEY) or a fresh save is used.
  * - Older versions are upgraded by MIGRATIONS; newer versions are never downgraded.
  */
-export const SAVE_VERSION = 5;
+export const SAVE_VERSION = 6;
 export const SAVE_KEY = 'riftwarden.save';
 export const BACKUP_KEY = 'riftwarden.save.bak';
 export const CORRUPT_KEY = 'riftwarden.save.corrupt';
@@ -42,6 +42,19 @@ export interface TierRecord {
   salvageSecured: number;
   longestRun: number;
   lastPlayedAt: number;
+  // ---- M6 survival records (per tier)
+  /** Highest wave reached (in progress when the run ended). */
+  highestWave: number;
+  bossesDefeated: number;
+  elitesDefeated: number;
+  /** Most bosses destroyed in a single run. */
+  bestBossesRun: number;
+  /** Most player damage dealt in a single run. */
+  bestPlayerDamage: number;
+  /** Most tower damage dealt in a single run. */
+  bestTowerDamage: number;
+  deaths: number;
+  itemsBanked: number;
 }
 
 export type HistoryOutcome = RunOutcome | 'interrupted';
@@ -63,6 +76,20 @@ export interface RunHistoryEntry {
   /** M4 */
   creditsSecured: number;
   componentsSecured: number;
+  // ---- M6
+  bosses: string[];
+  elites: number;
+  deaths: number;
+  reactorDamage: number;
+  playerDamage: number;
+  towerDamage: number;
+  itemsCollected: number;
+  events: number;
+  milestones: string[];
+  /** Personal records broken (labels). */
+  records: string[];
+  /** Development session (not record eligible). */
+  dev: boolean;
 }
 
 export interface ActiveRun {
@@ -109,7 +136,17 @@ export interface SaveData {
     itemsScrapped: number;
     /** Best rarity index ever secured (-1 = none). */
     bestRarity: number;
+    // ---- M6
+    bossesDefeated: number;
+    elitesDefeated: number;
+    deaths: number;
+    playerDamage: number;
+    towerDamage: number;
+    reactorDamage: number;
+    devRuns: number;
   };
+  /** M6: survival milestones reached (ids, see survival/records.ts). Development sessions never add to it. */
+  milestones: string[];
   history: RunHistoryEntry[];
   activeRun: ActiveRun | null;
   base: { layoutVersion: number; placeables: Placeable[]; facilities: string[] };
@@ -153,9 +190,9 @@ export const DEFAULT_FACILITIES = ['command', 'deployment', 'configuration', 'st
 
 const emptyLoadout = (): Record<SlotId, string | null> => Object.fromEntries(SLOT_IDS.map((s) => [s, null])) as Record<SlotId, string | null>;
 
-export const emptyRecord = (): TierRecord => ({ bestWave: 0, bestKills: 0, runs: 0, checkpoints: 0, salvageSecured: 0, longestRun: 0, lastPlayedAt: 0 });
+export const emptyRecord = (): TierRecord => ({ bestWave: 0, bestKills: 0, runs: 0, checkpoints: 0, salvageSecured: 0, longestRun: 0, lastPlayedAt: 0, highestWave: 0, bossesDefeated: 0, elitesDefeated: 0, bestBossesRun: 0, bestPlayerDamage: 0, bestTowerDamage: 0, deaths: 0, itemsBanked: 0 });
 
-const emptyTotals = (): SaveData['totals'] => ({ runs: 0, returned: 0, defeated: 0, abandoned: 0, interrupted: 0, kills: 0, salvageSecured: 0, itemsSecured: 0, itemsLost: 0, itemsScrapped: 0, bestRarity: -1 });
+const emptyTotals = (): SaveData['totals'] => ({ runs: 0, returned: 0, defeated: 0, abandoned: 0, interrupted: 0, kills: 0, salvageSecured: 0, itemsSecured: 0, itemsLost: 0, itemsScrapped: 0, bestRarity: -1, bossesDefeated: 0, elitesDefeated: 0, deaths: 0, playerDamage: 0, towerDamage: 0, reactorDamage: 0, devRuns: 0 });
 
 const defaultPresets = (): LoadoutPreset[] => Array.from({ length: PRESET_COUNT }, (_, i) => ({ name: `CONFIG ${String.fromCharCode(65 + i)}`, slots: emptyLoadout() }));
 
@@ -175,6 +212,7 @@ export function createDefaultSave(now = Date.now()): SaveData {
     threat: { selected: 1, unlocked: 1 },
     records: {},
     totals: emptyTotals(),
+    milestones: [],
     history: [],
     activeRun: null,
     base: { layoutVersion: 1, placeables: DEFAULT_PLACEABLES.map((p) => structuredCloneSafe(p)), facilities: [...DEFAULT_FACILITIES] },
@@ -213,6 +251,14 @@ const MAX_TIER = THREAT_TIERS.length;
 function sanitizeRecord(v: unknown): TierRecord {
   const r = obj(v);
   return {
+    highestWave: int(r.highestWave, int(r.bestWave, 0)),
+    bossesDefeated: int(r.bossesDefeated, 0),
+    elitesDefeated: int(r.elitesDefeated, 0),
+    bestBossesRun: int(r.bestBossesRun, 0),
+    bestPlayerDamage: num(r.bestPlayerDamage, 0, 0, 1e300),
+    bestTowerDamage: num(r.bestTowerDamage, 0, 0, 1e300),
+    deaths: int(r.deaths, 0),
+    itemsBanked: int(r.itemsBanked, 0),
     bestWave: int(r.bestWave, 0),
     bestKills: int(r.bestKills, 0),
     runs: int(r.runs, 0),
@@ -422,6 +468,17 @@ function sanitizeHistory(v: unknown): RunHistoryEntry | null {
     newRecord: r.newRecord === true,
     creditsSecured: int(r.creditsSecured, 0),
     componentsSecured: int(r.componentsSecured, 0),
+    bosses: arr(r.bosses).filter((x): x is string => typeof x === 'string').slice(0, 64).map((x) => x.slice(0, 40)),
+    elites: int(r.elites, 0),
+    deaths: int(r.deaths, 0),
+    reactorDamage: num(r.reactorDamage, 0, 0, 1e300),
+    playerDamage: num(r.playerDamage, 0, 0, 1e300),
+    towerDamage: num(r.towerDamage, 0, 0, 1e300),
+    itemsCollected: int(r.itemsCollected, 0),
+    events: int(r.events, 0),
+    milestones: arr(r.milestones).filter((x): x is string => typeof x === 'string').slice(0, 32),
+    records: arr(r.records).filter((x): x is string => typeof x === 'string').slice(0, 16),
+    dev: r.dev === true,
   };
 }
 
@@ -495,6 +552,7 @@ export function sanitizeSave(raw: unknown, now = Date.now()): { data: SaveData; 
     threat: { selected: 1, unlocked: 1 },
     records: {},
     totals: { ...def.totals },
+    milestones: arr(r.milestones).filter((x): x is string => typeof x === 'string').slice(0, 64),
     history: [],
     activeRun: null,
     base: { layoutVersion: 1, placeables: [], facilities: [] },
@@ -606,7 +664,10 @@ export function sanitizeSave(raw: unknown, now = Date.now()): { data: SaveData; 
     if (Number.isInteger(id) && id >= 1 && id <= MAX_TIER) data.records[String(id)] = sanitizeRecord(v);
   }
   const t = obj(r.totals);
-  for (const k of Object.keys(data.totals) as (keyof SaveData['totals'])[]) data.totals[k] = k === 'bestRarity' ? int(t[k], -1, -1, 5) : int(t[k], 0);
+  for (const k of Object.keys(data.totals) as (keyof SaveData['totals'])[]) {
+    const big = k === 'playerDamage' || k === 'towerDamage' || k === 'reactorDamage';
+    data.totals[k] = k === 'bestRarity' ? int(t[k], -1, -1, 5) : big ? num(t[k], 0, 0, 1e300) : int(t[k], 0);
+  }
   for (const v of arr(r.history)) {
     const h = sanitizeHistory(v);
     if (h) data.history.push(h);
@@ -715,6 +776,11 @@ export const MIGRATIONS: Record<number, (data: Obj) => Obj> = {
    * with only the starter parts researched (towers.unlocked is empty).
    */
   4: (d) => ({ ...d, towers: { unlocked: [] } }),
+  /**
+   * v5 (M5) -> v6 (M6): survival records. Per-tier records, totals and history gain M6 statistics (zero / derived
+   * defaults via sanitize, e.g. highestWave = bestWave); milestones start empty. Nothing is removed.
+   */
+  5: (d) => ({ ...d, milestones: [] }),
 };
 
 export function migrate(data: unknown, fromVersion: number): { data: unknown; ok: boolean } {
@@ -862,6 +928,17 @@ export function resolveInterruptedRun(data: SaveData, now = Date.now()): RunHist
     newRecord: false,
     creditsSecured: a.creditsSecured,
     componentsSecured: a.componentsSecured,
+    bosses: [],
+    elites: 0,
+    deaths: 0,
+    reactorDamage: 0,
+    playerDamage: 0,
+    towerDamage: 0,
+    itemsCollected: 0,
+    events: 0,
+    milestones: [],
+    records: [],
+    dev: false,
   };
   const rec = record(data, a.tier);
   rec.runs++;
@@ -918,28 +995,61 @@ export function bankRewards(data: SaveData, runId: string, wave: number, rewards
   const rec = record(data, a.tier);
   rec.checkpoints++;
   rec.salvageSecured += s;
+  rec.itemsBanked += incoming.length;
   if (unlocksNextTier(a.tier, wave, opts.bosses ?? 0) && data.threat.unlocked < a.tier + 1) data.threat.unlocked = a.tier + 1;
   return true;
 }
 
-/** Record a finished run once. Returns false if it was already recorded. */
+/**
+ * Record a finished run once. Returns false if it was already recorded.
+ * M6: per-tier survival records and milestones come only from real run statistics; development sessions are
+ * listed in the history (flagged) but never touch records, totals, milestones or unlocks.
+ */
 export function recordRun(data: SaveData, result: RunResult): boolean {
   if (data.history.some((h) => h.id === result.id)) return false;
   if (data.activeRun && data.activeRun.id !== result.id) return false;
-  const rec = record(data, result.tier);
-  const newRecord = result.wavesCleared > rec.bestWave;
-  rec.bestWave = Math.max(rec.bestWave, result.wavesCleared);
-  rec.bestKills = Math.max(rec.bestKills, result.kills);
-  rec.runs++;
-  rec.longestRun = Math.max(rec.longestRun, result.duration);
-  rec.lastPlayedAt = result.endedAt;
-  data.totals.runs++;
-  data.totals.kills += result.kills;
-  data.totals.itemsLost += result.itemsLost;
-  if (result.outcome === 'returned') data.totals.returned++;
-  else if (result.outcome === 'defeat') data.totals.defeated++;
-  else data.totals.abandoned++;
+  const sv = result.survival;
+  const dev = !!sv?.dev;
+  const broken: string[] = [];
+  let newRecord = false;
+  if (!dev) {
+    const rec = record(data, result.tier);
+    const beat = (label: string, cur: number, val: number) => {
+      if (val > cur && val > 0) broken.push(label);
+      return Math.max(cur, val);
+    };
+    newRecord = result.wavesCleared > rec.bestWave;
+    rec.bestWave = beat('Waves cleared', rec.bestWave, result.wavesCleared);
+    rec.highestWave = beat('Highest wave reached', rec.highestWave, result.finalWave);
+    rec.bestKills = beat('Hostiles destroyed', rec.bestKills, result.kills);
+    rec.runs++;
+    rec.longestRun = Math.max(rec.longestRun, result.duration);
+    rec.lastPlayedAt = result.endedAt;
+    if (sv) {
+      rec.bossesDefeated += sv.bossesKilled;
+      rec.elitesDefeated += sv.elitesKilled;
+      rec.deaths += sv.deaths;
+      rec.bestBossesRun = beat('Bosses in one run', rec.bestBossesRun, sv.bossesKilled);
+      rec.bestPlayerDamage = beat('Drone damage dealt', rec.bestPlayerDamage, Math.round(sv.playerDamage));
+      rec.bestTowerDamage = beat('Tower damage dealt', rec.bestTowerDamage, Math.round(sv.towerDamage));
+      const t = data.totals;
+      t.bossesDefeated += sv.bossesKilled;
+      t.elitesDefeated += sv.elitesKilled;
+      t.deaths += sv.deaths;
+      t.playerDamage = Math.min(1e300, t.playerDamage + sv.playerDamage);
+      t.towerDamage = Math.min(1e300, t.towerDamage + sv.towerDamage);
+      t.reactorDamage = Math.min(1e300, t.reactorDamage + sv.reactorDamage);
+      for (const m of sv.milestones) if (!data.milestones.includes(m)) data.milestones.push(m);
+    }
+    data.totals.runs++;
+    data.totals.kills += result.kills;
+    data.totals.itemsLost += result.itemsLost;
+    if (result.outcome === 'returned') data.totals.returned++;
+    else if (result.outcome === 'defeat') data.totals.defeated++;
+    else data.totals.abandoned++;
+  } else data.totals.devRuns++;
   result.newRecord = newRecord;
+  result.records = broken;
   data.history.unshift({
     id: result.id,
     tier: result.tier,
@@ -956,6 +1066,17 @@ export function recordRun(data: SaveData, result: RunResult): boolean {
     newRecord,
     creditsSecured: result.creditsSecured ?? 0,
     componentsSecured: result.componentsSecured ?? 0,
+    bosses: [...(sv?.bosses ?? [])],
+    elites: sv?.elitesKilled ?? 0,
+    deaths: sv?.deaths ?? 0,
+    reactorDamage: Math.round(sv?.reactorDamage ?? 0),
+    playerDamage: Math.round(sv?.playerDamage ?? 0),
+    towerDamage: Math.round(sv?.towerDamage ?? 0),
+    itemsCollected: result.itemsCollected ?? 0,
+    events: sv?.events.length ?? 0,
+    milestones: [...(sv?.milestones ?? [])],
+    records: broken,
+    dev,
   });
   data.history = data.history.slice(0, HISTORY_LIMIT);
   data.activeRun = null;
