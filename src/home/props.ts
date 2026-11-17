@@ -425,15 +425,6 @@ export function workshop(ctx: PropCtx, st: Station, screen: ScreenTex): void {
     j1.rotation.set(0.35 + Math.sin(t * 0.4) * 0.15, Math.sin(t * 0.25) * 0.6, 0);
     j2.rotation.x = 1.2 + Math.sin(t * 0.55 + 1) * 0.25;
   });
-  // Fabricator (offline): big housing with a dark chamber and amber standby light.
-  const fab = kit.node('fabricator', null, [21.6, 0, -5.2]);
-  fab.rotation.y = -Math.PI / 2;
-  kit.part('box', M.white, fab, { pos: [0, 1.3, 0], scale: [2.6, 2.6, 1.6] });
-  kit.part('box', M.graphite, fab, { pos: [0, 1.35, 0.62], scale: [1.8, 1.4, 0.4] });
-  kit.part('box', M.screenFrame, fab, { pos: [0, 1.35, 0.8], scale: [1.5, 1.1, 0.05] });
-  kit.part('box', M.amber, fab, { pos: [0, 2.3, 0.81], scale: [0.6, 0.06, 0.02] });
-  kit.part('box', M.graphite, fab, { pos: [0, 0.15, 0.2], scale: [2.7, 0.3, 2.0] });
-  ctx.collider(20.7, 0, -6.6, 22.6, 2.7, -3.8);
   // Tool wall
   const tw = kit.node('toolWall', null, [17, 0, -8.72]);
   kit.part('box', M.graphite, tw, { pos: [0, 2.2, 0], scale: [4.6, 1.8, 0.06] });

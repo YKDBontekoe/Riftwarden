@@ -10,6 +10,7 @@ import { fmtNum } from '../combat/stats';
 import { buildComponents, FAMILIES, SOCKET_LABEL } from '../weapons/build';
 import { describeEffects } from '../weapons/components';
 import { moduleTypeDef } from '../weapons/modules';
+import { enhanceLevel, enhanceStatMult, maxEnhance } from '../economy/config';
 
 const CATEGORY_ICON: Record<Category, IconKind> = { weapon: 'rifle', armor: 'plate', shield: 'ring', reactor: 'core', processor: 'chip', accessory: 'gem', module: 'cube' };
 
@@ -99,8 +100,14 @@ function catLabel(c: string): string {
   return (CATEGORY_LABEL as Record<string, string>)[c]?.toUpperCase() ?? c.toUpperCase();
 }
 
-/** One line in an item list. */
-export function ItemCard({ e, selected, onSelect, compareTo }: { e: InvEntry; selected: boolean; onSelect: () => void; compareTo?: ItemInstance | null }) {
+/** Display name with enhancement level ("Rail Lancer +3"). */
+export function itemTitle(it: ItemInstance): string {
+  const e = enhanceLevel(it);
+  return e > 0 ? `${it.name} +${e}` : it.name;
+}
+
+/** One line in an item list. `right` replaces the status tag (prices); `check` turns it into a multi-select row. */
+export function ItemCard({ e, selected, onSelect, compareTo, right, check, disabled }: { e: InvEntry; selected: boolean; onSelect: () => void; compareTo?: ItemInstance | null; right?: ReactNode; check?: boolean; disabled?: boolean }) {
   const it = e.item;
   const r = rarity(it.rarity);
   const known = !!baseDef(it.defId);
@@ -117,21 +124,25 @@ export function ItemCard({ e, selected, onSelect, compareTo }: { e: InvEntry; se
     );
   }
   return (
-    <button className={`icard r-${r.id} ${selected ? 'sel' : ''} ${e.status}`} style={{ ['--rc' as string]: r.color }} onClick={onSelect}>
+    <button className={`icard r-${r.id} ${selected ? 'sel' : ''} ${e.status} ${disabled ? 'dis' : ''}`} style={{ ['--rc' as string]: r.color }} onClick={onSelect} data-uid={it.uid}>
+      {check !== undefined && <i className={`ic-check ${check ? 'on' : ''}`} />}
       <ItemGlyph item={it} />
       <span className="ic-main">
-        <b>{it.name}</b>
+        <b>
+          {itemTitle(it)}
+          {it.locked && <i className="ic-lock" title="Locked: protected from selling and dismantling" />}
+        </b>
         <em>
           {known ? catLabel(it.category) : 'UNKNOWN DEFINITION'} · LV {fmtNum(it.level)}
         </em>
       </span>
       {hint}
-      <span className={`ic-status s-${e.status}`}>{e.equippedIn ? getSlot(e.equippedIn).label : STATUS_LABEL[e.status]}</span>
+      {right ?? <span className={`ic-status s-${e.status}`}>{e.equippedIn ? getSlot(e.equippedIn).label : STATUS_LABEL[e.status]}</span>}
     </button>
   );
 }
 
-function TierPips({ tier }: { tier: number }) {
+export function TierPips({ tier }: { tier: number }) {
   return (
     <span className="pips" title={`Tier ${tier}`}>
       {Array.from({ length: 5 }, (_, i) => (
@@ -152,9 +163,17 @@ export function ItemDetail({ item, status }: { item: ItemInstance; status?: Entr
       <div className="id-head">
         <ItemGlyph item={item} size={54} />
         <div>
-          <div className="id-name">{item.name}</div>
+          <div className="id-name">{itemTitle(item)}</div>
           <div className="id-meta">
             <RarityTag id={item.rarity} /> <span>LV {fmtNum(item.level)}</span> <span>{catLabel(item.category)}</span>
+            {enhanceLevel(item) > 0 && (
+              <span className="enh-tag">
+                ENHANCED +{enhanceLevel(item)}/{maxEnhance(item)}
+              </span>
+            )}
+            {item.locked && <span className="lock-tag">LOCKED</span>}
+            {item.source === 'crafted' && <span className="src-tag">FABRICATED</span>}
+            {item.source === 'merchant' && <span className="src-tag">MERCHANT STOCK</span>}
             {status && <span className={`ic-status s-${status}`}>{STATUS_LABEL[status]}</span>}
           </div>
         </div>
@@ -164,27 +183,36 @@ export function ItemDetail({ item, status }: { item: ItemInstance; status?: Entr
       {item.base.length > 0 && (
         <div className="id-block">
           <div className="id-label">BASE</div>
-          {item.base.map((s, i) => (
-            <div key={i} className="id-row">
-              <span>{STAT_DEFS[s.stat].label}</span>
-              <b className={(s.value < 0) !== (STAT_DEFS[s.stat].better === 'lower') && s.value !== 0 ? 'neg' : ''}>{formatModifier(s.stat, s.op, s.value)}</b>
-            </div>
-          ))}
+          {item.base.map((s, i) => {
+            const m = enhanceStatMult(item, s.stat, s.value, 'base');
+            return (
+              <div key={i} className="id-row">
+                <span>{STAT_DEFS[s.stat].label}</span>
+                {m !== 1 && <small className="enh-up">+{Math.round((m - 1) * 100)}%</small>}
+                <b className={(s.value < 0) !== (STAT_DEFS[s.stat].better === 'lower') && s.value !== 0 ? 'neg' : ''}>{formatModifier(s.stat, s.op, s.value * m)}</b>
+              </div>
+            );
+          })}
         </div>
       )}
       <div className="id-block">
         <div className="id-label">{item.category === 'module' ? `MODULE AFFIXES · ${item.affixes.length}` : `AFFIXES · ${item.affixes.length}`}</div>
         {item.affixes.length === 0 && <div className="id-none">No affixes</div>}
-        {item.affixes.map((a, i) => (
-          <div key={i} className="id-row affix">
-            <span>
-              {STAT_DEFS[a.stat].label}
-              <small>{affixDef(a.id)?.adjective ?? ''}</small>
-            </span>
-            <TierPips tier={a.tier} />
-            <b>{formatModifier(a.stat, a.op, a.value)}</b>
-          </div>
-        ))}
+        {item.affixes.map((a, i) => {
+          const m = enhanceStatMult(item, a.stat, a.value, 'affix');
+          return (
+            <div key={i} className={`id-row affix ${a.locked ? 'locked' : ''}`}>
+              <span>
+                {a.locked && <i className="ic-lock" title="Locked affix: kept by full recalibration" />}
+                {STAT_DEFS[a.stat].label}
+                <small>{affixDef(a.id)?.adjective ?? ''}</small>
+              </span>
+              {m !== 1 && <small className="enh-up">+{Math.round((m - 1) * 100)}%</small>}
+              <TierPips tier={a.tier} />
+              <b>{formatModifier(a.stat, a.op, a.value * m)}</b>
+            </div>
+          );
+        })}
       </div>
       {item.category === 'module' && item.module && <ModuleNote item={item} />}
     </div>
@@ -281,7 +309,7 @@ export function WeaponBlock({ item, compact }: { item: ItemInstance; compact?: b
               <span>
                 <i className={`sock-ico k-${k}`} /> {SOCKET_LABEL[k]}
               </span>
-              <b>{m ? m.name : 'EMPTY'}</b>
+              <b>{m ? itemTitle(m) : 'EMPTY'}</b>
             </div>
           );
         })}
@@ -384,6 +412,8 @@ export interface InventoryActions {
   unequip(slot: SlotId): void;
   /** Destroy/scrap action for an entry (undefined = not available for it). */
   remove?: { label: (e: InvEntry) => string; allowed: (e: InvEntry) => boolean; run: (uid: string) => void; confirm: string };
+  /** Extra per-item controls (e.g. lock toggle). */
+  extra?: (e: InvEntry) => ReactNode;
 }
 
 /**
@@ -513,6 +543,7 @@ export function InventoryView({ entries, equipped, actions, extraFilter, header 
                       {actions.remove.label(selected)}
                     </button>
                   ))}
+                {actions.extra?.(selected)}
                 {!actions.canChange && <div className="locked-note">{actions.lockedReason}</div>}
               </div>
             </>

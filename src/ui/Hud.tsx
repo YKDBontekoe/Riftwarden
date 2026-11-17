@@ -550,6 +550,22 @@ function RunPanel() {
       setTimeout(() => setGains((g) => g.filter((x) => x.id !== my)), 900);
     });
   }, []);
+  const [cgains, setCgains] = useState<{ id: number; v: number; c: boolean }[]>([]);
+  useEffect(() => {
+    let id = 0;
+    const push = (v: number, c: boolean) => {
+      if (!v) return;
+      const my = ++id;
+      setCgains((g) => [...g.slice(-2), { id: my, v, c }]);
+      setTimeout(() => setCgains((g) => g.filter((x) => x.id !== my)), 1100);
+    };
+    const a = uiEvents.on('creditsGained', (v) => push(v, false));
+    const b = uiEvents.on('componentsGained', (v) => push(v, true));
+    return () => {
+      a();
+      b();
+    };
+  }, []);
   if (!run) return null;
   const tier = getTier(run.tier);
   return (
@@ -574,6 +590,21 @@ function RunPanel() {
         <span />
         <b className="sec">{run.salvageSecured}</b>
         <em>SECURED</em>
+      </div>
+      <div className="rp-row">
+        <span>CREDITS</span>
+        <b className="unsec">{run.creditsUnsecured}</b>
+        <em>
+          + {run.creditsSecured} SEC · COMP <b className="unsec">{run.componentsUnsecured}</b>/{run.componentsSecured}
+        </em>
+        <div className="gains">
+          {cgains.map((g) => (
+            <div key={g.id} className={`gain ${g.c ? 'comp' : 'cr'}`}>
+              +{g.v}
+              {g.c ? ' COMP' : ' CR'}
+            </div>
+          ))}
+        </div>
       </div>
       <div className="rp-row">
         <span>CARGO</span>

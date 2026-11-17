@@ -1,10 +1,9 @@
-import { type ReactNode, useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { sfx } from '../audio/Sfx';
 import { BASE_STATS, computeStats, fmtNum, formatModifier, formatStat, maxHull, mitigation, STAT_DEFS } from '../combat/stats';
 import type { Flow } from '../core/Flow';
 import { ECONOMY, SENTINEL, towerCost } from '../data/defs';
-import type { HomeBase } from '../home/HomeBase';
-import { scrapValue, STORAGE_EXPANSION, storageExpansionCost } from '../loot/economy';
+import { STORAGE_EXPANSION, storageExpansionCost } from '../loot/economy';
 import { equipmentModifiers, weaponDefFor, weaponStatRows, weaponSummary, withSocket } from '../loot/equipment';
 import { FAMILIES, SOCKET_LABEL } from '../weapons/build';
 import { canInstall, moduleTypeDef, removalCost } from '../weapons/modules';
@@ -24,71 +23,23 @@ import {
   loadPreset,
   type SaveData,
   savePreset,
-  scrapItem,
   storedItems,
   unequipToStorage,
 } from '../progression/save';
 import { CHECKPOINT_INTERVAL, THREAT_TIERS, type ThreatTier } from '../progression/tiers';
 import { fmtTime, useSave } from './App';
-import { useHud } from './store';
+import { Shell } from './shell';
+import { ResourceBar, useTx, TxMessage, CostLine } from './economy';
+import { dismantleItems, setItemLock } from '../economy/transactions';
+import { dismantleYield } from '../economy/config';
+import { uiEvents } from './store';
 import { type InvEntry, InventoryView, ItemCard, ItemDetail, RarityLegend, sortEntries } from './items';
-
-/** Routes the open station to its interface. */
-export function TerminalHost({ flow, home }: { flow: Flow; home: HomeBase }) {
-  const id = useHud((s) => s.terminal);
-  const close = () => void home.closeTerminal();
-  switch (id) {
-    case 'deploy':
-      return <DeployTerminal flow={flow} close={close} />;
-    case 'loadout':
-      return <LoadoutTerminal flow={flow} close={close} />;
-    case 'storage':
-      return <StorageTerminal flow={flow} close={close} />;
-    case 'workshop':
-      return <WorkshopTerminal flow={flow} close={close} />;
-    case 'command':
-      return <CommandTerminal flow={flow} close={close} />;
-    default:
-      return null;
-  }
-}
-
-function Shell({ code, title, sub, close, children, accent = 'cyan', wide }: { code: string; title: string; sub: string; close: () => void; children: ReactNode; accent?: 'cyan' | 'amber'; wide?: boolean }) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.repeat) return;
-      if (e.code === 'Escape' || e.code === 'KeyE') {
-        e.preventDefault();
-        close();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [close]);
-  return (
-    <div className="screen terminal-screen">
-      <div className={`terminal panel-frame ${accent} ${wide ? 'wide' : ''}`}>
-        <div className="term-head">
-          <div className="term-code">{code}</div>
-          <div className="term-titles">
-            <div className="term-title">{title}</div>
-            <div className="term-sub">{sub}</div>
-          </div>
-          <button className="term-close" onClick={close}>
-            <kbd>E</kbd>/<kbd>ESC</kbd> CLOSE
-          </button>
-        </div>
-        <div className="term-body">{children}</div>
-      </div>
-    </div>
-  );
-}
 
 const pct = (m: number) => (m === 1 ? '—' : `×${m.toFixed(2)}`);
 
 // ------------------------------------------------------------------ deployment
 
-function DeployTerminal({ flow, close }: { flow: Flow; close: () => void }) {
+export function DeployTerminal({ flow, close }: { flow: Flow; close: () => void }) {
   const save = useSave(flow);
   const [busy, setBusy] = useState(false);
   const selected = THREAT_TIERS.find((t) => t.id === save.threat.selected) ?? THREAT_TIERS[0];
@@ -199,7 +150,7 @@ function Stat({ k, v, tone }: { k: string; v: string; tone?: 'up' | 'down' }) {
   );
 }
 
-function useEquipped(save: SaveData): Record<SlotId, ItemInstance | null> {
+export function useEquipped(save: SaveData): Record<SlotId, ItemInstance | null> {
   return useMemo(() => Object.fromEntries(SLOTS.map((s) => [s.id, equippedItem(save, s.id)])) as Record<SlotId, ItemInstance | null>, [save]);
 }
 
@@ -256,7 +207,7 @@ function DroneStats({ equipped }: { equipped: Record<SlotId, ItemInstance | null
   );
 }
 
-function LoadoutTerminal({ flow, close }: { flow: Flow; close: () => void }) {
+export function LoadoutTerminal({ flow, close }: { flow: Flow; close: () => void }) {
   const save = useSave(flow);
   const equipped = useEquipped(save);
   const [msg, setMsg] = useState('');
@@ -330,7 +281,7 @@ export function saveEntries(save: SaveData): InvEntry[] {
   return out;
 }
 
-function StorageTerminal({ flow, close }: { flow: Flow; close: () => void }) {
+export function StorageTerminal({ flow, close }: { flow: Flow; close: () => void }) {
   const save = useSave(flow);
   const equipped = useEquipped(save);
   const entries = useMemo(() => saveEntries(save), [save]);
@@ -341,6 +292,7 @@ function StorageTerminal({ flow, close }: { flow: Flow; close: () => void }) {
     const ok = flow.profile.mutate((d) => !!fn(d));
     sfx.play(ok ? 'equip' : 'buildDeny');
   };
+  const tx = useTx(flow, 'salvage');
   return (
     <Shell code="ST-03" title="SECURE STORAGE" sub="Persistent equipment · secured at checkpoints" close={close} wide>
       <InventoryView
@@ -352,21 +304,24 @@ function StorageTerminal({ flow, close }: { flow: Flow; close: () => void }) {
           equip: (uid, slot) => act((d) => equipFromStorage(d, uid, slot)),
           unequip: (slot) => act((d) => unequipToStorage(d, slot)),
           remove: {
-            label: (e) => `SCRAP · +${scrapValue(e.item)} SALVAGE`,
-            allowed: (e) => e.status === 'stored',
-            run: (uid) => act((d) => scrapItem(d, uid)),
+            label: (e) => {
+              const y = dismantleYield(e.item);
+              return `DISMANTLE · +${y.salvage} SALVAGE${y.components ? ` · +${y.components} COMP` : ''}`;
+            },
+            allowed: (e) => e.status === 'stored' && !e.item.locked,
+            run: (uid) => void tx.run('dismantle', (d, id) => dismantleItems(d, [uid], id), (r) => `Dismantled · +${r.salvage} salvage${r.components ? ` · +${r.components} components` : ''}`),
             confirm: 'Dismantle permanently?',
           },
+          extra: (e) =>
+            e.status === 'stored' || e.status === 'equipped' ? (
+              <button className="mini" onClick={() => void tx.run('lock', (d) => setItemLock(d, e.item.uid, !e.item.locked), () => (e.item.locked ? 'Unlocked' : 'Locked: protected from selling and dismantling'))}>
+                {e.item.locked ? 'UNLOCK' : 'LOCK'}
+              </button>
+            ) : null,
         }}
         header={
           <div className="storage-bar">
-            <div className="resource small">
-              <span className="res-ico">⬢</span>
-              <div>
-                <b>{save.resources.salvage}</b>
-                <span>SALVAGE</span>
-              </div>
-            </div>
+            <ResourceBar save={save} compact />
             <div className={`cap ${over ? 'over' : ''}`}>
               <span>
                 BAYS {used} / {save.storage.capacity} {over && '· OVER CAPACITY: DEPLOYMENT LOCKED'}
@@ -376,9 +331,10 @@ function StorageTerminal({ flow, close }: { flow: Flow; close: () => void }) {
               </div>
             </div>
             <button className="mini expand" disabled={save.resources.salvage < cost} onClick={() => act((d) => expandStorage(d))}>
-              +{STORAGE_EXPANSION} BAYS · {cost} SALVAGE
+              +{STORAGE_EXPANSION} BAYS · <CostLine cost={{ salvage: cost }} save={save} />
             </button>
             <RarityLegend />
+            <TxMessage msg={tx.msg} />
           </div>
         }
       />
@@ -388,11 +344,11 @@ function StorageTerminal({ flow, close }: { flow: Flow; close: () => void }) {
 
 // ------------------------------------------------------------------ workshop
 
-function WorkshopTerminal({ flow, close }: { flow: Flow; close: () => void }) {
+/** M3 module bench (now the MODULES tab of the engineering workshop). */
+export function ModuleBench({ flow, selW, setSelW }: { flow: Flow; selW: string | null; setSelW: (uid: string) => void }) {
   const save = useSave(flow);
   const weapons = useMemo(() => sortEntries(saveEntries(save).filter((e) => e.item.category === 'weapon'), 'rarity'), [save]);
   const modules = useMemo(() => sortEntries(saveEntries(save).filter((e) => e.item.category === 'module'), 'rarity'), [save]);
-  const [selW, setSelW] = useState<string | null>(() => save.loadout.weapon);
   const [selS, setSelS] = useState(0);
   const [hover, setHover] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
@@ -415,6 +371,7 @@ function WorkshopTerminal({ flow, close }: { flow: Flow; close: () => void }) {
     const r = res as EngineeringResult;
     setMsg(r.ok ? { text: `${okText}${r.cost ? ` · −${r.cost} salvage` : ''}`, ok: true } : { text: r.reason, ok: false });
     sfx.play(r.ok ? sound : 'buildDeny');
+    if (r.ok) uiEvents.emit('econ', { station: 'workshop', kind: 'module', delta: r.cost ? { salvage: -r.cost } : {} });
     setHover(null);
   };
   // Other owned weapons with a compatible empty socket for the installed module (transfer targets).
@@ -427,7 +384,7 @@ function WorkshopTerminal({ flow, close }: { flow: Flow; close: () => void }) {
   }
 
   return (
-    <Shell code="WS-04" title="WEAPON ENGINEERING" sub="Inspect weapons · install, remove and transfer upgrade modules" close={close} accent="amber" wide>
+    <>
       <div className="eng-grid">
         <div className="eng-col">
           <div className="col-label">OWNED WEAPONS · {weapons.length}</div>
@@ -445,13 +402,7 @@ function WorkshopTerminal({ flow, close }: { flow: Flow; close: () => void }) {
               />
             ))}
           </div>
-          <div className="resource">
-            <span className="res-ico">⬢</span>
-            <div>
-              <b>{save.resources.salvage}</b>
-              <span>SALVAGE · removal/transfer costs salvage, installing is free</span>
-            </div>
-          </div>
+          <div className="faint small">Installing is free · removal and transfer cost salvage</div>
         </div>
         <div className="eng-col eng-center">
           <WeaponViewer item={shown} caption={hoverModule && shown !== weapon ? `PREVIEW · ${hoverModule.name.toUpperCase()} INSTALLED` : undefined} />
@@ -574,13 +525,13 @@ function WorkshopTerminal({ flow, close }: { flow: Flow; close: () => void }) {
           {msg && <div className={`term-msg ${msg.ok ? '' : 'bad'}`}>{msg.text}</div>}
         </div>
       </div>
-    </Shell>
+    </>
   );
 }
 
 // ------------------------------------------------------------------ command / records
 
-function CommandTerminal({ flow, close }: { flow: Flow; close: () => void }) {
+export function CommandTerminal({ flow, close }: { flow: Flow; close: () => void }) {
   const save = useSave(flow);
   const savedAt = flow.profile.store.get().savedAt || save.profile.lastSavedAt;
   const t = save.totals;

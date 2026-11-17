@@ -14,7 +14,7 @@ import {
 import { createBeveledBox } from '../visuals/bevel';
 import { boxProjectUVs } from '../visuals/uv';
 import { PHYS_ENV } from '../world/physicsGroups';
-import { HQ_ROOMS, HQ_SEALED_DOORS, HQ_WINDOW, type Room, type WallSegment, wallSegments } from './layout';
+import { HQ_PORTALS, HQ_ROOMS, HQ_SEALED_DOORS, HQ_WINDOW, type Room, type WallSegment, wallSegments } from './layout';
 
 export interface HqMaterials {
   floor: Material;
@@ -232,7 +232,7 @@ export class HqBuilder {
       this.ceiling(r);
     }
     // Ground collider under everything (floor slabs are visual).
-    this.collider(-30, -1, -20, 30, 0, 30);
+    this.collider(-40, -1, -20, 44, 0, 30);
     for (const s of wallSegments()) {
       // Window cut in the command deck's south wall.
       if (s.axis === 'z' && s.c === W.z && s.y0 === 0 && s.a < W.x1 && s.b > W.x0) {
@@ -246,9 +246,7 @@ export class HqBuilder {
     }
     this.window();
     for (const d of HQ_SEALED_DOORS) this.sealedDoor(d);
-    this.doorFrame('x', -11, -3.5, 3.5, 4.2);
-    this.doorFrame('x', 11, -4, 4, 4.2);
-    this.doorFrame('z', 11, -4.5, 4.5, 6);
+    for (const p of HQ_PORTALS) this.doorFrame(p.axis, p.c, p.a, p.b, p.height);
   }
 
   /** Merge render parts, box-project UVs, and create the static physics body. */

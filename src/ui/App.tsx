@@ -8,7 +8,7 @@ import { getTier, nextCheckpoint } from '../progression/tiers';
 import { HomeHud } from './HomeHud';
 import { Hud } from './Hud';
 import { useHud } from './store';
-import { TerminalHost } from './Terminals';
+import { TerminalHost } from './TerminalHost';
 import { ArenaInventory } from './LootHud';
 import { BriefList } from './items';
 
@@ -236,6 +236,10 @@ function MainMenu({ flow }: { flow: Flow }) {
         </div>
         <div className="chip cyan">
           <i />
+          CREDITS · {save.resources.credits}
+        </div>
+        <div className="chip cyan">
+          <i />
           OPERATIONS · {save.totals.runs}
         </div>
         <div className="chip red">
@@ -308,7 +312,8 @@ function CheckpointPanel({ flow, game }: { flow: Flow; game: Game }) {
           {(
             [
               ['WAVES CLEARED', String(wave)],
-              ['SECURED THIS RUN', String(run.salvageSecured)],
+              ['SALVAGE SECURED', String(run.salvageSecured)],
+              ['CREDITS · COMPONENTS', `${run.creditsSecured} · ${run.componentsSecured}`],
               ['HQ RESERVE', String(save.resources.salvage)],
               ['HOSTILES', String(run.kills)],
               ['TIME', fmtTime(run.duration)],
@@ -373,7 +378,8 @@ export function RunSummary({ result, extra }: { result: RunResult; extra?: { tur
     ['HOSTILES DESTROYED', String(result.kills)],
     ['RUN DURATION', fmtTime(result.duration)],
     ['SALVAGE SECURED', String(result.salvageSecured), 'good'],
-    ['UNSECURED LOST', String(result.salvageLost), result.salvageLost > 0 ? 'bad' : ''],
+    ['CREDITS · COMPONENTS SECURED', `${result.creditsSecured ?? 0} · ${result.componentsSecured ?? 0}`, (result.creditsSecured ?? 0) > 0 ? 'good' : ''],
+    ['UNSECURED LOST', `${result.salvageLost} salv · ${result.creditsLost ?? 0} cr · ${result.componentsLost ?? 0} comp`, result.salvageLost + (result.creditsLost ?? 0) + (result.componentsLost ?? 0) > 0 ? 'bad' : ''],
   ];
   cards.push(['ITEMS SECURED / LOST', `${result.itemsSecured} / ${result.itemsLost}`, result.itemsLost > 0 ? 'bad' : result.itemsSecured > 0 ? 'good' : '']);
   if (extra) cards.push(['TURRETS DEPLOYED', String(extra.turretsBuilt)]);
@@ -445,7 +451,7 @@ function SummaryScreen({ flow }: { flow: Flow }) {
         <div className="cp-kicker">{extracted ? 'OPERATION COMPLETE' : 'OPERATION ABANDONED'}</div>
         <div className="cp-title">{extracted ? 'DRONE RECOVERED' : 'RUN FORFEITED'}</div>
         <div className="cp-sub">
-          {extracted ? 'Checkpoint extraction successful.' : 'The run was abandoned; unsecured salvage did not make it back.'} HQ salvage reserve: <b className="o">{save.resources.salvage}</b>
+          {extracted ? 'Checkpoint extraction successful.' : 'The run was abandoned; unsecured salvage did not make it back.'} HQ reserve: <b className="o">{save.resources.salvage} salvage</b> · <b className="c">{save.resources.credits} credits</b> · <b className="v">{save.resources.components} components</b>. Merchants have restocked.
         </div>
         <RunSummary result={result} />
         <button className="primary" onClick={() => void flow.home?.takeControl()}>

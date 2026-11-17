@@ -1,6 +1,6 @@
 # Riftwarden: project notes for future sessions
 
-Browser FPS + tower-defense roguelite. Current milestone: **M3 complete** (see "Milestones"). Read this before changing code.
+Browser FPS + tower-defense roguelite. Current milestone: **M4 complete** (see "Milestones"). Read this before changing code.
 
 ## Stack
 
@@ -34,7 +34,13 @@ src/loot/generate.ts       seeded generator, level scaling, naming, validation, 
 src/loot/drops.ts          drop sources (walker/rusher/bulwark/wave/checkpoint/boss), item level, luck [pure]
 src/loot/equipment.ts      items -> StatModifiers / WeaponDef, item comparison, stat preview [pure]
 src/loot/runInventory.ts   run loadout + cargo + carried/secured/unsecured status, prep-only changes [pure]
-src/loot/economy.ts        scrap value, storage expansion cost [pure]
+src/loot/economy.ts        scrap value (= dismantle salvage), storage expansion cost [pure]
+src/economy/config.ts      M4: ALL economy formulas: prices, dismantle yields, enhancement, reroll/swap costs, run income, market config [pure]
+src/economy/engineering.ts affix rerolls (single stat/value, full w/ locks), component swaps (roll rescaled by effect ratios) [pure]
+src/economy/market.ts      merchant stock generation (seeded by profile+rotation), progressLevel [pure]
+src/economy/recipes.ts     fabrication recipes + quality grades, craft costs, odds, fabricate() [pure]
+src/economy/transactions.ts every economy transaction: validate-all-then-apply, tx-id guard, ownership/protection [pure]
+src/home/economyProps.ts   exchange wall, module vault/broker, reclamation press, fabricator, calibration ring (live displays)
 src/loot/LootField.ts      physical pickups (instanced holograms, beams, rings), lifetime + saturation rules
 src/progression/tiers.ts   threat tiers + checkpoint interval                          [pure]
 src/progression/Profile.ts owns the SaveData; mutate() persists + publishes a snapshot store
@@ -76,16 +82,34 @@ src/waves/waves.ts         wave definitions + endless generator       [pure]
 src/waves/WaveManager.ts   prep/combat/cleared lifecycle, spawn cap   [pure, hooks-based]
 src/fx/Effects.ts          pooled tracers, debris, enemy projectiles, particle bursts, flash light
 src/audio/Sfx.ts           procedural WebAudio bank
+src/ui/Market.tsx          M4 terminals: equipment exchange / module broker (buy, sell, exchange), reclamation, fabricator
+src/ui/Engineering.tsx     M4 engineering workshop: MODULES (M3 ModuleBench) / AFFIXES / ENHANCE / COMPONENTS tabs
+src/ui/economy.tsx         ResourceBar, CostLine, ConfirmButton, useTx (one tx at a time, fresh tx id, econ feedback event)
 src/ui/                    React App (menus, pause, checkpoint, defeat, summary, transit), Hud (arena), HomeHud,
                            Terminals (deploy/loadout/storage/workshop/command), items.tsx (shared inventory view,
                            item detail, comparison), LootHud (prompt, feed, world labels, arena cargo), store + uiEvents
 tests/                     Vitest suites for the [pure] modules
 scripts/e2e-m1.cjs         M1 browser acceptance suite (70 checks: scenarios A-G, tiers, leaks, persistence)
 scripts/e2e-m2.cjs         M2 browser acceptance suite (loot scenarios A-I, migration, leaks)
+scripts/e2e-m4.cjs         M4 browser acceptance suite (A-K through the terminal UIs, reloads, exploits, rollback, leaks)
 scripts/e2e-m3.cjs         M3 browser acceptance suite (families, generation, engineering UI, variation, loot, v2 migration, leaks)
 ```
 
 ## Key design decisions
+
+### M4: persistent economy, merchants, salvage, fabrication, engineering
+
+- **Three resources** in `save.resources`: `credits`, `salvage`, `components` (advanced components). Run income (`RUN_INCOME`): wave clear credits, checkpoint credits + components (tier-scaled), credits per kill (elites most), 25% elite component chance. They go through `RunLedger` (unsecured -> banked at checkpoints -> lost on defeat) exactly like salvage; `bankRewards` applies them. New profiles and v3 migrations get `STARTING_CREDITS` (200).
+- **One formula file** (`economy/config.ts`). Everything grows linearly with `levelFactor(L) = 1 + 0.1(L-1)` (levels are clamped, counters capped, results rounded non-negative integers): no unbounded exponentials. Item value = 18 × levelFactor × rarity value × category × affix quality; buy = value × 2.3-2.4, sell = value × 0.3, enhancement never adds value. Unit tests assert buy→sell/dismantle and craft→sell/dismantle are always lossy at exchange prices (`EXCHANGE_UNIT`), and that material conversions are lossy both ways.
+- **Transactions** (`economy/transactions.ts`): every action validates everything first (HQ only, ownership incl. modules installed in owned weapons, protection, eligibility, cost, storage bay) then mutates synchronously; failures return `{ok:false, reason}` with the save untouched. `withTx` remembers the last 40 committed tx ids (repeat submissions rejected). UI goes through `useTx` -> `Profile.transact`, which restores the pre-transaction state if a rule fails and **rolls back if the storage write fails** (so success is only reported once persisted; `profile.failWrites` test hook). Batch dismantle/sell are all-or-nothing.
+- **Protection**: equipped items, installed modules and `item.locked` items cannot be sold or dismantled. Selling/dismantling a weapon returns its modules to storage. Presets referencing a removed item are cleared.
+- **Merchants**: `save.market` holds the stock (8 equipment, 6 modules, featured slot = rare floor, max epic), generated by `generateItem` at `progressLevel` (best cleared wave + that tier's loot bonus) from `marketSeed(profile, rotation)`. Reopening never rerolls; `recordRun`/interrupted runs rotate it; paid refresh escalates per rotation. Stock items are full `ItemInstance`s (sanitized on load; an entry whose uid is already owned is forced sold). Exchange packs are limited per rotation and cannot be sold back.
+- **Affix engineering** (`economy/engineering.ts`): single 'stat' reroll (any compatible affix from the same pool/weights, group uniqueness kept), 'value' refine (same affix, new tier+roll), full reroll of unlocked affixes. Tiers use the generator's `rollTier` + rarity minTopTier guarantee; values use `rollAffix` (level scaling, quality floor, affixMult). Randomness = `engineeringRand(uid, seed, rerolls)`: deterministic, so restoring a backup cannot fish. Locks are per affix (`affix.locked`), max affixes-1, each lock adds salvage + components to a full reroll. Costs escalate +15%/op (`item.rerolls`, capped ×10). Item names and `signature` never change.
+- **Enhancement**: `item.enhance` 0..`MAX_ENHANCE[rarity]` (4/6/8/10/12/15). Applied in the stat pipeline only (`itemModifiers`, `weaponDefFor`; stored rolls untouched): weapons +4% damage +1.5% cooling per level, gear +4% to beneficial implicits, modules +5% to all beneficial stats (penalties never amplified, counts like projectiles never scaled). Never fails.
+- **Component engineering**: barrel/core/cooling/mechanism swaps limited to `componentsFor(slot, family, rarity)` (prism core stays legendary+; a railgun can only get rail mechanisms). Because effects are baked into rolls, the roll is rescaled by new/old `buildEffects` ratios (quality preserved). The model builder reads the build, so preview/viewmodel update automatically.
+- **Fabrication** (`economy/recipes.ts`): recipe (category, weapon family or module base) × quality grade (standard C-U, refined U-R +1 comp, superior R-E needs tier II, masterwork E-L needs tier III with luck 0.5 → ~10% legendary). Output = `generateItem` at `progressLevel`, source 'crafted', seed from `economy.crafts` counter. Exotics are never craftable; merchants cap at epic.
+- **HQ**: two new rooms from layout data (`market` east of storage, `reclaim` west of the drone bay; portals at x=±23/-21; sealed doors moved to the far walls), 4 new stations (`merchant`, `modules`, `salvage`, `fabricate`). Live displays: exchange wall bays mirror stock rarity/sold state, broker vault cores + exchange tanks, press hopper fill (log of salvage) and component cells. `uiEvents 'econ'` triggers `HomeBase.stationFx` (press stroke, fabricator glow, vault spin, calibration ring, sounds) and HUD resource deltas. Interior materials take 10 lights.
+- **Save v4**: `MIGRATIONS[3]` adds credits/components; sanitize generates the market/economy if missing and validates item engineering fields (`locked`, `enhance` capped by rarity, `rerolls`, `mods`, `affix.locked` with at least one affix unlocked).
 
 ### M3: weapon families, procedural weapons, modules, engineering
 
@@ -146,8 +170,9 @@ scripts/e2e-m3.cjs         M3 browser acceptance suite (families, generation, en
 
 ## Testing
 
-- `npm test` (104): M3 weapon generation/compatibility/engineering transactions/v2->v3 migration (`weapons.test.ts`), plus loot generation/rarity/drops/equipment/lifetime (`loot.test.ts`), save v2 migration, banking and ownership scenarios D/E/F, presets/scrap/expansion (`save-m2.test.ts`), plus the M1 suites: damage, stats, tactical/wallet, layout lane clearance, placement rules, wave generation and the wave lifecycle, settings, save format/migration/corruption, run ledger + banking rules, tiers, HQ layout and interaction targeting.
+- `npm test` (147): M4 economy (`economy.test.ts`: formulas finite at extreme levels, exploit invariants, dismantle/sell/buy/exchange/refresh, protection and atomic batches, rerolls/locks/determinism/signature, enhancement effects, component swaps, crafting windows/gating, v3->v4 migration, run income, Profile.transact rollback), plus (104) M3 weapon generation/compatibility/engineering transactions/v2->v3 migration (`weapons.test.ts`), plus loot generation/rarity/drops/equipment/lifetime (`loot.test.ts`), save v2 migration, banking and ownership scenarios D/E/F, presets/scrap/expansion (`save-m2.test.ts`), plus the M1 suites: damage, stats, tactical/wallet, layout lane clearance, placement rules, wave generation and the wave lifecycle, settings, save format/migration/corruption, run ledger + banking rules, tiers, HQ layout and interaction targeting.
 - `node scripts/e2e-m1.cjs` (dev server on :5173, Playwright): M1 acceptance scenarios A-G, tiers, interrupted runs, 4 deploy/return cycles with resource/listener/heap leak checks. Last run (after M2): ALL PASSED.
+- `node scripts/e2e-m4.cjs`: M4 scenarios A-K driven through the terminal UIs (salvage + reload, lock protection, purchase + reload, stock stability/rotation, double-click purchase, exchange, fabrication + equip + fire, affix reroll + reload, locked affixes, enhancement changes real shot damage, component refit + preview rebuild, failed transactions, save-failure rollback, exploit loops, station targeting, leak cycles). See "Measured" for the last result.
 - `node scripts/e2e-m3.cjs` (last run: 35/35 passed, ~2 min): A families (plasma bolts, rail charge/release/pierce/trail, beam ticks/ramp, visible overheat), B generation (108 weapons, determinism, sockets, geometry budget), F visual variation, G loot drop -> equip -> fire -> bank -> HQ, C/D/E workshop install/preview/remove/incompatible through the UI + reload, H M2 save migration + install, I splitter/arc/movement/perf + leak cycles. M1 (all) and M2 (54/54) suites were re-run after M3 and pass.
 - `node scripts/e2e-m2.cjs` (last run after M3: 54/54 passed): M2 scenarios A-I in the browser (drops near kills, targeting + E pickup, live roll validity, real shot damage/cooling/shield/movement/Sentinel cost changes, combat lock, banking + storage UI + reload, unsecured loss, equip-before-bank exploit via the inventory UI, lifetime, M1-save migration + reloads, leak cycles with loot). Extra debug API: `spawnLoot`, `pickups`, `approach(id)`, `teleport`, `makeItem`, `grant`, `damageReactor`; `game.dropChanceMult`, `game.rollItems(source)`. Do not edit `src/` while an e2e runs against the dev server (Vite HMR reloads the page).
 - Browser automation: open `/?test`. This sets `input.forceCapture` (no pointer lock needed) and exposes `window.__rift` (`Flow.debugApi()`) with `state()` (location, screen, profile summary + current world snapshot), `look(yaw, pitch)`, `advance(seconds)` (fixed 60 Hz simulation of the current world, no rendering), `stopLoop()`, `render(frames)`, `killAll()` (through the real damage pipeline), `leakStats()`, and `flow`, `profile`, `game` (current arena or null), `home`. Drive the loop with `flow.enterHq()`, `flow.deploy(tier)`, `flow.returnHome()`, `flow.abandonRun()`, `flow.leaveArena()`. Note: a real Playwright mouse move feeds `mouseDx` while `forceCapture` is on; `advance(1/60)` before `look()` after DOM clicks. In SwiftShader the high preset takes ~1 s per frame: call `stopLoop()`, wait for `game.scene.environmentTexture`, then interleave `advance(1/60)` + `render(1)` and screenshot with a long timeout. Drive input with `game.input.simulateKey(code, down)` / `simulateMouse(button, down)`. Headless Chromium uses SwiftShader (very low FPS), so verify gameplay with `advance()` and take screenshots between calls.
@@ -170,9 +195,9 @@ scripts/e2e-m3.cjs         M3 browser acceptance suite (families, generation, en
 - Real-GPU frame rate not measured in this environment; use F3 on target hardware.
 - Babylon is imported from the barrel (`@babylonjs/core`), so the bundle is large. Switching to deep imports would cut startup size.
 - Turrets cannot be damaged and have no upgrades; core income outpaces spending in later waves (needs sinks later).
-- Rerolling, crafting, selling and legendary signature effects are not implemented; no elemental damage types exist (Arc Conductor arcs are energy damage).
+- Legendary signature effects are not implemented; no elemental damage types exist (Arc Conductor arcs are energy damage).
+- Economy balance is first-pass (prices/costs in `economy/config.ts`, recipes in `economy/recipes.ts`). Item names are not regenerated after affix rerolls. Attachments are not swappable.
 - Only the weapon has sockets; armor/shield/etc. sockets were never functional and were removed in save v3.
-- Weapon component swapping is not offered (components are fixed per weapon); engineering is modules only.
 - The HQ preview has its own WebGL context while a terminal is open (released on close).
 - Dropped weapons use the shared rifle hologram (no per-family world model).
 - Balance is first-pass: enemy HP grows quadratically with waves while item power grows roughly linearly + affixes, so very deep endless runs still get harder. Drop rates/weights are in `drops.ts`/`rarity.ts`.
@@ -192,5 +217,6 @@ scripts/e2e-m3.cjs         M3 browser acceptance suite (families, generation, en
 - **M1 (done):** explorable HQ with interactive stations, deployment with threat tiers I-III, 5-wave checkpoints with automatic banking and continue/return choice, defeat/abandon handling, versioned persistent save (records, salvage, loadout, storage, placeables), repeated scene transitions without leaks.
 - **M2 (done):** procedural loot (6 rarities, 20 affixes, 19 bases over 7 categories, seeded generator, level scaling), drop tables per source incl. elite/target-farm and checkpoint cache, physical pickups with lifetime rules, run cargo + prep-only equipping, functional armor/shield/reactor/processor/accessory stats, comparison UI, banking/loss/ownership rules, HQ storage (scrap, expansion sink), presets, module drops (stored), save v2 migration.
 - **M3 (done):** three weapon families with distinct mechanics/effects/sound, procedural components baked into rolls, procedural first-person models with mechanical animation and heat visuals, 8 functional module types in rarity-based typed sockets, HQ weapon engineering (install/remove/transfer for salvage) with live 3D inspection, save v3 migration.
-- **Next:** run upgrades, legendary signature effects (`signature` is still reserved), module upgrading.
+- **M4 (done):** credits + advanced components, equipment exchange and module broker with persisted rotating stock and material exchange, reclamation press with batch dismantling and item locks, affix recalibration with locks and escalation, enhancement, component refits, fabrication recipes with quality grades, two new HQ rooms with live station displays, transactional saves with rollback, save v4.
+- **Next:** run upgrades, legendary signature effects (`signature` is still reserved; rerolls already preserve it).
 - Later: combat depth (second tower, turret upgrades, enemy variety, hit flash, audio pass, deep-import bundle split), run upgrades, M4 modular towers, M5 advanced endless (bosses/events), M6 content, M7 co-op evaluation.

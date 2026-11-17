@@ -8,7 +8,7 @@ import type { RunResult } from '../progression/run';
  */
 export type Screen = 'loading' | 'menu' | 'home' | 'terminal' | 'summary' | 'transit' | 'playing' | 'paused' | 'checkpoint' | 'defeat' | 'inventory';
 export type Location = 'home' | 'arena';
-export type TerminalId = 'deploy' | 'loadout' | 'storage' | 'workshop' | 'command';
+export type TerminalId = 'deploy' | 'loadout' | 'storage' | 'workshop' | 'command' | 'merchant' | 'modules' | 'salvage' | 'fabricate';
 
 export interface PromptInfo {
   key: string;
@@ -20,6 +20,10 @@ export interface RunHud {
   tier: number;
   salvageUnsecured: number;
   salvageSecured: number;
+  creditsUnsecured: number;
+  creditsSecured: number;
+  componentsUnsecured: number;
+  componentsSecured: number;
   nextCheckpoint: number;
   /** Return-home option open (checkpoint preparation phase). */
   checkpointOpen: boolean;
@@ -211,6 +215,10 @@ type EventMap = {
   coresGained: number;
   /** Salvage collected (unsecured) during a run. */
   salvageGained: number;
+  creditsGained: number;
+  componentsGained: number;
+  /** HQ: a committed economy transaction (station feedback + resource deltas). */
+  econ: { station: string; kind: string; delta: Partial<Record<'credits' | 'salvage' | 'components', number>> };
   /** Loot feed: drops landing, pickups, full cargo, expiry. */
   loot: LootEvent;
 };

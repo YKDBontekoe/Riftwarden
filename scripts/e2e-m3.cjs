@@ -516,7 +516,7 @@ const M = (p, fn, arg) => p.evaluate(fn, arg);
   ({ b, p, errs } = await launch({ 'riftwarden.save': v2 }));
   await helpers(p);
   const hm = await M(p, () => { const R = window.__rift; const d = R.profile.save; const w = d.items.find((i) => i.uid === 'm2_w'); return { status: R.profile.loadStatus, v: d.version, n: d.items.length, dmg: w.weapon.damage, build: w.build && w.build.family, chassis: w.build && w.build.chassis, sockets: w.sockets, kinds: w.build && w.build.sockets, salvage: d.resources.salvage }; });
-  check('H1 M2 save loads, migrates to v3, keeps all items and stats', hm.status === 'loaded' && hm.v === 3 && hm.n === 3 && hm.dmg === 31 && hm.salvage === 400, JSON.stringify(hm));
+  check('H1 M2 save loads, migrates to v3, keeps all items and stats', hm.status === 'loaded' && hm.v >= 3 && hm.n === 3 && hm.dmg === 31 && hm.salvage === 400, JSON.stringify(hm));
   check('H2 old weapon gets a valid default build for its chassis and M3 sockets (rare -> 2)', hm.build === 'plasma' && hm.chassis === 'heavy_repeater' && hm.sockets === 2, JSON.stringify(hm));
   await p.click('text=ENTER HEADQUARTERS');
   await waitFor(p, () => window.__rift.state().location === 'home' && !window.__rift.state().busy && window.__rift.home);

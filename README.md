@@ -2,7 +2,7 @@
 
 A first-person sci-fi action tower-defense roguelite for the browser. You are a hovering combat drone defending an energy reactor against endless waves of robotic machines, using a plasma repeater, fast movement and automated Sentinel turrets.
 
-**Status: Milestone M1 (home base, persistent progression, deploy/return run loop).**
+**Status: Milestone M4 (persistent economy: merchants, salvaging, fabrication, affix engineering, enhancement, component engineering).**
 
 ## Run it
 
@@ -25,7 +25,7 @@ Open the printed URL (default http://localhost:5173), click **ENTER HEADQUARTERS
 | `npm run preview` | Serve the production build locally |
 | `npm test` | Unit tests (Vitest) |
 | `npm run typecheck` | TypeScript only |
-| `node scripts/e2e-m1.cjs` | Browser acceptance suite (needs `npm run dev` running and Playwright) |
+| `node scripts/e2e-m1.cjs` … `e2e-m4.cjs` | Browser acceptance suites per milestone (need `npm run dev` running and Playwright) |
 
 ## Controls
 
@@ -43,6 +43,16 @@ Open the printed URL (default http://localhost:5173), click **ENTER HEADQUARTERS
 | H | At a checkpoint (preparation phase): reopen the continue / return-to-HQ choice |
 | Esc | Pause (releases the mouse); in a run the pause menu can abandon it |
 | F3 | Performance overlay (FPS, enemies, draw calls, particles) |
+
+## The economy loop (M4)
+
+**Deploy -> survive -> bank loot, salvage, credits and advanced components every 5 waves -> return to HQ -> sell / dismantle / buy / craft / engineer -> deploy stronger.**
+
+- **Resources:** *credits* (trade currency: wave clears, checkpoints, elite kills, selling), *salvage* (dismantling, kills, waves) and *advanced components* (rare: checkpoints by threat tier, elite kills, dismantling rare+ gear). All three are unsecured until banked, exactly like loot.
+- **Market Concourse** (east of storage): the *Equipment Exchange* sells 8 generated items (one featured rare+) and buys your gear; the *Module Broker* sells 6 modules (compatibility with your weapons shown), buys modules and runs a limited material exchange. Stock is persisted and restocks after every completed operation (or a paid, escalating manifest refresh). Merchants never sell legendary or exotic gear.
+- **Reclamation** (west of the drone bay): the press dismantles single items or batches (quick-select by rarity) with a full yield preview. Equipped and locked items are protected; lock any item from storage, the press or the market.
+- **Engineering Workshop:** modules (M3 install/remove/transfer), *affixes* (recalibrate one stat, refine its value, or reroll every unlocked affix; locks cost components; costs escalate per item), *enhancement* (+levels with rarity caps, never fails), *components* (refit barrel, core, cooling or firing mechanism within the family; the 3D preview shows the result).
+- **Fabricator** (workshop): craft weapons by family, armor, shields, reactors, processors, accessories and each module type in four quality grades (standard, refined, superior, masterwork) at your progress level, plus material conversions.
 
 ## The loop (M1)
 

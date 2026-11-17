@@ -23,7 +23,9 @@ import { rarity } from '../loot/rarity';
 import type { Profile } from '../progression/Profile';
 import { equippedItem, type SaveData } from '../progression/save';
 import { getTier, THREAT_TIERS } from '../progression/tiers';
-import { hudStore, type Screen, type TerminalId } from '../ui/store';
+import { hudStore, type Screen, type TerminalId, uiEvents } from '../ui/store';
+import { calibrationRing, type EconCtx, equipmentExchange, fabricator, moduleBroker, reclamation } from './economyProps';
+import { fabricationLevel } from '../economy/transactions';
 import { captureEnvironment } from '../visuals/envCapture';
 import { Kit } from '../visuals/kit';
 import { createPalette, unlit } from '../visuals/materials';
@@ -45,7 +47,6 @@ import {
   makeSign,
   MONO_FONT,
   planeBuilder,
-  type PropCtx,
   SCREEN_FONT,
   type ScreenTex,
   screenLine,
@@ -64,6 +65,7 @@ interface StationRig {
 }
 
 const TMP = new Vector3();
+const PULSE_TIME = 1.6;
 
 /**
  * The headquarters: a calm, explorable first-person space. Reuses the arena's
@@ -91,6 +93,14 @@ export class HomeBase {
   private wallScreens: { left: ScreenTex; right: ScreenTex } | null = null;
   /** Lights whose intensity breathes slightly (subtle "alive" feel). */
   private pulseLights: { light: PointLight; base: number; phase: number }[] = [];
+  /** Transaction feedback per station (1 -> 0 over PULSE_TIME). */
+  private pulses = new Map<string, number>();
+  private unsubEcon: () => void = () => {};
+  private displays: {
+    exchange?: ReturnType<typeof equipmentExchange>;
+    broker?: ReturnType<typeof moduleBroker>;
+    reclaim?: ReturnType<typeof reclamation>;
+  } = {};
 
   constructor(
     engine: Engine,
@@ -182,12 +192,13 @@ export class HomeBase {
     // ---- static shell + props
     const builder = new HqBuilder(scene, M);
     builder.buildShell();
-    const ctx: PropCtx = {
+    const ctx: EconCtx = {
       scene,
       kit: this.kit,
       M,
       collider: (x0, y0, z0, x1, y1, z1) => builder.collider(x0, y0, z0, x1, y1, z1),
       animators: this.animators,
+      pulse: (id) => this.pulses.get(id) ?? 0,
     };
     const save = profile.save;
     this.buildStations(ctx, save);
@@ -222,6 +233,10 @@ export class HomeBase {
     point('hqBay', [-16.5, 4.4, 0], [0.55, 1, 0.95], 2.6, 13);
     point('hqStorage', [17, 4.4, 4.5], [0.9, 0.95, 1], 2.5, 12);
     point('hqWorkshop', [17, 4.4, -5], [1, 0.84, 0.66], 2.5, 12);
+    point('hqMarket', [30, 5.2, 0], [0.86, 0.94, 1], 2.8, 14);
+    point('hqReclaim', [-27, 5.2, 0], [1, 0.8, 0.55], 2.6, 13, true);
+    // Ten lights in total: let the interior materials see all of them.
+    for (const m of lit) m.maxSimultaneousLights = 10;
 
     if (high) {
       const sg = new ShadowGenerator(2048, moon);
@@ -251,12 +266,13 @@ export class HomeBase {
       if (!locked && this.screen === 'home') this.setScreen('paused');
     };
     this.unsubProfile = profile.store.subscribe(() => this.refreshScreens());
+    this.unsubEcon = uiEvents.on('econ', (e) => this.stationFx(e.station, e.kind));
     this.applySettings(settings);
   }
 
   // ------------------------------------------------------------------ construction
 
-  private buildStations(ctx: PropCtx, save: Readonly<SaveData>): void {
+  private buildStations(ctx: EconCtx, save: Readonly<SaveData>): void {
     for (const st of HQ_STATIONS) {
       let screen: ScreenTex | null = null;
       switch (st.id) {
@@ -281,6 +297,23 @@ export class HomeBase {
         case 'workshop':
           screen = makeScreen(this.scene, st.id, 512, 256, [1, 1, 1]);
           workshop(ctx, st, screen);
+          calibrationRing(ctx, [17, 1.75, -7.35]);
+          break;
+        case 'fabricate':
+          screen = makeScreen(this.scene, st.id, 512, 230);
+          fabricator(ctx, st, screen);
+          break;
+        case 'merchant':
+          screen = makeScreen(this.scene, st.id);
+          this.displays.exchange = equipmentExchange(ctx, st, screen);
+          break;
+        case 'modules':
+          screen = makeScreen(this.scene, st.id);
+          this.displays.broker = moduleBroker(ctx, st, screen);
+          break;
+        case 'salvage':
+          screen = makeScreen(this.scene, st.id);
+          this.displays.reclaim = reclamation(ctx, st, screen);
           break;
       }
       this.rigs.push({ station: st, screen });
@@ -363,15 +396,20 @@ export class HomeBase {
     plane.applyFog = false;
   }
 
-  private buildSignage(ctx: PropCtx): void {
+  private buildSignage(ctx: EconCtx): void {
     makeSign(ctx, 'LAUNCH BAY', [0, 6.5, 10.68], Math.PI, 5.2);
     makeSign(ctx, 'DRONE BAY', [-10.68, 4.75, 0], Math.PI / 2, 4.2);
     makeSign(ctx, 'STORAGE · WORKSHOP', [10.68, 4.75, 0], -Math.PI / 2, 5.6);
+    makeSign(ctx, 'MARKET CONCOURSE', [22.68, 4.75, 0], -Math.PI / 2, 5.0, '#9ef7ff');
+    makeSign(ctx, 'RECLAMATION', [-21.32, 4.75, 0], Math.PI / 2, 4.2, '#ffd59a');
+    makeSign(ctx, 'EQUIPMENT EXCHANGE', [30, 5.15, 7.38], Math.PI, 5.2);
+    makeSign(ctx, 'MODULE BROKER', [30, 4.6, -7.6], 0, 4.4);
+    makeSign(ctx, 'DISMANTLING', [-32.7, 4.6, 0], Math.PI / 2, 3.6, '#ffd59a');
     makeSign(ctx, 'DEPLOYMENT', [0, 7.35, 18.7], Math.PI, 5.0, '#9ef7ff');
     makeSign(ctx, 'FABRICATION', [17, 3.75, -8.6], 0, 3.6, '#ffd59a');
     makeSign(ctx, 'SECURE STORAGE', [17.0, 3.65, 7.8], Math.PI, 4.4);
-    makeSign(ctx, 'HANGAR · SEALED', [-20.6, 3.9, 0], Math.PI / 2, 3.4, '#ffb547');
-    makeSign(ctx, 'CONCOURSE · SEALED', [22.6, 3.9, 0], -Math.PI / 2, 3.6, '#ffb547');
+    makeSign(ctx, 'HANGAR · SEALED', [-32.6, 3.9, 0], Math.PI / 2, 3.4, '#ffb547');
+    makeSign(ctx, 'TRANSIT · SEALED', [36.6, 3.9, 0], -Math.PI / 2, 3.6, '#ffb547');
     makeSign(ctx, 'QUARTERS · SEALED', [-9.4, 3.9, -10.6], 0, 3.2, '#ffb547');
   }
 
@@ -410,14 +448,47 @@ export class HomeBase {
           screenLine(s, 250, 'LOCK', 'SECURED');
           break;
         case 'workshop':
-          drawScreenFrame(s, 'FABRICATION', '#ffb547');
-          screenLine(s, 100, 'ENGINEERING', 'OFFLINE', '#ffb547');
+          drawScreenFrame(s, 'ENGINEERING', '#ffb547');
+          screenLine(s, 100, 'WEAPONS', String(save.items.filter((i) => i.category === 'weapon').length), '#cdd9df');
           screenLine(s, 150, 'MODULES', String(save.items.filter((i) => i.category === 'module').length), '#cdd9df');
-          screenLine(s, 200, 'SALVAGE', String(save.resources.salvage), '#ffb547');
+          screenLine(s, 200, 'SALVAGE · COMP', `${save.resources.salvage} · ${save.resources.components}`, '#ffb547');
+          break;
+        case 'fabricate':
+          drawScreenFrame(s, 'FABRICATOR', '#ffb547');
+          screenLine(s, 90, 'OUTPUT LEVEL', String(fabricationLevel(save as SaveData)), '#ffd59a');
+          screenLine(s, 140, 'CRAFTED', String(save.economy.stats.itemsCrafted), '#cdd9df');
+          screenLine(s, 190, 'STATUS', 'READY');
+          break;
+        case 'merchant': {
+          const left = save.market.equipment.filter((e) => !e.sold).length;
+          drawScreenFrame(s, 'EXCHANGE');
+          screenLine(s, 100, 'CREDITS', String(save.resources.credits), '#9ef7ff');
+          screenLine(s, 150, 'IN STOCK', `${left} / ${save.market.equipment.length}`);
+          screenLine(s, 200, 'MANIFEST', `#${save.market.rotation}`, '#cdd9df');
+          screenLine(s, 250, 'RESTOCK', 'AFTER NEXT OPERATION', '#cdd9df');
+          break;
+        }
+        case 'modules': {
+          const left = save.market.modules.filter((e) => !e.sold).length;
+          drawScreenFrame(s, 'MODULE BROKER');
+          screenLine(s, 100, 'CREDITS', String(save.resources.credits), '#9ef7ff');
+          screenLine(s, 150, 'MODULES', `${left} / ${save.market.modules.length}`);
+          screenLine(s, 200, 'EXCHANGE', save.market.exchange.map((o) => o.left).join(' · '), '#ffd59a');
+          break;
+        }
+        case 'salvage':
+          drawScreenFrame(s, 'RECLAMATION', '#ffb547');
+          screenLine(s, 100, 'SALVAGE', String(save.resources.salvage), '#ffb547');
+          screenLine(s, 150, 'ADV. COMPONENTS', String(save.resources.components), '#9ef7ff');
+          screenLine(s, 200, 'DISMANTLED', String(save.economy.stats.itemsDismantled), '#cdd9df');
+          screenLine(s, 250, 'PRESS', 'ARMED');
           break;
       }
       s.tex.update(false);
     }
+    this.displays.exchange?.update(save.market.equipment);
+    this.displays.broker?.update(save.market.modules, save.market.exchange);
+    this.displays.reclaim?.update(save.resources.salvage, save.resources.components);
     if (this.wallScreens) {
       const { left, right } = this.wallScreens;
       drawScreenFrame(left, 'SERVICE RECORD');
@@ -512,6 +583,7 @@ export class HomeBase {
     this.updateTarget(controls);
     if (controls && this.target && input.pressed('KeyE')) this.openTerminal(this.target.station.id);
 
+    for (const [k, v] of this.pulses) this.pulses.set(k, Math.max(0, v - dt / PULSE_TIME));
     for (const a of this.animators) a(dt, this.time);
     for (const p of this.pulseLights) p.light.intensity = p.base * (0.92 + 0.08 * Math.sin(this.time * 1.3 + p.phase));
     this.post.update(dt, 0, 0, 0);
@@ -560,6 +632,14 @@ export class HomeBase {
     }
   }
 
+  /** Station feedback for a committed transaction (animation + sound). */
+  stationFx(station: string, kind: string): void {
+    if (this.disposed) return;
+    this.pulses.set(station, 1);
+    const sound = ({ buy: 'purchase', sell: 'sell', dismantle: 'press', craft: 'fabricate', enhance: 'enhance', reroll: 'reroll', component: 'install', exchange: 'purchase' } as const)[kind as 'buy'];
+    if (sound) sfx.play(sound);
+  }
+
   togglePerf(on = !this.perfOn): void {
     this.perfOn = on;
     if (on && !this.instrumentation) this.instrumentation = new SceneInstrumentation(this.scene);
@@ -582,6 +662,7 @@ export class HomeBase {
     if (this.disposed) return;
     this.disposed = true;
     this.unsubProfile();
+    this.unsubEcon();
     this.input.onLockChange = () => {};
     this.instrumentation?.dispose();
     this.scene.dispose();

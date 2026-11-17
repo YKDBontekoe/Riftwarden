@@ -30,7 +30,13 @@ export type SfxName =
   | 'arc'
   | 'weaponSwitch'
   | 'install'
-  | 'uninstall';
+  | 'uninstall'
+  | 'purchase'
+  | 'sell'
+  | 'press'
+  | 'fabricate'
+  | 'enhance'
+  | 'reroll';
 
 interface PlayOpts {
   volume?: number;
@@ -404,6 +410,35 @@ export class Sfx {
       case 'uninstall':
         this.osc('triangle', 660, 330, 0.18, 0.09 * v, out);
         this.noiseBurst(0.1, 0.1 * v, 900, 2400, out, 'bandpass', 2, 0.06);
+        break;
+      case 'purchase':
+        this.osc('sine', 1046, 1046, 0.12, 0.08 * v, out);
+        this.osc('sine', 1568, 1568, 0.3, 0.08 * v, out, 0.07);
+        this.noiseBurst(0.04, 0.05 * v, 6000, 3000, out, 'bandpass', 3);
+        break;
+      case 'sell':
+        this.osc('triangle', 784, 523, 0.18, 0.09 * v, out);
+        this.osc('sine', 1318, 1318, 0.22, 0.05 * v, out, 0.06);
+        break;
+      case 'press':
+        this.osc('sine', 70, 38, 0.5, 0.4 * v, out, 0.18);
+        this.noiseBurst(0.35, 0.22 * v, 1400, 200, out, 'lowpass', 1, 0.18);
+        this.osc('sawtooth', 160, 90, 0.2, 0.05 * v, out);
+        break;
+      case 'fabricate':
+        this.osc('sawtooth', 180, 720, 0.6, 0.05 * v, out);
+        this.osc('triangle', 523, 523, 0.15, 0.08 * v, out, 0.55);
+        this.osc('triangle', 784, 784, 0.15, 0.08 * v, out, 0.65);
+        this.osc('sine', 1046, 1046, 0.4, 0.08 * v, out, 0.75);
+        break;
+      case 'enhance':
+        this.osc('sine', 330, 1320, 0.45, 0.09 * v, out);
+        this.osc('triangle', 660, 1980, 0.45, 0.04 * v, out, 0.05);
+        this.noiseBurst(0.2, 0.05 * v, 5000, 1500, out, 'bandpass', 2, 0.3);
+        break;
+      case 'reroll':
+        for (let i = 0; i < 5; i++) this.osc('square', 600 + i * 180, 600 + i * 180, 0.04, 0.035 * v, out, i * 0.045);
+        this.osc('sine', 1400, 1400, 0.25, 0.06 * v, out, 0.25);
         break;
       case 'bank':
         this.osc('triangle', 392, 392, 0.2, 0.1 * v, out);

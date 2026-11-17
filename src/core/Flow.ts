@@ -9,6 +9,9 @@ import { HomeBase } from '../home/HomeBase';
 import { newUid, SLOT_IDS } from '../progression/items';
 import { Profile } from '../progression/Profile';
 import { RunLedger, type RunOutcome } from '../progression/run';
+import * as TX from '../economy/transactions';
+import type { SaveData } from '../progression/save';
+import { equipFromStorage, uninstallModule } from '../progression/save';
 import { applyLoadout, bankRewards, beginRun, deployBlocker, equippedItem, recordRun, selectTier } from '../progression/save';
 import { getTier } from '../progression/tiers';
 import { hudStore, type Location, uiEvents } from '../ui/store';
@@ -427,6 +430,17 @@ export class Flow {
         document.body.classList.add('lab');
         return () => rigs.forEach((r) => r.dispose());
       },
+      /**
+       * M4 economy: run a transaction from economy/transactions.ts through Profile.transact
+       * (validated, persisted, rolled back on failed writes), e.g. econ('buyItem', 'equipment', id).
+       */
+      econ: (name: keyof typeof TX, ...args: unknown[]) => {
+        const fn = TX[name] as unknown as (d: SaveData, ...a: unknown[]) => { ok: boolean };
+        return flow.profile.transact((d) => fn(d, ...args));
+      },
+      econPure: TX,
+      equipFromStorage,
+      uninstallModule,
       /** Resource counters for leak checks across transitions. */
       leakStats: () => {
         const sc = flow.world?.scene;

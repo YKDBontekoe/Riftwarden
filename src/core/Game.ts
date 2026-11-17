@@ -30,6 +30,7 @@ import { flatScale, generateItem, hashSeed } from '../loot/generate';
 import { convertsToSalvage, expiresAfterWave, LootField, type Pickup, PICKUP_RANGE } from '../loot/LootField';
 import { rarity } from '../loot/rarity';
 import { scrapValue } from '../loot/economy';
+import { RUN_INCOME } from '../economy/config';
 import { RunInventory } from '../loot/runInventory';
 import type { ItemInstance } from '../loot/types';
 import type { SlotId } from '../progression/items';
@@ -289,8 +290,10 @@ export class Game {
         this.reactorHp = Math.min(ECONOMY.reactorMaxHp, this.reactorHp + ECONOMY.reactorMaxHp * ECONOMY.reactorRepairPerWave);
         sfx.play('waveClear');
         const salvage = Math.round((ECONOMY.salvageWaveBase + w.number * ECONOMY.salvagePerWave) * cfg.tier.salvageMult);
-        run.collect({ salvage });
+        const credits = Math.round(RUN_INCOME.waveCredits(w.number) * cfg.tier.salvageMult);
+        run.collect({ salvage, credits });
         uiEvents.emit('salvageGained', salvage);
+        uiEvents.emit('creditsGained', credits);
         run.waveCleared(w.number);
         // Wave reward drop lands on the reactor apron.
         this.dropLoot('wave', new Vector3(0, 3, -4.2), w.number);
@@ -305,7 +308,12 @@ export class Game {
         if (isCheckpointWave(w.number)) {
           // Milestone cache: granted with the checkpoint and banked together with everything collected.
           this.lastCache = this.rollItems('checkpoint', w.number);
-          run.collect({ items: this.lastCache });
+          // Milestone: credits and advanced components (tier scaled).
+          const cpCredits = Math.round(RUN_INCOME.checkpointCredits(w.number) * cfg.tier.salvageMult);
+          const cpComponents = RUN_INCOME.checkpointComponents(w.number, cfg.tier.id);
+          run.collect({ items: this.lastCache, credits: cpCredits, components: cpComponents });
+          uiEvents.emit('creditsGained', cpCredits);
+          uiEvents.emit('componentsGained', cpComponents);
           banked = run.bank(w.number);
         }
         if (banked) {
@@ -314,9 +322,9 @@ export class Game {
           const n = banked.items.length;
           if (this.lastBankSaved) {
             sfx.play('bank');
-            uiEvents.emit('banner', { title: 'CHECKPOINT SECURED', sub: `Wave ${w.number} cleared · ${banked.salvage} salvage${n ? ` · ${n} item${n === 1 ? '' : 's'}` : ''} banked to HQ`, tone: 'cyan' });
+            uiEvents.emit('banner', { title: 'CHECKPOINT SECURED', sub: `Wave ${w.number} cleared · ${banked.salvage} salvage · ${banked.credits} cr · ${banked.components} comp${n ? ` · ${n} item${n === 1 ? '' : 's'}` : ''} banked to HQ`, tone: 'cyan' });
           } else uiEvents.emit('banner', { title: 'CHECKPOINT · SAVE FAILED', sub: 'Rewards are held by the run but could not be written to storage yet', tone: 'red' });
-        } else uiEvents.emit('banner', { title: `WAVE ${w.number} CLEARED`, sub: `+${w.clearReward} cores · +${salvage} salvage · reactor repaired`, tone: 'cyan' });
+        } else uiEvents.emit('banner', { title: `WAVE ${w.number} CLEARED`, sub: `+${w.clearReward} cores · +${salvage} salvage · +${credits} cr · reactor repaired`, tone: 'cyan' });
       },
       onPrepStart: (w) => {
         run.waveReached(w.number);
@@ -987,6 +995,13 @@ export class Game {
     uiEvents.emit('coresGained', e.def.reward);
     const salvage = Math.round(e.def.salvage * this.cfg.tier.salvageMult);
     if (this.cfg.run.collect({ salvage })) uiEvents.emit('salvageGained', salvage);
+    // M4 income: credits per kill (elites pay well) and a chance of an advanced component from elites.
+    const credits = Math.round((RUN_INCOME.killCredits[e.kind] ?? 0) * this.cfg.tier.salvageMult);
+    const components = e.kind === 'bulwark' && this.lootRand() < RUN_INCOME.eliteComponentChance ? 1 : 0;
+    if (this.cfg.run.collect({ credits, components })) {
+      if (credits) uiEvents.emit('creditsGained', credits);
+      if (components) uiEvents.emit('componentsGained', components);
+    }
     this.cfg.run.addKill();
     this.dropLoot(e.kind as DropSourceId, e.center().clone());
     this.enemies.kill(e, this.fx, this.enemyCtx);
@@ -1159,6 +1174,10 @@ export class Game {
         tier: this.cfg.tier.id,
         salvageUnsecured: run.unsecured.salvage,
         salvageSecured: run.secured.salvage,
+        creditsUnsecured: run.unsecured.credits,
+        creditsSecured: run.secured.credits,
+        componentsUnsecured: run.unsecured.components,
+        componentsSecured: run.secured.components,
         nextCheckpoint: nextCheckpoint(run.wavesCleared + 1),
         checkpointOpen: this.canReturnHome,
         lastBankedWave: run.lastBankedWave,
@@ -1219,6 +1238,10 @@ export class Game {
       canReturnHome: this.canReturnHome,
       salvageUnsecured: this.cfg.run.unsecured.salvage,
       salvageSecured: this.cfg.run.secured.salvage,
+      creditsUnsecured: this.cfg.run.unsecured.credits,
+      creditsSecured: this.cfg.run.secured.credits,
+      componentsUnsecured: this.cfg.run.unsecured.components,
+      componentsSecured: this.cfg.run.secured.components,
       tier: this.cfg.tier.id,
       wavesCleared: this.cfg.run.wavesCleared,
       pickups: this.loot.count,
