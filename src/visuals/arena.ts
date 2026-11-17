@@ -1,5 +1,7 @@
 import {
+  Color3,
   Mesh,
+  type PBRMaterial,
   MeshBuilder,
   PhysicsBody,
   PhysicsMotionType,
@@ -11,11 +13,23 @@ import {
   TransformNode,
   Vector3,
 } from '@babylonjs/core';
-import type { ArenaLayout, Box, Ramp, Vec2 } from '../world/layout';
+import type { ArenaLayout, Box, GateId, Ramp } from '../world/layout';
 import { PHYS_ENV } from '../world/physicsGroups';
-import type { Palette } from './materials';
+import { type Palette, unlit } from './materials';
 import { boxProjectUVs } from './uv';
 import { createBeveledBox } from './bevel';
+import { createPathLight } from './pathLighting';
+import { segmentedRing } from './rings';
+
+interface GateVisual {
+  lane: ReturnType<typeof createPathLight>;
+  rotor: Mesh;
+  counterRotor: Mesh;
+  lights: PBRMaterial;
+  charge: number;
+  flash: number;
+}
+
 
 /**
  * Builds the research facility from layout data:
@@ -26,7 +40,9 @@ import { createBeveledBox } from './bevel';
 export class ArenaBuilder {
   private parts = new Map<string, { mat: Material; surface: string | null; meshes: Mesh[] }>();
   private physicsShape: PhysicsShapeContainer;
-  readonly animated: { node: TransformNode | Mesh; spin: Vector3 }[] = [];
+  private gates = new Map<GateId, GateVisual>();
+  private armed = new Set<GateId>();
+  private conduits: ReturnType<typeof createPathLight>[] = [];
   readonly shadowCasters: Mesh[] = [];
   /** Every static render mesh (for environment capture). */
   readonly meshes: Mesh[] = [];
@@ -89,7 +105,6 @@ export class ArenaBuilder {
     }
 
     for (const r of L.ramps) this.buildRamp(r);
-    for (const route of Object.values(L.routes)) this.buildLane(route.points);
     this.buildConduits();
     this.buildGates();
     this.buildSkyline();
@@ -207,57 +222,43 @@ export class ArenaBuilder {
     this.physicsShape.addChild(new PhysicsShapeBox(Vector3.Zero(), Quaternion.Identity(), new Vector3(dims.width, dims.height, dims.depth), this.scene), center, rot);
   }
 
-  /** Hostile lanes: orange edge strips plus chevrons pointing toward the reactor. */
-  private buildLane(pts: Vec2[]): void {
-    const P = this.pal;
-    const hw = this.layout.laneHalfWidth;
-    for (let i = 0; i < pts.length - 1; i++) {
-      const a = pts[i];
-      const b = pts[i + 1];
-      const dx = b.x - a.x;
-      const dz = b.z - a.z;
-      const len = Math.hypot(dx, dz);
-      const yaw = Math.atan2(dx, dz);
-      const nx = dz / len;
-      const nz = -dx / len;
-      for (const side of [-1, 1]) {
-        const s = MeshBuilder.CreateBox('lane', { width: 0.14, height: 0.02, depth: len + 0.3 }, this.scene);
-        s.position.set((a.x + b.x) / 2 + nx * hw * side, 0.012, (a.z + b.z) / 2 + nz * hw * side);
-        s.rotation.y = yaw;
-        this.add(s, P.orangeDim, null);
-      }
-      for (let d = 2.5; d < len - 1; d += 4) {
-        for (const side of [-1, 1]) {
-          const c = MeshBuilder.CreateBox('chev', { width: 0.12, height: 0.02, depth: 0.9 }, this.scene);
-          const px = a.x + (dx / len) * d;
-          const pz = a.z + (dz / len) * d;
-          c.position.set(px + nx * 0.32 * side, 0.014, pz + nz * 0.32 * side);
-          c.rotation.y = yaw + side * 0.75;
-          this.add(c, P.orangeGlow, null);
-        }
-      }
-    }
+  prepareWave(gates: Iterable<GateId>): void {
+    this.armed = new Set(gates);
   }
 
-  /** Friendly cyan conduits feeding the reactor from the southern platforms. */
+  gateSpawned(gate: GateId): void {
+    const visual = this.gates.get(gate);
+    if (visual) visual.flash = 1;
+  }
+
+  gateActivity(gate: GateId): number {
+    return this.gates.get(gate)?.charge ?? 0;
+  }
+
+  update(dt: number, hostileDt: number, warning: number): void {
+    for (const [id, gate] of this.gates) {
+      const target = this.armed.has(id) ? 0.13 + 0.87 * warning : 0.12;
+      gate.charge += (target - gate.charge) * (1 - Math.exp(-dt * 4));
+      gate.flash *= Math.exp(-hostileDt * 3.4);
+      gate.lane.update(hostileDt, gate.charge, gate.flash);
+      gate.rotor.rotation.y += hostileDt * (0.24 + gate.charge * 0.7);
+      gate.counterRotor.rotation.y -= hostileDt * (0.32 + gate.charge * 0.9);
+      const power = 0.33 + 0.75 * gate.charge + 0.7 * gate.flash;
+      gate.lights.emissiveColor.set(2.5 * power, 0.64 * power, 0.13 * power);
+    }
+    for (const conduit of this.conduits) conduit.update(dt, 0.72);
+  }
+
+  /** Cyan power guides run from the southern deck into the reactor hub. */
   private buildConduits(): void {
     const P = this.pal;
     const lines: [number, number, number, number][] = [
-      [0, -4.5, 0, -38],
-      [-4, -3, -20, -22],
-      [4, -3, 20, -22],
+      [0, -38, 0, -4.5],
+      [-20, -22, -4, -3],
+      [20, -22, 4, -3],
     ];
     for (const [x0, z0, x1, z1] of lines) {
-      const len = Math.hypot(x1 - x0, z1 - z0);
-      const yaw = Math.atan2(x1 - x0, z1 - z0);
-      for (const off of [-0.35, 0.35]) {
-        const s = MeshBuilder.CreateBox('conduit', { width: 0.1, height: 0.02, depth: len }, this.scene);
-        s.rotation.y = yaw;
-        const nx = Math.cos(yaw) * off;
-        const nz = -Math.sin(yaw) * off;
-        s.position.set((x0 + x1) / 2 + nx, 0.012, (z0 + z1) / 2 + nz);
-        this.add(s, P.cyanDim, null);
-      }
+      this.conduits.push(createPathLight(this.scene, 'reactorFeed', [{ x: x0, z: z0 }, { x: x1, z: z1 }], 0.52, new Color3(0.23, 1.7, 2.2)));
     }
     // Reactor plaza ring
     const ring = MeshBuilder.CreateTorus('plaza', { diameter: 15, thickness: 0.12, tessellation: 64 }, this.scene);
@@ -269,12 +270,13 @@ export class ArenaBuilder {
   private buildGates(): void {
     const P = this.pal;
     const H = this.layout.half;
-    const frames: { pos: Vector3; yaw: number }[] = [
-      { pos: new Vector3(0, 0, H), yaw: 0 },
-      { pos: new Vector3(H, 0, 0), yaw: Math.PI / 2 },
-      { pos: new Vector3(-H, 0, 0), yaw: -Math.PI / 2 },
+    const frames: { id: GateId; pos: Vector3; yaw: number }[] = [
+      { id: 'north', pos: new Vector3(0, 0, H), yaw: 0 },
+      { id: 'east', pos: new Vector3(H, 0, 0), yaw: Math.PI / 2 },
+      { id: 'west', pos: new Vector3(-H, 0, 0), yaw: -Math.PI / 2 },
     ];
     for (const f of frames) {
+      const lights = unlit(this.scene, `gateSignal:${f.id}`, [1.35, 0.36, 0.08], { twoSided: true });
       const root = new TransformNode('gate', this.scene);
       root.position.copyFrom(f.pos);
       root.rotation.y = f.yaw;
@@ -283,16 +285,16 @@ export class ArenaBuilder {
         root.computeWorldMatrix(true);
         m.rotation.y = f.yaw;
         m.position = Vector3.TransformCoordinates(new Vector3(x, y, z), root.getWorldMatrix());
-        this.add(m, mat, mat === P.orangeGlow || mat === P.redGlow ? null : 'wall');
+        this.add(m, mat, mat === lights || mat === P.orangeDim ? null : 'wall');
         return m;
       };
       // massive frame
       mk(1.4, 9.4, 2.6, -5.2, 4.7, 0.2, P.graphite);
       mk(1.4, 9.4, 2.6, 5.2, 4.7, 0.2, P.graphite);
       mk(11.8, 1.6, 2.6, 0, 8.6, 0.2, P.graphite);
-      mk(9.0, 0.18, 0.1, 0, 7.6, -1.12, P.orangeGlow);
-      mk(0.18, 6.8, 0.1, -4.45, 3.6, -1.12, P.orangeGlow);
-      mk(0.18, 6.8, 0.1, 4.45, 3.6, -1.12, P.orangeGlow);
+      mk(9.0, 0.18, 0.1, 0, 7.6, -1.12, lights);
+      mk(0.18, 6.8, 0.1, -4.45, 3.6, -1.12, lights);
+      mk(0.18, 6.8, 0.1, 4.45, 3.6, -1.12, lights);
       // hazard chevrons on the floor at the threshold
       for (let i = -3; i <= 3; i++) mk(0.6, 0.02, 0.6, i * 1.2, 0.015, -1.6, i % 2 ? P.orangeDim : P.graphite);
       // Rift portal at the back of the tunnel
@@ -303,18 +305,24 @@ export class ArenaBuilder {
       disc.position.copyFrom(portalPos);
       disc.rotation.y = f.yaw;
       disc.isPickable = false;
-      const ringA = MeshBuilder.CreateTorus('riftRing', { diameter: 7.4, thickness: 0.22, tessellation: 48 }, this.scene);
-      ringA.material = P.orangeGlow;
-      ringA.position.copyFrom(portalPos);
-      ringA.rotation.set(Math.PI / 2, f.yaw, 0);
-      ringA.isPickable = false;
-      const ringB = MeshBuilder.CreateTorus('riftRing2', { diameter: 5.6, thickness: 0.1, tessellation: 40 }, this.scene);
-      ringB.material = P.redGlow;
-      ringB.parent = disc;
-      ringB.rotation.x = Math.PI / 2;
-      ringB.position.z = -0.1;
-      ringB.isPickable = false;
-      this.animated.push({ node: disc, spin: new Vector3(0, 0, 0.9) });
+      const frame = new TransformNode('gateRotorFrame', this.scene);
+      frame.parent = root;
+      frame.position.set(0, 3.6, 10.94);
+      frame.rotation.x = -Math.PI / 2;
+      const rim = MeshBuilder.CreateTorus('riftRing', { diameter: 7.4, thickness: 0.22, tessellation: 48 }, this.scene);
+      rim.material = P.graphite;
+      rim.parent = frame;
+      rim.isPickable = false;
+      const rotor = segmentedRing(this.scene, 'gateRotor', 3.66, 0.12, 8, 0.57);
+      rotor.parent = frame;
+      rotor.position.y = 0.11;
+      rotor.material = lights;
+      const counterRotor = segmentedRing(this.scene, 'gateRotorInner', 3.19, 0.04, 20, 0.35);
+      counterRotor.parent = frame;
+      counterRotor.material = P.orangeDim;
+      const lane = createPathLight(this.scene, `hostileLane:${f.id}`, this.layout.routes[f.id].points,
+        this.layout.laneHalfWidth, new Color3(2.7, 0.65, 0.11), true);
+      this.gates.set(f.id, { lane, rotor, counterRotor, lights, charge: 0.4, flash: 0 });
     }
   }
 
@@ -349,5 +357,6 @@ export class ArenaBuilder {
       merged.doNotSyncBoundingInfo = true;
       if (g.surface === 'wall' || g.surface === 'platform') this.shadowCasters.push(merged);
     }
+    this.parts.clear();
   }
 }

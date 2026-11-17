@@ -339,23 +339,12 @@ function Radar({ game }: { game: Game }) {
       b.fillStyle = fill;
       b.fillRect(X(x0), Y(z1), (x1 - x0) * k, (z1 - z0) * k);
     }
-    b.lineWidth = 2.2 * dpr;
-    b.strokeStyle = 'rgba(255,130,40,0.38)';
-    b.setLineDash([4 * dpr, 3 * dpr]);
-    for (const r of Object.values(ARENA.routes)) {
-      b.beginPath();
-      r.points.forEach((p, i) => (i ? b.lineTo(X(p.x), Y(p.z)) : b.moveTo(X(p.x), Y(p.z))));
-      b.stroke();
-    }
-    b.setLineDash([]);
-    // Gates
-    for (const r of Object.values(ARENA.routes)) {
-      const p = r.points[0];
-      b.fillStyle = 'rgba(255,110,30,0.9)';
-      b.beginPath();
-      b.arc(X(p.x), Y(p.z), 3.2 * dpr, 0, Math.PI * 2);
-      b.fill();
-    }
+    const routes = Object.values(ARENA.routes).map(({ gate, points }) => {
+      const path = new Path2D();
+      path.moveTo(X(points[0].x), Y(points[0].z));
+      for (const p of points.slice(1)) path.lineTo(X(p.x), Y(p.z));
+      return { gate, path, x: X(points[0].x), y: Y(points[0].z) };
+    });
     // Reactor
     b.strokeStyle = 'rgba(80,230,245,0.9)';
     b.lineWidth = 1.5 * dpr;
@@ -374,6 +363,23 @@ function Radar({ game }: { game: Game }) {
       ctx.clearRect(0, 0, S, S);
       ctx.drawImage(base, 0, 0);
       const pulse = 0.5 + 0.5 * Math.sin(now * 0.008);
+      // Match the floor guides so the map points to the same incoming lanes.
+      ctx.strokeStyle = '#ff9a42';
+      ctx.fillStyle = '#ff9a42';
+      ctx.lineWidth = 1.6 * dpr;
+      ctx.setLineDash([4 * dpr, 3 * dpr]);
+      ctx.lineDashOffset = -((now * 0.009) % 7) * dpr;
+      for (const route of routes) {
+        const activity = game.gateActivity(route.gate);
+        ctx.globalAlpha = 0.16 + activity * 0.68;
+        ctx.stroke(route.path);
+        ctx.globalAlpha = 0.27 + activity * (0.45 + pulse * 0.24);
+        ctx.beginPath();
+        ctx.arc(route.x, route.y, (2.4 + activity * 0.9) * dpr, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      ctx.setLineDash([]);
       // Turrets: cyan diamonds with range hint
       ctx.fillStyle = '#5ff0ff';
       for (const t of game.turrets.turrets) {

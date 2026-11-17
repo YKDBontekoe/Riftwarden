@@ -3,6 +3,7 @@ import {
   Color4,
   ColorCurves,
   Constants,
+  CubeTexture,
   DefaultRenderingPipeline,
   type Engine,
   ImageProcessingConfiguration,
@@ -24,39 +25,39 @@ export class PostFx {
   private ssr: SSRRenderingPipeline | null = null;
   private aberration = 0;
   /** Per-location grade baselines (the HQ uses a calmer, brighter look). */
-  baseExposure = 0.95;
-  baseGrain = 2.5;
+  baseExposure = 0.94;
+  baseGrain = 1.2;
 
-  constructor(scene: Scene, private engine: Engine, camera: Camera, high: boolean) {
+  constructor(scene: Scene, engine: Engine, camera: Camera, high: boolean) {
     const supportsGBuffer = engine.getCaps().drawBuffersExtension && engine.webGLVersion >= 2;
     if (high && supportsGBuffer) {
       try {
         const ssao = new SSAO2RenderingPipeline('ssao', scene, { ssaoRatio: 0.5, blurRatio: 1 }, [camera], true, Constants.TEXTURETYPE_HALF_FLOAT);
         ssao.radius = 1.4;
-        ssao.totalStrength = 1.4;
+        ssao.totalStrength = 1.18;
         ssao.base = 0.12;
         ssao.samples = 12;
         ssao.maxZ = 120;
         ssao.minZAspect = 0.4;
         ssao.expensiveBlur = true;
-        ssao.bilateralSamples = 12;
+        ssao.bilateralSamples = 8;
         this.ssao = ssao;
       } catch (e) {
         console.warn('SSAO unavailable', e);
       }
       try {
         const ssr = new SSRRenderingPipeline('ssr', scene, [camera], true, Constants.TEXTURETYPE_HALF_FLOAT);
-        ssr.strength = 1.0;
+        ssr.strength = 0.62;
         ssr.reflectionSpecularFalloffExponent = 1.6;
-        ssr.step = 1;
-        ssr.maxSteps = 140;
-        ssr.maxDistance = 90;
-        ssr.thickness = 0.5;
+        ssr.step = 2;
+        ssr.maxSteps = 96;
+        ssr.maxDistance = 60;
+        ssr.thickness = 0.28;
         ssr.selfCollisionNumSkip = 2;
         ssr.ssrDownsample = 1;
         ssr.blurDispersionStrength = 0.07;
         ssr.blurDownsample = 1;
-        ssr.roughnessFactor = 0.15;
+        ssr.roughnessFactor = 0.08;
         ssr.reflectivityThreshold = 0.02;
         ssr.enableSmoothReflections = true;
         ssr.attenuateFacingCamera = true;
@@ -65,7 +66,12 @@ export class PostFx {
         ssr.attenuateBackfaceReflection = true;
         ssr.clipToFrustum = true;
         ssr.useFresnel = true;
-        ssr.environmentTexture = null;
+        // Use the captured environment on misses. Blurring the scene color on misses
+        // spreads bright foreground particles into square highlights on reflective surfaces.
+        ssr.environmentTextureIsProbe = true;
+        scene.onEnvironmentTextureChangedObservable.add((texture) => {
+          ssr.environmentTexture = texture instanceof CubeTexture ? texture : null;
+        });
         this.ssr = ssr;
       } catch (e) {
         console.warn('SSR unavailable', e);
@@ -74,20 +80,20 @@ export class PostFx {
 
     const p = new DefaultRenderingPipeline('pipe', true, scene, [camera]);
     this.pipeline = p;
-    p.samples = high ? 4 : 1;
-    p.fxaaEnabled = !high;
+    p.samples = high ? 2 : 1;
+    p.fxaaEnabled = true;
     p.bloomEnabled = true;
     p.bloomThreshold = 1.0;
-    p.bloomWeight = high ? 0.32 : 0.25;
-    p.bloomKernel = high ? 96 : 48;
+    p.bloomWeight = high ? 0.26 : 0.23;
+    p.bloomKernel = high ? 72 : 48;
     p.bloomScale = 0.5;
     p.sharpenEnabled = high;
-    p.sharpen.edgeAmount = 0.15;
+    p.sharpen.edgeAmount = 0.1;
     p.chromaticAberrationEnabled = true;
-    p.chromaticAberration.aberrationAmount = 1;
+    p.chromaticAberration.aberrationAmount = 0;
     p.chromaticAberration.radialIntensity = 1.2;
     p.grainEnabled = true;
-    p.grain.intensity = 2.5;
+    p.grain.intensity = this.baseGrain;
     p.grain.animated = true;
 
     const ip = p.imageProcessing;
@@ -96,7 +102,7 @@ export class PostFx {
     ip.exposure = this.baseExposure;
     ip.contrast = 1.12;
     ip.vignetteEnabled = true;
-    ip.vignetteWeight = 1.1;
+    ip.vignetteWeight = 0.92;
     ip.vignetteStretch = 0.4;
     ip.vignetteColor = new Color4(0.0, 0.01, 0.02, 1);
     ip.vignetteCameraFov = 0.8;
@@ -112,7 +118,6 @@ export class PostFx {
     cc.globalSaturation = 10;
     ip.colorCurves = cc;
 
-    engine.setHardwareScalingLevel(high ? 1 / Math.min(window.devicePixelRatio, 1.5) : 1);
   }
 
   /** Brief lens punch (explosions near the player, taking hits). */
@@ -132,10 +137,9 @@ export class PostFx {
     cc.globalSaturation = 10 - 70 * tactical - 20 * hurt;
     cc.globalHue = 220;
     cc.globalDensity = 18 * tactical;
-    p.chromaticAberration.aberrationAmount = 1 + 30 * this.aberration + 6 * tactical + 14 * hurt;
+    p.chromaticAberration.aberrationAmount = 25 * this.aberration + 6 * tactical + 14 * hurt;
     p.imageProcessing.exposure = this.baseExposure + lightning * 0.05;
     p.grain.intensity = this.baseGrain + tactical * 6;
-    void this.engine;
   }
 
   /** Meshes that should not write into the geometry buffer (the first-person viewmodel). */

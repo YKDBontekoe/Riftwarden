@@ -1,6 +1,9 @@
-import { type DynamicTexture, type Material, Matrix, MeshBuilder, type PBRMaterial, type Scene, type TransformNode, VertexBuffer } from '@babylonjs/core';
+import { Color3, type DynamicTexture, type Material, Matrix, MeshBuilder, type PBRMaterial, type Scene, type TransformNode, VertexBuffer } from '@babylonjs/core';
+import { createRiftMaterial } from '../visuals/atmosphere';
 import { type Kit } from '../visuals/kit';
 import { unlit } from '../visuals/materials';
+import { createPathLight } from '../visuals/pathLighting';
+import { segmentedRing } from '../visuals/rings';
 import { canvas, flareSprite, toTexture } from '../visuals/textures';
 import { ARENA } from '../world/layout';
 import type { HqMaterials } from './HqBuilder';
@@ -211,36 +214,8 @@ export function launchRing(ctx: PropCtx): void {
     kit.part('box', M.cyan, root, { pos: [s * 4.12, 3.4, -0.4], scale: [0.04, 5.6, 0.08] });
   }
   ctx.collider(-5.3, 0, 18.6, 5.3, 8, 20.6);
-  // Membrane: swirling energy disc (additive), slowly rotating.
-  const S = 256;
-  const { c, ctx: g } = canvas(S);
-  const img = g.createImageData(S, S);
-  for (let y = 0; y < S; y++)
-    for (let x = 0; x < S; x++) {
-      const dx = (x - S / 2) / (S / 2);
-      const dy = (y - S / 2) / (S / 2);
-      const r = Math.hypot(dx, dy);
-      const a = Math.atan2(dy, dx);
-      const swirl = 0.5 + 0.5 * Math.sin(a * 5 + r * 14);
-      const v = r > 1 ? 0 : Math.pow(1 - r, 0.6) * (0.25 + 0.75 * swirl) * (0.4 + 0.6 * r);
-      const i = (y * S + x) * 4;
-      img.data[i] = v * 120;
-      img.data[i + 1] = v * 235;
-      img.data[i + 2] = v * 255;
-      img.data[i + 3] = 255;
-    }
-  g.putImageData(img, 0, 0);
-  const tex = toTexture('membrane', c, scene, { aniso: 2 });
-  tex.wrapU = tex.wrapV = 0;
-  const mat = unlit(scene, 'membraneMat', [1.8, 1.8, 1.8], { tex, additive: true, twoSided: true });
-  // Dark void behind the membrane so the energy reads against the bright bay.
-  const voidMat = unlit(scene, 'launchVoid', [0.004, 0.02, 0.03]);
-  const back = MeshBuilder.CreateDisc('launchVoid', { radius: 3.35, tessellation: 48 }, scene);
-  back.material = voidMat;
-  back.parent = root;
-  back.position.set(0, 4.2, 0.25); // CreateDisc faces -z: towards the player
-  back.isPickable = false;
-  const disc = MeshBuilder.CreateDisc('membrane', { radius: 3.2, tessellation: 48 }, scene);
+  const mat = createRiftMaterial(scene, 'launchMembrane', new Color3(0.11, 1.25, 1.9), 5.1);
+  const disc = MeshBuilder.CreateDisc('membrane', { radius: 3.32, tessellation: 64 }, scene);
   disc.material = mat;
   disc.parent = root;
   disc.position.set(0, 4.2, 0);
@@ -251,21 +226,26 @@ export function launchRing(ctx: PropCtx): void {
   pool.material = glowMat;
   pool.position.set(0, 0.02, 18.2);
   pool.isPickable = false;
-  ctx.animators.push((dt, t) => {
-    disc.rotation.z += dt * 0.35;
-    mat.emissiveColor.setAll(1.5 + 0.35 * Math.sin(t * 1.7));
-  });
-  // Launch rails with travelling chevrons towards the ring
+  const gimbal = kit.node('launchGimbal', root, [0, 4.2, -0.54]);
+  gimbal.rotation.x = -Math.PI / 2;
+  const sweep = segmentedRing(scene, 'launchGimbalArc', 3.57, 0.11, 6, 0.48);
+  sweep.parent = gimbal;
+  sweep.material = M.cyan;
+  const ticks = segmentedRing(scene, 'launchGimbalTicks', 3.78, 0.045, 24, 0.28);
+  ticks.parent = gimbal;
+  ticks.material = M.teal;
+
+  // Travelling floor guides and counter-rotating rings along the launch approach.
   for (const s of [-1, 1]) kit.part('box', M.metal, root, { pos: [s * 1.6, 0.04, -5], scale: [0.25, 0.08, 9] });
-  const chevs: TransformNode[] = [];
-  for (let i = 0; i < 7; i++) {
-    const n = kit.node(`chev${i}`, root, [0, 0.03, -9 + i * 1.3]);
-    for (const s of [-1, 1]) kit.part('box', M.cyanDim, n, { pos: [s * 0.32, 0, 0], rot: [0, s * 0.75, 0], scale: [0.12, 0.02, 0.9] });
-    chevs.push(n);
-  }
-  ctx.animators.push((_dt, t) => {
-    for (let i = 0; i < chevs.length; i++) chevs[i].position.z = -9 + ((i * 1.3 + t * 1.2) % 9.1);
+  const approach = createPathLight(scene, 'launchApproach', [{ x: 0, z: 8.8 }, { x: 0, z: 19.1 }], 1.22, new Color3(0.22, 1.65, 2.15));
+  ctx.animators.push((dt, t) => {
+    const power = 0.78 + 0.18 * Math.sin(t * 1.5);
+    mat.setFloat('time', t);
+    approach.update(dt, power);
+    sweep.rotation.y += dt * 0.39;
+    ticks.rotation.y -= dt * 0.31;
   });
+
 }
 
 /** Central holo-table with a slowly turning miniature of the arena and orbiting rings. */

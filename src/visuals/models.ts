@@ -11,6 +11,7 @@ import type { Kit } from './kit';
 import { type Palette, unlit } from './materials';
 import { createBeveledBox } from './bevel';
 import { canvas, fbm, flareSprite, toTexture } from './textures';
+import { segmentedRing } from './rings';
 
 export interface WalkerRig {
   root: TransformNode;
@@ -164,11 +165,10 @@ export function buildTurret(kit: Kit, P: Palette, unique?: Material): TurretRig 
 
 export interface ReactorRig {
   root: TransformNode;
-  rings: TransformNode[];
   coreMat: PBRMaterial;
   beamMat: PBRMaterial;
-  /** Animate plasma flow; `integrity` 0..1. */
-  update(dt: number, integrity: number): void;
+  /** Animate containment and plasma flow from the integrity and impact signals. */
+  update(dt: number, integrity: number, hit: number): void;
 }
 
 /** Vertical plasma streaks (tileable) used to animate the reactor core and beam. */
@@ -265,12 +265,26 @@ export function buildReactor(scene: Scene, P: Palette): ReactorRig {
     strip.rotation.x = -0.18;
   }
 
-  const rings: TransformNode[] = [];
+  const coilLight = unlit(scene, 'reactorCoilLight', [0.28, 2.0, 2.5], { twoSided: true });
+  const coils: { node: TransformNode; restHeight: number }[] = [];
   for (let i = 0; i < 3; i++) {
-    const r = mk(MeshBuilder.CreateTorus('rRing', { diameter: 3.4 + i * 0.7, thickness: 0.14, tessellation: 48 }, scene), i === 1 ? P.white : P.metal, false);
-    r.position.y = 3 + i * 1.6;
-    rings.push(r);
+    const diameter = 3.4 + i * 0.7;
+    const r = mk(MeshBuilder.CreateTorus('rRing', { diameter, thickness: 0.14, tessellation: 48 }, scene), i === 1 ? P.white : P.metal, false);
+    const restHeight = 2.78 + i * 1.63;
+    r.position.y = restHeight;
+    r.rotation.y = i * Math.PI / 3;
+    const arcs = segmentedRing(scene, 'reactorCoilArcs', diameter / 2 + 0.19, 0.14, i === 1 ? 4 : 3, 0.45);
+    arcs.material = coilLight;
+    arcs.parent = r;
+    arcs.position.y = 0.02;
+    coils.push({ node: r, restHeight });
   }
+
+  // Chasing rings tell the player where the power conduits converge.
+  const baseSweep = mk(segmentedRing(scene, 'reactorBaseSweep', 4.91, 0.17, 10, 0.52), coilLight, false);
+  baseSweep.position.y = 0.055;
+  const perimeterSweep = mk(segmentedRing(scene, 'reactorPerimeterSweep', 7.21, 0.10, 7, 0.51), coilLight, false);
+  perimeterSweep.position.y = 0.055;
 
   const fade = toTexture('beamFade', beamFadeCanvas(), scene, { aniso: 1 });
   fade.wrapV = 0; // clamp
@@ -288,15 +302,25 @@ export function buildReactor(scene: Scene, P: Palette): ReactorRig {
   let t = 0;
   return {
     root,
-    rings,
     coreMat,
     beamMat,
-    update(dt: number, integrity: number) {
+    update(dt: number, integrity: number, hit: number) {
       t += dt;
-      coreTex.vOffset -= dt * (0.25 + 0.35 * integrity);
-      beamTex.vOffset -= dt * 0.8;
-      poolMat.emissiveColor.copyFrom(coreMat.emissiveColor).scaleInPlace(0.28 + 0.04 * Math.sin(t * 3));
-      shell.rotation.y += dt * 0.1;
+      coreTex.vOffset = (coreTex.vOffset - dt * (0.25 + 0.35 * integrity)) % 1;
+      beamTex.vOffset = (beamTex.vOffset - dt * 0.8) % 1;
+      poolMat.emissiveColor.copyFrom(coreMat.emissiveColor).scaleInPlace(0.22 + 0.055 * Math.sin(t * 2));
+      coilLight.emissiveColor.copyFrom(coreMat.emissiveColor).scaleInPlace(0.88 + 0.14 * Math.sin(t * 2) + hit * 0.27);
+      baseSweep.rotation.y += dt * 0.67;
+      perimeterSweep.rotation.y -= dt * 0.24;
+
+      for (let i = 0; i < coils.length; i++) {
+        const { node, restHeight } = coils[i];
+        const phase = t * (1.2 + (1 - integrity) * 0.8) + i * 1.9;
+        node.rotation.y += dt * (0.45 + i * 0.25) * (i % 2 ? -1 : 1);
+        node.rotation.x = Math.sin(phase) * (0.088 + hit * 0.041);
+        node.rotation.z = Math.cos(phase * 0.78) * 0.064;
+        node.position.y = restHeight + Math.sin(phase) * 0.09;
+      }
     },
   };
 }

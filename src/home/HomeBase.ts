@@ -119,7 +119,7 @@ export class HomeBase {
     scene.enablePhysics(new Vector3(0, -26, 0), new HavokPlugin(true, havok));
     const high = settings.quality === 'high';
 
-    const pal = createPalette(scene);
+    const pal = createPalette(scene, high, true);
     this.kit = new Kit(scene);
 
     // HQ material set: brighter, cleaner interior variants of the shared palette.
@@ -141,7 +141,7 @@ export class HomeBase {
       }
       return m;
     };
-    const floor = composite('hqFloor', [0.52, 0.55, 0.58], 0.5, 0.75);
+    const floor = pal.floor;
     const wall = composite('hqWall', [0.95, 0.96, 0.97], 0.62, 0.15);
     const ceiling = composite('hqCeiling', [0.8, 0.82, 0.84], 0.85, 0);
     ceiling.albedoTexture = null; // plain acoustic panels: keeps the vents for walls/floor
@@ -187,7 +187,7 @@ export class HomeBase {
       plant,
       screenFrame,
     };
-    const lit = [floor, ceiling, wall, plant, screenFrame, ...pal.lit];
+    const lit = [ceiling, wall, plant, screenFrame, ...pal.lit];
 
     // ---- static shell + props
     const builder = new HqBuilder(scene, M);
@@ -209,7 +209,7 @@ export class HomeBase {
 
     // ---- lighting: cool fill, moonlight through the window, cyan/teal accents, warm workshop
     const hemi = new HemisphericLight('hqFill', new Vector3(0, 1, 0), scene);
-    hemi.intensity = 0.85;
+    hemi.intensity = 0.65;
     hemi.diffuse = new Color3(0.86, 0.93, 1);
     hemi.groundColor = new Color3(0.5, 0.53, 0.56);
     hemi.specular = Color3.Black();
@@ -227,8 +227,8 @@ export class HomeBase {
       if (pulse) this.pulseLights.push({ light: l, base: intensity, phase: pos[0] + pos[2] });
       return l;
     };
-    point('hqCommand', [0, 6.2, -2], [0.9, 0.97, 1], 3.2, 26);
-    point('hqHolo', [0, 2.2, 0], [0.25, 0.85, 1], 1.4, 8, true);
+    point('hqCommand', [0, 6.2, -2], [0.9, 0.97, 1], 2.65, 26);
+    point('hqHolo', [0, 2.2, 0], [0.25, 0.85, 1], 0.95, 8, true);
     point('hqLaunch', [0, 6.5, 16.5], [0.45, 0.9, 1], 3.0, 18, true);
     point('hqBay', [-16.5, 4.4, 0], [0.55, 1, 0.95], 2.6, 13);
     point('hqStorage', [17, 4.4, 4.5], [0.9, 0.95, 1], 2.5, 12);
@@ -254,13 +254,13 @@ export class HomeBase {
     this.player.camera.maxZ = 260;
 
     // Reflections: capture the finished static HQ once into a prefiltered cube map.
-    captureEnvironment(scene, scene.meshes.filter((m) => m.isEnabled() && m.isVisible && m.getTotalVertices() > 0), lit, new Vector3(0, 2.6, 0));
+    captureEnvironment(scene, scene.meshes.filter((m) => m.isEnabled() && m.isVisible && m.getTotalVertices() > 0), lit, new Vector3(0, 2.6, 0), high ? 256 : 128);
     this.post = new PostFx(scene, engine, this.player.camera, high);
     // Interior grade: calmer than the arena (less bloom spread, grain and aberration).
     this.post.pipeline.bloomWeight = 0.22;
     this.post.pipeline.bloomKernel = high ? 64 : 48;
-    this.post.baseGrain = 1.2;
-    this.post.baseExposure = 1.05;
+    this.post.baseGrain = 0.7;
+    this.post.baseExposure = 0.92;
 
     this.input.onLockChange = (locked) => {
       if (!locked && this.screen === 'home') this.setScreen('paused');

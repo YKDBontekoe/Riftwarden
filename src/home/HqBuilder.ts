@@ -125,15 +125,12 @@ export class HqBuilder {
     for (const e of [s.a, s.b]) this.onLine(s.axis, s.c, e - 0.12, e + 0.12, -T - 0.12, T + 0.12, 0, s.y1, M.graphite);
   }
 
-  /** Floor slab for a room: inset composite tiles with graphite seams and a perimeter light. */
+  /** Floor slab for a room, with seams supplied by the deck material. */
   floor(r: Room): void {
     const M = this.M;
     const [x0, z0] = r.min;
     const [x1, z1] = r.max;
     this.box(x0, -0.3, z0, x1, 0, z1, M.floor, 'floor', 0.01);
-    // Seam grid every 3 m (thin graphite inlays slightly above the surface).
-    for (let x = Math.ceil(x0 / 3) * 3; x < x1; x += 3) if (x > x0 + 0.5) this.box(x - 0.025, 0, z0 + 0.3, x + 0.025, 0.006, z1 - 0.3, M.graphite, null, 0.002);
-    for (let z = Math.ceil(z0 / 3) * 3; z < z1; z += 3) if (z > z0 + 0.5) this.box(x0 + 0.3, 0, z - 0.025, x1 - 0.3, 0.006, z + 0.025, M.graphite, null, 0.002);
   }
 
   /** Ceiling section: slab, recessed coffers with light panels, perimeter cove light. */

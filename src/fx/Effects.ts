@@ -16,7 +16,7 @@ import type { Kit } from '../visuals/kit';
 import type { ArenaLayout } from '../world/layout';
 import { BounceSparks, CollisionBoxes } from './sparks';
 import { type Palette, unlit } from '../visuals/materials';
-import { flareSprite, ringSprite, scorchSprite, smokeSprite, sparkSprite, starSprite } from '../visuals/textures';
+import { flareSprite, plumeSprite, ringSprite, scorchSprite, sparkSprite, starSprite } from '../visuals/textures';
 
 export type BurstKind =
   | 'spark'
@@ -33,7 +33,7 @@ export type BurstKind =
   | 'embers'
   | 'puff';
 
-type TexKey = 'flare' | 'smoke' | 'spark' | 'star';
+type TexKey = 'flare' | 'fire' | 'smoke' | 'spark' | 'star';
 
 interface BurstConfig {
   tex: TexKey;
@@ -72,8 +72,8 @@ const BURSTS: Record<BurstKind, BurstConfig> = {
   // Thick billowing smoke that lingers and rises.
   smoke: {
     tex: 'smoke', capacity: 160,
-    colors: [[0, c4(0.5, 0.22, 0.08, 0)], [0.06, c4(0.32, 0.16, 0.09, 0.7)], [0.3, c4(0.1, 0.095, 0.09, 0.62)], [1, c4(0.13, 0.13, 0.14, 0)]],
-    sizes: [[0, 0.9], [0.4, 2.8], [1, 4.4]],
+    colors: [[0, c4(0.5, 0.22, 0.08, 0)], [0.06, c4(0.32, 0.19, 0.13, 0.68)], [0.3, c4(0.095, 0.1, 0.12, 0.69)], [1, c4(0.13, 0.13, 0.14, 0)]],
+    sizes: [[0, 0.85], [0.25, 2.55], [0.65, 3.6], [1, 4.6]],
     minSize: 1, maxSize: 1, minLife: 1.8, maxLife: 3.6, minPower: 0.8, maxPower: 3, gravity: 1.3, blend: STD, spread: 1, drag: 1.4, spin: 0.6, emitRadius: 0.5,
   },
   shield: { tex: 'spark', capacity: 140, colors: [[0, c4(3.4, 1.6, 0.4)], [1, c4(1, 0.2, 0, 0)]], minSize: 0.05, maxSize: 0.1, minLife: 0.15, maxLife: 0.35, minPower: 3, maxPower: 8, gravity: 0, blend: ADD, spread: 0.85, stretch: 3 },
@@ -81,8 +81,8 @@ const BURSTS: Record<BurstKind, BurstConfig> = {
   // Explosion layers
   flash: { tex: 'star', capacity: 8, colors: [[0, c4(6, 4.4, 3, 1)], [1, c4(2, 0.6, 0.1, 0)]], minSize: 3, maxSize: 4.2, minLife: 0.07, maxLife: 0.13, minPower: 0, maxPower: 0, gravity: 0, blend: ADD, spread: 0, spin: 0 },
   fire: {
-    tex: 'smoke', capacity: 120,
-    colors: [[0, c4(5, 3.4, 1.8, 1)], [0.15, c4(4, 1.6, 0.4, 1)], [0.4, c4(1.6, 0.55, 0.15, 0.7)], [0.7, c4(0.18, 0.12, 0.08, 0.35)], [1, c4(0, 0, 0, 0)]],
+    tex: 'fire', capacity: 120,
+    colors: [[0, c4(4.2, 2.6, 1.25, 1)], [0.15, c4(4, 1.6, 0.4, 1)], [0.4, c4(1.6, 0.55, 0.15, 0.7)], [0.7, c4(0.18, 0.12, 0.08, 0.35)], [1, c4(0, 0, 0, 0)]],
     sizes: [[0, 0.7], [0.25, 1.8], [1, 2.6]],
     minSize: 1, maxSize: 1, minLife: 0.35, maxLife: 0.85, minPower: 1.5, maxPower: 5.5, gravity: 2.2, blend: ADD, spread: 1, drag: 3.2, spin: 1.5, emitRadius: 0.35,
   },
@@ -252,10 +252,12 @@ export class Effects {
   private world: CollisionBoxes;
   private hotSparks: BounceSparks;
 
-  constructor(private scene: Scene, kit: Kit, P: Palette, layout: ArenaLayout) {
+  constructor(private scene: Scene, kit: Kit, P: Palette, layout: ArenaLayout, private high: boolean) {
+    this.particleBudget = high ? 1800 : 1050;
     const tex: Record<TexKey, DynamicTexture> = {
       flare: flareSprite(scene),
-      smoke: smokeSprite(scene),
+      smoke: plumeSprite(scene),
+      fire: plumeSprite(scene, true),
       spark: sparkSprite(scene),
       star: starSprite(scene),
     };
@@ -410,17 +412,17 @@ export class Effects {
   explode(pos: Vector3, o: ExplosionOpts = {}): void {
     const s = o.scale ?? 1;
     const over = this.particleCount > this.particleBudget;
-    const k = over ? 0.4 : 1;
+    const k = over ? 0.4 : this.high ? 1 : 0.65;
     this.burst('flash', pos, 2, undefined, s);
-    this.burst('fire', pos, Math.round(16 * s * k), undefined, s);
+    this.burst('fire', pos, Math.round(13 * s * k), undefined, s);
     this.burst('sparks', pos, Math.round(10 * s * k), undefined, Math.sqrt(s));
     // Molten sparks that rain down, bounce and skid across the arena.
     this.hotSparks.emit(pos, Vector3.UpReadOnly, Math.round(55 * s * k), 13 * Math.sqrt(s), 1.1);
     this.burst('embers', pos, Math.round(16 * s * k), undefined, Math.sqrt(s));
-    this.burst('smoke', TMP.copyFrom(pos).addInPlaceFromFloats(0, 0.3 * s, 0), Math.round(10 * s * k), undefined, s);
+    this.burst('smoke', TMP.copyFrom(pos).addInPlaceFromFloats(0, 0.35 * s, 0), Math.round(12 * s * k), undefined, s);
     if (pos.y < 3.5) this.ring(pos, 8 * s, 0.5, o.color ?? new Color3(3, 1.3, 0.4), true);
     this.ring(pos, 3.6 * s, 0.16, new Color3(1.6, 1.1, 0.7), false);
-    if (o.debris) this.debrisBurst(pos, o.debris, 7 * Math.sqrt(s), Math.sqrt(s));
+    if (o.debris) this.debrisBurst(pos, Math.ceil(o.debris * k), 7 * Math.sqrt(s), Math.sqrt(s));
     this.flashLight(pos, 4 + 2 * s, 0.35 + 0.15 * s, o.color);
     if (o.scorch !== false && pos.y < 4) this.scorch(pos, 2.6 * s);
     this.onShake?.(pos, Math.min(1, 0.35 * s + 0.15));
@@ -428,8 +430,10 @@ export class Effects {
 
   /** Shot hitting level geometry: sparks, a small dust puff and a burn mark. */
   impact(pos: Vector3, normal: Vector3): void {
-    this.burst('impact', pos, 5, normal);
-    this.burst('puff', pos, 2, normal);
+    const contact = TMP.copyFrom(normal).scaleInPlace(0.05).addInPlace(pos);
+    this.burst('impact', contact, this.high ? 8 : 5, normal);
+    this.burst('puff', contact, 2, normal);
+    if (this.high) this.burst('flash', contact, 1, normal, 0.13);
     this.hotSparks.emit(pos, normal, 5, 6, 0.65);
     const h = this.holes[this.holeNext];
     this.holeNext = (this.holeNext + 1) % this.holes.length;

@@ -17,15 +17,15 @@ const smooth = (t: number) => t * t * (3 - 2 * t);
 const wrap = (i: number, p: number) => ((i % p) + p) % p;
 
 /** Tileable value noise in [0,1]. `period` is in lattice cells. */
-export function vnoise(x: number, y: number, period: number, seed = 0): number {
+export function vnoise(x: number, y: number, period: number, seed = 0, periodY = period): number {
   const x0 = Math.floor(x);
   const y0 = Math.floor(y);
   const fx = smooth(x - x0);
   const fy = smooth(y - y0);
   const ax = wrap(x0, period);
-  const ay = wrap(y0, period);
+  const ay = wrap(y0, periodY);
   const bx = wrap(x0 + 1, period);
-  const by = wrap(y0 + 1, period);
+  const by = wrap(y0 + 1, periodY);
   const a = hash(ax, ay, seed);
   const b = hash(bx, ay, seed);
   const c = hash(ax, by, seed);
@@ -122,136 +122,120 @@ function ormPixel(d: Uint8ClampedArray, i: number, ao: number, rough: number, me
   d[i + 3] = 255;
 }
 
-/**
- * Industrial floor: 2x2 heavy deck plates per texture tile, seams, bolts, scuffs and
- * oily stains. Albedo/normal cover one 8 m tile.
- */
-export function floorSet(scene: Scene): PbrSet {
-  const S = 1024;
-  const n = 2;
-  const P = S / n;
-  const { c: ac, ctx: a } = canvas(S);
-  const height = new Float32Array(S * S);
-  const img = a.createImageData(S, S);
-  const d = img.data;
-  const r = rng(7);
-  const tint: number[] = [];
-  for (let i = 0; i < n * n; i++) tint.push(0.93 + r() * 0.12);
-  for (let y = 0; y < S; y++) {
-    for (let x = 0; x < S; x++) {
-      const u = x / S;
-      const v = y / S;
-      const px = x % P;
-      const py = y % P;
-      const edge = Math.min(px, py, P - 1 - px, P - 1 - py);
-      const panel = Math.floor(y / P) * n + Math.floor(x / P);
-      const grain = fbm(u, v, 32, 4, 3);
-      const blotch = fbm(u, v, 4, 3, 11);
-      let h = 0.6 + (grain - 0.5) * 0.06;
-      let alb = (0.46 + (grain - 0.5) * 0.05 + (blotch - 0.5) * 0.05) * tint[panel];
-      // seams: recessed groove with a bevel
-      if (edge < 4) {
-        h = 0.05 + edge * 0.08;
-        alb *= 0.3;
-      } else if (edge < 10) {
-        h = 0.6 - (10 - edge) * 0.015;
-        alb *= 1.06;
+/** Steel deck plates with recessed fasteners, grip strips and worn paint. */
+export function floorSet(scene: Scene, high: boolean, indoor: boolean): PbrSet {
+  const size = (indoor ? 512 : 1024) * (high ? 2 : 1);
+  const name = indoor ? 'hqDeck' : 'arenaDeck';
+  const { c: ac, ctx: a } = canvas(size);
+  const { c: oc, ctx: o } = canvas(size);
+  const albedo = a.createImageData(size, size);
+  const orm = o.createImageData(size, size);
+  const height = new Float32Array(size * size);
+  const random = rng(indoor ? 18 : 7);
+  const plates = indoor ? 2 : 4;
+  const panelTint = Array.from({ length: plates * plates }, () => (random() - 0.5) * 0.1);
+
+  // Scratch marks contribute to all three maps, including the exposed metal beneath the paint.
+  const { ctx: scratches } = canvas(size);
+  for (let i = 0; i < (indoor ? 80 : 380); i++) {
+    const x = random() * size;
+    const y = random() * size;
+    const length = (0.002 + random() ** 3 * 0.026) * size;
+    const angle = (random() - 0.5) * 2.5;
+    scratches.strokeStyle = `rgba(255,255,255,${0.2 + random() * 0.7})`;
+    scratches.lineWidth = Math.max(0.65, (0.5 + random() * 1.6) * size / 1024);
+    scratches.beginPath();
+    scratches.moveTo(x, y);
+    scratches.lineTo(x + Math.sin(angle) * length, y + Math.cos(angle) * length);
+    scratches.stroke();
+  }
+  const scuffs = scratches.getImageData(0, 0, size, size).data;
+  for (let y = 0; y < size; y++) {
+    const v = y / size;
+    const py = (v * plates) % 1;
+    const dy = Math.min(py, 1 - py);
+    for (let x = 0; x < size; x++) {
+      const u = x / size;
+      const px = (u * plates) % 1;
+      const dx = Math.min(px, 1 - px);
+      const edge = Math.min(dx, dy);
+      const panel = Math.floor(v * plates) * plates + Math.floor(u * plates);
+      const grain = vnoise(u * 256, v * 256, 256, 3) - 0.5;
+      const grime = fbm(u, v, 12, 2, 11);
+      const stain = fbm(u, v, 5, 3, 21);
+      const i = (y * size + x) * 4;
+      const nick = scuffs[i + 3] / 255;
+      const wet = indoor ? 0 : smooth(Math.max(0, Math.min(1, (stain + grime * 0.16 - 0.59) * 7)));
+      const dirt = (indoor ? 0.05 : 0.13) * grime * Math.max(0, 1 - edge * 9);
+      let base = (indoor ? 0.55 : 0.47) + panelTint[panel] + grain * 0.045 + (stain - 0.5) * 0.10;
+      base += nick * 0.09 - dirt - wet * 0.065;
+      let metal = (indoor ? 0.17 : 0.32) + nick * 0.5;
+      let rough = (indoor ? 0.4 : 0.5) + (grime - 0.5) * 0.17 + grain * 0.045 - wet * 0.38 - nick * 0.08;
+      let ao = 1;
+      let relief = 0.58 + grain * 0.042 - nick * 0.075 + wet * 0.026;
+
+      // Separate the top face, machined bevel and dark gap between plates.
+      if (edge < 0.022) {
+        const bevel = smooth(Math.min(1, edge / 0.022));
+        relief -= (1 - bevel) * 0.51;
+        base *= 0.32 + 0.68 * bevel;
+        rough += (1 - bevel) * 0.25;
+        ao = 0.53 + 0.47 * bevel;
       }
-      // inner inset frame line
-      const inner = Math.abs(edge - 46);
-      if (inner < 2) {
-        h -= 0.12;
-        alb *= 0.6;
+
+      const bx = dx - 0.064;
+      const by = dy - 0.064;
+      const bolt = bx * bx + by * by;
+      if (bolt < 0.0006) {
+        if (bolt > 0.00036) {
+          base *= 0.54;
+          relief -= 0.19;
+          ao = 0.7;
+        } else {
+          const slot = Math.abs(bx + by * 0.55) < 0.0035 && bolt < 0.00024;
+          base = slot ? 0.24 : indoor ? 0.65 : 0.58;
+          relief = slot ? 0.41 : 0.7 - bolt * 180;
+          rough = slot ? 0.65 : 0.28;
+          metal = 0.82;
+        }
       }
-      height[y * S + x] = h;
-      const i = (y * S + x) * 4;
-      const g = Math.min(1, alb);
-      d[i] = g * 255 * 0.96;
-      d[i + 1] = g * 255;
-      d[i + 2] = g * 255 * 1.06;
-      d[i + 3] = 255;
+
+      // Some plates have narrow milled traction strips near their short edges.
+      if (panel % 3 !== 1 && dx > 0.20 && dy > 0.085 && dy < 0.155) {
+        const cut = Math.max(0, 1 - Math.abs((dy * 58) % 1 - 0.5) * 3.6);
+        const grip = cut * Math.min(1, (dx - 0.20) * 28);
+        base -= grip * 0.10;
+        relief -= grip * 0.15;
+        rough += grip * 0.26;
+      }
+
+      height[y * size + x] = relief;
+      albedo.data[i] = base * 255 * (indoor ? 0.88 : 0.94);
+      albedo.data[i + 1] = base * 255;
+      albedo.data[i + 2] = base * 255 * (indoor ? 1.13 : 1.05);
+      albedo.data[i + 3] = 255;
+      ormPixel(orm.data, i, ao, rough, metal);
     }
   }
-  a.putImageData(img, 0, 0);
-  // bolts
-  for (let i = 0; i < n; i++)
-    for (let j = 0; j < n; j++)
-      for (const [cx, cy] of [[22, 22], [P - 22, 22], [22, P - 22], [P - 22, P - 22]]) {
-        const bx = i * P + cx;
-        const by = j * P + cy;
-        a.fillStyle = '#6b7279';
-        a.beginPath();
-        a.arc(bx, by, 7, 0, Math.PI * 2);
-        a.fill();
-        a.fillStyle = '#3a4048';
-        a.fillRect(bx - 4, by - 1, 8, 2);
-        for (let yy = -8; yy <= 8; yy++)
-          for (let xx = -8; xx <= 8; xx++) {
-            const rr = Math.hypot(xx, yy);
-            if (rr < 8) height[((by + yy + S) % S) * S + ((bx + xx + S) % S)] = 0.75 + (8 - rr) * 0.02;
-          }
-      }
-  // scuffs and tire-like streaks
-  a.globalCompositeOperation = 'lighter';
-  for (let i = 0; i < 70; i++) {
-    const x = r() * S;
-    const y = r() * S;
-    const ang = r() * Math.PI;
-    const len = 10 + r() * 70;
-    a.strokeStyle = `rgba(120,128,138,${0.03 + r() * 0.07})`;
-    a.lineWidth = 0.6 + r() * 1.2;
-    a.beginPath();
-    a.moveTo(x, y);
-    a.lineTo(x + Math.cos(ang) * len, y + Math.sin(ang) * len);
-    a.stroke();
-  }
-  a.globalCompositeOperation = 'multiply';
-  for (let i = 0; i < 5; i++) {
-    const x = r() * S;
-    const y = r() * S;
-    const rad = 30 + r() * 110;
-    const g = a.createRadialGradient(x, y, 0, x, y, rad);
-    g.addColorStop(0, 'rgba(150,148,146,0.35)');
-    g.addColorStop(1, 'rgba(255,255,255,0)');
-    a.fillStyle = g;
-    a.fillRect(x - rad, y - rad, rad * 2, rad * 2);
-  }
-  a.globalCompositeOperation = 'source-over';
-
-  // ORM at a different, non-integer scale (set by caller) for large wet patches.
-  const O = 512;
-  const { c: oc, ctx: o } = canvas(O);
-  const oimg = o.createImageData(O, O);
-  for (let y = 0; y < O; y++) {
-    for (let x = 0; x < O; x++) {
-      const u = x / O;
-      const v = y / O;
-      const wet = fbm(u, v, 3, 5, 21);
-      const micro = fbm(u, v, 48, 2, 5);
-      const puddle = Math.min(1, Math.max(0, (wet - 0.5) * 6));
-      const rough = 0.34 + (micro - 0.5) * 0.14 - puddle * 0.28;
-      ormPixel(oimg.data, (y * O + x) * 4, 1, rough, 1);
-    }
-  }
-  o.putImageData(oimg, 0, 0);
-
+  a.putImageData(albedo, 0, 0);
+  o.putImageData(orm, 0, 0);
   return {
-    albedo: toTexture('floorAlb', ac, scene),
-    normal: toTexture('floorNrm', heightToNormal(height, S, 6), scene, { srgb: false }),
-    orm: toTexture('floorOrm', oc, scene, { srgb: false }),
+    albedo: toTexture(`${name}Alb`, ac, scene),
+    normal: toTexture(`${name}Nrm`, heightToNormal(height, size, 4), scene, { srgb: false }),
+    orm: toTexture(`${name}Orm`, oc, scene, { srgb: false }),
   };
 }
 
 /** Wall cladding: vertical panels with seams, rivet rows, vents and rain/grime streaks. One tile = 4 m. */
-export function wallSet(scene: Scene): PbrSet {
-  const S = 512;
+export function wallSet(scene: Scene, high: boolean): PbrSet {
+  const S = high ? 1024 : 512;
+  const scale = S / 512;
   const { c: ac, ctx: a } = canvas(S);
   const img = a.createImageData(S, S);
   const d = img.data;
   const height = new Float32Array(S * S);
-  const O = S;
-  const { c: oc, ctx: o } = canvas(O);
-  const oimg = o.createImageData(O, O);
+  const { c: oc, ctx: o } = canvas(S);
+  const oimg = o.createImageData(S, S);
   const cols = 2;
   const rows = 2;
   const PW = S / cols;
@@ -260,13 +244,18 @@ export function wallSet(scene: Scene): PbrSet {
     for (let x = 0; x < S; x++) {
       const u = x / S;
       const v = y / S;
-      const px = x % PW;
-      const py = y % PH;
-      const edge = Math.min(px, py, PW - 1 - px, PH - 1 - py);
-      const streak = fbm(u * 1, v * 0.08, 24, 3, 9); // vertical streaks
-      const grime = fbm(u, v, 8, 4, 2);
-      let h = 0.6;
-      let alb = 0.7 + (grime - 0.5) * 0.04 - Math.max(0, streak - 0.55) * 0.08;
+      const px = (x % PW) / scale;
+      const py = (y % PH) / scale;
+      const width = PW / scale;
+      const depth = PH / scale;
+      const edge = Math.min(px, py, width - px, depth - py);
+      const streak = vnoise(u * 64, v * 3, 64, 9, 3);
+      const runoff = Math.max(0, streak - 0.43) * Math.max(0, 1 - py / (depth * 0.62));
+      const grime = fbm(u, v, 8, 3, 2);
+      const grain = vnoise(u * 192, v * 192, 192, 25) - 0.5;
+      const tint = ((Math.floor(y / PH) + Math.floor(x / PW)) % 2) * 0.05;
+      let h = 0.6 + grain * 0.03;
+      let alb = 0.72 + tint + (grime - 0.5) * 0.11 + grain * 0.034 - runoff * 0.30;
       let rough = 0.42 + (grime - 0.5) * 0.12 + Math.max(0, streak - 0.6) * 0.2;
       if (edge < 3) {
         h = 0.1;
@@ -277,14 +266,14 @@ export function wallSet(scene: Scene): PbrSet {
         rough -= 0.1;
       }
       // horizontal stiffener ribs
-      const rib = Math.abs(py - PH * 0.5);
+      const rib = Math.abs(py - depth * 0.5);
       if (rib < 6) {
         h = 0.75 - rib * 0.02;
         alb *= 0.55; // dark accent band
         rough = 0.3;
       }
       // vent slots on lower panels
-      if (Math.floor(y / PH) === 1 && px > PW * 0.2 && px < PW * 0.8 && py > PH * 0.62 && py < PH * 0.86 && py % 12 < 5) {
+      if (Math.floor(y / PH) === 1 && px > width * 0.2 && px < width * 0.8 && py > depth * 0.62 && py < depth * 0.86 && py % 12 < 5) {
         h = 0.15;
         alb *= 0.25;
         rough = 0.9;
@@ -305,13 +294,19 @@ export function wallSet(scene: Scene): PbrSet {
   for (let cx = 0; cx < cols; cx++)
     for (let cy = 0; cy < rows; cy++)
       for (let k = 0; k < 8; k++) {
-        for (const side of [10, PW - 10]) {
+        for (const side of [10 * scale, PW - 10 * scale]) {
           const x = cx * PW + side;
-          const y = cy * PH + 14 + k * ((PH - 28) / 7);
+          const y = cy * PH + 14 * scale + k * ((PH - 28 * scale) / 7);
           a.beginPath();
-          a.arc(x, y, 2.4, 0, Math.PI * 2);
+          a.arc(x, y, 2.4 * scale, 0, Math.PI * 2);
           a.fill();
-          for (let yy = -3; yy <= 3; yy++) for (let xx = -3; xx <= 3; xx++) if (xx * xx + yy * yy < 9) height[(Math.round(y) + yy) * S + x + xx] = 0.8;
+          const radius = 3 * scale;
+          for (let yy = -radius; yy <= radius; yy++) {
+            for (let xx = -radius; xx <= radius; xx++) {
+              const distance = Math.hypot(xx, yy) / radius;
+              if (distance < 1) height[(Math.round(y) + yy) * S + x + xx] = 0.62 + (1 - distance) * 0.23;
+            }
+          }
         }
       }
   return {
@@ -322,8 +317,8 @@ export function wallSet(scene: Scene): PbrSet {
 }
 
 /** Generic wear for small props and machines: grime albedo multiplier + roughness noise + scratches. */
-export function wearSet(scene: Scene): PbrSet {
-  const S = 256;
+export function wearSet(scene: Scene, high: boolean): PbrSet {
+  const S = high ? 512 : 256;
   const { c: ac, ctx: a } = canvas(S);
   const img = a.createImageData(S, S);
   const { c: oc, ctx: o } = canvas(S);
@@ -335,12 +330,13 @@ export function wearSet(scene: Scene): PbrSet {
       const v = y / S;
       const g = fbm(u, v, 6, 5, 31);
       const speck = vnoise(u * 96, v * 96, 96, 4);
-      const alb = 0.95 + (g - 0.5) * 0.08 - (speck > 0.9 ? 0.06 : 0);
+      const brushing = vnoise(u * 7, v * 192, 7, 41, 192) - 0.5;
+      const alb = 0.93 + (g - 0.5) * 0.15 + brushing * 0.06 - Math.max(0, speck - 0.73) * 0.35;
       const i = (y * S + x) * 4;
       img.data[i] = img.data[i + 1] = img.data[i + 2] = Math.min(1, alb) * 255;
       img.data[i + 3] = 255;
-      ormPixel(oimg.data, i, 1, 0.8 + (g - 0.5) * 0.3, 1);
-      height[y * S + x] = g * 0.15;
+      ormPixel(oimg.data, i, 1, 0.77 + (g - 0.5) * 0.32 + brushing * 0.16, 1);
+      height[y * S + x] = g * 0.12 + brushing * 0.09;
     }
   }
   a.putImageData(img, 0, 0);
@@ -351,9 +347,9 @@ export function wearSet(scene: Scene): PbrSet {
     const x = r() * S;
     const y = r() * S;
     const ang = r() * Math.PI;
-    const len = 4 + r() * 30;
+    const len = (4 + r() * 30) * (S / 256);
     o.strokeStyle = `rgba(255,${60 + r() * 60},255,0.7)`; // scratches are smoother
-    o.lineWidth = 0.7;
+    o.lineWidth = 0.7 * (S / 256);
     o.beginPath();
     o.moveTo(x, y);
     o.lineTo(x + Math.cos(ang) * len, y + Math.sin(ang) * len);
@@ -361,7 +357,7 @@ export function wearSet(scene: Scene): PbrSet {
   }
   return {
     albedo: toTexture('wearAlb', ac, scene, { aniso: 4 }),
-    normal: toTexture('wearNrm', heightToNormal(height, S, 2), scene, { srgb: false, aniso: 4 }),
+    normal: toTexture('wearNrm', heightToNormal(height, S, 3), scene, { srgb: false }),
     orm: toTexture('wearOrm', oc, scene, { srgb: false, aniso: 4 }),
   };
 }
@@ -418,51 +414,55 @@ export function flareSprite(scene: Scene): DynamicTexture {
   return spriteTex('flareSprite', c, scene);
 }
 
-/** Billowy smoke puff (white, alpha from noise density, lit from above). */
-export function smokeSprite(scene: Scene): DynamicTexture {
-  const C = 128;
-  const { c, ctx } = canvas(C);
-  const img = ctx.createImageData(C, C);
-  for (let y = 0; y < C; y++) {
-    for (let x = 0; x < C; x++) {
-      const dx = (x - C / 2) / (C / 2);
-      const dy = (y - C / 2) / (C / 2);
-      const rr = Math.hypot(dx, dy);
-      const n = fbm(x / C, y / C, 4, 5, 40);
-      const n2 = fbm(x / C, y / C, 9, 3, 80);
-      const fall = Math.max(0, 1 - rr * (1.05 + (n - 0.5) * 0.9));
-      const dens = Math.max(0, Math.min(1, fall * 1.6 * (0.55 + n * 0.9)));
-      const shade = 0.75 + (n2 - 0.5) * 0.5 + (1 - rr) * 0.15 - dy * 0.12;
-      const i = (y * C + x) * 4;
-      const v = Math.max(0, Math.min(1, shade)) * 255;
-      img.data[i] = v;
-      img.data[i + 1] = v;
-      img.data[i + 2] = v;
-      img.data[i + 3] = dens * dens * 255;
+/** Billowing smoke or a hotter, filamented flame using the same soft-edge density field. */
+export function plumeSprite(scene: Scene, fire = false): DynamicTexture {
+  const size = 192;
+  const { c, ctx } = canvas(size);
+  const img = ctx.createImageData(size, size);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const u = x / size;
+      const v = y / size;
+      const dx = u * 2 - 1;
+      const dy = v * 2 - 1;
+      const radius = Math.hypot(dx, dy);
+      const clouds = fbm(u, v, 4, 5, fire ? 31 : 40);
+      const detail = fbm(u + 0.10 * clouds, v - 0.14 * clouds, 8, 4, 80);
+      const falloff = Math.max(0, 1 - radius * 1.07);
+      const density = Math.max(0, Math.min(1, falloff * 1.23 + (clouds - 0.64) * 0.86));
+      const edge = Math.min(1, Math.max(0, (0.99 - radius) * 9));
+      const veins = Math.max(0, 1 - Math.abs(detail - 0.52) * 7);
+      const shade = fire ? 0.65 + veins * 0.35 : 0.66 + (detail - 0.5) * 0.75 - dy * 0.18;
+      const i = (y * size + x) * 4;
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = shade * 255;
+      const opacity = fire ? density ** 1.75 * (0.32 + veins * 0.68) : density ** 1.55;
+      img.data[i + 3] = opacity * edge * 255;
     }
   }
   ctx.putImageData(img, 0, 0);
-  return spriteTex('smokeSprite', c, scene);
+  return spriteTex(fire ? 'flameSprite' : 'smokeSprite', c, scene);
 }
 
-/** Long thin spark streak for stretched billboards (oriented along +Y of the texture). */
+/** A bright spark head and tapering trail for velocity-aligned billboards. */
 export function sparkSprite(scene: Scene): DynamicTexture {
-  const W = 16;
-  const H = 64;
-  const { c, ctx } = canvas(W, H);
-  const g = ctx.createLinearGradient(0, 0, 0, H);
-  g.addColorStop(0, 'rgba(255,255,255,0)');
-  g.addColorStop(0.35, 'rgba(255,255,255,1)');
-  g.addColorStop(1, 'rgba(255,255,255,0)');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, W, H);
-  ctx.globalCompositeOperation = 'destination-in';
-  const h = ctx.createLinearGradient(0, 0, W, 0);
-  h.addColorStop(0, 'rgba(0,0,0,0)');
-  h.addColorStop(0.5, 'rgba(0,0,0,1)');
-  h.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = h;
-  ctx.fillRect(0, 0, W, H);
+  const width = 32;
+  const height = 128;
+  const { c, ctx } = canvas(width, height);
+  const img = ctx.createImageData(width, height);
+  for (let y = 0; y < height; y++) {
+    const t = y / height;
+    const tail = Math.max(0, 1 - Math.abs(t - 0.26) / (t < 0.26 ? 0.26 : 0.74));
+    const spread = 0.11 + tail * 0.32;
+    for (let x = 0; x < width; x++) {
+      const side = Math.abs(x / width * 2 - 1);
+      const core = Math.max(0, 1 - side / spread);
+      const halo = Math.max(0, 1 - side) ** 3 * tail ** 2 * 0.26;
+      const i = (y * width + x) * 4;
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = 255;
+      img.data[i + 3] = Math.min(1, core * tail + halo) * 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
   return spriteTex('sparkSprite', c, scene);
 }
 
@@ -472,9 +472,12 @@ export function ringSprite(scene: Scene): DynamicTexture {
   const { c, ctx } = canvas(S);
   const g = ctx.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
   g.addColorStop(0, 'rgba(255,255,255,0)');
-  g.addColorStop(0.62, 'rgba(255,255,255,0.0)');
-  g.addColorStop(0.86, 'rgba(255,255,255,0.9)');
-  g.addColorStop(0.92, 'rgba(255,255,255,0.5)');
+  g.addColorStop(0.68, 'rgba(255,255,255,0)');
+  g.addColorStop(0.78, 'rgba(255,255,255,0.22)');
+  g.addColorStop(0.83, 'rgba(255,255,255,0.13)');
+  g.addColorStop(0.90, 'rgba(255,255,255,0.42)');
+  g.addColorStop(0.94, 'rgba(255,255,255,1)');
+  g.addColorStop(0.97, 'rgba(255,255,255,0.25)');
   g.addColorStop(1, 'rgba(255,255,255,0)');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, S, S);

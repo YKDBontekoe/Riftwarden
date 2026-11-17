@@ -1,4 +1,4 @@
-import { type BaseTexture, Color3, Constants, FresnelParameters, type Material, PBRMaterial, type Scene, StandardMaterial, type Texture } from '@babylonjs/core';
+import { type BaseTexture, Color3, Constants, FresnelParameters, type Material, PBRMaterial, type Scene, StandardMaterial } from '@babylonjs/core';
 import { floorSet, type PbrSet, wallSet, wearSet } from './textures';
 
 /**
@@ -36,7 +36,6 @@ interface PbrOpts {
   metallic: number;
   roughness: number;
   set?: PbrSet;
-  bump?: number;
   /** Use only the ORM/normal of the set, not its albedo. */
   noAlbedo?: boolean;
   clearCoat?: number;
@@ -55,7 +54,6 @@ function pbr(scene: Scene, name: string, o: PbrOpts): PBRMaterial {
   if (o.set) {
     if (!o.noAlbedo) m.albedoTexture = o.set.albedo;
     m.bumpTexture = o.set.normal;
-    m.bumpTexture.level = o.bump ?? 1;
     m.metallicTexture = o.set.orm;
     m.useAmbientOcclusionFromMetallicTextureRed = true;
     m.useRoughnessFromMetallicTextureGreen = true;
@@ -109,28 +107,24 @@ function glow(scene: Scene, name: string, e: [number, number, number]): PBRMater
   return unlit(scene, name, e);
 }
 
-function scaled(t: Texture, u: number, v = u): Texture {
-  // Each floor texture has a single user, so scale in place (DynamicTexture clones are blank).
-  t.uScale = u;
-  t.vScale = v;
-  return t;
-}
+export function createPalette(scene: Scene, high: boolean, indoor = false): Palette {
+  const floorTex = floorSet(scene, high, indoor);
+  const wallTex = wallSet(scene, high);
+  const wear = wearSet(scene, high);
 
-export function createPalette(scene: Scene): Palette {
-  const floorTex = floorSet(scene);
-  const wallTex = wallSet(scene);
-  const wear = wearSet(scene);
-
-  // Ground is a 120 m plane with 0..1 UVs: albedo/normal tile every 8 m, wetness every ~23 m.
-  const floor = pbr(scene, 'floor', { albedo: [1, 1, 1], metallic: 0.08, roughness: 1 });
-  floor.albedoTexture = scaled(floorTex.albedo, 15);
-  floor.bumpTexture = scaled(floorTex.normal, 15);
-  floor.bumpTexture.level = 0.55;
-  floor.metallicTexture = scaled(floorTex.orm, 120 / 23.3);
-  floor.useRoughnessFromMetallicTextureGreen = true;
-  floor.useMetallnessFromMetallicTextureBlue = true;
-  floor.useAmbientOcclusionFromMetallicTextureRed = true;
-  floor.useRoughnessFromMetallicTextureAlpha = false;
+  // The arena uses a 120 m ground plane, the HQ projects a 6 m tile in world space.
+  if (!indoor) {
+    for (const texture of [floorTex.albedo, floorTex.normal, floorTex.orm]) {
+      texture.uScale = texture.vScale = 10;
+    }
+  }
+  const floor = pbr(scene, indoor ? 'hqFloor' : 'floor', {
+    albedo: indoor ? [0.71, 0.76, 0.8] : [0.98, 1, 1.04],
+    metallic: 1,
+    roughness: 1,
+    set: floorTex,
+  });
+  floorTex.normal.level = indoor ? 0.55 : 0.8;
 
   const shield = new StandardMaterial('shield', scene);
   shield.diffuseColor = Color3.Black();
@@ -160,12 +154,15 @@ export function createPalette(scene: Scene): Palette {
   rift.backFaceCulling = false;
 
   // Clean hard-surface set: off-white composite panels, dark gunmetal trims, bright machined metal.
-  const panel = pbr(scene, 'panel', { albedo: [0.86, 0.88, 0.9], metallic: 0.12, roughness: 1, set: wallTex, bump: 0.6, clearCoat: 0.3 });
-  const white = pbr(scene, 'white', { albedo: [0.88, 0.89, 0.9], metallic: 0.05, roughness: 0.45, set: wear, bump: 0.1, clearCoat: 0.7 });
-  const graphite = pbr(scene, 'graphite', { albedo: [0.13, 0.14, 0.16], metallic: 0.75, roughness: 0.5, set: wear, bump: 0.1 });
-  const metal = pbr(scene, 'metal', { albedo: [0.82, 0.83, 0.86], metallic: 1, roughness: 0.32, set: wear, noAlbedo: true, bump: 0.1 });
-  const enemyArmor = pbr(scene, 'enemyArmor', { albedo: [0.55, 0.22, 0.12], metallic: 0.35, roughness: 0.5, set: wear, bump: 0.15, clearCoat: 0.4 });
-  const enemyDark = pbr(scene, 'enemyDark', { albedo: [0.07, 0.065, 0.07], metallic: 0.85, roughness: 0.38, set: wear, bump: 0.15 });
+  const panel = pbr(scene, 'panel', { albedo: [0.86, 0.88, 0.9], metallic: 0.12, roughness: 1, set: wallTex, clearCoat: 0.3 });
+  const white = pbr(scene, 'white', { albedo: [0.88, 0.89, 0.9], metallic: 0.05, roughness: 0.45, set: wear, clearCoat: 0.7 });
+  const graphite = pbr(scene, 'graphite', { albedo: [0.13, 0.14, 0.16], metallic: 0.75, roughness: 0.5, set: wear });
+  const metal = pbr(scene, 'metal', { albedo: [0.82, 0.83, 0.86], metallic: 1, roughness: 0.32, set: wear, noAlbedo: true });
+  const enemyArmor = pbr(scene, 'enemyArmor', { albedo: [0.55, 0.22, 0.12], metallic: 0.35, roughness: 0.5, set: wear, clearCoat: 0.4 });
+  const enemyDark = pbr(scene, 'enemyDark', { albedo: [0.07, 0.065, 0.07], metallic: 0.85, roughness: 0.38, set: wear });
+
+  wallTex.normal.level = 0.65;
+  wear.normal.level = 0.42;
 
   // Generous sky fill so shadowed areas stay readable (daylight bounce).
   for (const m of [white, panel, graphite, metal, floor, enemyArmor, enemyDark]) m.environmentIntensity = 1.45;

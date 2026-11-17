@@ -49,7 +49,7 @@ import { Kit } from '../visuals/kit';
 import { createPalette, type Palette } from '../visuals/materials';
 import { buildReactor, type ReactorRig } from '../visuals/models';
 import { WaveManager } from '../waves/WaveManager';
-import { ARENA } from '../world/layout';
+import { ARENA, type GateId } from '../world/layout';
 import { ENV_QUERY } from '../world/physicsGroups';
 import type { Input } from './Input';
 import { type Settings, saveSettings } from './settings';
@@ -57,7 +57,7 @@ import { TacticalEnergy, Wallet } from './tactical';
 
 const TMP = new Vector3();
 /** Sun intensity (directional, range-free). */
-const SUN = 3.4;
+const SUN = 2.65;
 const TMP2 = new Vector3();
 /** Arc Conductor reach (m): enemies on the lanes are spread a few metres apart. */
 export const ARC_RANGE = 12;
@@ -110,7 +110,7 @@ export class Game {
   private moon: DirectionalLight;
   private hurtFx = 0;
   private lastFlash = 0;
-  private animated: { node: { rotation: Vector3 }; spin: Vector3 }[] = [];
+  private arenaVisuals: ArenaBuilder;
 
   /** Extra modifiers (future run upgrades); equipment modifiers are derived from the run loadout. */
   modifiers: StatModifier[] = [];
@@ -171,15 +171,15 @@ export class Game {
     scene.skipPointerMovePicking = true;
     scene.enablePhysics(new Vector3(0, -26, 0), new HavokPlugin(true, havok));
 
-    this.pal = createPalette(scene);
-    this.kit = new Kit(scene);
     const high = settings.quality === 'high';
+    this.pal = createPalette(scene, high);
+    this.kit = new Kit(scene);
 
-    // Night-time storm: sky, haze, lamps, embers. PBR ambient comes from the captured environment.
+    // Dusk sky, haze, lamps and embers. PBR ambient comes from the captured environment.
     this.atmosphere = new Atmosphere(scene, this.pal, ARENA);
     this.atmosphere.setQuality(high);
     scene.fogMode = Scene.FOGMODE_EXP2;
-    scene.fogDensity = 0.0042;
+    scene.fogDensity = 0.0053;
     scene.fogColor = this.atmosphere.fogColor;
 
     // Lighting: low golden-hour sun (key), sky IBL (fill), cyan reactor glow, orange rift light at the gates.
@@ -198,7 +198,7 @@ export class Game {
     // Arena
     const arena = new ArenaBuilder(scene, this.pal, ARENA);
     arena.build();
-    this.animated.push(...arena.animated);
+    this.arenaVisuals = arena;
     this.atmosphere.adoptPortals();
     this.reactor = buildReactor(scene, this.pal);
 
@@ -209,7 +209,7 @@ export class Game {
     this.weapon = new Weapon(scene, weaponDef, this.player, cfg.loadout.weapon);
     scene.setRenderingAutoClearDepthStencil(1, true, true, true);
 
-    this.fx = new Effects(scene, this.kit, this.pal, ARENA);
+    this.fx = new Effects(scene, this.kit, this.pal, ARENA, high);
     this.wfx = new WeaponFx(scene);
     this.wfx.setColor(this.weapon.rig.energyBase);
     this.fx.onShake = (pos, strength) => {
@@ -252,7 +252,7 @@ export class Game {
     this.lootRand = mulberry32(hashSeed(cfg.run.id));
 
     // Reflections/ambient: capture the finished static scene once into a prefiltered cube map.
-    this.atmosphere.captureEnvironment([...arena.meshes, ...this.reactor.root.getChildMeshes()], this.pal.lit);
+    this.atmosphere.captureEnvironment([...arena.meshes, ...this.reactor.root.getChildMeshes()], this.pal.lit, high);
 
     this.post = new PostFx(scene, engine, this.player.camera, high);
 
@@ -275,7 +275,10 @@ export class Game {
 
     const run = cfg.run;
     this.waves = new WaveManager({
-      spawn: (s, w) => this.enemies.spawn(s.kind, s.gate, ARENA, w.hpMult, w.damageMult, w.speedMult),
+      spawn: (s, w) => {
+        this.enemies.spawn(s.kind, s.gate, ARENA, w.hpMult, w.damageMult, w.speedMult);
+        this.arenaVisuals.gateSpawned(s.gate);
+      },
       aliveCount: () => this.enemies.count,
       onWaveStart: (w) => {
         this.checkpointOpen = false;
@@ -327,6 +330,7 @@ export class Game {
         } else uiEvents.emit('banner', { title: `WAVE ${w.number} CLEARED`, sub: `+${w.clearReward} cores · +${salvage} salvage · +${credits} cr · reactor repaired`, tone: 'cyan' });
       },
       onPrepStart: (w) => {
+        this.arenaVisuals.prepareWave(w.spawns.map((entry) => entry.gate));
         run.waveReached(w.number);
         if (w.number > 1 && run.atCheckpoint) {
           this.checkpointOpen = true;
@@ -652,7 +656,7 @@ export class Game {
     const flash = this.updateSky(dt);
     this.post.update(dt, 0, 0, flash);
     this.updateReactor(dt, false);
-    for (const a of this.animated) a.node.rotation.addInPlace(a.spin.scale(dt));
+    this.updateArenaVisuals(dt, dt);
   }
 
   private update(dt: number): void {
@@ -720,7 +724,7 @@ export class Game {
     this.hurtFx = Math.max(this.player.hurtFlash, this.player.alive ? 0 : 0.8);
     this.post.update(dt, k, this.hurtFx, flash);
 
-    for (const a of this.animated) a.node.rotation.addInPlace(a.spin.scale(hdt));
+    this.updateArenaVisuals(dt, hdt);
 
     if (this.screen === 'defeat') {
       this.defeatT += dt;
@@ -732,6 +736,16 @@ export class Game {
       this.hudT = 1 / 20;
       this.publishHud();
     }
+  }
+
+  private updateArenaVisuals(dt: number, hostileDt: number): void {
+    const phase = this.waves.phase;
+    const warning = this.screen === 'defeat' || phase === 'cleared' ? 0 : phase === 'combat' ? 1 : 0.5;
+    this.arenaVisuals.update(dt, hostileDt, warning);
+  }
+
+  gateActivity(gate: GateId): number {
+    return this.arenaVisuals.gateActivity(gate);
   }
 
   /** Storm: sky lightning brightens the moonlight and rolls thunder. */
@@ -1079,8 +1093,6 @@ export class Game {
     this.reactorHitT = Math.max(0, this.reactorHitT - dt * 2.5);
     this.reactorSfxT -= dt;
     const f = live ? this.reactorHp / ECONOMY.reactorMaxHp : 1;
-    for (let i = 0; i < this.reactor.rings.length; i++) this.reactor.rings[i].rotation.y += dt * (0.4 + i * 0.3) * (i % 2 ? -1 : 1) * (0.5 + f);
-    this.reactor.update(dt, f);
     // Integrity colour: cyan -> amber -> red, flashing white-orange when struck.
     const danger = 1 - f;
     const flicker = f < 0.3 ? 0.75 + 0.25 * Math.sin(performance.now() * 0.02) : 1;
@@ -1094,6 +1106,7 @@ export class Game {
     this.reactorLight.diffuse.set(0.3 + danger * 0.7, 0.9 - danger * 0.5, 1 - danger * 0.8);
     this.reactorLight.intensity = (3 + h * 2.5 + Math.sin(performance.now() * 0.004) * 0.2) * flicker;
     this.reactor.beamMat.alpha = 0.18 + 0.2 * f;
+    this.reactor.update(dt, f, h);
   }
 
   // ---------------------------------------------------------------- queries

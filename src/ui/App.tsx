@@ -135,11 +135,11 @@ function SettingsPanel({ flow, compact }: { flow: Flow; compact?: boolean }) {
           <div className="seg">
             <button className={s.quality === 'high' ? 'on' : ''} onClick={() => update({ quality: 'high' })}>
               CINEMATIC
-              <small>Reflections · AO · shadows</small>
+              <small>HiDPI · reflections · ambient occlusion</small>
             </button>
             <button className={s.quality === 'low' ? 'on' : ''} onClick={() => update({ quality: 'low' })}>
               PERFORMANCE
-              <small>Bloom only</small>
+              <small>Lighter effects · limited resolution</small>
             </button>
           </div>
         </div>
