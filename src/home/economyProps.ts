@@ -283,7 +283,8 @@ export function fabricator(ctx: EconCtx, st: Station, screen: ScreenTex): void {
   kit.part('box', M.white, fab, { pos: [0, 1.45, -0.05], scale: [2.8, 2.9, 1.7] });
   kit.part('box', M.graphite, fab, { pos: [0, 0.15, 0.15], scale: [2.9, 0.3, 2.0] });
   // Chamber: dark interior box seen through a glass window
-  kit.part('box', M.graphite, fab, { pos: [0, 1.3, 0.55], scale: [1.9, 1.5, 0.6] });
+  kit.part('box', M.graphite, fab, { pos: [0, 1.3, 0.28], scale: [1.9, 1.5, 0.06] });
+  for (const sx of [-1, 1]) kit.part('box', M.graphite, fab, { pos: [sx * 0.93, 1.3, 0.56], scale: [0.04, 1.5, 0.56] });
   const chamberGlow = unlit(scene, 'fabChamber', [0.4, 0.2, 0.05]);
   kit.part('box', chamberGlow, fab, { pos: [0, 0.6, 0.6], scale: [1.7, 0.03, 0.5] });
   kit.part('box', chamberGlow, fab, { pos: [0, 2.02, 0.6], scale: [1.7, 0.03, 0.5] });
