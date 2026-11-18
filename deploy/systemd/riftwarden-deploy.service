@@ -1,0 +1,8 @@
+[Unit]
+Description=Deploy the latest Riftwarden production image
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/stacks/riftwarden
+ExecStart=/usr/bin/bash %h/stacks/riftwarden/deploy.sh
+TimeoutStartSec=3min
