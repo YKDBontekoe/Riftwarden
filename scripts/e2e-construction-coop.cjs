@@ -324,7 +324,8 @@ const cell = (i, j) => [2 + 5 * i + 2.5, -2.5 + 5 * j + 2.5];
       if (bt) await bt.act({ a: 'upgrade', pick: snap.of[0][0] }).catch(() => null);
       else for (const pg of [A, B]) await ev(pg, () => { const g = window.__rift.game; if (g.offer && g.offerChooser === g.you) g.chooseUpgrade(g.offer[0].id); });
     };
-    for (let guard = 0; guard < 60 && !(bots[0].snap.cp[2]); guard++) {
+    const loopEnd = Date.now() + 240000;
+    for (let guard = 0; Date.now() < loopEnd && !(bots[0].snap.cp[2]); guard++) {
       await pickOffer();
       const snap = bots[0].snap;
       if (snap.w[1] === 'prep' && !snap.of) await bots[0].act({ a: 'startWave' }).catch(() => null);
