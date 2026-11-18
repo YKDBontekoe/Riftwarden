@@ -1187,6 +1187,8 @@ export class Game {
     // ---- shooting
     const trigger = controls && input.mouse(0) && !this.construction.active;
     this.weapon.update(dt, trigger, this.stats, this.shoot, this.weaponFx);
+    if (this.weapon.overheated && !this.wasOverheated) this.director.bus.emit({ type: 'overheat', chain: this.director.bus.newChain(), source: { kind: 'weapon', id: 'heat' }, value: 1 });
+    this.wasOverheated = this.weapon.overheated;
     this.wfx.update(dt, this.player.camera.position);
 
     // ---- inspect / recycle, loot
@@ -1470,6 +1472,13 @@ export class Game {
     const player = source === 'player';
     const prec = this.director.build.count('s_precision');
     const crit = player && prec && (isChilled(e.status, 1) || speedFactor(e.status) < 0.95) ? { critChance: this.stats.critChance + UP.precision.crit(prec), critMultiplier: this.stats.critMultiplier + UP.precision.critDmg(prec) } : this.stats;
+    // M7 run upgrades that scale weapon hits from the situation.
+    if (player) {
+      const ex = this.director.build.count('w_exec');
+      if (ex && e.hp < e.maxHp * UP.exec.hp) base *= 1 + UP.exec.bonus(ex);
+      const mo = this.director.build.count('m_momentum');
+      if (mo && this.droneSpeed() > UP.momentum.speed) base *= 1 + UP.momentum.bonus(mo);
+    }
     const roll = rollDamage(base, crit, weakpoint, Math.random, 'energy', source);
     // Arc Conductor: a player hit may jump to the nearest other enemy (no chains of arcs).
     if (player && family !== 'arc' && this.stats.arcChance > 0 && Math.random() < this.stats.arcChance) this.arcFrom(e, point, roll.amount * this.stats.arcDamage);
@@ -1490,6 +1499,12 @@ export class Game {
   /** M7 Pulse Capacitor: every pulse detonates (60% damage in PULSE_SPLASH m). */
   protected pulseSplash(point: Vector3, dmg: number, hit: Enemy | null): void {
     this.director.blast(point, PULSE_SPLASH, dmg * 0.6, 'none', { kind: 'weapon', id: 'beam' }, this.director.bus.newChain(), { falloff: 0.4, exclude: hit, family: 'splash' });
+  }
+
+  private wasOverheated = false;
+  /** Current drone speed (m/s); dashes count as fast. The co-op server reports the shooter's. */
+  protected droneSpeed(): number {
+    return this.player.dashing ? 40 : this.player.speed;
   }
 
   /** Arc to the nearest other living enemy within ARC_RANGE of the struck one. */

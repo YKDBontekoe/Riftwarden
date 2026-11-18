@@ -379,6 +379,11 @@ export class ServerGame extends Game {
     return this.fx;
   }
 
+  protected droneSpeed(): number {
+    const a = this.rec.owner ? this.avatar(this.rec.owner) : undefined;
+    return a ? (a.flags & 1 ? 40 : a.speed) : 0;
+  }
+
   panFor(p: Vector3): { pan: number; volume: number } {
     this.rec.panPos = p.clone();
     return { pan: 0, volume: 1 };
@@ -548,7 +553,9 @@ export class ServerGame extends Game {
     a.lastT = this.clock;
     a.player.yaw = m.yaw;
     a.pitch = m.pitch;
-    a.heat = Math.max(0, Math.min(1, m.heat));
+    const hot = Math.max(0, Math.min(1, m.heat));
+    if (hot >= 0.99 && a.heat < 0.99) this.as(a, () => this.director.bus.emit({ type: 'overheat', chain: this.director.bus.newChain(), source: { kind: 'weapon', id: 'heat' }, value: 1 }));
+    a.heat = hot;
     a.flags = m.fl;
     a.speed = m.sp;
     if (a.player.alive) {
