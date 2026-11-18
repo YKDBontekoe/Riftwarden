@@ -41,6 +41,7 @@ src/visuals/moodDirector.ts applies the mood to scene fog, sun colour and PostFx
 src/enemies/deathAnims.ts  DEATH_TIME per kind + deathPose(): collapse animation of destroyed regular enemies                              [pure]
 src/home/ambientNav.ts     waypoint graph (rooms, doorways, stations) + Dijkstra for ambient drones                                       [pure]
 src/home/AmbientDrones.ts  3 cosmetic service drones patrolling between stations (hum emitters follow them)
+src/home/hqVista.ts        3D middle ground outside the observation window (landing deck, dropship, lit towers, blinking beacons), merged, unlit glows only
 src/home/StationFocus.ts   HQ station floor ring under the targeted station + camera push-in while a terminal is open
 src/arena/DevTools.ts      dev lab actions behind `game.dev` (narrow DevHost interface, no Game dependency)
 src/arena/shadows.ts       createSunShadows(): cascaded / single sun shadow generator

@@ -32,6 +32,7 @@ import { createPalette, unlit } from '../visuals/materials';
 import { StationFocus } from './StationFocus';
 import { AmbientDrones } from './AmbientDrones';
 import { buildNav } from './ambientNav';
+import { buildHqVista, type HqVista } from './hqVista';
 import { PostFx } from '../visuals/postfx';
 import { canvas, rng, toTexture } from '../visuals/textures';
 import { ENV_QUERY } from '../world/physicsGroups';
@@ -125,6 +126,7 @@ export class HomeBase {
   private pulses = new Map<string, number>();
   private focus!: StationFocus;
   private ambient!: AmbientDrones;
+  private vista!: HqVista;
   private reduceMotion = false;
   private unsubEcon: () => void = () => {};
   private displays: {
@@ -241,6 +243,7 @@ export class HomeBase {
     this.layer.sync(save);
     this.layoutSig = layoutSignature(save);
     this.buildBackdrop();
+    this.vista = buildHqVista(scene, this.pal);
     this.buildSignage(ctx);
     stationWayfinding(ctx);
 
@@ -677,6 +680,7 @@ export class HomeBase {
 
     for (const [k, v] of this.pulses) this.pulses.set(k, Math.max(0, v - dt / PULSE_TIME));
     for (const a of this.animators) a(dt, this.time);
+    this.vista.update(this.time);
     for (const p of this.pulseLights) p.light.intensity = p.base * (0.92 + 0.08 * Math.sin(this.time * 1.3 + p.phase));
     this.post.update(dt, 0, 0, 0);
 
