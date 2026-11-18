@@ -8,7 +8,7 @@ export interface NetState {
   error: string;
   playerId: string;
   name: string;
-  /** Server has an online profile for this identity (else the player picks import/fresh). */
+  /** Server has an online profile for this identity. */
   hasProfile: boolean | null;
   lobby: LobbyState | null;
   rtt: number;

@@ -143,11 +143,6 @@ export class Profile {
     this.store.set({ save: snapshot(this.data), savedAt: Date.now(), lastWriteOk: true });
   }
 
-  /** The single-player save (even while an online profile is mirrored), for importing. */
-  get localSave(): Readonly<SaveData> {
-    return this.localData ?? this.data;
-  }
-
   get online(): boolean {
     return !!this.remote;
   }

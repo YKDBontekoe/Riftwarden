@@ -3,6 +3,14 @@ services:
   web:
     image: ${RIFTWARDEN_IMAGE:?The deploy script must select the image digest}
     container_name: riftwarden-web
+    environment:
+      PGHOST: db
+      PGDATABASE: riftwarden
+      PGUSER: riftwarden
+      PGPASSWORD: ${RIFT_POSTGRES_PASSWORD:?Set RIFT_POSTGRES_PASSWORD in .env}
+    depends_on:
+      db:
+        condition: service_healthy
     ports:
       - "127.0.0.1:18084:8080"
     volumes:
@@ -12,7 +20,24 @@ services:
     security_opt: [no-new-privileges:true]
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=16m
+    stop_grace_period: 30s
+    restart: unless-stopped
+  db:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: riftwarden
+      POSTGRES_USER: riftwarden
+      POSTGRES_PASSWORD: ${RIFT_POSTGRES_PASSWORD:?Set RIFT_POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "riftwarden", "-d", "riftwarden"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
     restart: unless-stopped
 
 volumes:
+  # The previous app image needs this mount if the deploy script rolls back.
   profiles:
+  postgres:
