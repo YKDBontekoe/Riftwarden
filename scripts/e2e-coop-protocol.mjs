@@ -392,6 +392,7 @@ const profileFile = (id) => {
     failures++;
   }
   check('Z team-upgrade picks are accepted by the server (never left to the auto-pick)', pickFailures.length === 0, JSON.stringify(pickFailures.slice(0, 3)));
+  if (failures) console.log('--- server log (tail) ---\n' + server.log.split('\n').slice(-30).join('\n'));
   await stopServer();
   console.log(`\n${failures === 0 ? 'ALL PASSED' : 'FAILURES'}  ${passes} passed, ${failures} failed`);
   if (failures) console.log(server?.log ?? '');
