@@ -27,6 +27,10 @@ export class PostFx {
   /** Per-location grade baselines (the HQ uses a calmer, brighter look). */
   baseExposure = 0.94;
   baseGrain = 1.2;
+  baseContrast = 1.12;
+  baseVignette = 0.92;
+  /** Situation mood offsets (see MoodDirector); zero in calm play and in the HQ. */
+  mood = { exposure: 0, contrast: 0, vignette: 0 };
 
   constructor(scene: Scene, engine: Engine, camera: Camera, high: boolean) {
     const supportsGBuffer = engine.getCaps().drawBuffersExtension && engine.webGLVersion >= 2;
@@ -100,9 +104,9 @@ export class PostFx {
     ip.toneMappingEnabled = true;
     ip.toneMappingType = ImageProcessingConfiguration.TONEMAPPING_ACES;
     ip.exposure = this.baseExposure;
-    ip.contrast = 1.12;
+    ip.contrast = this.baseContrast;
     ip.vignetteEnabled = true;
-    ip.vignetteWeight = 0.92;
+    ip.vignetteWeight = this.baseVignette;
     ip.vignetteStretch = 0.4;
     ip.vignetteColor = new Color4(0.0, 0.01, 0.02, 1);
     ip.vignetteCameraFov = 0.8;
@@ -147,7 +151,10 @@ export class PostFx {
     cc.globalHue = 220;
     cc.globalDensity = 18 * tactical;
     p.chromaticAberration.aberrationAmount = 25 * this.aberration + 6 * tactical + 14 * hurt;
-    p.imageProcessing.exposure = this.baseExposure + lightning * 0.05;
+    const ip = p.imageProcessing;
+    ip.exposure = this.baseExposure + lightning * 0.05 + this.mood.exposure;
+    ip.contrast = this.baseContrast + this.mood.contrast;
+    ip.vignetteWeight = this.baseVignette + this.mood.vignette;
     p.grain.intensity = this.baseGrain + tactical * 6;
   }
 

@@ -502,6 +502,7 @@ export class ClientGame extends Game {
     const k = this.tactical.active ? 1 : 0;
     const flash = this.updateSky(dt);
     this.hurtFx = Math.max(this.player.hurtFlash, this.player.alive ? 0 : 0.8);
+    this.mood.update(dt, this.moodInput());
     this.post.update(dt, k, this.hurtFx, flash);
     this.updateArenaVisuals(dt, hdt);
     if (this.screen === 'defeat') this.defeatT += dt;

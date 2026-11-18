@@ -8,6 +8,7 @@ import type { Ordnance, Telegraphs } from '../fx/Hostile';
 import type { Player } from '../player/Player';
 import type { Kit } from '../visuals/kit';
 import { FLASH_BUFFER } from '../visuals/hitFlashPlugin';
+import { DEATH_TIME, deathPose, FLYERS, type DeathPose } from './deathAnims';
 import type { Palette } from '../visuals/materials';
 import { hasAnyStatus, isBurning, isChilled, isFrozen, isShocked, newStatus, resetStatus, speedFactor, type StatusState } from '../combat/status';
 import { unlit } from '../visuals/materials';
@@ -95,6 +96,8 @@ export interface Behavior {
 }
 
 let nextId = 1;
+
+const DEATH_POSE: DeathPose = { pitch: 0, roll: 0, sink: 0, flash: 0 };
 
 /** Hit-flash tints (additive HDR). */
 const HIT_FLASH: [number, number, number] = [1, 0.92, 0.8];
@@ -244,7 +247,7 @@ export class EnemyManager {
   /** Pool pre-warm queue: rigs are built ahead of need, one per frame, so spawns never hitch. */
   private warmQueue: EnemyKind[] = [];
   /** Wrecks playing a destruction sequence (bosses). */
-  private wrecks: { e: Enemy; t: number; dur: number }[] = [];
+  private wrecks: { e: Enemy; t: number; dur: number; finish?: () => void; spark: number }[] = [];
   private blastTemplate: Mesh;
   private aiAcc = 0;
   /** Diagnostics: last frame's AI update time (ms) and a smoothed average. */
@@ -530,15 +533,27 @@ export class EnemyManager {
       const i = this.active.indexOf(e);
       if (i >= 0) this.active.splice(i, 1);
       for (const h of e.hitboxes) h.isPickable = false;
-      this.wrecks.push({ e, t: 0, dur: handled });
+      this.wrecks.push({ e, t: 0, dur: handled, spark: 0 });
       return;
     }
-    if (!handled) {
+    const burst = () => {
       const [big, debris, pitch] = BLAST[e.kind] ?? [1, 12, 1];
       fx.explode(c, { scale: detonated ? big * 1.25 : big, debris });
       const a = ctx.panFor(c);
       sfx.play('explosion', { volume: a.volume * (detonated ? 1 : 0.8), pan: a.pan, pitch });
+    };
+    const dur = DEATH_TIME[e.kind];
+    if (!handled && dur && e.def.role !== 'boss') {
+      // Collapse first, burst at the end (through the same fx the kill used, so replicas show it too).
+      e.alive = false;
+      const i = this.active.indexOf(e);
+      if (i >= 0) this.active.splice(i, 1);
+      for (const h of e.hitboxes) h.isPickable = false;
+      this.flash(e, [1, 0.55, 0.2]);
+      this.wrecks.push({ e, t: 0, dur, finish: () => burst(), spark: 0 });
+      return;
     }
+    if (!handled) burst();
     this.release(e);
   }
 
@@ -566,6 +581,21 @@ export class EnemyManager {
     if (!this.active.includes(e)) return;
     if (fx) fx.burst('sparks', e.center(TMP), 12, undefined, 0.8);
     this.release(e);
+  }
+
+  /** Default collapse animation for a destroyed enemy: buckle/spiral, flicker, sparks. Presentation only. */
+  private collapse(w: { e: Enemy; t: number; dur: number; spark: number }, dt: number, ctx: EnemyContext): void {
+    const e = w.e;
+    const k = w.t / w.dur;
+    const pose = deathPose(FLYERS.has(e.kind), k, e.netId || e.gen, DEATH_POSE);
+    e.root.position.set(e.pos.x, e.pos.y - pose.sink, e.pos.z);
+    e.root.rotation.set(pose.pitch, e.yaw, pose.roll);
+    this.setFlash(e, pose.flash * 0.8);
+    w.spark -= dt;
+    if (w.spark <= 0) {
+      w.spark = 0.09;
+      ctx.effects.burst(FLYERS.has(e.kind) ? 'puff' : 'sparks', e.center(TMP), 2, undefined, 0.5);
+    }
   }
 
   /** Start a hit flash with a tint (also used by replicas for remote damage). */
@@ -598,6 +628,8 @@ export class EnemyManager {
     e.mark?.setEnabled(false);
     e.markKind = '';
     this.setFlash(e, 0);
+    e.root.rotation.x = 0;
+    e.root.rotation.z = 0;
     e.behavior?.release?.(e, this);
     e.root.setEnabled(false);
     const i = this.active.indexOf(e);
@@ -713,9 +745,11 @@ export class EnemyManager {
     for (let i = this.wrecks.length - 1; i >= 0; i--) {
       const w = this.wrecks[i];
       w.t += dt;
-      w.e.behavior?.dying?.(w.e, dt, w.t, ctx, this);
+      if (w.finish) this.collapse(w, dt, ctx);
+      else w.e.behavior?.dying?.(w.e, dt, w.t, ctx, this);
       if (w.t >= w.dur) {
         this.wrecks.splice(i, 1);
+        w.finish?.();
         this.release(w.e);
       }
     }

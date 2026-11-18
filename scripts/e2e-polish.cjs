@@ -33,6 +33,54 @@ async function deploy(p, tier = 1) {
       await ev(p, () => { const R = window.__rift; const en = R.game.enemies.active[0]; R.approach(en.id ?? 0); R.advance(1 / 60); R.game.damageEnemy('player', en, 5, en.center(), false); });
       await shot(p, 'polish-flash', { frames: 2 });
     }
+    if (want('B')) {
+      await deploy(p);
+      const r = await ev(p, () => {
+        const R = window.__rift;
+        const out = {};
+        for (const kind of ['walker', 'rusher', 'bulwark']) {
+          R.dev.spawn(kind);
+          R.advance(0.1);
+          const en = R.game.enemies.active.find((x) => x.kind === kind);
+          const before = R.game.enemies.active.length;
+          R.game.damageEnemy('player', en, 1e6, en.center(), false);
+          const o = { dying: R.game.enemies.dyingCount, active: R.game.enemies.active.length - before };
+          R.advance(0.3);
+          o.midRot = Math.abs(en.root.rotation.x) + Math.abs(en.root.rotation.z);
+          o.midFlash = en.hitFlash;
+          R.advance(1.2);
+          o.after = R.game.enemies.dyingCount;
+          o.rotReset = en.root.rotation.x === 0 && en.root.rotation.z === 0;
+          out[kind] = o;
+        }
+        return out;
+      });
+      for (const [k, o] of Object.entries(r)) {
+        check(`B1 ${k} enters a wreck on kill (out of play)`, o.dying === 1 && o.active === -1, JSON.stringify(o));
+        check(`B2 ${k} collapses (tilts, flickers)`, o.midRot > 0.05 && o.midFlash > 0, `rot=${o.midRot.toFixed(2)} flash=${o.midFlash.toFixed(2)}`);
+        check(`B3 ${k} wreck is released and tilt reset`, o.after === 0 && o.rotReset);
+      }
+    }
+    if (want('C')) {
+      await deploy(p);
+      const r = await ev(p, () => {
+        const R = window.__rift;
+        const g = R.game;
+        const snap = () => ({ d: g.scene.fogDensity, lum: g.scene.fogColor.r + g.scene.fogColor.g + g.scene.fogColor.b, exp: g.post.pipeline.imageProcessing.exposure });
+        R.advance(3);
+        const calm = snap();
+        R.dev.spawn('colossus');
+        R.advance(5);
+        const boss = snap();
+        R.killAll();
+        R.advance(12);
+        const after = snap();
+        return { calm, boss, after };
+      });
+      check('C1 boss raises fog density', r.boss.d > r.calm.d * 1.15, `${r.calm.d.toFixed(4)} -> ${r.boss.d.toFixed(4)}`);
+      check('C2 boss darkens fog and exposure', r.boss.lum < r.calm.lum - 0.1 && r.boss.exp < r.calm.exp, `lum ${r.calm.lum.toFixed(2)} -> ${r.boss.lum.toFixed(2)}`);
+      check('C3 mood recovers after the boss dies', Math.abs(r.after.d - r.calm.d) < r.calm.d * 0.05, `${r.after.d.toFixed(4)}`);
+    }
   } catch (e) {
     check('suite ran without exception', false, String(e && e.stack || e).slice(0, 400));
   }
