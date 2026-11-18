@@ -27,6 +27,16 @@ Open the printed URL (default http://localhost:5173), click **ENTER HEADQUARTERS
 | `npm run typecheck` | TypeScript only |
 | `node scripts/e2e-m1.cjs` … `e2e-m4.cjs` | Browser acceptance suites per milestone (need `npm run dev` running and Playwright) |
 
+## Contributing
+
+Start short-lived branches from an up-to-date `main` and open a pull request back into `main`. For example, use `fix/pause-menu` for a pause menu fix.
+
+Before merging, resolve review conversations and wait for **Build and unit tests** and **Dependency review** to pass. Update the branch from `main` if GitHub requests it. The dependency check blocks newly introduced high or critical vulnerabilities. Run the relevant browser acceptance suite locally for gameplay changes.
+
+GitHub squash-merges pull requests and automatically deletes merged branches in this repository. Use the pull request title to summarize the change in `main` history.
+
+See the [security policy](.github/SECURITY.md) for private vulnerability reporting.
+
 ## Controls
 
 | Input | Action |
