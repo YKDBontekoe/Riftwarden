@@ -1,4 +1,4 @@
-FROM ghcr.io/nginx/nginx-unprivileged:1.30.6-alpine-slim@sha256:30b5b66412019e6860fb900420758f664f770082d142b614db0d9afadfede1d3
+FROM ghcr.io/nginx/nginx-unprivileged:1.31.8-alpine-slim@sha256:b19233c62309c8e620732244f9d0d0008678854cb9c6c47898817e8dec93a9e3
 
 LABEL org.opencontainers.image.source="https://github.com/YKDBontekoe/Riftwarden"
 
