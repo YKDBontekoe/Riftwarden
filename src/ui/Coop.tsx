@@ -34,7 +34,7 @@ export function urlJoinCode(): string {
 
 /**
  * Co-op operations panel (main menu tab and deployment terminal): connect with a guest identity,
- * create or import the online profile, create/join a private session by code or link, ready up,
+ * create an online profile, create/join a private session by code or link, ready up,
  * pick the threat tier (host) and deploy the team.
  */
 export function CoopPanel({ flow, compact }: { flow: Flow; compact?: boolean }) {
@@ -81,14 +81,10 @@ export function CoopPanel({ flow, compact }: { flow: Flow; compact?: boolean }) 
     return (
       <div className="coop" data-testid="coop-profile">
         <div className="coop-title">ONLINE PROFILE</div>
-        <div className="coop-lead">This server has no profile for you yet. Co-op progression (equipment, resources, records, HQ) lives on the server so teammates cannot be shortchanged by edited saves.</div>
+        <div className="coop-lead">Create a profile to save your online equipment, resources, records, and headquarters.</div>
         <div className="coop-choices">
-          <button className="primary" data-testid="coop-import" onClick={() => flow.coopProfileInit('import')}>
-            IMPORT A COPY OF MY LOCAL PROFILE
-            <small>{flow.profile.localSave.items.length} items · {flow.profile.localSave.resources.credits} cr · your local save stays as it is</small>
-          </button>
-          <button data-testid="coop-fresh" onClick={() => flow.coopProfileInit('fresh')}>
-            START A FRESH ONLINE PROFILE
+          <button className="primary" data-testid="coop-fresh" onClick={() => flow.coopProfileInit()}>
+            CREATE ONLINE PROFILE
           </button>
         </div>
         <button className="mini" onClick={() => flow.coopDisconnect()}>CANCEL</button>

@@ -246,7 +246,7 @@ const cell = (i, j) => [2 + 5 * i + 2.5, -2.5 + 5 * j + 2.5];
     for (const [pg, name] of [[A, 'Alpha'], [B, 'Bravo']]) {
       await ev(pg, (n) => window.__rift.flow.coopConnect(n), name);
       await waitFor(pg, () => window.__rift.flow.net.state.status === 'online');
-      await ev(pg, () => window.__rift.flow.coopProfileInit('fresh'));
+      await ev(pg, () => window.__rift.flow.coopProfileInit());
       await waitFor(pg, () => window.__rift.flow.profile.online);
     }
     // Lobby through the real UI: A creates from the menu's co-op tab, B types the code.
@@ -262,7 +262,7 @@ const cell = (i, j) => [2 + 5 * i + 2.5, -2.5 + 5 * j + 2.5];
     for (const n of ['Charlie', 'Delta']) {
       const bt = new Bot(n, wsUrl);
       await bt.connect();
-      bt.send({ t: 'profileInit', mode: 'fresh' });
+      bt.send({ t: 'profileInit' });
       await bt.wait((m) => m.t === 'profile');
       bt.send({ t: 'join', code });
       await bt.waitNew((m) => m.t === 'lobby' && m.lobby);

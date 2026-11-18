@@ -412,9 +412,8 @@ export class Flow {
     if (first && this.home && !this.busy && this.location === 'home') this.rebuildHomeKeepScreen();
   }
 
-  /** Create the online profile: import a copy of the local save, or start fresh. */
-  coopProfileInit(mode: 'import' | 'fresh'): void {
-    this.net?.send({ t: 'profileInit', mode, save: mode === 'import' ? JSON.parse(JSON.stringify(this.profile.localSave)) : undefined });
+  coopProfileInit(): void {
+    this.net?.send({ t: 'profileInit' });
   }
 
   /** Disconnect and return to the single-player profile. */

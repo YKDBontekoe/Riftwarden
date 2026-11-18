@@ -6,7 +6,7 @@
  * rewards, online profiles); clients send intents (movement state, shot claims, actions) which
  * the server validates. Messages are validated structurally here before any game code sees them.
  */
-export const PROTOCOL_VERSION = 4;
+export const PROTOCOL_VERSION = 5;
 export const MAX_PLAYERS = 4;
 export const MAX_MESSAGE_BYTES = 64 * 1024;
 /** Authoritative simulation and snapshot rates (Hz). */
@@ -75,7 +75,7 @@ export type ClientMsg =
   | { t: 'ready'; ready: boolean }
   | { t: 'tier'; tier: number }
   | { t: 'start' }
-  | { t: 'profileInit'; mode: 'import' | 'fresh'; save?: unknown }
+  | { t: 'profileInit' }
   | { t: 'op'; name: string; args: unknown[]; tx: string }
   | { t: 'presence'; p: V3; yaw: number }
   | { t: 'visit'; on: boolean }
@@ -205,7 +205,7 @@ export function parseClientMsg(raw: unknown): ClientMsg | null {
     case 'tier':
       return isInt(o.tier, 10) ? (o as ClientMsg) : null;
     case 'profileInit':
-      return o.mode === 'import' || o.mode === 'fresh' ? (o as ClientMsg) : null;
+      return Object.keys(o).length === 1 ? { t: 'profileInit' } : null;
     case 'op':
       return isStr(o.name, 40) && Array.isArray(o.args) && isStr(o.tx, 80) ? (o as ClientMsg) : null;
     case 'presence':

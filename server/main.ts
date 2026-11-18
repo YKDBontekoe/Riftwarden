@@ -1,7 +1,9 @@
 import './headless';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { existsSync, readFileSync, statSync } from 'node:fs';
-import { extname, join, normalize, resolve } from 'node:path';
+import { createReadStream } from 'node:fs';
+import { stat } from 'node:fs/promises';
+import { extname, join, resolve, sep } from 'node:path';
+import { pipeline } from 'node:stream/promises';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { DEFAULT_PORT, MAX_MESSAGE_BYTES, normalizeCode, parseClientMsg, PROTOCOL_VERSION, RateLimiter, type ClientMsg, type ServerMsg } from '../src/net/protocol';
 import { playerIdFor, ProfileStore } from './profiles';
@@ -11,61 +13,101 @@ import { CoopSim, loadHavok } from './sim';
 /**
  * Riftwarden co-op server.
  *
- *   npm run server                     (ws://localhost:8787/ws, profiles in ./server-data)
- *   RIFT_PORT=9000 RIFT_DATA=/srv/rift npm run server
+ *   npm run server                     (ws://localhost:8787/ws)
+ *   Configure PostgreSQL with DATABASE_URL or the standard PG* variables.
  *
  * Also serves the production build (dist/) on the same port, so `npm run build && npm run server`
  * is a complete deployment: open http://host:8787 and the client connects to /ws on the same origin.
  */
 const PORT = Number(process.env.RIFT_PORT ?? DEFAULT_PORT);
-const DATA = resolve(process.env.RIFT_DATA ?? 'server-data');
 const DIST = resolve(process.env.RIFT_DIST ?? 'dist');
 const log = (m: string) => console.log(`[${new Date().toISOString().slice(11, 19)}] ${m}`);
 
-const store = new ProfileStore(join(DATA, 'profiles'));
+const store = new ProfileStore(log);
+await store.migrate();
+const havok = await loadHavok();
 const rooms = new Map<string, Room>();
 const online = new Map<string, Peer>();
-let havok: unknown = null;
+const messages = new Set<Promise<void>>();
+let shuttingDown = false;
 
-const MIME: Record<string, string> = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.wasm': 'application/wasm', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml', '.woff2': 'font/woff2' };
+const MIME: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.wasm': 'application/wasm', '.json': 'application/json', '.txt': 'text/plain; charset=utf-8', '.png': 'image/png', '.svg': 'image/svg+xml', '.woff2': 'font/woff2' };
 
-function serveStatic(req: IncomingMessage, res: ServerResponse): void {
-  const url = new URL(req.url ?? '/', 'http://x');
-  if (url.pathname === '/health') {
+async function serveHttp(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Cache-Control', 'no-store');
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    res.writeHead(405, { Allow: 'GET, HEAD' }).end();
+    return;
+  }
+  let pathname: string;
+  try {
+    pathname = decodeURIComponent(new URL(req.url ?? '/', 'http://localhost').pathname);
+    if (pathname.includes('\0')) throw new URIError('Invalid pathname');
+  } catch {
+    res.writeHead(400).end();
+    return;
+  }
+  if (pathname === '/health') {
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify({ ok: true, v: PROTOCOL_VERSION, rooms: rooms.size, players: online.size }));
     return;
   }
-  let p = normalize(join(DIST, decodeURIComponent(url.pathname)));
-  if (!p.startsWith(DIST)) {
+
+  const file = resolve(DIST, `.${pathname === '/' ? '/index.html' : pathname}`);
+  const root = DIST.endsWith(sep) ? DIST : DIST + sep;
+  if (!file.startsWith(root)) {
     res.writeHead(403).end();
     return;
   }
-  if (!existsSync(p) || statSync(p).isDirectory()) p = join(DIST, 'index.html');
-  if (!existsSync(p)) {
-    res.writeHead(404, { 'content-type': 'text/plain' }).end('Riftwarden co-op server. Build the client (npm run build) to serve it here, or use the dev server.');
+
+  const info = await stat(file).catch((error: NodeJS.ErrnoException) => {
+    if (error.code !== 'ENOENT' && error.code !== 'ENOTDIR') throw error;
+  });
+  if (!info?.isFile()) {
+    res.writeHead(404).end();
     return;
   }
-  res.writeHead(200, { 'content-type': MIME[extname(p)] ?? 'application/octet-stream' });
-  res.end(readFileSync(p));
+  const cache = file.startsWith(join(DIST, 'assets') + sep) ? 'public, max-age=31536000, immutable' : 'no-cache';
+  res.writeHead(200, {
+    'Content-Type': MIME[extname(file)] ?? 'application/octet-stream',
+    'Content-Length': info.size,
+    'Cache-Control': file === join(DIST, 'build.txt') ? 'no-store' : cache,
+  });
+  if (req.method === 'HEAD') res.end();
+  else await pipeline(createReadStream(file), res);
 }
 
-const http = createServer(serveStatic);
+const http = createServer((req, res) => {
+  void serveHttp(req, res).catch((error: NodeJS.ErrnoException) => {
+    if (error.code !== 'ERR_STREAM_PREMATURE_CLOSE') log(`HTTP error: ${error.message}`);
+    if (!res.headersSent) res.writeHead(500).end();
+  });
+});
 const wss = new WebSocketServer({ server: http, path: '/ws', maxPayload: MAX_MESSAGE_BYTES });
+const awaitingPong = new Set<WebSocket>();
+const heartbeat = setInterval(() => {
+  for (const ws of wss.clients) {
+    if (ws.readyState !== ws.OPEN) continue;
+    if (awaitingPong.has(ws)) ws.terminate();
+    else {
+      awaitingPong.add(ws);
+      ws.ping();
+    }
+  }
+}, 30_000);
 
 function deps() {
   return {
     store,
     log,
-    createSim: async (room: Room) => {
-      havok ??= await loadHavok();
-      return new CoopSim(room, store, havok, log);
-    },
+    createSim: (room: Room) => CoopSim.create(room, store, havok, log),
   };
 }
 
 wss.on('connection', (ws: WebSocket) => {
   let peer: Peer | null = null;
+  let processing = Promise.resolve();
   const limiter = new RateLimiter(90, 180);
   let strikes = 0;
   const send = (msg: ServerMsg) => {
@@ -73,7 +115,10 @@ wss.on('connection', (ws: WebSocket) => {
   };
   const fail = (code: string, msg: string) => send({ t: 'error', code, msg });
 
-  ws.on('message', async (buf, isBinary) => {
+  ws.on('pong', () => awaitingPong.delete(ws));
+  ws.on('error', (error) => log(`WebSocket error: ${error.message}`));
+  ws.on('message', (buf, isBinary) => {
+    if (shuttingDown) return;
     if (isBinary) return ws.close(1003, 'binary not supported');
     if (!limiter.take()) {
       if (++strikes > 50) ws.close(1008, 'rate limit');
@@ -90,27 +135,32 @@ wss.on('connection', (ws: WebSocket) => {
       if (++strikes > 50) ws.close(1008, 'malformed traffic');
       return fail('malformed', 'Invalid message');
     }
-    try {
-      await handle(msg);
-    } catch (e) {
-      log(`handler error (${msg.t}): ${(e as Error).stack}`);
+    if (msg.t === 'ping') return send({ t: 'pong', c: msg.c, s: Date.now() });
+    const job = processing.then(async () => {
+      if (ws.readyState === ws.OPEN) await handle(msg);
+    }).catch((e: Error) => {
+      log(`handler error (${msg.t}): ${e.stack}`);
       fail('server', 'Server error');
-    }
+    });
+    processing = job;
+    messages.add(job);
+    void job.then(() => messages.delete(job));
   });
 
   async function handle(msg: ClientMsg): Promise<void> {
-    if (msg.t === 'ping') return send({ t: 'pong', c: msg.c, s: Date.now() });
     if (msg.t === 'hello') {
+      if (peer) return fail('hello', 'Already connected');
       if (msg.v !== PROTOCOL_VERSION) {
         fail('version', `Protocol mismatch: server v${PROTOCOL_VERSION}, client v${msg.v}. Reload the page.`);
         return void ws.close(1008, 'version');
       }
       const id = playerIdFor(msg.secret);
+      const prof = await store.load(id);
+      if (ws.readyState !== ws.OPEN) return;
       const prev = online.get(id);
       if (prev) prev.send({ t: 'error', code: 'replaced', msg: 'Signed in from another window' });
       const name = msg.name.replace(/[^\p{L}\p{N} _.-]/gu, '').trim().slice(0, 18) || 'Warden';
-      const prof = store.get(id);
-      peer = { id, name, send, profile: prof!, room: prev?.room ?? null, presence: null, visiting: false };
+      peer = { id, name, send, profile: prof, room: prev?.room ?? null, presence: null, visiting: false };
       online.set(id, peer);
       send({ t: 'welcome', v: PROTOCOL_VERSION, playerId: id, name, hasProfile: !!prof, profile: prof?.data ?? null });
       // Reconnect into a session (and a running operation) this identity still belongs to.
@@ -126,18 +176,22 @@ wss.on('connection', (ws: WebSocket) => {
     }
     if (!peer) return fail('hello', 'Say hello first');
     const me = peer;
+    if (online.get(me.id) !== me) return fail('replaced', 'Signed in from another window');
     if (msg.t === 'profileInit') {
       if (me.profile) return fail('profile', 'Online profile already exists');
-      const p = store.create(me.id, msg.mode, msg.save, me.name);
+      const p = await store.create(me.id, me.name);
       if (!p) return fail('profile', 'Could not create the online profile');
       me.profile = p;
-      log(`profile ${me.id.slice(0, 6)} created (${msg.mode})`);
+      log(`profile ${me.id.slice(0, 6)} initialized`);
       return send({ t: 'profile', save: p.data });
     }
     if (!me.profile) return fail('profile', 'Create an online profile first');
+    if (me.room?.state === 'deploying' && (msg.t === 'leave' || msg.t === 'create' || msg.t === 'join')) {
+      return fail('deploying', 'Wait for the operation to finish deploying');
+    }
     switch (msg.t) {
       case 'op': {
-        const r = store.op(me.profile, msg.name, msg.args, msg.tx);
+        const r = await store.op(me.profile, msg.name, msg.args, msg.tx);
         send({ t: 'opResult', tx: msg.tx, ok: r.ok, reason: r.ok ? undefined : (r as { reason: string }).reason });
         send({ t: 'profile', save: me.profile.data });
         if (r.ok && me.room && me.room.hostId === me.id && msg.name.startsWith('hq')) me.room.broadcast({ t: 'hostHq', owner: me.id, base: me.profile.data.base });
@@ -200,24 +254,24 @@ wss.on('connection', (ws: WebSocket) => {
   }
 
   ws.on('close', () => {
-    if (!peer) return;
-    if (online.get(peer.id) === peer) online.delete(peer.id);
+    awaitingPong.delete(ws);
+    if (!peer || online.get(peer.id) !== peer) return;
+    online.delete(peer.id);
     if (peer.room) peer.room.disconnected(peer.id);
   });
 });
 
 // Housekeeping: reconnect windows, empty rooms, lobby presence (10 Hz).
-setInterval(() => {
+const housekeeping = setInterval(() => {
   for (const [code, r] of rooms) {
     r.tick();
     if (r.empty) {
-      r.sim?.shutdown('empty');
       rooms.delete(code);
       log(`room ${code} closed`);
     }
   }
 }, 1000);
-setInterval(() => {
+const presence = setInterval(() => {
   for (const r of rooms.values()) {
     if (r.state !== 'lobby') continue;
     const players = r.connected.filter((m) => m.peer?.presence && (m.peer.visiting || m.id === r.hostId)).map((m) => ({ id: m.id, name: m.name, p: m.peer!.presence!.p, yaw: m.peer!.presence!.yaw }));
@@ -225,15 +279,25 @@ setInterval(() => {
   }
 }, 100);
 
-function shutdown(sig: string): void {
+async function shutdown(sig: string): Promise<void> {
+  if (shuttingDown) return;
+  shuttingDown = true;
   log(`${sig}: closing ${rooms.size} sessions`);
-  for (const r of rooms.values()) r.sim?.shutdown('server');
-  for (const p of online.values()) p.send({ t: 'error', code: 'shutdown', msg: 'The server is shutting down' });
-  wss.close();
+  clearInterval(heartbeat);
+  clearInterval(housekeeping);
+  clearInterval(presence);
   http.close();
-  setTimeout(() => process.exit(0), 200);
+  await Promise.allSettled(messages);
+  const endings = [...rooms.values()].map((r) => r.sim?.shutdown()).filter((ending) => ending !== undefined);
+  await Promise.allSettled(endings);
+  for (const p of online.values()) p.send({ t: 'error', code: 'shutdown', msg: 'The server is shutting down' });
+  for (const ws of wss.clients) ws.close(1012, 'Server restarting');
+  wss.close();
+  const close = setTimeout(() => { for (const ws of wss.clients) ws.terminate(); }, 1000);
+  close.unref();
+  await store.close();
 }
-process.on('SIGINT', () => shutdown('SIGINT'));
-process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => void shutdown('SIGINT'));
+process.on('SIGTERM', () => void shutdown('SIGTERM'));
 
-http.listen(PORT, () => log(`Riftwarden co-op server v${PROTOCOL_VERSION} on :${PORT} (ws path /ws, data ${DATA})`));
+http.listen(PORT, () => log(`Riftwarden co-op server v${PROTOCOL_VERSION} on :${PORT} (ws path /ws, PostgreSQL profiles)`));

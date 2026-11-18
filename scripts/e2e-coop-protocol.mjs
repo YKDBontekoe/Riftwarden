@@ -3,14 +3,17 @@
 // server restart, and the failure cases of the M7 spec (section 35).
 // Usage: node scripts/e2e-coop-protocol.mjs [filter]   (starts its own test server on :8799)
 import { spawn } from 'node:child_process';
-import { mkdtempSync, readFileSync, readdirSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { randomBytes } from 'node:crypto';
+import pg from 'pg';
 import { Bot, sleep } from './bot.mjs';
 
 const PORT = 8799;
-const URL = `ws://localhost:${PORT}/ws`;
-const DATA = mkdtempSync(join(tmpdir(), 'rift-coop-'));
+const WS_URL = `ws://localhost:${PORT}/ws`;
+if (!process.env.RIFT_TEST_DATABASE_URL) throw new Error('Set RIFT_TEST_DATABASE_URL to a PostgreSQL test database');
+const schema = `coop_${randomBytes(8).toString('hex')}`;
+const databaseUrl = new URL(process.env.RIFT_TEST_DATABASE_URL);
+databaseUrl.searchParams.set('options', `-c search_path=${schema}`);
+const db = new pg.Pool({ connectionString: databaseUrl.href });
 const FILTER = process.argv[2] || '';
 const want = (k) => !FILTER || FILTER.split(',').some((f) => k.startsWith(f));
 let passes = 0, failures = 0;
@@ -19,29 +22,44 @@ const check = (n, ok, info = '') => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${n}
 
 let server = null;
 function startServer() {
-  server = spawn(process.execPath, ['--import', 'tsx', 'server/main.ts'], { env: { ...process.env, RIFT_PORT: String(PORT), RIFT_DATA: DATA, RIFT_TEST: '1' }, stdio: ['ignore', 'pipe', 'pipe'] });
-  server.log = '';
-  server.stdout.on('data', (d) => (server.log += d));
-  server.stderr.on('data', (d) => (server.log += d));
-  return new Promise((res) => {
-    const t = setInterval(() => { if (server.log.includes('co-op server')) { clearInterval(t); res(); } }, 100);
+  const child = spawn(process.execPath, ['--import', 'tsx', 'server/main.ts'], {
+    env: { ...process.env, RIFT_PORT: String(PORT), DATABASE_URL: databaseUrl.href, RIFT_TEST: '1' },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  server = child;
+  child.log = '';
+  return new Promise((res, rej) => {
+    const timeout = setTimeout(() => rej(new Error(`Server startup timed out\n${child.log}`)), 20000);
+    child.once('exit', () => {
+      clearTimeout(timeout);
+      rej(new Error(`Server exited\n${child.log}`));
+    });
+    child.stdout.on('data', (d) => {
+      child.log += d;
+      if (child.log.includes('Riftwarden co-op server')) {
+        clearTimeout(timeout);
+        res();
+      }
+    });
+    child.stderr.on('data', (d) => (child.log += d));
   });
 }
 async function stopServer(sig = 'SIGTERM') {
   const s = server;
+  server = null;
   if (!s) return;
+  if (s.exitCode !== null || s.signalCode !== null) return;
   const done = new Promise((r) => s.on('exit', r));
   s.kill(sig);
   await done;
-  server = null;
 }
 
 async function bot(name, secret) {
-  const b = new Bot(name, URL, secret);
+  const b = new Bot(name, WS_URL, secret);
   const w = await b.connect();
   if (w.t !== 'welcome') throw new Error(`${name}: ${JSON.stringify(w)}`);
   if (!w.hasProfile) {
-    b.send({ t: 'profileInit', mode: 'fresh' });
+    b.send({ t: 'profileInit' });
     await b.wait((m) => m.t === 'profile');
   }
   return b;
@@ -97,7 +115,7 @@ async function clearWave(bots, actor = bots[0]) {
     // Pick any pending team upgrade first (the chooser rotates).
     for (let i = 0; i < 40 && actor.snap.of; i++) {
       const chooser = bots.find((b) => b.welcome.playerId === actor.snap.of[1]);
-      if (chooser) { const r = await chooser.act({ a: 'upgrade', pick: actor.snap.of[0][0] }); if (!r.ok) pickFailures.push(r.reason); }
+      if (chooser) await pickUpgrade(chooser, actor);
       await sleep(80);
     }
     for (let i = 0; i < 20 && actor.snap.cp[2]; i++) {
@@ -114,15 +132,26 @@ async function clearWave(bots, actor = bots[0]) {
   return r;
 }
 
-const profileFile = (id) => {
-  const dir = join(DATA, 'profiles', id);
-  const f = readdirSync(dir).find((x) => x === 'riftwarden.save.json');
-  return JSON.parse(readFileSync(join(dir, f), 'utf8')).data;
-};
+async function pickUpgrade(chooser, actor) {
+  const reply = await chooser.act({ a: 'upgrade', pick: actor.snap.of[0][0] });
+  if (!reply.ok) pickFailures.push(reply.reason);
+  else await actor.waitNew((m) => m.t === 'snap' && !m.s.of, 3000);
+}
+
+async function profileRows(id) {
+  const { rows } = await db.query(`
+    SELECT
+      ARRAY(SELECT uid FROM profile_items WHERE player_id = $1 AND scope = 'owned' ORDER BY position) AS items,
+      ARRAY(SELECT id FROM profile_run_history WHERE player_id = $1 ORDER BY position) AS history,
+      EXISTS(SELECT 1 FROM profile_active_runs WHERE player_id = $1) AS active_run
+  `, [id]);
+  return rows[0];
+}
 
 (async () => {
-  await startServer();
   try {
+    await db.query(`CREATE SCHEMA ${schema}`);
+    await startServer();
     // ------------------------------------------------------------ B: session creation
     if (want('B')) {
       const a = await bot('Alpha'), b = await bot('Bravo');
@@ -225,15 +254,15 @@ const profileFile = (id) => {
       await sleep(400);
       const banks = bots.map((b) => b.events.filter((e) => e[0] === 'bank').length);
       check('D4 wave 5 banks for every player individually', banks.every((n) => n === 1) && A.snap.me.run.is >= unsecured + 0 && A.snap.me.run.iu === 0, `banks ${banks} secured ${A.snap.me.run.is}`);
-      const profA = profileFile(A.welcome.playerId);
-      const securedUids = new Set(profA.items.map((i) => i.uid));
+      const profA = await profileRows(A.welcome.playerId);
+      const securedUids = new Set(profA.items);
       check('D5 banked items are written to that player\'s server profile only', A.snap.me.run.is > 0 ? [...securedUids].some((u) => u.startsWith(A.run.runId)) : true, `${profA.items.length} items`);
-      const profB = profileFile(B.welcome.playerId);
-      check('D6 no item exists in two profiles', !profB.items.some((i) => securedUids.has(i.uid) && i.uid.startsWith(A.run.runId)));
+      const profB = await profileRows(B.welcome.playerId);
+      check('D6 no item exists in two profiles', !profB.items.some((uid) => securedUids.has(uid) && uid.startsWith(A.run.runId)));
       // Vote: one says continue -> continues; all say home -> extract.
       for (let i = 0; i < 40 && A.snap.of; i++) {
         const chooser = bots.find((b) => b.welcome.playerId === A.snap.of[1]);
-        if (chooser) { const r = await chooser.act({ a: 'upgrade', pick: A.snap.of[0][0] }); if (!r.ok) pickFailures.push(r.reason); }
+        if (chooser) await pickUpgrade(chooser, A);
         await sleep(100);
       }
       await sleep(300);
@@ -246,10 +275,11 @@ const profileFile = (id) => {
       for (const b of bots) await b.wait((m) => m.t === 'runEnd', 15000);
       stop();
       check('D9 unanimous vote returns the whole team home', bots.every((b) => b.end?.result?.outcome === 'returned'), bots.map((b) => b.end?.result?.outcome).join(','));
-      const profA2 = profileFile(A.welcome.playerId);
-      const uids = profA2.items.map((i) => i.uid);
-      check('D10 inventory after return: secured items kept, no duplicates', new Set(uids).size === uids.length && A.end.result.itemsSecured === A.snap.me.run.is && !profA2.activeRun, `${uids.length} items, secured ${A.end.result.itemsSecured}`);
-      check('D11 run recorded once on every profile', bots.every((b) => profileFile(b.welcome.playerId).history.filter((h) => h.id === A.run.runId).length === 1));
+      const profA2 = await profileRows(A.welcome.playerId);
+      const uids = profA2.items;
+      check('D10 inventory after return: secured items kept, no duplicates', new Set(uids).size === uids.length && A.end.result.itemsSecured === A.snap.me.run.is && !profA2.active_run, `${uids.length} items, secured ${A.end.result.itemsSecured}`);
+      const profiles = await Promise.all(bots.map((b) => profileRows(b.welcome.playerId)));
+      check('D11 run recorded once on every profile', profiles.every((p) => p.history.filter((id) => id === A.run.runId).length === 1));
       for (const b of bots) b.close();
       await sleep(500);
     }
@@ -269,10 +299,10 @@ const profileFile = (id) => {
       await clearWave([A, C], A);
       check('E2 server stays stable; waves keep completing', A.snap.w[0] > w);
       stop();
-      const B2 = new Bot('Fox', URL, secretB);
+      const B2 = new Bot('Fox', WS_URL, secretB);
       await B2.connect();
-      await B2.waitNew((m) => m.t === 'runStart', 10000);
-      await B2.waitNew((m) => m.t === 'snap');
+      await B2.wait((m) => m.t === 'runStart', 10000);
+      await B2.wait((m) => m.t === 'snap');
       check('E3 reconnect restores the same run, identity and drone', B2.run.rejoin && B2.run.runId === A.run.runId && !!B2.me(), `rejoin=${B2.run.rejoin}`);
       check('E4 reconnect resends the world (enemies, towers, upgrades) without duplicating items', B2.events.filter((e) => e[0] === 'es').length >= 0 && B2.snap.me.run.iu >= 0);
       bots[1] = B2;
@@ -321,7 +351,7 @@ const profileFile = (id) => {
       check('S2 lobby host leaving transfers host to another player', five[1].lobby.hostId === five[1].welcome.playerId && five[1].lobby.players.length === 3);
       for (const b of five) b.close();
       // Incompatible protocol
-      const old = new Bot('Old', URL);
+      const old = new Bot('Old', WS_URL);
       const r = await old.connect(1);
       check('S3 incompatible protocol version is refused with a message', r.t === 'error' && r.code === 'version', r.msg);
       // Malformed + rate limit
@@ -338,7 +368,7 @@ const profileFile = (id) => {
       check('S5 a repeated purchase (same transaction id) is refused', o1.ok && !o2.ok, o2.reason);
       // Another player's equipment
       const other = await bot('Victim');
-      const victimItem = other.profile?.items?.[0]?.uid ?? profileFile(other.welcome.playerId).items[0].uid;
+      const victimItem = (await profileRows(other.welcome.playerId)).items[0];
       bad.send({ t: 'op', name: 'sellItems', args: [[victimItem]], tx: 'tx_steal' });
       const o3 = await bad.waitNew((m) => m.t === 'opResult');
       check('S6 cannot sell/equip another player\'s equipment', !o3.ok, o3.reason);
@@ -381,7 +411,7 @@ const profileFile = (id) => {
       await sleep(300);
       check('S11 clients notice the server closing', bots2.every((b) => b.closed));
       await startServer();
-      const back = new Bot('Kilo', URL, ids[0][1]);
+      const back = new Bot('Kilo', WS_URL, ids[0][1]);
       const w2 = await back.connect();
       const prof = w2.profile;
       check('S12 after a crash the profile is intact and the run is recorded as interrupted', w2.hasProfile && !prof.activeRun && prof.history.some((h) => h.id === runId), `history ${prof.history.length}`);
@@ -392,9 +422,14 @@ const profileFile = (id) => {
     failures++;
   }
   check('Z team-upgrade picks are accepted by the server (never left to the auto-pick)', pickFailures.length === 0, JSON.stringify(pickFailures.slice(0, 3)));
-  if (failures) console.log('--- server log (tail) ---\n' + server.log.split('\n').slice(-30).join('\n'));
+  if (failures && server) console.log('--- server log (tail) ---\n' + server.log.split('\n').slice(-30).join('\n'));
   await stopServer();
+  await db.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
+  await db.end();
   console.log(`\n${failures === 0 ? 'ALL PASSED' : 'FAILURES'}  ${passes} passed, ${failures} failed`);
   if (failures) console.log(server?.log ?? '');
   process.exit(failures ? 1 : 0);
-})();
+})().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});

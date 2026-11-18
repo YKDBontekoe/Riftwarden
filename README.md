@@ -17,13 +17,19 @@ Click **ENTER HEADQUARTERS**, walk to the launch bay and press **E** at the depl
 
 ### Co-op (2-4 players)
 
+For local co-op development, run PostgreSQL alongside the game server.
+
 ```bash
+docker run -d --name riftwarden-dev-db -p 127.0.0.1:5432:5432 \
+  -e POSTGRES_DB=riftwarden -e POSTGRES_USER=riftwarden -e POSTGRES_PASSWORD=riftwarden-dev \
+  -v riftwarden_dev_db:/var/lib/postgresql postgres:18
+export DATABASE_URL=postgresql://riftwarden:riftwarden-dev@127.0.0.1:5432/riftwarden
 npm run serve          # builds the client, then serves it AND the co-op server on http://<host>:8787
 ```
 
-Every player opens `http://<host>:8787`, chooses **CO-OP** in the menu (or the *Co-op* tab of the deployment terminal), connects and creates or imports an online profile (a copy of the local save; the local save is never changed). The host clicks **CREATE SESSION** and shares the 5-letter code or the invite link (`?join=CODE`); the others join, press **READY**, and the host picks the threat tier (every player must have unlocked it) and deploys. While waiting in the lobby, guests can **VISIT HOST HQ** (read-only; only the owner can construct).
+Every player opens `http://<host>:8787`, chooses **CO-OP** in the menu (or the *Co-op* tab of the deployment terminal), connects and creates a fresh online profile. The host clicks **CREATE SESSION** and shares the 5-letter code or the invite link (`?join=CODE`); the others join, press **READY**, and the host picks the threat tier (every player must have unlocked it) and deploys. A host can also deploy alone with their online profile. While waiting in the lobby, guests can **VISIT HOST HQ** (read-only; only the owner can construct).
 
-For development run `npm run server` (co-op server on :8787, `RIFT_PORT`, `RIFT_DATA=./server-data` for profiles) next to `npm run dev`; the dev server proxies `/ws`. A different server can be chosen with `?server=ws://host:port/ws`.
+For development run `npm run server` (co-op server on :8787, overridable with `RIFT_PORT`) next to `npm run dev`; the dev server proxies `/ws`. The server creates the database tables on first startup. It accepts either `DATABASE_URL` or the standard PostgreSQL connection variables `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, and `PGPASSWORD`. A different game server can be chosen with `?server=ws://host:port/ws`.
 
 In a co-op run the server owns enemies, waves, the reactor, towers, loot, rewards and profiles. Each player keeps their own equipment and loot drops (ownership per player), banks individually at every 5th wave, and the team votes unanimously at checkpoints to continue or return. Towers, cores, tactical time and the reactor are shared. Disconnected players keep their slot for 120 s and rejoin the running operation.
 
@@ -37,7 +43,7 @@ In a co-op run the server owns enemies, waves, the reactor, towers, loot, reward
 | `npm test` | Unit tests (Vitest) |
 | `node scripts/e2e-m1.cjs` … `e2e-m6.cjs` | Browser acceptance suites per earlier milestone (Playwright; `RIFT_URL` selects the client) |
 | `node scripts/e2e-construction-coop.cjs [G,H,I,J,X]` | Browser suite: HQ construction, decorations, station relocation, blueprints, real browser co-op |
-| `node scripts/e2e-coop-protocol.mjs` | Co-op protocol suite (starts its own server, 4 bot clients) |
+| `node scripts/e2e-coop-protocol.mjs` | Co-op protocol suite (starts its own server and uses an isolated schema in `RIFT_TEST_DATABASE_URL`) |
 
 ### HQ construction
 
@@ -55,9 +61,13 @@ See the [security policy](.github/SECURITY.md) for private vulnerability reporti
 
 ## Production deployment
 
-Merges to `main` run the tests and build, publish a container to GitHub Container Registry, and verify the deployed commit at [riftwarden.ykdbonte.dev](https://riftwarden.ykdbonte.dev). The `production` GitHub environment only accepts `main`. You can also run the CI workflow manually on `main` to redeploy it.
+Merges to `main` run the tests and build, smoke-test the game and co-op WebSocket inside the production container, and publish the image to GitHub Container Registry. CI checks the deployed commit and repeats the WebSocket handshake and ping through Cloudflare. The `production` GitHub environment only accepts `main`. You can also run the CI workflow manually on `main` to redeploy it.
 
-The Ubuntu server checks for a new image every minute and serves the game on loopback. Its dedicated Cloudflare Tunnel publishes the site over HTTPS. The Compose file and user systemd units are in [`deploy/`](deploy/). On the server, `systemctl --user start riftwarden-deploy.service` checks for an update immediately. For deployment logs, use `journalctl --user -u riftwarden-deploy.service`.
+Play at [riftwarden.ykdbonte.dev](https://riftwarden.ykdbonte.dev) and select **CO-OP**. The Cloudflare Tunnel publishes both the game and `wss://riftwarden.ykdbonte.dev/ws` from the container's loopback port. PostgreSQL runs on the private Compose network. Online profiles and banked rewards live in the `riftwarden_postgres` volume and survive container updates. Lobbies and in-progress sessions end when the server restarts.
+
+Before publishing the PostgreSQL build, install the updated Compose file and deploy script in `~/stacks/riftwarden`. Generate a secret with `openssl rand -hex 32` and set it as `RIFT_POSTGRES_PASSWORD` in that directory's `.env`. Back up the `riftwarden` database off-host with `pg_dump`. The first PostgreSQL deployment starts fresh online profiles. The Solo tab uses browser saves. [Compose file](deploy/compose.yml) · [Deploy script](deploy/deploy.sh)
+
+The Ubuntu server checks for a new image every minute and restores the previous image if the update fails its local health or revision check. Run `systemctl --user start riftwarden-deploy.service` to check for an update immediately and `journalctl --user -u riftwarden-deploy.service` to inspect deployment logs. [Systemd units](deploy/systemd/)
 
 ## Controls
 
