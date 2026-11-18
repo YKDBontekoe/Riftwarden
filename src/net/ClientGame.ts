@@ -14,15 +14,15 @@ import type { ItemInstance } from '../loot/types';
 import type { SlotId } from '../progression/items';
 import { upgradeDef, type UpgradeDef } from '../roguelite/upgrades';
 import type { EliteModId } from '../survival/elites';
-import type { EvolutionId } from '../survival/plan';
-import { configCost, type TowerConfig, type TowerSlot } from '../towers/components';
+import { configCost, type TowerSlot } from '../towers/components';
 import { hudStore, uiEvents } from '../ui/store';
 import { buildWardenDrone, type DroneRig, SLOT_CSS } from '../visuals/droneModel';
 import { ARENA, type GateId } from '../world/layout';
-import type { ActMsg, ShotClaim, V3 } from './protocol';
+import type { ActMsg, ShotClaim } from './protocol';
 import { INPUT_HZ } from './protocol';
 import { spawnFor } from './ServerGame';
 import { dec, vec } from './wire';
+import { parseEvent, type ReplicatedEvent } from './events';
 import { isFxCall, isOrdnanceCall, isWfxCall, replay } from './replicated';
 import type { ShotOutcome, ShotRequest } from '../combat/Weapon';
 import type { Player } from '../player/Player';
@@ -163,7 +163,7 @@ export class ClientGame extends Game {
   myVote: boolean | null = null;
   defeatedByServer = false;
   /** Diagnostics. */
-  netStats = { snaps: 0, events: 0, corrections: 0, rejected: 0, bytes: 0 };
+  netStats = { snaps: 0, events: 0, corrections: 0, rejected: 0, bytes: 0, badEvents: 0 };
   readonly puppet: EnemyContext;
 
   constructor(engine: Engine, canvas: HTMLCanvasElement, havok: unknown, settings: Settings, input: Input, cfg: ArenaConfig & { you: string; slot: number; players: { id: string; name: string; slot: number }[] }, link: NetLink) {
@@ -760,8 +760,13 @@ export class ClientGame extends Game {
 
   /** Apply a batch of replicated events in order. */
   onEvents(list: unknown[][]): void {
-    for (const ev of list) {
+    for (const raw of list) {
       this.netStats.events++;
+      const ev = parseEvent(raw);
+      if (!ev) {
+        this.netStats.badEvents++;
+        continue;
+      }
       try {
         this.applyEvent(ev);
       } catch (err) {
@@ -770,39 +775,35 @@ export class ClientGame extends Game {
     }
   }
 
-  private applyEvent(ev: unknown[]): void {
-    const k = ev[0] as string;
-    switch (k) {
+  private applyEvent(ev: ReplicatedEvent): void {
+    switch (ev[0]) {
       case 'f': {
-        const m = ev[1] as string;
+        const m = ev[1];
         const args = dec(ev[2]) as unknown[];
         if (m === 'spawnProjectile') this.fx.spawnProjectile(args[0] as Vector3, args[1] as Vector3, 0);
         else if (isFxCall(m)) replay(this.fx, m, args);
         return;
       }
       case 'w': {
-        const m = ev[1] as string;
+        const m = ev[1];
         if (isWfxCall(m)) replay(this.wfx, m, dec(ev[2]) as unknown[]);
         return;
       }
       case 's': {
-        const o = (ev[2] ?? {}) as { volume?: number; pitch?: number };
-        const pos = ev[3] as V3 | null;
+        const o = ev[2] ?? {};
+        const pos = ev[3];
         if (pos) {
           const a = this.panFor(vec(pos));
           sfx.play(ev[1] as SfxName, { ...o, volume: (o.volume ?? 1) * a.volume, pan: a.pan });
         } else sfx.play(ev[1] as SfxName, o);
         return;
       }
-      case 'u': {
-        const name = ev[1] as string;
-        const payload = dec(ev[2]);
-        (uiEvents.emit as (k: string, v: unknown) => void)(name, payload);
+      case 'u':
+        (uiEvents.emit as (k: string, v: unknown) => void)(ev[1], dec(ev[2]));
         return;
-      }
       case 't': {
-        const op = ev[1] as string;
-        const sid = ev[2] as number;
+        const op = ev[1];
+        const sid = ev[2];
         const args = dec(ev[3]) as unknown[];
         if (op === 'marker') this.teleMap.set(sid, this.tele.marker(args[0] as Vector3, args[1] as number, args[2] as number, args[3] as never));
         else if (op === 'line') this.teleMap.set(sid, this.tele.line(args[0] as Vector3, args[1] as Vector3, args[2] as number, args[3] as never, args[4] as number | undefined));
@@ -817,10 +818,10 @@ export class ClientGame extends Game {
         return;
       }
       case 'o': {
-        const op = ev[1] as string;
+        const op = ev[1];
         const args = dec(ev[3]) as unknown[];
         if (isOrdnanceCall(op) && replay(this.ordnance, op, args)) {
-          this.ordMap.set(ev[2] as number, this.ordnance.lastId);
+          this.ordMap.set(ev[2], this.ordnance.lastId);
           if (op === 'lob') sfx.play('enemyShot', { pitch: 0.6, ...this.panFor(args[0] as Vector3) });
         }
         return;
@@ -828,22 +829,22 @@ export class ClientGame extends Game {
       case 'es':
         return this.spawnReplica(ev);
       case 'ek': {
-        const e = this.byNet.get(ev[1] as number);
+        const e = this.byNet.get(ev[1]);
         if (!e || !e.alive) return;
         this.enemies.kill(e, this.fx, this.puppet, !!ev[2]);
-        this.byNet.delete(ev[1] as number);
-        this.tracks.delete(ev[1] as number);
+        this.byNet.delete(ev[1]);
+        this.tracks.delete(ev[1]);
         return;
       }
       case 'er': {
-        const e = this.byNet.get(ev[1] as number);
+        const e = this.byNet.get(ev[1]);
         if (e && e.alive) this.enemies.despawn(e, null);
-        this.byNet.delete(ev[1] as number);
-        this.tracks.delete(ev[1] as number);
+        this.byNet.delete(ev[1]);
+        this.tracks.delete(ev[1]);
         return;
       }
       case 'ed': {
-        const e = this.byNet.get(ev[1] as number);
+        const e = this.byNet.get(ev[1]);
         if (!e) return;
         e.flinch = Math.min(1, e.flinch + 0.35);
         if (ev[2]) e.shieldFlash = 1;
@@ -851,7 +852,7 @@ export class ClientGame extends Game {
         return;
       }
       case 'T+': {
-        const [, id, cfg, pos, yaw, , ownerName] = ev as [string, number, TowerConfig, V3, number, string, string];
+        const [, id, cfg, pos, yaw, , ownerName] = ev;
         if (this.towerById.has(id)) return;
         const t = this.turrets.add(vec(pos), yaw, this.turretCtx, cfg);
         this.towerById.set(id, t);
@@ -859,20 +860,20 @@ export class ClientGame extends Game {
         return;
       }
       case 'T-': {
-        const t = this.towerById.get(ev[1] as number);
+        const t = this.towerById.get(ev[1]);
         if (!t) return;
         this.turrets.remove(t);
-        this.towerById.delete(ev[1] as number);
+        this.towerById.delete(ev[1]);
         if (this.inspected === t) this.inspected = null;
         return;
       }
       case 'Tc': {
-        const t = this.towerById.get(ev[1] as number);
-        if (t) t.refit(ev[2] as TowerConfig, ev[3] as number, this.turretCtx);
+        const t = this.towerById.get(ev[1]);
+        if (t) t.refit(ev[2], ev[3], this.turretCtx);
         return;
       }
       case 'L+': {
-        const [, id, item, at, ground, wave] = ev as [string, number, ItemInstance, V3, V3, number];
+        const [, id, item, at, ground, wave] = ev;
         if (this.pickupMap.has(id)) return;
         const p = this.loot.spawn(item, vec(at), vec(ground), wave);
         this.pickupMap.set(id, p);
@@ -880,17 +881,17 @@ export class ClientGame extends Game {
         return;
       }
       case 'L-': {
-        const p = this.pickupMap.get(ev[1] as number);
+        const p = this.pickupMap.get(ev[1]);
         if (!p) return;
         if (!ev[2]) this.fx.burst('build', p.focus, 18);
         this.loot.remove(p);
         if (this.lootTarget === p) this.lootTarget = null;
-        this.pickupMap.delete(ev[1] as number);
+        this.pickupMap.delete(ev[1]);
         this.inventoryVersion++;
         return;
       }
       case 'ev': {
-        const id = ev[1] as EvolutionId;
+        const id = ev[1];
         const instant = !!ev[2];
         if (id === 'routes') {
           this.dynamics.openSouth(instant);
@@ -898,15 +899,13 @@ export class ClientGame extends Game {
         } else this.dynamics.activateInstability(instant);
         return;
       }
-      case 'up': {
-        this.director.takeUpgrade(ev[1] as string);
+      case 'up':
+        this.director.takeUpgrade(ev[1]);
         return;
-      }
       case 'offer': {
-        const ids = ev[1] as string[];
-        this.offer = ids.map((id) => upgradeDef(id)).filter((u): u is UpgradeDef => !!u);
-        this.offerChooser = ev[2] as string | null;
-        this.offerChooserName = ev[3] as string;
+        this.offer = ev[1].map((id) => upgradeDef(id)).filter((u): u is UpgradeDef => !!u);
+        this.offerChooser = ev[2];
+        this.offerChooserName = ev[3];
         if (this.screen === 'playing' || this.screen === 'paused') {
           this.setBuildMode(false);
           this.setScreen('upgrade');
@@ -926,23 +925,23 @@ export class ClientGame extends Game {
         }
         return;
       case 'bank': {
-        const [, wave, ok, salvage, credits, components, items] = ev as number[];
+        const [, wave, ok, salvage, credits, components, items] = ev;
         sfx.play('bank');
         uiEvents.emit('banner', ok ? { title: 'CHECKPOINT SECURED', sub: `Wave ${wave} · ${salvage} salvage · ${credits} cr · ${components} comp${items ? ` · ${items} item${items === 1 ? '' : 's'}` : ''} banked to your HQ`, tone: 'cyan' } : { title: 'CHECKPOINT · NOT BANKED', sub: 'The server could not commit this checkpoint', tone: 'red' });
         this.inventoryVersion++;
         return;
       }
       case 'h': {
-        const from = ev[3] ? vec(ev[3] as V3) : null;
-        this.player.feelHit(ev[1] as number, !!ev[2], from);
+        const from = ev[3] ? vec(ev[3]) : null;
+        this.player.feelHit(ev[1], !!ev[2], from);
         return;
       }
       case 'k':
-        this.player.knockback(vec(ev[1] as V3), ev[2] as number);
+        this.player.knockback(vec(ev[1]), ev[2]);
         return;
       case 'mv': {
         this.netStats.corrections++;
-        const p = vec(ev[1] as V3);
+        const p = vec(ev[1]);
         this.player.controller.setPosition(p);
         this.player.controller.setVelocity(Vector3.Zero());
         return;
@@ -956,18 +955,23 @@ export class ClientGame extends Game {
         hudStore.set({ stats: this.runStats });
         return;
       case 'left':
-        this.removeRemote(ev[1] as string);
+        this.removeRemote(ev[1]);
         uiEvents.emit('alert', { text: `${String(ev[2]).toUpperCase()} LEFT THE OPERATION`, tone: 'orange' });
         return;
       case 'shot':
         return this.remoteShot(ev);
+      default: {
+        // Exhaustiveness: a new ReplicatedEvent tag without a handler fails to compile here.
+        const unhandled: never = ev;
+        void unhandled;
+      }
     }
   }
 
   myName = '';
 
-  private spawnReplica(ev: unknown[]): void {
-    const [, id, kind, mods, tag, encounter, maxHp, maxShield, x, z, yaw, seg, gate] = ev as [string, number, EnemyKind, EliteModId[], string | null, number, number, number, number, number, number, number, GateId];
+  private spawnReplica(ev: Extract<ReplicatedEvent, readonly ['es', ...unknown[]]>): void {
+    const [, id, kind, mods, tag, encounter, maxHp, maxShield, x, z, yaw, seg, gate] = ev as readonly [string, number, EnemyKind, EliteModId[], string | null, number, number, number, number, number, number, number, GateId];
     if (this.byNet.has(id)) return;
     const e = this.enemies.spawn(kind, gate in ARENA.routes ? gate : 'north', ARENA, 1, 1, 1, { mods, tag: (tag ?? undefined) as Enemy['tag'], encounter, ctx: this.puppet });
     e.netId = id;
@@ -982,11 +986,11 @@ export class ClientGame extends Game {
     this.arenaVisuals.gateSpawned(gate);
   }
 
-  private remoteShot(ev: unknown[]): void {
-    const r = this.remotes.get(ev[1] as string);
+  private remoteShot(ev: Extract<ReplicatedEvent, readonly ['shot', ...unknown[]]>): void {
+    const r = this.remotes.get(ev[1]);
     if (!r) return;
     const family = ev[2] as WeaponFamily;
-    const to = vec(ev[3] as V3);
+    const to = vec(ev[3]);
     r.rig.muzzle.computeWorldMatrix(true);
     const from = r.rig.muzzle.getAbsolutePosition().clone();
     const a = this.panFor(from);

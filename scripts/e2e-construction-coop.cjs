@@ -336,6 +336,8 @@ const cell = (i, j) => [2 + 5 * i + 2.5, -2.5 + 5 * j + 2.5];
     }
     const banks = await Promise.all([A, B].map((pg) => ev(pg, () => window.__rift.game.cfg.run.secured.salvage)));
     check('X5 the wave-5 checkpoint banks for each client', banks.every((v) => v > 0), JSON.stringify(banks));
+    const rejectedEvents = await Promise.all([A, B].map((pg) => ev(pg, () => ({ events: window.__rift.game.netStats.events, bad: window.__rift.game.netStats.badEvents }))));
+    check('X5b the clients accepted every replicated event (none rejected by the parser)', rejectedEvents.every((r) => r.events > 200 && r.bad === 0), JSON.stringify(rejectedEvents));
     for (const pg of [A, B]) await ev(pg, () => window.__rift.game.openCheckpoint());
     await A.click('[data-testid="cp-home"]');
     await B.click('[data-testid="cp-home"]');
