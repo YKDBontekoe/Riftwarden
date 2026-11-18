@@ -55,9 +55,11 @@ See the [security policy](.github/SECURITY.md) for private vulnerability reporti
 
 ## Production deployment
 
-Merges to `main` run the tests and build, publish a container to GitHub Container Registry, and verify the deployed commit at [riftwarden.ykdbonte.dev](https://riftwarden.ykdbonte.dev). The `production` GitHub environment only accepts `main`. You can also run the CI workflow manually on `main` to redeploy it.
+Merges to `main` run the tests and build, smoke-test the game and co-op WebSocket inside the production container, and publish the image to GitHub Container Registry. CI checks the deployed commit and repeats the WebSocket handshake and ping through Cloudflare. The `production` GitHub environment only accepts `main`. You can also run the CI workflow manually on `main` to redeploy it.
 
-The Ubuntu server checks for a new image every minute and serves the game on loopback. Its dedicated Cloudflare Tunnel publishes the site over HTTPS. The Compose file and user systemd units are in [`deploy/`](deploy/). On the server, `systemctl --user start riftwarden-deploy.service` checks for an update immediately. For deployment logs, use `journalctl --user -u riftwarden-deploy.service`.
+Play at [riftwarden.ykdbonte.dev](https://riftwarden.ykdbonte.dev) and select **CO-OP**. The Cloudflare Tunnel publishes both the game and `wss://riftwarden.ykdbonte.dev/ws` from the container's loopback port. Online profiles and banked rewards live in the `riftwarden_profiles` Docker volume and survive container updates. Lobbies and in-progress sessions end when the server restarts.
+
+The Ubuntu server checks for a new image every minute and restores the previous image if the update fails its local health or revision check. Install [`deploy/compose.yml`](deploy/compose.yml) and [`deploy/deploy.sh`](deploy/deploy.sh) in `~/stacks/riftwarden` on the server when those files change. The user systemd units are in [`deploy/systemd/`](deploy/systemd/). Run `systemctl --user start riftwarden-deploy.service` to check for an update immediately and `journalctl --user -u riftwarden-deploy.service` to inspect deployment logs.
 
 ## Controls
 

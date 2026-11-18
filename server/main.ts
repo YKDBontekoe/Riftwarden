@@ -1,7 +1,9 @@
 import './headless';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { existsSync, readFileSync, statSync } from 'node:fs';
-import { extname, join, normalize, resolve } from 'node:path';
+import { accessSync, constants, createReadStream } from 'node:fs';
+import { stat } from 'node:fs/promises';
+import { extname, join, resolve, sep } from 'node:path';
+import { pipeline } from 'node:stream/promises';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { DEFAULT_PORT, MAX_MESSAGE_BYTES, normalizeCode, parseClientMsg, PROTOCOL_VERSION, RateLimiter, type ClientMsg, type ServerMsg } from '../src/net/protocol';
 import { playerIdFor, ProfileStore } from './profiles';
@@ -22,45 +24,84 @@ const DATA = resolve(process.env.RIFT_DATA ?? 'server-data');
 const DIST = resolve(process.env.RIFT_DIST ?? 'dist');
 const log = (m: string) => console.log(`[${new Date().toISOString().slice(11, 19)}] ${m}`);
 
-const store = new ProfileStore(join(DATA, 'profiles'));
+const profiles = join(DATA, 'profiles');
+const store = new ProfileStore(profiles);
+accessSync(profiles, constants.W_OK);
+const havok = await loadHavok();
 const rooms = new Map<string, Room>();
 const online = new Map<string, Peer>();
-let havok: unknown = null;
 
-const MIME: Record<string, string> = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.wasm': 'application/wasm', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml', '.woff2': 'font/woff2' };
+const MIME: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.wasm': 'application/wasm', '.json': 'application/json', '.txt': 'text/plain; charset=utf-8', '.png': 'image/png', '.svg': 'image/svg+xml', '.woff2': 'font/woff2' };
 
-function serveStatic(req: IncomingMessage, res: ServerResponse): void {
-  const url = new URL(req.url ?? '/', 'http://x');
-  if (url.pathname === '/health') {
+async function serveHttp(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Cache-Control', 'no-store');
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    res.writeHead(405, { Allow: 'GET, HEAD' }).end();
+    return;
+  }
+  let pathname: string;
+  try {
+    pathname = decodeURIComponent(new URL(req.url ?? '/', 'http://localhost').pathname);
+    if (pathname.includes('\0')) throw new URIError('Invalid pathname');
+  } catch {
+    res.writeHead(400).end();
+    return;
+  }
+  if (pathname === '/health') {
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify({ ok: true, v: PROTOCOL_VERSION, rooms: rooms.size, players: online.size }));
     return;
   }
-  let p = normalize(join(DIST, decodeURIComponent(url.pathname)));
-  if (!p.startsWith(DIST)) {
+
+  const file = resolve(DIST, `.${pathname === '/' ? '/index.html' : pathname}`);
+  const root = DIST.endsWith(sep) ? DIST : DIST + sep;
+  if (!file.startsWith(root)) {
     res.writeHead(403).end();
     return;
   }
-  if (!existsSync(p) || statSync(p).isDirectory()) p = join(DIST, 'index.html');
-  if (!existsSync(p)) {
-    res.writeHead(404, { 'content-type': 'text/plain' }).end('Riftwarden co-op server. Build the client (npm run build) to serve it here, or use the dev server.');
+
+  const info = await stat(file).catch((error: NodeJS.ErrnoException) => {
+    if (error.code !== 'ENOENT' && error.code !== 'ENOTDIR') throw error;
+  });
+  if (!info?.isFile()) {
+    res.writeHead(404).end();
     return;
   }
-  res.writeHead(200, { 'content-type': MIME[extname(p)] ?? 'application/octet-stream' });
-  res.end(readFileSync(p));
+  const cache = file.startsWith(join(DIST, 'assets') + sep) ? 'public, max-age=31536000, immutable' : 'no-cache';
+  res.writeHead(200, {
+    'Content-Type': MIME[extname(file)] ?? 'application/octet-stream',
+    'Content-Length': info.size,
+    'Cache-Control': file === join(DIST, 'build.txt') ? 'no-store' : cache,
+  });
+  if (req.method === 'HEAD') res.end();
+  else await pipeline(createReadStream(file), res);
 }
 
-const http = createServer(serveStatic);
+const http = createServer((req, res) => {
+  void serveHttp(req, res).catch((error: NodeJS.ErrnoException) => {
+    if (error.code !== 'ERR_STREAM_PREMATURE_CLOSE') log(`HTTP error: ${error.message}`);
+    if (!res.headersSent) res.writeHead(500).end();
+  });
+});
 const wss = new WebSocketServer({ server: http, path: '/ws', maxPayload: MAX_MESSAGE_BYTES });
+const awaitingPong = new Set<WebSocket>();
+const heartbeat = setInterval(() => {
+  for (const ws of wss.clients) {
+    if (ws.readyState !== ws.OPEN) continue;
+    if (awaitingPong.has(ws)) ws.terminate();
+    else {
+      awaitingPong.add(ws);
+      ws.ping();
+    }
+  }
+}, 30_000);
 
 function deps() {
   return {
     store,
     log,
-    createSim: async (room: Room) => {
-      havok ??= await loadHavok();
-      return new CoopSim(room, store, havok, log);
-    },
+    createSim: async (room: Room) => new CoopSim(room, store, havok, log),
   };
 }
 
@@ -73,7 +114,9 @@ wss.on('connection', (ws: WebSocket) => {
   };
   const fail = (code: string, msg: string) => send({ t: 'error', code, msg });
 
-  ws.on('message', async (buf, isBinary) => {
+  ws.on('pong', () => awaitingPong.delete(ws));
+  ws.on('error', (error) => log(`WebSocket error: ${error.message}`));
+  ws.on('message', (buf, isBinary) => {
     if (isBinary) return ws.close(1003, 'binary not supported');
     if (!limiter.take()) {
       if (++strikes > 50) ws.close(1008, 'rate limit');
@@ -90,12 +133,10 @@ wss.on('connection', (ws: WebSocket) => {
       if (++strikes > 50) ws.close(1008, 'malformed traffic');
       return fail('malformed', 'Invalid message');
     }
-    try {
-      await handle(msg);
-    } catch (e) {
-      log(`handler error (${msg.t}): ${(e as Error).stack}`);
+    void handle(msg).catch((e: Error) => {
+      log(`handler error (${msg.t}): ${e.stack}`);
       fail('server', 'Server error');
-    }
+    });
   });
 
   async function handle(msg: ClientMsg): Promise<void> {
@@ -200,6 +241,7 @@ wss.on('connection', (ws: WebSocket) => {
   }
 
   ws.on('close', () => {
+    awaitingPong.delete(ws);
     if (!peer) return;
     if (online.get(peer.id) === peer) online.delete(peer.id);
     if (peer.room) peer.room.disconnected(peer.id);
@@ -227,8 +269,10 @@ setInterval(() => {
 
 function shutdown(sig: string): void {
   log(`${sig}: closing ${rooms.size} sessions`);
+  clearInterval(heartbeat);
   for (const r of rooms.values()) r.sim?.shutdown('server');
   for (const p of online.values()) p.send({ t: 'error', code: 'shutdown', msg: 'The server is shutting down' });
+  for (const ws of wss.clients) ws.close(1012, 'Server restarting');
   wss.close();
   http.close();
   setTimeout(() => process.exit(0), 200);

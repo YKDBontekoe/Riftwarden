@@ -3,4 +3,10 @@
 !dist/**
 !deploy/
 !deploy/Dockerfile
-!deploy/nginx.conf
+!package.json
+!package-lock.json
+!tsconfig.json
+!server/
+!server/**
+!src/
+!src/**
