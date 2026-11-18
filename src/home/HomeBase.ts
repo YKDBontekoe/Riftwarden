@@ -30,6 +30,8 @@ import { captureEnvironment } from '../visuals/envCapture';
 import { Kit } from '../visuals/kit';
 import { createPalette, unlit } from '../visuals/materials';
 import { StationFocus } from './StationFocus';
+import { AmbientDrones } from './AmbientDrones';
+import { buildNav } from './ambientNav';
 import { PostFx } from '../visuals/postfx';
 import { canvas, rng, toTexture } from '../visuals/textures';
 import { ENV_QUERY } from '../world/physicsGroups';
@@ -41,7 +43,7 @@ import type { Palette } from '../visuals/materials';
 import { type TutorialHost, TutorialDirector } from '../core/TutorialDirector';
 import { LIMITS } from './build/catalog';
 import { pickInteractable } from './interaction';
-import { areaAt, HQ_SPAWN, HQ_STATIONS, type Station } from './layout';
+import { areaAt, HQ_PORTALS, HQ_ROOMS, HQ_SPAWN, HQ_STATIONS, type Station } from './layout';
 import {
   type Animator,
   commandTable,
@@ -122,6 +124,7 @@ export class HomeBase {
   /** Transaction feedback per station (1 -> 0 over PULSE_TIME). */
   private pulses = new Map<string, number>();
   private focus!: StationFocus;
+  private ambient!: AmbientDrones;
   private reduceMotion = false;
   private unsubEcon: () => void = () => {};
   private displays: {
@@ -291,6 +294,7 @@ export class HomeBase {
     captureEnvironment(scene, scene.meshes.filter((m) => m.isEnabled() && m.isVisible && m.getTotalVertices() > 0), lit, new Vector3(0, 2.6, 0), high ? 256 : 128);
     this.post = new PostFx(scene, engine, this.player.camera, high);
     this.focus = new StationFocus(scene, this.player.camera);
+    this.ambient = new AmbientDrones({ scene, kit: this.kit, pal: this.pal, playerPosition: () => this.player.position }, buildNav(HQ_ROOMS, HQ_PORTALS, HQ_STATIONS));
     // Interior grade: calmer than the arena (less bloom spread, grain and aberration).
     this.post.pipeline.bloomWeight = 0.22;
     this.post.pipeline.bloomKernel = high ? 64 : 48;
@@ -652,6 +656,7 @@ export class HomeBase {
     }
     if (this.screen !== 'terminal') this.focus.closeStation();
     this.focus.update(dt, this.reduceMotion);
+    this.ambient.update(dt);
     this.layer.update(dt);
     this.animateOthers(dt);
     if (!this.emitters.length && sfx.ready) this.startAmbience();
@@ -759,6 +764,7 @@ export class HomeBase {
       const e = sfx.emitter(k, x, y, z, g, r);
       if (e) this.emitters.push(e);
     }
+    this.ambient.startSound();
   }
 
   /** M7: enter construction mode (from the architect console). Owner only. */
@@ -853,6 +859,7 @@ export class HomeBase {
   dispose(): void {
     if (this.disposed) return;
     this.build?.dispose();
+    this.ambient?.dispose();
     this.layer?.dispose();
     this.tut?.dispose();
     for (const e of this.emitters) e.dispose();

@@ -102,6 +102,33 @@ async function deploy(p, tier = 1) {
       check('D1 opening a terminal pushes the camera in', r.opened.dolly > 0.9 && moved > 0.05, `dolly=${r.opened.dolly.toFixed(2)} moved=${moved.toFixed(2)}`);
       check('D2 closing returns to the exact view', r.closed.dolly === 0 && Math.abs(r.closed.ry - r.closed.yaw) < 0.03, JSON.stringify(r.closed));
     }
+    if (want('E')) {
+      await ev(p, async () => { const R = window.__rift; await R.flow.enterHq(); });
+      await p.waitForFunction(() => window.__rift.state().location === 'home' && !window.__rift.state().busy, null, { timeout: 120000 });
+      await ev(p, () => { const R = window.__rift; if (R.state().screen !== 'home') R.home.takeControl(false); R.advance(0.2); });
+      const r = await ev(p, () => {
+        const R = window.__rift;
+        const a = R.home.ambient;
+        const start = a.positions().map((v) => ({ x: v.x, z: v.z }));
+        let maxDist = 0, outside = 0, badY = 0, nan = 0;
+        for (let i = 0; i < 90 * 60; i++) {
+          R.advance(1 / 60);
+          if (i % 30) continue;
+          a.positions().forEach((v, j) => {
+            maxDist = Math.max(maxDist, Math.hypot(v.x - start[j].x, v.z - start[j].z));
+            if (v.x < -34 || v.x > 38 || v.z < -12 || v.z > 22) outside++;
+            if (v.y < 2.2 || v.y > 2.8) badY++;
+            if (!Number.isFinite(v.x + v.y + v.z)) nan++;
+          });
+        }
+        return { n: a.count, maxDist, outside, badY, nan, em: R.home.emitters.length };
+      });
+      check('E1 three ambient drones exist', r.n === 3);
+      check('E2 drones patrol (travelled > 6 m)', r.maxDist > 6, `max=${r.maxDist.toFixed(1)}`);
+      check('E3 drones stay inside the floor plan at hover height', r.outside === 0 && r.badY === 0 && r.nan === 0, JSON.stringify(r));
+      await ev(p, () => window.__rift.render(2));
+      await p.screenshot({ path: `${H.OUT}/polish-hq.png`, timeout: 120000 });
+    }
   } catch (e) {
     check('suite ran without exception', false, String(e && e.stack || e).slice(0, 400));
   }
