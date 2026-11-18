@@ -23,6 +23,7 @@ import type { ActMsg, ShotClaim, V3 } from './protocol';
 import { INPUT_HZ } from './protocol';
 import { spawnFor } from './ServerGame';
 import { dec, vec } from './wire';
+import { isFxCall, isOrdnanceCall, isWfxCall, replay } from './replicated';
 import type { ShotOutcome, ShotRequest } from '../combat/Weapon';
 import type { Player } from '../player/Player';
 import type { Kit } from '../visuals/kit';
@@ -776,12 +777,14 @@ export class ClientGame extends Game {
         const m = ev[1] as string;
         const args = dec(ev[2]) as unknown[];
         if (m === 'spawnProjectile') this.fx.spawnProjectile(args[0] as Vector3, args[1] as Vector3, 0);
-        else (this.fx as unknown as Record<string, (...a: unknown[]) => void>)[m]?.(...args);
+        else if (isFxCall(m)) replay(this.fx, m, args);
         return;
       }
-      case 'w':
-        (this.wfx as unknown as Record<string, (...a: unknown[]) => void>)[ev[1] as string]?.(...(dec(ev[2]) as unknown[]));
+      case 'w': {
+        const m = ev[1] as string;
+        if (isWfxCall(m)) replay(this.wfx, m, dec(ev[2]) as unknown[]);
         return;
+      }
       case 's': {
         const o = (ev[2] ?? {}) as { volume?: number; pitch?: number };
         const pos = ev[3] as V3 | null;
@@ -816,8 +819,7 @@ export class ClientGame extends Game {
       case 'o': {
         const op = ev[1] as string;
         const args = dec(ev[3]) as unknown[];
-        const fn = (this.ordnance as unknown as Record<string, (...a: unknown[]) => boolean>)[op];
-        if (fn && fn.apply(this.ordnance, args)) {
+        if (isOrdnanceCall(op) && replay(this.ordnance, op, args)) {
           this.ordMap.set(ev[2] as number, this.ordnance.lastId);
           if (op === 'lob') sfx.play('enemyShot', { pitch: 0.6, ...this.panFor(args[0] as Vector3) });
         }
