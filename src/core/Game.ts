@@ -19,13 +19,14 @@ import { mulberry32, rollDamage } from '../combat/damage';
 import { Director } from '../combat/Director';
 import { isChilled, speedFactor } from '../combat/status';
 import { hashRunSeed, type OfferContext, UP, type UpgradeDef, upgradeDef } from '../roguelite/upgrades';
-import { availableParts, canInstall, configCost, DEFAULT_CONFIG, levelCost, MAX_TOWER_LEVEL, partDef, STARTER_TECH, swapCost, type TowerConfig, type TowerSlot } from '../towers/components';
+import { availableParts, configCost, DEFAULT_CONFIG, levelCost, MAX_TOWER_LEVEL, partDef, STARTER_TECH, swapCost, type TowerConfig, type TowerSlot } from '../towers/components';
 import { BASE_STATS, type CombatStats, computeStats, type StatModifier } from '../combat/stats';
 import { type ShotOutcome, type ShotRequest, type SurfaceImpact, Weapon, type WeaponFxHooks } from '../combat/Weapon';
 import type { WeaponFamily } from '../data/defs';
 import { WeaponFx } from '../fx/WeaponFx';
 import { ECONOMY } from '../data/defs';
 import { DevTools } from '../arena/DevTools';
+import { planBuildConfig, planRefit } from '../towers/refit';
 import { rollLoot } from '../loot/roll';
 import { createSunShadows } from '../arena/shadows';
 import { CORE_BEHAVIORS } from '../enemies/coreBehaviors';
@@ -907,59 +908,37 @@ export class Game {
    * resources first, then spends, recomposes numbers from scratch, rebuilds the model and resets attack state.
    */
   modifyTower(t: Turret, what: 'level' | TowerSlot, id?: string): { ok: true; cost: number } | { ok: false; reason: string } {
-    const phase = this.towerEditReason();
-    if (phase) return this.towerFail(phase);
-    if (!this.turrets.turrets.includes(t)) return this.towerFail('Tower no longer exists');
-    if (t.building) return this.towerFail('Tower is still deploying');
-    const mult = this.stats.buildCostMult;
-    let cost: number;
-    let cfg = t.config;
-    let level = t.level;
-    if (what === 'level') {
-      if (t.level >= MAX_TOWER_LEVEL) return this.towerFail('Tower is at maximum level');
-      cost = levelCost(t.config, t.level, mult);
-      level = t.level + 1;
-    } else {
-      if (what === 'base') return this.towerFail('The base is fixed once built');
-      if (!id || !partDef(what, id)) return this.towerFail('Unknown component');
-      if (t.config[what] === id) return this.towerFail('Already installed');
-      if (!this.towerTech.has(`${what}:${id}`) && partDef(what, id)?.tech) return this.towerFail('Blueprint not researched (HQ tower technology)');
-      const bad = canInstall(t.config, what, id);
-      if (bad) return this.towerFail(bad);
-      cost = swapCost(t.config, what, id, mult);
-      cfg = { ...t.config, [what]: id };
-    }
-    if (!this.wallet.spend(cost)) return this.towerFail(`Not enough cores (need ${cost})`);
-    t.paid += cost;
-    t.refit(cfg, level, this.turretCtx);
+    const plan = planRefit({
+      phaseBlock: this.towerEditReason(),
+      exists: this.turrets.turrets.includes(t),
+      building: t.building,
+      config: t.config,
+      level: t.level,
+      what,
+      id,
+      tech: this.towerTech,
+      cores: this.wallet.cores,
+      costMult: this.stats.buildCostMult,
+    });
+    if (!plan.ok) return this.towerFail(plan.reason);
+    if (!this.wallet.spend(plan.cost)) return this.towerFail(`Not enough cores (need ${plan.cost})`);
+    t.paid += plan.cost;
+    t.refit(plan.config, plan.level, this.turretCtx);
     this.bumpStats();
     this.fx.burst('build', t.head, 24);
     this.fx.ring(new Vector3(t.pos.x, t.pos.y + 0.1, t.pos.z), 3, 0.4, new Color3(0.4, 1.8, 2.2), true);
     sfx.play('equip', { pitch: 1.1 });
-    this.towerNote = { text: `${t.name} refit${what === 'level' ? ` · level ${level}` : ''}${cost ? ` · -${cost} cores` : ''}`, t: 3 };
+    this.towerNote = { text: `${t.name} refit${what === 'level' ? ` · level ${plan.level}` : ''}${plan.cost ? ` · -${plan.cost} cores` : ''}`, t: 3 };
     this.inventoryVersion++;
-    return { ok: true, cost };
+    return { ok: true, cost: plan.cost };
   }
 
   /** Choose the configuration for towers built from now on (no cost). Incompatible dependants reset to defaults. */
   setBuildConfig(slot: TowerSlot, id: string): { ok: true } | { ok: false; reason: string } {
-    const def = partDef(slot, id);
-    if (!def) return { ok: false, reason: 'Unknown component' };
-    if (def.tech && !this.towerTech.has(`${slot}:${id}`)) return { ok: false, reason: 'Blueprint not researched' };
-    let cfg: TowerConfig = { ...this.buildConfig, [slot]: id };
-    // Auto-repair dependants (weapon -> core/modifier, base -> weapon) so the template is always valid.
-    for (let i = 0; i < 3; i++) {
-      const bad = canInstall(cfg, slot, id);
-      if (!bad) break;
-      if (!bad.includes('cannot mount') && slot === 'weapon') {
-        if (bad.includes(partDef('core', cfg.core)?.name ?? '#')) cfg = { ...cfg, core: 'standard_core' };
-        if (bad.includes(partDef('modifier', cfg.modifier)?.name ?? '#')) cfg = { ...cfg, modifier: 'none' };
-      } else if (slot === 'base') cfg = { ...cfg, weapon: 'autocannon', core: 'standard_core', modifier: 'none' };
-      else return { ok: false, reason: bad };
-    }
-    if (canInstall(cfg, slot, id)) return { ok: false, reason: canInstall(cfg, slot, id)! };
-    this.buildConfig = cfg;
-    this.construction.setTemplate(cfg);
+    const plan = planBuildConfig(this.buildConfig, slot, id, this.towerTech);
+    if (!plan.ok) return plan;
+    this.buildConfig = plan.config;
+    this.construction.setTemplate(plan.config);
     this.inventoryVersion++;
     return { ok: true };
   }
