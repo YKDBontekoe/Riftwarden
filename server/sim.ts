@@ -8,9 +8,9 @@ import { type ClientMsg, type RunStart, SIM_HZ, SNAP_HZ } from '../src/net/proto
 import { type Avatar, ServerGame, type ServerPlayerInit } from '../src/net/ServerGame';
 import { newUid, SLOT_IDS } from '../src/progression/items';
 import { RunLedger, type RunOutcome } from '../src/progression/run';
-import { applyLoadout, bankRewards, beginRun, equippedItem, recordRun } from '../src/progression/save';
+import { applyLoadout, bankRewards, equippedItem, recordRun } from '../src/progression/save';
 import { getTier } from '../src/progression/tiers';
-import type { ProfileStore } from './profiles';
+import type { OnlineProfile, ProfileStore } from './profiles';
 import type { Peer, Room } from './room';
 
 export async function loadHavok(): Promise<unknown> {
@@ -29,7 +29,6 @@ export async function loadHavok(): Promise<unknown> {
  */
 export class CoopSim {
   readonly game: ServerGame;
-  readonly runId = newUid('run');
   private engine: NullEngine;
   private timer: NodeJS.Timeout | null = null;
   private acc = 0;
@@ -38,6 +37,8 @@ export class CoopSim {
   private ended = false;
   private endT = 0;
   private pendingEnd: RunOutcome | null = null;
+  private ending: Promise<void> | null = null;
+  private readonly closingPlayers: Promise<void>[] = [];
   /** State replicas need when (re)joining mid-run. */
   private evolutions: [string, number][] = [];
   private upgrades: string[] = [];
@@ -47,11 +48,28 @@ export class CoopSim {
   private whyLast = '{}';
   stats = { ticks: 0, simMs: 0, maxMs: 0, bytes: 0, snaps: 0, events: 0 };
 
-  constructor(
+  static async create(room: Room, store: ProfileStore, havok: unknown, log: (m: string) => void): Promise<CoopSim> {
+    const players = room.connected.map((m) => ({ id: m.id, name: m.name, profile: store.get(m.id)! }));
+    const runId = newUid('run');
+    if (!await store.startRun(players.map((p) => p.profile), runId, room.tier)) throw new Error('Could not save operation start');
+    try {
+      return new CoopSim(room, store, havok, log, runId, players);
+    } catch (error) {
+      await Promise.all(players.map(async ({ profile }) => {
+        await store.mutate(profile, (data) => { data.activeRun = null; });
+        profile.inRun = null;
+      }));
+      throw error;
+    }
+  }
+
+  private constructor(
     private room: Room,
     private store: ProfileStore,
     havok: unknown,
     private log: (m: string) => void,
+    readonly runId: string,
+    members: { id: string; name: string; profile: OnlineProfile }[],
   ) {
     this.engine = new NullEngine();
     const tier = getTier(room.tier);
@@ -60,15 +78,12 @@ export class CoopSim {
     const tech = new Set<string>();
     let milestones = null as Set<string> | null;
     let slot = 0;
-    for (const m of room.connected) {
-      const p = store.get(m.id)!;
-      store.mutate(p, (d) => beginRun(d, this.runId, tier.id));
-      p.inRun = this.runId;
+    for (const { id, name, profile: p } of members) {
       for (const t of p.data.towers.unlocked) tech.add(t);
       const ms = new Set<string>(p.data.milestones);
       milestones = milestones ? new Set<string>([...milestones].filter((x: string) => ms.has(x))) : ms;
       const loadout = Object.fromEntries(SLOT_IDS.map((s) => [s, structuredClone(equippedItem(p.data, s))]));
-      players.push({ id: m.id, name: m.name, slot: slot++, loadout, ledger: new RunLedger(this.runId, tier.id, Date.now()) });
+      players.push({ id, name, slot: slot++, loadout, ledger: new RunLedger(this.runId, tier.id, Date.now()) });
     }
     this.game = new ServerGame(
       this.engine,
@@ -76,10 +91,10 @@ export class CoopSim {
       players,
       { tier, runId: this.runId, seed: this.seed, towerTech: [...tech], milestones: [...(milestones ?? [])] },
       {
-        bank: (id, wave, rewards, bosses) => {
+        bank: async (id, wave, rewards, bosses) => {
           const p = this.store.get(id);
           if (!p) return false;
-          const ok = this.store.mutate(p, (d) => bankRewards(d, this.runId, wave, rewards, { bosses }));
+          const ok = await this.store.mutate(p, (d) => bankRewards(d, this.runId, wave, rewards, { bosses }));
           this.log(`run ${this.runId.slice(-6)}: banked wave ${wave} for ${id.slice(0, 6)} (${rewards.items.length} items, ok=${ok})`);
           return ok;
         },
@@ -102,7 +117,10 @@ export class CoopSim {
       if (ok) this.upgrades.push(id);
       return ok;
     };
-    for (const a of g.avatars) this.sendStart(a, false);
+    for (const a of g.avatars) {
+      if (this.peer(a.id)) this.sendStart(a, false);
+      else this.playerDisconnected(a.id);
+    }
     this.timer = setInterval(() => this.loop(), 1000 / SIM_HZ);
     this.log(`room ${room.code}: operation ${this.runId.slice(-6)} started (tier ${tier.id}, ${players.length} players)`);
   }
@@ -198,7 +216,7 @@ export class CoopSim {
     }
     if (this.pendingEnd) {
       this.endT -= elapsed;
-      if (this.endT <= 0) this.endRun(this.pendingEnd);
+      if (this.endT <= 0) void this.endRun(this.pendingEnd);
     }
     elapsed = 0;
   }
@@ -258,9 +276,9 @@ export class CoopSim {
   /** A player left for good (or their reconnect window expired): their run ends with only secured rewards. */
   playerLeft(id: string, why: 'left' | 'timeout'): void {
     const a = this.game.avatar(id);
-    if (!a || a.left) return;
+    if (!a || a.left || this.ended) return;
     this.game.syncStats();
-    this.closeFor(a, 'abandoned');
+    this.closingPlayers.push(this.closeFor(a, 'abandoned'));
     void why;
     a.left = true;
     a.connected = false;
@@ -268,24 +286,26 @@ export class CoopSim {
     a.player.controller.setPosition(a.player.position.add(a.player.position.scale(0)).set(0, -60, 0));
     this.game.rebuildStats();
     this.game.within(() => this.game.rec.push(['left', a.id, a.name]));
-    if (!this.game.avatars.some((x) => !x.left)) this.endRun('abandoned');
+    if (!this.game.avatars.some((x) => !x.left)) void this.endRun('abandoned');
   }
 
   /** Record one player's run on their profile (idempotent per run id) and adopt owned gear. */
-  private closeFor(a: Avatar, outcome: RunOutcome): void {
+  private async closeFor(a: Avatar, outcome: RunOutcome): Promise<void> {
     const p = this.store.get(a.id);
+    const peer = this.peer(a.id);
+    await this.game.settleBanking();
     const result = a.run.finalize(outcome);
     if (p) {
       const owned = a.inventory.ownedLoadout();
-      this.store.mutate(p, (d) => {
+      const saved = await this.store.mutate(p, (d) => {
         const recorded = recordRun(d, result);
-        applyLoadout(d, owned, { ignoreActiveRun: true });
+        if (recorded) applyLoadout(d, owned, { ignoreActiveRun: true });
         return recorded;
       });
       p.inRun = null;
+      if (!saved) (this.peer(a.id) ?? peer)?.send({ t: 'error', code: 'save', msg: 'The operation summary could not be saved' });
     }
-    const peer = this.peer(a.id);
-    peer?.send({ t: 'runEnd', result, save: p?.data ?? null });
+    (this.peer(a.id) ?? peer)?.send({ t: 'runEnd', result, save: p?.data ?? null });
     this.log(`run ${this.runId.slice(-6)}: ${a.name} ${outcome} (wave ${result.finalWave}, ${result.itemsSecured} items secured, ${result.itemsLost} lost)`);
   }
 
@@ -295,14 +315,20 @@ export class CoopSim {
     this.endT = delay;
   }
 
-  endRun(outcome: RunOutcome): void {
-    if (this.ended) return;
+  private endRun(outcome: RunOutcome): Promise<void> {
+    this.ending ??= this.finishRun(outcome);
+    return this.ending;
+  }
+
+  private async finishRun(outcome: RunOutcome): Promise<void> {
     this.ended = true;
-    this.flushEvents();
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
+    await this.game.settleBanking();
+    this.flushEvents();
     this.game.syncStats();
-    for (const a of this.game.avatars) if (!a.left) this.closeFor(a, a.connected ? outcome : outcome === 'returned' ? 'returned' : outcome);
+    for (const a of this.game.avatars) if (!a.left) this.closingPlayers.push(this.closeFor(a, outcome));
+    await Promise.all(this.closingPlayers);
     this.log(`run ${this.runId.slice(-6)}: ended (${outcome}) at wave ${this.wave}; sim avg ${this.stats.simMs.toFixed(2)} ms/frame, ${(this.stats.bytes / 1024).toFixed(0)} KiB sent`);
     try {
       this.game.dispose();
@@ -313,8 +339,7 @@ export class CoopSim {
     this.room.runEnded();
   }
 
-  shutdown(reason: 'empty' | 'server'): void {
-    if (!this.ended) this.endRun('abandoned');
-    void reason;
+  shutdown(): Promise<void> {
+    return this.endRun('abandoned');
   }
 }

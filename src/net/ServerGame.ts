@@ -135,7 +135,7 @@ class TeamLedger extends RunLedger {
 
 export interface ServerHooks {
   /** Persist a player's banked rewards. Returns true once written. */
-  bank(playerId: string, wave: number, rewards: Rewards, bosses: number): boolean;
+  bank(playerId: string, wave: number, rewards: Rewards, bosses: number): Promise<boolean>;
   /** Reactor destroyed. */
   defeat(): void;
   /** Unanimous extraction vote at a checkpoint. */
@@ -160,6 +160,7 @@ export class ServerGame extends Game {
   offerChooser: string | null = null;
   offerDeadline = 0;
   voteOpen = false;
+  private banking: Promise<void> | null = null;
   voteDeadline = 0;
   clock = 0;
   defeated = false;
@@ -620,11 +621,13 @@ export class ServerGame extends Game {
       }
       case 'startWave':
         if (this.waves.phase !== 'prep') return 'The wave is already under way';
+        if (this.banking) return 'The checkpoint is being saved';
         if (this.offer) return 'Choose the team upgrade first';
         if (this.voteOpen) return 'The checkpoint vote is still open';
         this.startWave();
         return null;
       case 'collect': {
+        if (this.banking) return 'The checkpoint is being saved';
         const p = a.pickups.get(m.pickup);
         if (!p) return 'Not your pickup';
         if (this.clock < p.readyAt) return 'Still landing';
@@ -655,6 +658,7 @@ export class ServerGame extends Game {
       case 'discard': {
         const allowed = this.waves.phase === 'prep';
         if (m.a === 'discard') {
+          if (this.banking) return 'The checkpoint is being saved';
           if (!a.inventory.discard(m.uid, allowed)) return 'Only unsecured items, during preparation';
         } else if (m.a === 'equip') {
           const slot = m.slot && (SLOT_IDS as readonly string[]).includes(m.slot) ? (m.slot as SlotId) : undefined;
@@ -699,7 +703,7 @@ export class ServerGame extends Game {
   }
 
   private openVoteIfCheckpoint(): void {
-    if (!this.checkpointOpen || !this.team.atCheckpoint) return;
+    if (this.banking || this.voteOpen || !this.checkpointOpen || !this.team.atCheckpoint) return;
     this.voteOpen = true;
     this.voteDeadline = this.clock + 45;
     for (const a of this.avatars) a.vote = null;
@@ -764,7 +768,7 @@ export class ServerGame extends Game {
     // Offers / votes hold the preparation countdown (never the combat).
     if (this.offer && this.clock > this.offerDeadline) this.applyTeamUpgrade(this.offer[0].id, 'Auto-select');
     if (this.voteOpen && this.clock > this.voteDeadline) this.closeVote(false);
-    const hold = this.waves.phase === 'prep' && (!!this.offer || this.voteOpen);
+    const hold = this.waves.phase === 'prep' && (!!this.offer || this.voteOpen || !!this.banking);
     if (!hold) this.waves.update(dt, hdt);
     this.hostileT += hdt;
     this.enemies.update(hdt, this.enemyCtx, dt);
@@ -797,14 +801,21 @@ export class ServerGame extends Game {
 
   /** Checkpoint: bank every player's own ledger into their own profile. */
   bankAll(wave: number): void {
-    for (const a of this.avatars) {
-      if (a.left) continue;
-      const moved = a.run.bank(wave);
-      if (!moved) continue;
-      const ok = this.cfg.run.survival.dev ? false : this.sh.bank(a.id, wave, moved, this.team.survival.bossesKilled);
+    const dev = this.cfg.run.survival.dev;
+    this.banking = Promise.all(this.avatars.filter((a) => !a.left).map(async (a) => {
+      const moved = structuredClone(a.run.unsecured);
+      const ok = !dev && await this.sh.bank(a.id, wave, moved, this.team.survival.bossesKilled);
+      if (ok || dev) a.run.bank(wave);
       a.inventoryDirty = true;
       this.rec.push(['bank', wave, ok ? 1 : 0, moved.salvage, moved.credits, moved.components, moved.items.length], a.id);
-    }
+    })).then(() => {
+      this.banking = null;
+      if (!this.offer && !this.upgradeDue) this.within(() => this.openVoteIfCheckpoint());
+    });
+  }
+
+  async settleBanking(): Promise<void> {
+    await this.banking;
   }
 
   private serverDefeat(): void {

@@ -8,7 +8,7 @@ export interface Peer {
   id: string;
   name: string;
   send(msg: ServerMsg): void;
-  profile: OnlineProfile;
+  profile: OnlineProfile | null;
   room: Room | null;
   /** Lobby HQ presence (for host-HQ visits). */
   presence: { p: [number, number, number]; yaw: number } | null;
@@ -147,7 +147,7 @@ export class Room {
   }
 
   get empty(): boolean {
-    return this.connected.length === 0 && (!this.sim || this.members.size === 0);
+    return this.state === 'lobby' && this.connected.length === 0;
   }
 
   setReady(id: string, ready: boolean): void {

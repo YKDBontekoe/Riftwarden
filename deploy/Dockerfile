@@ -3,11 +3,10 @@ FROM node:24.22.3-bookworm-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b
 LABEL org.opencontainers.image.source="https://github.com/YKDBontekoe/Riftwarden"
 
 WORKDIR /srv/riftwarden
-ENV NODE_ENV=production RIFT_PORT=8080 RIFT_DATA=/var/lib/riftwarden TSX_DISABLE_CACHE=1
+ENV NODE_ENV=production RIFT_PORT=8080 TSX_DISABLE_CACHE=1
 
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force \
-    && install -d -m 0750 -o node -g node "$RIFT_DATA"
+RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
 COPY tsconfig.json ./
 COPY server/ server/
 COPY src/ src/

@@ -1,6 +1,6 @@
 import './headless';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { accessSync, constants, createReadStream } from 'node:fs';
+import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { extname, join, resolve, sep } from 'node:path';
 import { pipeline } from 'node:stream/promises';
@@ -13,23 +13,23 @@ import { CoopSim, loadHavok } from './sim';
 /**
  * Riftwarden co-op server.
  *
- *   npm run server                     (ws://localhost:8787/ws, profiles in ./server-data)
- *   RIFT_PORT=9000 RIFT_DATA=/srv/rift npm run server
+ *   npm run server                     (ws://localhost:8787/ws)
+ *   Configure PostgreSQL with DATABASE_URL or the standard PG* variables.
  *
  * Also serves the production build (dist/) on the same port, so `npm run build && npm run server`
  * is a complete deployment: open http://host:8787 and the client connects to /ws on the same origin.
  */
 const PORT = Number(process.env.RIFT_PORT ?? DEFAULT_PORT);
-const DATA = resolve(process.env.RIFT_DATA ?? 'server-data');
 const DIST = resolve(process.env.RIFT_DIST ?? 'dist');
 const log = (m: string) => console.log(`[${new Date().toISOString().slice(11, 19)}] ${m}`);
 
-const profiles = join(DATA, 'profiles');
-const store = new ProfileStore(profiles);
-accessSync(profiles, constants.W_OK);
+const store = new ProfileStore(log);
+await store.migrate();
 const havok = await loadHavok();
 const rooms = new Map<string, Room>();
 const online = new Map<string, Peer>();
+const messages = new Set<Promise<void>>();
+let shuttingDown = false;
 
 const MIME: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.wasm': 'application/wasm', '.json': 'application/json', '.txt': 'text/plain; charset=utf-8', '.png': 'image/png', '.svg': 'image/svg+xml', '.woff2': 'font/woff2' };
 
@@ -101,12 +101,13 @@ function deps() {
   return {
     store,
     log,
-    createSim: async (room: Room) => new CoopSim(room, store, havok, log),
+    createSim: (room: Room) => CoopSim.create(room, store, havok, log),
   };
 }
 
 wss.on('connection', (ws: WebSocket) => {
   let peer: Peer | null = null;
+  let processing = Promise.resolve();
   const limiter = new RateLimiter(90, 180);
   let strikes = 0;
   const send = (msg: ServerMsg) => {
@@ -117,6 +118,7 @@ wss.on('connection', (ws: WebSocket) => {
   ws.on('pong', () => awaitingPong.delete(ws));
   ws.on('error', (error) => log(`WebSocket error: ${error.message}`));
   ws.on('message', (buf, isBinary) => {
+    if (shuttingDown) return;
     if (isBinary) return ws.close(1003, 'binary not supported');
     if (!limiter.take()) {
       if (++strikes > 50) ws.close(1008, 'rate limit');
@@ -133,25 +135,32 @@ wss.on('connection', (ws: WebSocket) => {
       if (++strikes > 50) ws.close(1008, 'malformed traffic');
       return fail('malformed', 'Invalid message');
     }
-    void handle(msg).catch((e: Error) => {
+    if (msg.t === 'ping') return send({ t: 'pong', c: msg.c, s: Date.now() });
+    const job = processing.then(async () => {
+      if (ws.readyState === ws.OPEN) await handle(msg);
+    }).catch((e: Error) => {
       log(`handler error (${msg.t}): ${e.stack}`);
       fail('server', 'Server error');
     });
+    processing = job;
+    messages.add(job);
+    void job.then(() => messages.delete(job));
   });
 
   async function handle(msg: ClientMsg): Promise<void> {
-    if (msg.t === 'ping') return send({ t: 'pong', c: msg.c, s: Date.now() });
     if (msg.t === 'hello') {
+      if (peer) return fail('hello', 'Already connected');
       if (msg.v !== PROTOCOL_VERSION) {
         fail('version', `Protocol mismatch: server v${PROTOCOL_VERSION}, client v${msg.v}. Reload the page.`);
         return void ws.close(1008, 'version');
       }
       const id = playerIdFor(msg.secret);
+      const prof = await store.load(id);
+      if (ws.readyState !== ws.OPEN) return;
       const prev = online.get(id);
       if (prev) prev.send({ t: 'error', code: 'replaced', msg: 'Signed in from another window' });
       const name = msg.name.replace(/[^\p{L}\p{N} _.-]/gu, '').trim().slice(0, 18) || 'Warden';
-      const prof = store.get(id);
-      peer = { id, name, send, profile: prof!, room: prev?.room ?? null, presence: null, visiting: false };
+      peer = { id, name, send, profile: prof, room: prev?.room ?? null, presence: null, visiting: false };
       online.set(id, peer);
       send({ t: 'welcome', v: PROTOCOL_VERSION, playerId: id, name, hasProfile: !!prof, profile: prof?.data ?? null });
       // Reconnect into a session (and a running operation) this identity still belongs to.
@@ -167,18 +176,22 @@ wss.on('connection', (ws: WebSocket) => {
     }
     if (!peer) return fail('hello', 'Say hello first');
     const me = peer;
+    if (online.get(me.id) !== me) return fail('replaced', 'Signed in from another window');
     if (msg.t === 'profileInit') {
       if (me.profile) return fail('profile', 'Online profile already exists');
-      const p = store.create(me.id, msg.mode, msg.save, me.name);
+      const p = await store.create(me.id, me.name);
       if (!p) return fail('profile', 'Could not create the online profile');
       me.profile = p;
-      log(`profile ${me.id.slice(0, 6)} created (${msg.mode})`);
+      log(`profile ${me.id.slice(0, 6)} initialized`);
       return send({ t: 'profile', save: p.data });
     }
     if (!me.profile) return fail('profile', 'Create an online profile first');
+    if (me.room?.state === 'deploying' && (msg.t === 'leave' || msg.t === 'create' || msg.t === 'join')) {
+      return fail('deploying', 'Wait for the operation to finish deploying');
+    }
     switch (msg.t) {
       case 'op': {
-        const r = store.op(me.profile, msg.name, msg.args, msg.tx);
+        const r = await store.op(me.profile, msg.name, msg.args, msg.tx);
         send({ t: 'opResult', tx: msg.tx, ok: r.ok, reason: r.ok ? undefined : (r as { reason: string }).reason });
         send({ t: 'profile', save: me.profile.data });
         if (r.ok && me.room && me.room.hostId === me.id && msg.name.startsWith('hq')) me.room.broadcast({ t: 'hostHq', owner: me.id, base: me.profile.data.base });
@@ -242,24 +255,23 @@ wss.on('connection', (ws: WebSocket) => {
 
   ws.on('close', () => {
     awaitingPong.delete(ws);
-    if (!peer) return;
-    if (online.get(peer.id) === peer) online.delete(peer.id);
+    if (!peer || online.get(peer.id) !== peer) return;
+    online.delete(peer.id);
     if (peer.room) peer.room.disconnected(peer.id);
   });
 });
 
 // Housekeeping: reconnect windows, empty rooms, lobby presence (10 Hz).
-setInterval(() => {
+const housekeeping = setInterval(() => {
   for (const [code, r] of rooms) {
     r.tick();
     if (r.empty) {
-      r.sim?.shutdown('empty');
       rooms.delete(code);
       log(`room ${code} closed`);
     }
   }
 }, 1000);
-setInterval(() => {
+const presence = setInterval(() => {
   for (const r of rooms.values()) {
     if (r.state !== 'lobby') continue;
     const players = r.connected.filter((m) => m.peer?.presence && (m.peer.visiting || m.id === r.hostId)).map((m) => ({ id: m.id, name: m.name, p: m.peer!.presence!.p, yaw: m.peer!.presence!.yaw }));
@@ -267,17 +279,25 @@ setInterval(() => {
   }
 }, 100);
 
-function shutdown(sig: string): void {
+async function shutdown(sig: string): Promise<void> {
+  if (shuttingDown) return;
+  shuttingDown = true;
   log(`${sig}: closing ${rooms.size} sessions`);
   clearInterval(heartbeat);
-  for (const r of rooms.values()) r.sim?.shutdown('server');
+  clearInterval(housekeeping);
+  clearInterval(presence);
+  http.close();
+  await Promise.allSettled(messages);
+  const endings = [...rooms.values()].map((r) => r.sim?.shutdown()).filter((ending) => ending !== undefined);
+  await Promise.allSettled(endings);
   for (const p of online.values()) p.send({ t: 'error', code: 'shutdown', msg: 'The server is shutting down' });
   for (const ws of wss.clients) ws.close(1012, 'Server restarting');
   wss.close();
-  http.close();
-  setTimeout(() => process.exit(0), 200);
+  const close = setTimeout(() => { for (const ws of wss.clients) ws.terminate(); }, 1000);
+  close.unref();
+  await store.close();
 }
-process.on('SIGINT', () => shutdown('SIGINT'));
-process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => void shutdown('SIGINT'));
+process.on('SIGTERM', () => void shutdown('SIGTERM'));
 
-http.listen(PORT, () => log(`Riftwarden co-op server v${PROTOCOL_VERSION} on :${PORT} (ws path /ws, data ${DATA})`));
+http.listen(PORT, () => log(`Riftwarden co-op server v${PROTOCOL_VERSION} on :${PORT} (ws path /ws, PostgreSQL profiles)`));
