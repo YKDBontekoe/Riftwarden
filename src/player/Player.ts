@@ -94,6 +94,10 @@ export class Player {
   /** Camera shake energy (0..1); shake amplitude is trauma squared. */
   trauma = 0;
   sensitivity = 1;
+  /** M7 accessibility: no FOV kicks, roll or camera shake. */
+  reduceMotion = false;
+  /** M7: camera shake multiplier (settings). */
+  shakeScale = 1;
 
   hp: number = ECONOMY.playerMaxHp;
   maxHp: number = ECONOMY.playerMaxHp;
@@ -280,7 +284,8 @@ export class Player {
   }
 
   addTrauma(amount: number): void {
-    this.trauma = Math.min(1, this.trauma + amount);
+    if (this.reduceMotion) return;
+    this.trauma = Math.min(1, this.trauma + amount * this.shakeScale);
   }
 
   knockback(dir: Vector3, strength: number): void {
@@ -449,6 +454,10 @@ export class Player {
     const sr = sh * 0.05 * Math.sin(t * 27.7 + 0.7);
     this.camera.rotation.set(this.pitch - this.recoil + sp, this.yaw + sy, (this.alive ? this.roll : 0.25) + sr);
     this.fovKick *= Math.exp(-dt * 8);
+    if (this.reduceMotion) {
+      this.fovKick = 0;
+      this.roll = 0;
+    }
     const sprintFov = this.sprinting ? this.move.sprintFov : 0;
     this.camera.fov += (this.baseFov + this.fovKick + sprintFov - this.camera.fov) * (1 - Math.exp(-dt * 14));
   }

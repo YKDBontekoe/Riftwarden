@@ -1,3 +1,4 @@
+import { TutorialCard } from './TutorialCard';
 import { TeamHud } from './TeamHud';
 import { RunBadges } from './Roguelite';
 import { useEffect, useRef, useState } from 'react';
@@ -35,6 +36,7 @@ export function Hud({ game }: { game: Game }) {
       <RunBadges />
       <Perf />
       <TeamHud />
+      <TutorialCard />
     </div>
   );
 }

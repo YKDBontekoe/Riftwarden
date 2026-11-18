@@ -47,6 +47,34 @@ export const RARITY_IDS: readonly RarityId[] = RARITIES.map((r) => r.id);
 
 const BY_ID = new Map(RARITIES.map((r) => [r.id, r]));
 
+/** M7 colour accessibility: rarity colours swapped in place (UI and world glows read them on use). */
+const ORIGINAL = RARITIES.map((r) => ({ color: r.color, glow: [...r.glow] }));
+const CB: Record<'deuteranopia' | 'tritanopia', { color: string; glow: [number, number, number] }[]> = {
+  deuteranopia: [
+    { color: '#c4d0d6', glow: [0.9, 1.0, 1.05] },
+    { color: '#3fd6e0', glow: [0.3, 2.0, 2.2] },
+    { color: '#3b6dff', glow: [0.4, 0.8, 3.6] },
+    { color: '#c58cff', glow: [1.9, 0.8, 3.6] },
+    { color: '#ffd23d', glow: [4.2, 3.0, 0.35] },
+    { color: '#ff7a2e', glow: [4.6, 1.6, 0.3] },
+  ],
+  tritanopia: [
+    { color: '#c4d0d6', glow: [0.9, 1.0, 1.05] },
+    { color: '#5fe07a', glow: [0.35, 2.2, 0.55] },
+    { color: '#2ec4ff', glow: [0.3, 1.8, 3.2] },
+    { color: '#ff6fd8', glow: [3.2, 0.7, 2.6] },
+    { color: '#ff5a3d', glow: [4.4, 1.0, 0.5] },
+    { color: '#ffffff', glow: [3.6, 3.6, 3.6] },
+  ],
+};
+export function setRarityPalette(mode: 'off' | 'deuteranopia' | 'tritanopia'): void {
+  const src = mode === 'off' ? ORIGINAL : CB[mode];
+  RARITIES.forEach((r, i) => {
+    (r as { color: string }).color = src[i].color;
+    (r as { glow: [number, number, number] }).glow = [...src[i].glow] as [number, number, number];
+  });
+}
+
 export function rarity(id: RarityId | string | undefined): RarityDef {
   return BY_ID.get(id as RarityId) ?? RARITIES[0];
 }

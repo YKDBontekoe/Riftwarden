@@ -122,7 +122,16 @@ export class PostFx {
 
   /** Brief lens punch (explosions near the player, taking hits). */
   kick(amount: number): void {
+    if (this.reduceMotion) return;
     this.aberration = Math.min(1.5, this.aberration + amount);
+  }
+
+  /** M7 settings: bloom toggle, reduced motion (no aberration kicks). */
+  reduceMotion = false;
+  setOptions(o: { bloom: boolean; reduceMotion: boolean }): void {
+    this.reduceMotion = o.reduceMotion;
+    this.pipeline.bloomEnabled = o.bloom;
+    this.pipeline.chromaticAberrationEnabled = !o.reduceMotion;
   }
 
   /**

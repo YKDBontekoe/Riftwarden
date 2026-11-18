@@ -127,6 +127,8 @@ export interface CoopHud {
 }
 
 export interface HudState {
+  /** M7 onboarding card. */
+  tutorial?: (import('../progression/tutorial').TutorialStep & { index: number; total: number }) | null;
   coop?: CoopHud | null;
   /** M7 HQ construction mode. */
   construct?: import('../home/build/BuildMode').BuildHud | null;

@@ -1,10 +1,10 @@
 import { CoopPanel, urlJoinCode } from './Coop';
+import { SettingsPanel } from './SettingsPanel';
 import { ConstructionPanel } from './Construction';
 import { ClientGame } from '../net/ClientGame';
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import type { Flow } from '../core/Flow';
 import type { Game } from '../core/Game';
-import type { Settings } from '../core/settings';
 import type { RunResult } from '../progression/run';
 import type { SaveData } from '../progression/save';
 import { getTier, nextCheckpoint } from '../progression/tiers';
@@ -112,50 +112,6 @@ export function Logo({ small }: { small?: boolean }) {
         </div>
         {!small && <div className="logo-sub">REACTOR DEFENSE INITIATIVE · SECTOR 07</div>}
       </div>
-    </div>
-  );
-}
-
-function SettingsPanel({ flow, compact }: { flow: Flow; compact?: boolean }) {
-  const [s, setS] = useState<Settings>(flow.settings);
-  const update = (patch: Partial<Settings>) => {
-    const next = { ...s, ...patch };
-    setS(next);
-    flow.applySettings(next);
-  };
-  const inArena = flow.location === 'arena';
-  return (
-    <div className="settings">
-      <label>
-        <span>Mouse sensitivity</span>
-        <input type="range" min={0.2} max={3} step={0.05} value={s.sensitivity} onChange={(e) => update({ sensitivity: +e.target.value })} />
-        <em>{s.sensitivity.toFixed(2)}</em>
-      </label>
-      <label>
-        <span>Field of view</span>
-        <input type="range" min={70} max={110} step={1} value={s.fov} onChange={(e) => update({ fov: +e.target.value })} />
-        <em>{s.fov}°</em>
-      </label>
-      <label>
-        <span>Volume</span>
-        <input type="range" min={0} max={1} step={0.05} value={s.volume} onChange={(e) => update({ volume: +e.target.value })} />
-        <em>{Math.round(s.volume * 100)}%</em>
-      </label>
-      {!compact && (
-        <div className="quality">
-          <span>Graphics{inArena ? ' (applies on return to HQ)' : ''}</span>
-          <div className="seg">
-            <button className={s.quality === 'high' ? 'on' : ''} onClick={() => update({ quality: 'high' })}>
-              CINEMATIC
-              <small>HiDPI · reflections · ambient occlusion</small>
-            </button>
-            <button className={s.quality === 'low' ? 'on' : ''} onClick={() => update({ quality: 'low' })}>
-              PERFORMANCE
-              <small>Lighter effects · limited resolution</small>
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import { TutorialCard } from './TutorialCard';
 import { useEffect, useState } from 'react';
 import type { Flow } from '../core/Flow';
 import { RESOURCE_KEYS, type ResourceKey } from '../economy/config';
@@ -18,6 +19,7 @@ export function HomeHud({ flow }: { flow: Flow }) {
   const walking = screen === 'home';
   return (
     <div className={`hud home-hud ${walking ? '' : 'muted'}`}>
+      <TutorialCard />
       <div className="hq-loc panel-frame">
         <div className="hq-kicker">HEADQUARTERS</div>
         <div className="hq-area">{area || 'COMMAND DECK'}</div>

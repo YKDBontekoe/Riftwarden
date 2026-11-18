@@ -276,6 +276,12 @@ export class Effects {
   private liveProjectiles: Projectile[] = [];
   /** Visual budget: when particles exceed this, bursts are thinned. */
   particleBudget = 1800;
+  /** M7 settings: particle density multiplier (low 0.45, medium 0.75, high 1). */
+  density = 1;
+  setDensity(level: 'low' | 'medium' | 'high'): void {
+    this.density = level === 'low' ? 0.45 : level === 'medium' ? 0.75 : 1;
+    this.particleBudget = Math.round((this.high ? 1800 : 1050) * this.density);
+  }
   /** Camera shake request: world position and strength (0..1 at the source). */
   onShake: ((pos: Vector3, strength: number) => void) | null = null;
 
@@ -434,6 +440,7 @@ export class Effects {
   }
 
   burst(kind: BurstKind, pos: Vector3, count: number, normal?: Vector3, scale = 1): void {
+    if (this.density < 1) count = Math.max(1, Math.round(count * this.density));
     const over = this.particleCount > this.particleBudget;
     this.bursts.get(kind)!.emit(pos, over ? Math.ceil(count * 0.3) : count, normal, scale);
   }

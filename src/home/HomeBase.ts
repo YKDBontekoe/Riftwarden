@@ -35,6 +35,7 @@ import { ENV_QUERY } from '../world/physicsGroups';
 import { HqBuilder, type HqMaterials } from './HqBuilder';
 import { ExpansionLayer } from './build/ExpansionLayer';
 import { BuildMode } from './build/BuildMode';
+import { type TutorialHost, TutorialDirector } from '../core/TutorialDirector';
 import { LIMITS } from './build/catalog';
 import { pickInteractable } from './interaction';
 import { areaAt, HQ_SPAWN, HQ_STATIONS, type Station } from './layout';
@@ -61,6 +62,8 @@ export interface HomeHooks {
   deploy(): void;
   /** M7: the HQ shell must be rebuilt (station moved, gateway opened/closed). */
   rebuild?(): void;
+  /** M7: onboarding host. */
+  tutorial?: TutorialHost;
 }
 
 /** One interactive station in the HQ (data + its live screen). */
@@ -103,6 +106,10 @@ export class HomeBase {
   litMaterials: PBRMaterial[] = [];
   /** Visiting someone else's HQ: no construction, no persistent services. */
   readOnly = false;
+  private tut: TutorialDirector | null = null;
+  private tutDist = 0;
+  private tutPos: [number, number] = [0, 0];
+  private openedTerminals = new Set<string>();
   /** Lights whose intensity breathes slightly (subtle "alive" feel). */
   private pulseLights: { light: PointLight; base: number; phase: number }[] = [];
   /** Transaction feedback per station (1 -> 0 over PULSE_TIME). */
@@ -254,8 +261,8 @@ export class HomeBase {
     for (const m of lit) m.maxSimultaneousLights = 8 + LIMITS.lights;
     this.litMaterials = lit;
 
-    if (high) {
-      const sg = new ShadowGenerator(2048, moon);
+    if (settings.shadows !== 'off' && (high || settings.shadows === 'high')) {
+      const sg = new ShadowGenerator(settings.shadows === 'high' ? 2048 : 1024, moon);
       sg.usePercentageCloserFiltering = true;
       sg.filteringQuality = ShadowGenerator.QUALITY_MEDIUM;
       sg.bias = 0.004;
@@ -288,6 +295,11 @@ export class HomeBase {
     this.build = new BuildMode(scene, canvas, input, () => this.profile.save, (name, args) => this.profile.op(name, args), () => this.layer.realLights);
     this.unsubEcon = uiEvents.on('econ', (e) => this.stationFx(e.station, e.kind));
     this.applySettings(settings);
+    if (hooks.tutorial)
+      this.tut = new TutorialDirector('hq', hooks.tutorial, {
+        available: (id) => this.screen === 'home' && (id !== 'hq_return' || this.profile.save.history.length > 0),
+        complete: (id, t) => (id === 'hq_look' ? this.tutDist > 4 || t > 9 : id === 'hq_deploy' ? this.openedTerminals.has('deploy') : this.openedTerminals.has('storage') || t > 12),
+      });
   }
 
   // ------------------------------------------------------------------ construction
@@ -571,7 +583,11 @@ export class HomeBase {
     this.player.sensitivity = s.sensitivity;
     const h = (s.fov * Math.PI) / 180;
     this.player.baseFov = 2 * Math.atan(Math.tan(h / 2) / (16 / 9));
+    this.player.reduceMotion = s.reduceMotion;
+    this.player.shakeScale = s.shake;
+    this.post?.setOptions({ bloom: s.bloom, reduceMotion: s.reduceMotion });
     sfx.setVolume(s.volume);
+    sfx.setMix(s.sfxVolume, s.uiVolume, s.ambienceVolume);
   }
 
   /** Give the player control (pointer lock); falls back to the pause overlay. */
@@ -588,6 +604,7 @@ export class HomeBase {
     if (this.screen !== 'home') return;
     sfx.play('ui');
     this.screen = 'terminal';
+    this.openedTerminals.add(id);
     hudStore.set({ screen: 'terminal', terminal: id, prompt: null });
     this.input.releaseLock();
   }
@@ -617,6 +634,12 @@ export class HomeBase {
       if (input.pressed('Escape') || input.pressed('KeyB')) void this.exitConstruction();
     }
     this.layer.update(dt);
+    if (this.tut) {
+      const p = this.player.position;
+      this.tutDist += Math.min(2, Math.hypot(p.x - this.tutPos[0], p.z - this.tutPos[1]));
+      this.tutPos = [p.x, p.z];
+      this.tut.update(dt, input.pressed('F10'));
+    }
 
     if (controls && input.pressed('F3')) this.togglePerf();
     this.updateTarget(controls);
@@ -705,12 +728,14 @@ export class HomeBase {
     this.screen = 'construct';
     hudStore.set({ screen: 'construct', location: 'home' });
     this.input.releaseLock();
+    this.input.freeKeys = true;
     this.build.enter(this.player.position);
   }
 
   async exitConstruction(): Promise<void> {
     if (this.screen !== 'construct') return;
     this.build.exit();
+    this.input.freeKeys = false;
     await this.takeControl();
   }
 
@@ -731,6 +756,7 @@ export class HomeBase {
     if (this.disposed) return;
     this.build?.dispose();
     this.layer?.dispose();
+    this.tut?.dispose();
     this.disposed = true;
     this.unsubProfile();
     this.unsubEcon();

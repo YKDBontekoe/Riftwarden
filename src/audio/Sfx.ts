@@ -57,9 +57,17 @@ interface PlayOpts {
  * Small procedural sound bank built on WebAudio. Each effect is a short synthesized
  * envelope; a global low-pass is swept during tactical slow-time.
  */
+/** Interface sounds (mixed on the UI bus). */
+const UI_SOUNDS: ReadonlySet<string> = new Set(['ui', 'equip', 'purchase', 'sell', 'install', 'uninstall', 'press', 'fabricate', 'enhance', 'reroll', 'buildDeny', 'beep', 'bank']);
+
 export class Sfx {
   private ctx: AudioContext | null = null;
   private master!: GainNode;
+  /** M7 mix buses (master <- sfx / ui / ambience). */
+  private sfxBus!: GainNode;
+  private uiBus!: GainNode;
+  private ambBus!: GainNode;
+  private mix = { sfx: 1, ui: 0.8, amb: 0.8 };
   private filter!: BiquadFilterNode;
   private noise!: AudioBuffer;
   private lastPlay = new Map<SfxName, number>();
@@ -83,6 +91,13 @@ export class Sfx {
     comp.threshold.value = -14;
     comp.ratio.value = 4;
     this.master.connect(this.filter).connect(comp).connect(ctx.destination);
+    this.sfxBus = ctx.createGain();
+    this.uiBus = ctx.createGain();
+    this.ambBus = ctx.createGain();
+    this.sfxBus.gain.value = this.mix.sfx;
+    this.uiBus.gain.value = this.mix.ui;
+    this.ambBus.gain.value = this.mix.amb;
+    for (const b of [this.sfxBus, this.uiBus, this.ambBus]) b.connect(this.master);
     const len = ctx.sampleRate;
     this.noise = ctx.createBuffer(1, len, ctx.sampleRate);
     const d = this.noise.getChannelData(0);
@@ -108,7 +123,7 @@ export class Sfx {
     wind.Q.value = 0.7;
     const windGain = ctx.createGain();
     windGain.gain.value = 0.045;
-    loop(0.6).connect(wind).connect(windGain).connect(this.master);
+    loop(0.6).connect(wind).connect(windGain).connect(this.ambBus);
     const lfo = ctx.createOscillator();
     lfo.frequency.value = 0.07;
     const lfoAmt = ctx.createGain();
@@ -127,7 +142,7 @@ export class Sfx {
     rumble.frequency.value = 110;
     const rumbleGain = ctx.createGain();
     rumbleGain.gain.value = 0.09;
-    loop(0.4).connect(rumble).connect(rumbleGain).connect(this.master);
+    loop(0.4).connect(rumble).connect(rumbleGain).connect(this.ambBus);
     // Reactor hum: detuned low sines.
     const hum = ctx.createGain();
     hum.gain.value = 0.018;
@@ -137,7 +152,7 @@ export class Sfx {
       o.connect(hum);
       o.start();
     }
-    hum.connect(this.master);
+    hum.connect(this.ambBus);
   }
 
   /** Rolling thunder; `delay` approximates the distance to the strike. */
@@ -166,6 +181,21 @@ export class Sfx {
   setVolume(v: number): void {
     this.volume = v;
     if (this.ctx) this.master.gain.setTargetAtTime(v, this.ctx.currentTime, 0.02);
+  }
+
+  /** M7: category mix (effects, interface, ambience). */
+  setMix(sfxV: number, uiV: number, ambV: number): void {
+    this.mix = { sfx: sfxV, ui: uiV, amb: ambV };
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    this.sfxBus.gain.setTargetAtTime(sfxV, t, 0.02);
+    this.uiBus.gain.setTargetAtTime(uiV, t, 0.02);
+    this.ambBus.gain.setTargetAtTime(ambV, t, 0.05);
+  }
+
+  /** Bus for ambience loops (environment). */
+  get ambienceOut(): AudioNode | null {
+    return this.ctx ? this.ambBus : null;
   }
 
   setTactical(active: boolean): void {
@@ -278,7 +308,7 @@ export class Sfx {
     const p = o.pitch ?? 1;
     const pan = this.ctx.createStereoPanner();
     pan.pan.value = Math.max(-1, Math.min(1, o.pan ?? 0));
-    pan.connect(this.master);
+    pan.connect(UI_SOUNDS.has(name) ? this.uiBus : this.sfxBus);
     const out = pan;
     const j = 0.94 + Math.random() * 0.12; // pitch jitter
 

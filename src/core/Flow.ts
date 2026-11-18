@@ -17,12 +17,14 @@ import { getTier, THREAT_TIERS } from '../progression/tiers';
 import { hudStore, type Location, uiEvents } from '../ui/store';
 import { Game } from './Game';
 import { SurvivalPlanner } from '../survival/plan';
+import { tutorialActive } from '../progression/tutorial';
 import { Input } from './Input';
 import { ClientGame } from '../net/ClientGame';
 import { NetClient } from '../net/NetClient';
 import type { RunStart } from '../net/protocol';
 import type { RunResult } from '../progression/run';
-import { type Settings, saveSettings } from './settings';
+import { keyRemap, type Settings, saveSettings } from './settings';
+import { setRarityPalette } from '../loot/rarity';
 
 /** A loaded location. Exactly one exists at a time. */
 interface World {
@@ -79,6 +81,8 @@ export class Flow {
   /** M6: development tools available (URL ?dev or ?test). Never shown in the ordinary player experience. */
   devTools = false;
   private renderQuality: Settings['quality'];
+  /** Automation: show onboarding even in ?test mode. */
+  forceTutorial = false;
   /** M7 co-op session (null = single player). */
   net: NetClient | null = null;
   /** Co-op run in progress (server run id). */
@@ -93,6 +97,7 @@ export class Flow {
   ) {
     this.renderQuality = settings.quality;
     this.input = new Input(canvas);
+    applyGlobalSettings(settings, this.input);
     this.profile = new Profile();
   }
 
@@ -106,7 +111,7 @@ export class Flow {
     const pixels = Math.max(1, clientWidth * clientHeight);
     // Keep HiDPI output sharp while bounding the cost of the full-resolution G-buffer and HDR passes.
     const pixelBudget = cinematic ? 2560 * 1440 : 1920 * 1080;
-    const scale = Math.min(cinematic ? Math.min(window.devicePixelRatio || 1, 2) : 1, Math.sqrt(pixelBudget / pixels));
+    const scale = Math.min(cinematic ? Math.min(window.devicePixelRatio || 1, 2) : 1, Math.sqrt(pixelBudget / pixels)) * (this.settings.renderScale ?? 1);
     this.engine.setHardwareScalingLevel(1 / scale);
   }
 
@@ -139,9 +144,11 @@ export class Flow {
   }
 
   applySettings(s: Settings): void {
-    const qualityChanged = s.quality !== this.settings.quality;
+    const qualityChanged = s.quality !== this.settings.quality || s.shadows !== this.settings.shadows;
     this.settings = s;
     saveSettings(s);
+    applyGlobalSettings(s, this.input);
+    this.resize();
     this.world?.applySettings(s);
     // Graphics quality is applied when a scene is built: rebuild the HQ right away.
     if (qualityChanged && this.home && !this.busy) {
@@ -198,6 +205,7 @@ export class Flow {
         seed: this.nextUpgradeSeed ?? undefined,
         towerTech: [...save.towers.unlocked],
         milestones: [...save.milestones],
+        tutorial: this.tutorialHost(),
         hooks: {
           // Reported as secured only once the write succeeded.
           // Development sessions (M6 dev tools used) never commit permanent rewards.
@@ -292,6 +300,16 @@ export class Flow {
     this.run = null;
     if (then === 'summary') this.home!.setScreen('summary');
     else await this.home!.takeControl(false);
+  }
+
+  /** Onboarding persistence (the profile op validates and saves each completed step). */
+  private tutorialHost() {
+    return {
+      done: () => this.profile.save.tutorial.done,
+      active: () => (this.forceTutorial || (!this.skipUpgrades && !this.devTools)) && tutorialActive(this.profile.save),
+      mark: (id: string) => void this.profile.op('tutorialStep', [id]),
+      skip: () => void this.profile.op('tutorialSkip', []),
+    };
   }
 
   // ------------------------------------------------------------------ M7 co-op
@@ -448,6 +466,7 @@ export class Flow {
       deploy: () => void this.deploy(),
       // Station relocations rebuild the HQ shell; construction mode resumes where it was.
       rebuild: () => setTimeout(() => this.home && !this.busy && this.rebuildHomeKeepScreen(), 0),
+      tutorial: this.tutorialHost(),
     });
     if (this.loopStopped) this.home.scene.useConstantAnimationDeltaTime = true;
   }
@@ -668,4 +687,14 @@ export class Flow {
       },
     };
   }
+}
+
+/** Settings that live outside any world: key remapping, interface scale, colour accessibility. */
+export function applyGlobalSettings(s: Settings, input: Input): void {
+  input.remap = keyRemap(s);
+  if (typeof document !== 'undefined') {
+    document.documentElement.style.setProperty('--ui-scale', String(s.uiScale));
+    document.documentElement.dataset.motion = s.reduceMotion ? 'reduced' : 'full';
+  }
+  setRarityPalette(s.colorblind);
 }

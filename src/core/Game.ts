@@ -71,6 +71,7 @@ import type { BossId } from '../survival/bosses';
 import type { Input } from './Input';
 import { type Settings, saveSettings } from './settings';
 import { TacticalEnergy, Wallet } from './tactical';
+import { type TutorialHost, TutorialDirector } from './TutorialDirector';
 
 const TMP = new Vector3();
 /** Sun intensity (directional, range-free). */
@@ -101,6 +102,8 @@ export interface ArenaConfig {
   towerTech?: readonly string[];
   /** M6: milestones already reached on this profile (first-time milestone rewards). */
   milestones?: readonly string[];
+  /** M7: onboarding host (solo runs of profiles that have not finished the tutorial). */
+  tutorial?: TutorialHost;
 }
 
 /**
@@ -215,6 +218,9 @@ export class Game {
   /** Boss entrance announced (enemy id). */
   protected bossSeen = 0;
   protected disposed = false;
+  /** M7 onboarding. */
+  protected tut: TutorialDirector | null = null;
+  private tutTrack = { dist: 0, x: 0, z: 0, air: false, dash: false, tactical: false };
 
   constructor(
     private engine: Engine,
@@ -283,7 +289,9 @@ export class Game {
     // Shadows (high quality only); enemies & turrets register as casters via the kit.
     {
       // Cascaded shadows: crisp contact shadows near the player, coverage across the arena.
-      const sg = high ? new CascadedShadowGenerator(2048, moon) : new ShadowGenerator(1024, moon);
+      const shadows = settings.shadows ?? (high ? 'high' : 'low');
+      const sg = shadows === 'off' ? null : shadows === 'high' && high ? new CascadedShadowGenerator(2048, moon) : new ShadowGenerator(shadows === 'high' ? 2048 : 1024, moon);
+      if (sg) {
       if (sg instanceof CascadedShadowGenerator) {
         sg.numCascades = 4;
         sg.lambda = 0.82;
@@ -303,6 +311,7 @@ export class Game {
       for (const m of arena.shadowCasters) sg.addShadowCaster(m);
       for (const m of this.reactor.root.getChildMeshes()) sg.addShadowCaster(m);
       this.kit.shadowSink = (m) => sg.addShadowCaster(m);
+      }
     }
     this.enemies = new EnemyManager(scene, this.kit, this.pal);
     for (const [kind, b] of Object.entries({ ...M6_BEHAVIORS, ...BOSS_BEHAVIORS })) if (b) this.enemies.register(kind as EnemyKind, b as Behavior);
@@ -474,6 +483,66 @@ export class Game {
     };
     this.applySettings(settings);
     this.refreshEquipment();
+    if (cfg.tutorial) this.tut = new TutorialDirector('arena', cfg.tutorial, { available: (id) => this.tutAvailable(id), complete: (id, t) => this.tutComplete(id, t) });
+  }
+
+  // ---------------------------------------------------------------- M7 onboarding
+
+  private tutAvailable(id: string): boolean {
+    const w = this.waves;
+    const play = this.screen === 'playing';
+    switch (id) {
+      case 'move':
+      case 'dash':
+      case 'reactor':
+        return play;
+      case 'tower':
+        return play && w.phase === 'prep';
+      case 'wave':
+        return play && w.phase === 'prep' && this.turrets.turrets.length > 0;
+      case 'shoot':
+        return play && w.phase === 'combat';
+      case 'heat':
+        return play && this.weapon.heat > 45;
+      case 'loot':
+        return play && this.loot.count > 0;
+      case 'upgrade':
+        return this.screen === 'upgrade';
+      case 'tactical':
+        return play && w.number >= 2 && this.tactical.energy >= 99;
+      case 'bank':
+        return this.screen === 'checkpoint' || this.canReturnHome;
+    }
+    return false;
+  }
+
+  private tutComplete(id: string, t: number): boolean {
+    const k = this.tutTrack;
+    switch (id) {
+      case 'move':
+        return k.dist > 8 && k.air;
+      case 'dash':
+        return k.dash;
+      case 'reactor':
+        return t > 7;
+      case 'tower':
+        return this.turrets.turrets.length > 0;
+      case 'wave':
+        return this.waves.phase === 'combat';
+      case 'shoot':
+        return this.kills >= 3;
+      case 'heat':
+        return this.weapon.overheated || t > 7;
+      case 'loot':
+        return this.inventory.cargoUsed > 0 || t > 20;
+      case 'upgrade':
+        return this.director.build.total > 0 || this.screen !== 'upgrade';
+      case 'tactical':
+        return k.tactical || t > 25;
+      case 'bank':
+        return t > 9 || this.screen === 'playing';
+    }
+    return t > 10;
   }
 
   // ---------------------------------------------------------------- lifecycle
@@ -490,7 +559,13 @@ export class Game {
     // User FOV is horizontal at 16:9; convert to the vertical FOV Babylon uses.
     const h = (s.fov * Math.PI) / 180;
     this.player.baseFov = 2 * Math.atan(Math.tan(h / 2) / (16 / 9));
+    this.player.reduceMotion = s.reduceMotion;
+    this.player.shakeScale = s.shake;
+    this.weapon.anim.reduceMotion = s.reduceMotion;
+    this.fx.setDensity(s.particles);
+    this.post.setOptions({ bloom: s.bloom, reduceMotion: s.reduceMotion });
     sfx.setVolume(s.volume);
+    sfx.setMix(s.sfxVolume, s.uiVolume, s.ambienceVolume);
     saveSettings(s);
   }
 
@@ -970,6 +1045,7 @@ export class Game {
 
   dispose(): void {
     if (this.disposed) return;
+    this.tut?.dispose();
     this.disposed = true;
     this.input.onLockChange = () => {};
     this.director.bus.reset();
@@ -1024,6 +1100,16 @@ export class Game {
     const t0 = performance.now();
     if (this.screen === 'playing' || this.screen === 'defeat') this.update(dt);
     else this.idleAnimate(dt);
+    if (this.tut) {
+      const p = this.player.position;
+      this.tutTrack.dist += Math.min(2, Math.hypot(p.x - this.tutTrack.x, p.z - this.tutTrack.z));
+      this.tutTrack.x = p.x;
+      this.tutTrack.z = p.z;
+      if (!this.player.grounded) this.tutTrack.air = true;
+      if (this.player.dashing) this.tutTrack.dash = true;
+      if (this.tactical.active) this.tutTrack.tactical = true;
+      this.tut.update(dt, this.input.pressed('F10'));
+    }
     this.frameMs += (performance.now() - t0 - this.frameMs) * 0.05;
   }
   /** Smoothed simulation cost per frame (ms, diagnostics). */
@@ -1901,7 +1987,7 @@ export class Game {
       else if (w.number === 2 && w.phase === 'combat' && this.tactical.energy >= 99 && !this.tactical.active) hint = 'Q: tactical slow-time lets you place several turrets mid-fight.';
       if (this.canReturnHome) hint = 'Checkpoint secured. Press H to return to HQ, or start the next wave with G.';
     }
-    if (!this.player.alive || c.active) hint = '';
+    if (!this.player.alive || c.active || this.tut?.showing) hint = '';
     const run = this.cfg.run;
     const lt = this.lootTarget;
     let lootTarget: LootTargetInfo | null = null;
