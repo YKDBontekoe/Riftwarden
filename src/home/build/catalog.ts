@@ -94,4 +94,4 @@ export const LIGHT_COLORS: Record<string, [number, number, number]> = {
 export const MOVABLE_STATIONS: readonly TerminalId[] = ['command', 'loadout', 'storage', 'workshop', 'fabricate', 'merchant', 'modules', 'salvage'];
 
 /** Budgets: rendering cost stays bounded however much a player builds. */
-export const LIMITS = { props: 120, lights: 6, floors: 64, edges: 220 };
+export const LIMITS = { props: 120, lights: 4, floors: 64, edges: 220 };

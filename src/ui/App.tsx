@@ -1,4 +1,5 @@
 import { CoopPanel, urlJoinCode } from './Coop';
+import { ConstructionPanel } from './Construction';
 import { ClientGame } from '../net/ClientGame';
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import type { Flow } from '../core/Flow';
@@ -56,6 +57,7 @@ export function App({ getFlow }: Props) {
       {screen === 'inventory' && arena && <ArenaInventory key={`inv${flow?.transitions}`} game={arena} />}
       {screen === 'defeat' && flow && <DefeatScreen flow={flow} />}
       {screen === 'summary' && flow && <SummaryScreen flow={flow} />}
+      {screen === 'construct' && flow && home && <ConstructionPanel key={`cons${flow.transitions}`} flow={flow} />}
       {screen === 'transit' && <Transit />}
     </>
   );

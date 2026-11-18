@@ -360,8 +360,14 @@ export class Flow {
 
   private rebuildHomeKeepScreen(): void {
     const screen = this.home!.screen;
+    const pos = this.home!.player.position.clone();
+    const yaw = this.home!.player.yaw;
     this.buildHome();
-    this.home!.setScreen(screen);
+    const h = this.home!;
+    h.player.controller.setPosition(pos);
+    h.player.yaw = yaw;
+    if (screen === 'construct') h.enterConstruction();
+    else h.setScreen(screen);
   }
 
   private async coopRunStart(run: RunStart): Promise<void> {
@@ -440,6 +446,8 @@ export class Flow {
     this.resize();
     this.home = new HomeBase(this.engine, this.canvas, this.havok, this.settings, this.input, this.profile, {
       deploy: () => void this.deploy(),
+      // Station relocations rebuild the HQ shell; construction mode resumes where it was.
+      rebuild: () => setTimeout(() => this.home && !this.busy && this.rebuildHomeKeepScreen(), 0),
     });
     if (this.loopStopped) this.home.scene.useConstantAnimationDeltaTime = true;
   }

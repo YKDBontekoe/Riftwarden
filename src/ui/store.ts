@@ -6,9 +6,9 @@ import type { RunResult } from '../progression/run';
  * report after returning). Arena: playing, checkpoint (bank/continue/return choice),
  * defeat. Shared: loading, transit (scene swap), paused.
  */
-export type Screen = 'loading' | 'menu' | 'home' | 'terminal' | 'summary' | 'transit' | 'playing' | 'paused' | 'checkpoint' | 'defeat' | 'inventory' | 'upgrade' | 'build' | 'towers' | 'dev';
+export type Screen = 'loading' | 'menu' | 'home' | 'terminal' | 'summary' | 'transit' | 'playing' | 'paused' | 'checkpoint' | 'defeat' | 'inventory' | 'upgrade' | 'build' | 'towers' | 'dev' | 'construct';
 export type Location = 'home' | 'arena';
-export type TerminalId = 'deploy' | 'loadout' | 'storage' | 'workshop' | 'command' | 'merchant' | 'modules' | 'salvage' | 'fabricate';
+export type TerminalId = 'deploy' | 'loadout' | 'storage' | 'workshop' | 'command' | 'merchant' | 'modules' | 'salvage' | 'fabricate' | 'architect';
 
 export interface PromptInfo {
   key: string;
@@ -128,6 +128,8 @@ export interface CoopHud {
 
 export interface HudState {
   coop?: CoopHud | null;
+  /** M7 HQ construction mode. */
+  construct?: import('../home/build/BuildMode').BuildHud | null;
   screen: Screen;
   location: Location;
   terminal: TerminalId | null;

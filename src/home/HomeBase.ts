@@ -33,11 +33,13 @@ import { PostFx } from '../visuals/postfx';
 import { canvas, rng, toTexture } from '../visuals/textures';
 import { ENV_QUERY } from '../world/physicsGroups';
 import { HqBuilder, type HqMaterials } from './HqBuilder';
+import { ExpansionLayer } from './build/ExpansionLayer';
+import { BuildMode } from './build/BuildMode';
+import { LIMITS } from './build/catalog';
 import { pickInteractable } from './interaction';
 import { areaAt, HQ_SPAWN, HQ_STATIONS, type Station } from './layout';
 import {
   type Animator,
-  buildPlaceable,
   commandTable,
   consoleDesk,
   drawScreenFrame,
@@ -57,6 +59,8 @@ import {
 
 export interface HomeHooks {
   deploy(): void;
+  /** M7: the HQ shell must be rebuilt (station moved, gateway opened/closed). */
+  rebuild?(): void;
 }
 
 /** One interactive station in the HQ (data + its live screen). */
@@ -92,6 +96,13 @@ export class HomeBase {
   private unsubProfile: () => void;
   private disposed = false;
   private wallScreens: { left: ScreenTex; right: ScreenTex } | null = null;
+  /** M7 construction. */
+  layer!: ExpansionLayer;
+  build!: BuildMode;
+  private layoutSig = '';
+  litMaterials: PBRMaterial[] = [];
+  /** Visiting someone else's HQ: no construction, no persistent services. */
+  readOnly = false;
   /** Lights whose intensity breathes slightly (subtle "alive" feel). */
   private pulseLights: { light: PointLight; base: number; phase: number }[] = [];
   /** Transaction feedback per station (1 -> 0 over PULSE_TIME). */
@@ -203,8 +214,11 @@ export class HomeBase {
     };
     const save = profile.save;
     this.buildStations(ctx, save);
-    for (const p of save.base.placeables) buildPlaceable(ctx, p);
     builder.finish();
+    // M7: player-built modules and every placed object (incremental, own colliders).
+    this.layer = new ExpansionLayer(scene, this.kit, ctx, () => this.player?.position ?? Vector3.Zero(), high);
+    this.layer.sync(save);
+    this.layoutSig = layoutSignature(save);
     this.buildBackdrop();
     this.buildSignage(ctx);
     stationWayfinding(ctx);
@@ -230,15 +244,15 @@ export class HomeBase {
       return l;
     };
     point('hqCommand', [0, 6.2, -2], [0.9, 0.97, 1], 2.65, 26);
-    point('hqHolo', [0, 2.2, 0], [0.25, 0.85, 1], 0.95, 8, true);
     point('hqLaunch', [0, 6.5, 16.5], [0.45, 0.9, 1], 3.0, 18, true);
     point('hqBay', [-16.5, 4.4, 0], [0.42, 1, 0.76], 2.65, 12);
-    point('hqStorage', [17, 4.4, 4.5], [0.9, 0.95, 1], 2.5, 12);
-    point('hqWorkshop', [17, 4.4, -5], [1, 0.71, 0.42], 2.7, 11);
+    // Storage + workshop share one light (frees a slot for the player's light budget).
+    point('hqWorks', [17, 4.6, 0], [0.98, 0.86, 0.72], 3.0, 16);
     point('hqMarket', [30, 5.2, 0], [0.86, 0.94, 1], 2.8, 14);
     point('hqReclaim', [-27, 5.2, 0], [1, 0.8, 0.55], 2.6, 13, true);
-    // Ten lights in total: let the interior materials see all of them.
-    for (const m of lit) m.maxSimultaneousLights = 10;
+    // Eight fixed lights plus the player's light budget (12 is the portable per-material maximum).
+    for (const m of lit) m.maxSimultaneousLights = 8 + LIMITS.lights;
+    this.litMaterials = lit;
 
     if (high) {
       const sg = new ShadowGenerator(2048, moon);
@@ -267,7 +281,11 @@ export class HomeBase {
     this.input.onLockChange = (locked) => {
       if (!locked && this.screen === 'home') this.setScreen('paused');
     };
-    this.unsubProfile = profile.store.subscribe(() => this.refreshScreens());
+    this.unsubProfile = profile.store.subscribe(() => {
+      this.refreshScreens();
+      this.syncConstruction();
+    });
+    this.build = new BuildMode(scene, canvas, input, () => this.profile.save, (name, args) => this.profile.op(name, args), () => this.layer.realLights);
     this.unsubEcon = uiEvents.on('econ', (e) => this.stationFx(e.station, e.kind));
     this.applySettings(settings);
   }
@@ -275,9 +293,23 @@ export class HomeBase {
   // ------------------------------------------------------------------ construction
 
   private buildStations(ctx: EconCtx, save: Readonly<SaveData>): void {
-    for (const st of HQ_STATIONS) {
+    for (const base of HQ_STATIONS) {
       let screen: ScreenTex | null = null;
+      const pose = save.base.stations[base.id];
+      if (pose) {
+        // Relocated: the station's terminal moves on a modular console (same service, same interface).
+        const st: Station = { ...base, pos: [pose.x, pose.z], yaw: pose.yaw, focus: [pose.x + Math.sin(pose.yaw) * 0.45, 1.3, pose.z + Math.cos(pose.yaw) * 0.45], area: areaAt(pose.x, pose.z) };
+        screen = makeScreen(this.scene, st.id);
+        consoleDesk(ctx, st, screen, 1.6);
+        this.rigs.push({ station: st, screen });
+        continue;
+      }
+      const st = base;
       switch (st.id) {
+        case 'architect':
+          screen = makeScreen(this.scene, st.id);
+          consoleDesk(ctx, st, screen, 1.6);
+          break;
         case 'deploy':
           screen = makeScreen(this.scene, st.id);
           consoleDesk(ctx, st, screen, 1.7);
@@ -579,7 +611,12 @@ export class HomeBase {
     const input = this.input;
     const controls = this.screen === 'home' && input.captured;
     if (this.screen === 'menu') this.orbit();
-    else this.player.update(dt, input, 1, controls);
+    else if (this.screen !== 'construct') this.player.update(dt, input, 1, controls);
+    if (this.screen === 'construct') {
+      this.build.update(dt);
+      if (input.pressed('Escape') || input.pressed('KeyB')) void this.exitConstruction();
+    }
+    this.layer.update(dt);
 
     if (controls && input.pressed('F3')) this.togglePerf();
     this.updateTarget(controls);
@@ -660,8 +697,40 @@ export class HomeBase {
     });
   }
 
+  /** M7: enter construction mode (from the architect console). Owner only. */
+  enterConstruction(): void {
+    if (this.readOnly) return;
+    sfx.play('ui');
+    hudStore.set({ terminal: null, prompt: null });
+    this.screen = 'construct';
+    hudStore.set({ screen: 'construct', location: 'home' });
+    this.input.releaseLock();
+    this.build.enter(this.player.position);
+  }
+
+  async exitConstruction(): Promise<void> {
+    if (this.screen !== 'construct') return;
+    this.build.exit();
+    await this.takeControl();
+  }
+
+  /** Re-sync construction after a profile change; structural changes to the shell need a rebuild. */
+  private syncConstruction(): void {
+    if (this.disposed) return;
+    const save = this.profile.save;
+    const sig = layoutSignature(save);
+    if (sig !== this.layoutSig) {
+      this.layoutSig = sig;
+      this.hooks.rebuild?.();
+      return;
+    }
+    this.layer.sync(save);
+  }
+
   dispose(): void {
     if (this.disposed) return;
+    this.build?.dispose();
+    this.layer?.dispose();
     this.disposed = true;
     this.unsubProfile();
     this.unsubEcon();
@@ -680,4 +749,9 @@ export class HomeBase {
       fps: Math.round(this.fpsSmooth),
     };
   }
+}
+
+/** Things that need a full HQ rebuild when they change: relocated stations (their rigs are static). */
+function layoutSignature(save: Readonly<SaveData>): string {
+  return JSON.stringify(save.base.stations);
 }

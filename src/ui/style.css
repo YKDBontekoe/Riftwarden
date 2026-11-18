@@ -1152,3 +1152,44 @@ button.comp-card.on { border-color: var(--amber); background: rgba(255, 181, 71,
 .team-tag small { font-family: var(--mono); font-size: 10px; color: var(--muted); }
 .team-tag i { display: block; height: 2px; width: 40px; background: var(--tc); max-width: 40px; }
 .team-tag.down span { color: var(--red); }
+
+/* ------------------------------------------------------------------ M7 construction */
+.arch-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+.arch-lead { color: var(--muted); line-height: 1.45; font-size: 15px; }
+.arch-stats { display: flex; flex-wrap: wrap; gap: 14px; font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em; color: var(--faint); margin: 8px 0 14px; }
+.arch-stats b { color: var(--cyan-2); font-size: 14px; }
+.arch-row { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center; padding: 6px 8px; border-bottom: 1px solid var(--line); font-size: 14px; color: var(--muted); }
+.arch-row b { color: var(--white); }
+.arch-row em { font-style: normal; font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; color: var(--faint); text-align: right; }
+.arch-row.owned em { color: #6bf08a; }
+.arch-row.locked { opacity: 0.6; }
+.construct { position: fixed; inset: 0; pointer-events: none; font-family: var(--font); }
+.construct button, .construct input { pointer-events: auto; }
+.cons-top { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; align-items: center; background: var(--glass); border: 1px solid var(--line); padding: 8px 14px; pointer-events: auto; }
+.cons-title { font-family: var(--display); letter-spacing: 0.16em; color: var(--cyan-2); font-size: 15px; }
+.cons-side { position: absolute; left: 14px; top: 76px; bottom: 60px; width: 290px; display: flex; flex-direction: column; gap: 8px; background: var(--glass); border: 1px solid var(--line); padding: 10px; pointer-events: auto; }
+.cons-tools, .cons-cats { display: flex; flex-wrap: wrap; gap: 4px; }
+.cons-tools button, .cons-cats button { font-size: 11px; padding: 5px 8px; letter-spacing: 0.1em; }
+.cons-tools button.on, .cons-cats button.on { border-color: var(--cyan); color: var(--cyan-2); background: rgba(79, 230, 245, 0.12); }
+.cons-list { overflow-y: auto; display: grid; gap: 4px; align-content: start; flex: 1; }
+.cons-item { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; padding: 7px 9px; font-size: 14px; }
+.cons-item b { font-family: var(--display); letter-spacing: 0.04em; font-weight: 600; }
+.cons-item small { color: var(--muted); font-size: 11px; font-family: var(--mono); letter-spacing: 0.05em; }
+.cons-item.on { border-color: var(--cyan); background: rgba(79, 230, 245, 0.14); }
+.cons-item.locked { opacity: 0.55; }
+.cons-status { position: absolute; bottom: 64px; left: 50%; transform: translateX(-50%); padding: 8px 16px; background: var(--glass); border-left: 3px solid var(--cyan); font-size: 15px; max-width: 70vw; }
+.cons-status.bad { border-left-color: var(--red); color: #ffc4b8; }
+.cons-sel { position: absolute; right: 14px; top: 76px; width: 260px; background: var(--glass); border: 1px solid var(--line); padding: 10px; display: grid; gap: 8px; pointer-events: auto; }
+.cons-light { display: grid; gap: 6px; font-size: 12px; color: var(--muted); }
+.cons-light label { display: grid; gap: 3px; font-family: var(--mono); font-size: 10px; letter-spacing: 0.12em; }
+.swatches { display: flex; gap: 6px; }
+.swatches button { width: 24px; height: 24px; padding: 0; border: 2px solid transparent; }
+.swatches button.on { border-color: var(--white); }
+.cons-help { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); font-size: 12px; color: var(--muted); background: var(--glass); padding: 6px 12px; white-space: nowrap; }
+.cons-tools, .cons-cats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.cons-tools button, .cons-cats button { width: auto; margin: 0; min-height: 0; padding: 6px 4px; font-size: 10px; }
+.cons-cats { grid-template-columns: repeat(4, 1fr); }
+.cons-top { flex-wrap: nowrap; white-space: nowrap; }
+
+.cons-top button { width: auto; margin: 0; }
+.cons-item { width: 100%; margin: 0; }
