@@ -63,15 +63,23 @@ jobs:
         with:
           name: riftwarden-build
           path: dist/
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          package-manager-cache: false
       - name: Build and smoke-test the image
         run: |
           docker build --file deploy/Dockerfile --label "org.opencontainers.image.revision=$GITHUB_SHA" \
             --tag "$IMAGE:$GITHUB_SHA" .
-          container=$(docker run --detach --rm --publish 127.0.0.1::8080 "$IMAGE:$GITHUB_SHA")
-          trap 'docker stop "$container" >/dev/null' EXIT
+          container=$(docker run --detach --rm --read-only --cap-drop ALL --security-opt no-new-privileges \
+            --volume /var/lib/riftwarden --publish 127.0.0.1::8080 "$IMAGE:$GITHUB_SHA")
+          trap 'docker rm --force --volumes "$container" >/dev/null 2>&1 || true' EXIT
           address=$(docker port "$container" 8080/tcp)
-          test "$(curl --fail --silent --show-error --retry 3 --retry-connrefused "http://$address/build.txt")" = "$GITHUB_SHA"
-          curl --fail --silent --show-error "http://$address/" >/dev/null
+          if ! curl --fail --silent --show-error --max-time 3 --retry 10 --retry-all-errors --retry-delay 1 "http://$address/health"; then
+            docker logs "$container"
+            exit 1
+          fi
+          node scripts/smoke-coop.mjs "http://$address" "$GITHUB_SHA"
       - name: Publish the current main build
         id: publish
         env:
@@ -94,10 +102,11 @@ jobs:
         run: |
           for ((attempt = 1; attempt <= 24; attempt++)); do
             if live=$(curl --fail --silent --max-time 5 "https://riftwarden.ykdbonte.dev/build.txt") && [[ "$live" == "$GITHUB_SHA" ]]; then
-              curl --fail --silent --show-error --max-time 10 https://riftwarden.ykdbonte.dev/ >/dev/null
-              exit 0
+              if node scripts/smoke-coop.mjs https://riftwarden.ykdbonte.dev "$GITHUB_SHA"; then
+                exit 0
+              fi
             fi
             sleep 10
           done
-          echo "The production hostname did not serve $GITHUB_SHA in time." >&2
+          echo "The production hostname did not pass the co-op smoke test for $GITHUB_SHA in time." >&2
           exit 1

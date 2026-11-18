@@ -12,13 +12,17 @@ candidate=$(docker image inspect --format '{{index .RepoDigests 0}}' "$image")
 previous=$(docker container inspect --format '{{.Config.Image}}' riftwarden-web 2>/dev/null || true)
 health=$(docker container inspect --format '{{.State.Health.Status}}' riftwarden-web 2>/dev/null || true)
 
+deploy() {
+    local build
+    build=$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$1") &&
+        [[ -n "$build" ]] &&
+        RIFTWARDEN_IMAGE="$1" docker compose -f compose.yml up --detach --wait --wait-timeout 45 &&
+        [[ $(curl --fail --silent --show-error --max-time 4 --retry 2 --retry-connrefused http://127.0.0.1:18084/build.txt) == "$build" ]]
+}
+
 if [[ "$candidate" == "$previous" && "$health" == healthy ]]; then
     exit 0
 fi
-
-deploy() {
-    RIFTWARDEN_IMAGE="$1" docker compose -f compose.yml up --detach --wait --wait-timeout 45
-}
 
 if deploy "$candidate"; then
     printf 'Riftwarden is serving %s\n' "$candidate"
