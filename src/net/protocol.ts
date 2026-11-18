@@ -6,7 +6,7 @@
  * rewards, online profiles); clients send intents (movement state, shot claims, actions) which
  * the server validates. Messages are validated structurally here before any game code sees them.
  */
-export const PROTOCOL_VERSION = 3;
+export const PROTOCOL_VERSION = 4;
 export const MAX_PLAYERS = 4;
 export const MAX_MESSAGE_BYTES = 64 * 1024;
 /** Authoritative simulation and snapshot rates (Hz). */
@@ -28,13 +28,17 @@ export type ActMsg =
   | { a: 'tactical' }
   | { a: 'startWave' }
   | { a: 'collect'; pickup: number }
-  | { a: 'upgrade'; id: string }
+  | { a: 'upgrade'; pick: string }
   | { a: 'vote'; home: boolean }
   | { a: 'equip'; uid: string; slot?: string }
   | { a: 'unequip'; slot: string }
   | { a: 'discard'; uid: string }
   /** Test servers only (RIFT_TEST=1): drive the run quickly through the real pipelines. */
   | { a: 'test'; op: 'killAll' | 'jump' | 'boss' | 'clear' | 'reactor'; n?: number };
+
+/** Act messages are sent as `{ t: 'act', id: <request id>, ...act }`: no variant may use `id` or `t` (compile-time check). */
+type ClashingAct = Extract<ActMsg, { id: unknown } | { t: unknown }>;
+export const ACT_FIELDS_OK: [ClashingAct] extends [never] ? true : never = true;
 
 export interface ShotClaim {
   /** Family of the firing weapon (must match the server's view of the loadout). */
@@ -166,7 +170,7 @@ function validAct(o: Record<string, unknown>): boolean {
     case 'collect':
       return isInt(o.pickup);
     case 'upgrade':
-      return isStr(o.id, 48);
+      return isStr(o.pick, 48);
     case 'vote':
       return isBool(o.home);
     case 'equip':

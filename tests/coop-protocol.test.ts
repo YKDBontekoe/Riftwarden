@@ -12,6 +12,20 @@ const rich = () => {
 };
 
 describe('co-op protocol', () => {
+  it('every action survives the act envelope (no field collides with the request id)', () => {
+    const acts = [
+      { a: 'upgrade', pick: 'w_vent' },
+      { a: 'modify', tower: 3, what: 'weapon', part: 'arc_coil' },
+      { a: 'collect', pickup: 4 },
+      { a: 'equip', uid: 'x.1', slot: 'weapon' },
+      { a: 'vote', home: true },
+    ];
+    for (const a of acts) {
+      const m = parseClientMsg({ t: 'act', id: 7, ...a }) as { id: number } | null;
+      expect(m, a.a).not.toBeNull();
+      expect(m!.id).toBe(7);
+    }
+  });
   it('validates message shapes and rejects malformed input', () => {
     expect(parseClientMsg({ t: 'hello', v: PROTOCOL_VERSION, secret: 'x'.repeat(32), name: 'A' })).not.toBeNull();
     expect(parseClientMsg({ t: 'hello', v: PROTOCOL_VERSION, secret: 'short', name: 'A' })).toBeNull();

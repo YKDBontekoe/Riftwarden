@@ -14,6 +14,7 @@ const DATA = mkdtempSync(join(tmpdir(), 'rift-coop-'));
 const FILTER = process.argv[2] || '';
 const want = (k) => !FILTER || FILTER.split(',').some((f) => k.startsWith(f));
 let passes = 0, failures = 0;
+const pickFailures = [];
 const check = (n, ok, info = '') => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${n}${info ? '  ' + info : ''}`); ok ? passes++ : failures++; };
 
 let server = null;
@@ -96,7 +97,7 @@ async function clearWave(bots, actor = bots[0]) {
     // Pick any pending team upgrade first (the chooser rotates).
     for (let i = 0; i < 40 && actor.snap.of; i++) {
       const chooser = bots.find((b) => b.welcome.playerId === actor.snap.of[1]);
-      if (chooser) await chooser.act({ a: 'upgrade', id: actor.snap.of[0][0] });
+      if (chooser) { const r = await chooser.act({ a: 'upgrade', pick: actor.snap.of[0][0] }); if (!r.ok) pickFailures.push(r.reason); }
       await sleep(80);
     }
     for (let i = 0; i < 20 && actor.snap.cp[2]; i++) {
@@ -232,7 +233,7 @@ const profileFile = (id) => {
       // Vote: one says continue -> continues; all say home -> extract.
       for (let i = 0; i < 40 && A.snap.of; i++) {
         const chooser = bots.find((b) => b.welcome.playerId === A.snap.of[1]);
-        if (chooser) await chooser.act({ a: 'upgrade', id: A.snap.of[0][0] });
+        if (chooser) { const r = await chooser.act({ a: 'upgrade', pick: A.snap.of[0][0] }); if (!r.ok) pickFailures.push(r.reason); }
         await sleep(100);
       }
       await sleep(300);
@@ -390,6 +391,7 @@ const profileFile = (id) => {
     console.error(e);
     failures++;
   }
+  check('Z team-upgrade picks are accepted by the server (never left to the auto-pick)', pickFailures.length === 0, JSON.stringify(pickFailures.slice(0, 3)));
   await stopServer();
   console.log(`\n${failures === 0 ? 'ALL PASSED' : 'FAILURES'}  ${passes} passed, ${failures} failed`);
   if (failures) console.log(server?.log ?? '');

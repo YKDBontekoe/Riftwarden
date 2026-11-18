@@ -321,7 +321,7 @@ const cell = (i, j) => [2 + 5 * i + 2.5, -2.5 + 5 * j + 2.5];
       const snap = bots[0].snap;
       if (!snap.of) return;
       const bt = bots.find((x) => x.welcome.playerId === snap.of[1]);
-      if (bt) await bt.act({ a: 'upgrade', id: snap.of[0][0] }).catch(() => null);
+      if (bt) await bt.act({ a: 'upgrade', pick: snap.of[0][0] }).catch(() => null);
       else for (const pg of [A, B]) await ev(pg, () => { const g = window.__rift.game; if (g.offer && g.offerChooser === g.you) g.chooseUpgrade(g.offer[0].id); });
     };
     for (let guard = 0; guard < 60 && !(bots[0].snap.cp[2]); guard++) {

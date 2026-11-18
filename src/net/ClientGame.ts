@@ -297,7 +297,7 @@ export class ClientGame extends Game {
 
   chooseUpgrade(id: string): boolean {
     if (!this.offer || this.offerChooser !== this.you) return false;
-    void this.request({ a: 'upgrade', id });
+    void this.request({ a: 'upgrade', pick: id });
     return true;
   }
 

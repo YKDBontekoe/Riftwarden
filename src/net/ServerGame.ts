@@ -781,8 +781,8 @@ export class ServerGame extends Game {
       case 'upgrade': {
         if (!this.offer) return 'No upgrade on offer';
         if (this.offerChooser !== a.id) return 'Another warden is choosing this upgrade';
-        if (!this.offer.some((u) => u.id === m.id)) return 'Not on offer';
-        this.applyTeamUpgrade(m.id, a.name);
+        if (!this.offer.some((u) => u.id === m.pick)) return 'Not on offer';
+        this.applyTeamUpgrade(m.pick, a.name);
         return null;
       }
       case 'vote':
