@@ -349,11 +349,11 @@ const cell = (i, j) => [2 + 5 * i + 2.5, -2.5 + 5 * j + 2.5];
     for (const pg of [A, B]) await ev(pg, () => { window.__rift.flow.setScreen?.('playing'); });
     await ev(B, () => window.__rift.flow.visitHostHq(true));
     await waitFor(B, () => window.__rift.flow.visiting && window.__rift.state().location === 'home' && !window.__rift.state().busy, null, 60000);
-    const before = await ev(B, () => ({ ro: window.__rift.home.readOnly, n: window.__rift.home.layer.count }));
+    const before = await ev(B, () => ({ ro: window.__rift.home.readOnly, n: window.__rift.home.layer.count, floor: window.__rift.home.layer.built.has('f:7,0') }));
     const built = await ev(A, () => { const r = window.__rift.profile.op('hqFloor', [7, 0, 'floor_basic']); return [r.ok, r.reason]; });
-    await waitFor(B, (n) => window.__rift.home.layer.count > n, before.n, 20000).catch(() => null);
-    const live = await ev(B, () => window.__rift.home.layer.count);
-    check('X8 a guest visits the host HQ read-only and sees the host build live', before.ro && built[0] && live > before.n, JSON.stringify({ before, built, live }));
+    await waitFor(B, () => window.__rift.home.layer.built.has('f:7,0'), null, 20000).catch(() => null);
+    const live = await ev(B, () => window.__rift.home.layer.built.has('f:7,0'));
+    check('X8 a guest visits the host HQ read-only and sees the host build live', before.ro && !before.floor && built[0] && live, JSON.stringify({ before, built, live }));
     for (let i = 0; i < 12; i++) {
       for (const pg of [A, B]) await ev(pg, () => window.__rift.flow.coopPresence(1));
       await sleep(120);
