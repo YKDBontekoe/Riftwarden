@@ -1,5 +1,5 @@
-// M7 browser acceptance (construction, persistence, co-op clients, tutorial, settings).
-// Usage: npm run dev (5173) [+ npm run server for co-op sections], then node scripts/e2e-m7.cjs [G,H,I,J,K,L,M,O,P,X]
+// Browser acceptance (construction, persistence, co-op clients, tutorial, settings).
+// Usage: npm run dev (5173) [+ npm run server for co-op sections], then node scripts/e2e-construction-coop.cjs [G,H,I,J,K,L,M,O,P,X]
 const { chromium } = require('playwright');
 const OUT = process.env.E2E_OUT || require('os').tmpdir();
 const FILTER = process.argv[2] || '';
@@ -33,7 +33,7 @@ async function reload(p) {
 }
 async function shot(p, name) {
   for (let i = 0; i < 3; i++) await ev(p, () => { window.__rift.advance(1 / 60); window.__rift.render(1); });
-  await p.screenshot({ path: `${OUT}/m7-${name}.png`, timeout: 120000 });
+  await p.screenshot({ path: `${OUT}/construction-coop-${name}.png`, timeout: 120000 });
 }
 const structure = (p) => ev(p, () => JSON.stringify(window.__rift.profile.save.base.structure));
 const cell = (i, j) => [2 + 5 * i + 2.5, -2.5 + 5 * j + 2.5];

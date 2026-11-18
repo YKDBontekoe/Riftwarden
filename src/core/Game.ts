@@ -58,7 +58,7 @@ import { ARENA, type ArenaLayout, type GateId } from '../world/layout';
 import { ENV_QUERY } from '../world/physicsGroups';
 import { type Impact, Ordnance, Telegraphs } from '../fx/Hostile';
 import { M6_BEHAVIORS } from '../enemies/behaviors';
-import { M7_BEHAVIORS } from '../enemies/behaviorsM7';
+import { JAMMER_CRAWLER_BEHAVIORS } from '../enemies/jammerCrawlerBehaviors';
 import { BOSS_BEHAVIORS } from '../enemies/bosses';
 import { bossMults, type EvolutionId, SurvivalPlanner } from '../survival/plan';
 import { SurvivalRuntime } from '../survival/SurvivalRuntime';
@@ -319,7 +319,7 @@ export class Game {
       }
     }
     this.enemies = new EnemyManager(scene, this.kit, this.pal);
-    for (const [kind, b] of Object.entries({ ...M6_BEHAVIORS, ...M7_BEHAVIORS, ...BOSS_BEHAVIORS })) if (b) this.enemies.register(kind as EnemyKind, b as Behavior);
+    for (const [kind, b] of Object.entries({ ...M6_BEHAVIORS, ...JAMMER_CRAWLER_BEHAVIORS, ...BOSS_BEHAVIORS })) if (b) this.enemies.register(kind as EnemyKind, b as Behavior);
     this.tele = new Telegraphs(scene);
     this.ordnance = new Ordnance(scene, this.tele);
     this.dynamics = new ArenaDynamics(scene, this.pal, ARENA, {

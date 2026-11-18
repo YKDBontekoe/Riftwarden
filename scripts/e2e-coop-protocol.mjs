@@ -1,7 +1,7 @@
 // M7 co-op acceptance (protocol level, no rendering): lobby, 2-4 player runs, authoritative combat,
 // towers, tactical, individual loot + banking, votes, disconnect/reconnect, persistence across a
 // server restart, and the failure cases of the M7 spec (section 35).
-// Usage: node scripts/e2e-m7-net.mjs [filter]   (starts its own test server on :8799)
+// Usage: node scripts/e2e-coop-protocol.mjs [filter]   (starts its own test server on :8799)
 import { spawn } from 'node:child_process';
 import { mkdtempSync, readFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -10,7 +10,7 @@ import { Bot, sleep } from './bot.mjs';
 
 const PORT = 8799;
 const URL = `ws://localhost:${PORT}/ws`;
-const DATA = mkdtempSync(join(tmpdir(), 'rift-m7-'));
+const DATA = mkdtempSync(join(tmpdir(), 'rift-coop-'));
 const FILTER = process.argv[2] || '';
 const want = (k) => !FILTER || FILTER.split(',').some((f) => k.startsWith(f));
 let passes = 0, failures = 0;

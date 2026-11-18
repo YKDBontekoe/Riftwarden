@@ -30,12 +30,12 @@ src/progression/tutorial.ts M7: onboarding steps + ops                          
 src/core/TutorialDirector.ts M7: shows one tutorial card at a time (F10 skips)
 src/home/build/            M7: catalog.ts (pieces, limits), model.ts (grid, validation, reachability) [pure], ops.ts (BUILD_OPS) [pure],
                            ExpansionLayer.ts (incremental meshes/colliders/lights), BuildMode.ts (construction camera + tools)
-src/enemies/behaviorsM7.ts M7: Jammer Drone, Siege Crawler behaviours
+src/enemies/jammerCrawlerBehaviors.ts M7: Jammer Drone, Siege Crawler behaviours
 src/loot/signatures.ts     M7: legendary/exotic signature effects                                          [pure]
 src/visuals/droneModel.ts  M7: warden drone rig for teammates (slot colours)
 src/ui/Coop.tsx, TeamHud.tsx, Construction.tsx, SettingsPanel.tsx, TutorialCard.tsx   M7 UI
-scripts/e2e-m7-net.mjs     M7: protocol suite with bot clients (scripts/bot.mjs) against a spawned server
-scripts/e2e-m7.cjs         M7: browser suite: G construction, H decorations, I station relocation, J blueprint progression, X real browser co-op
+scripts/e2e-coop-protocol.mjs M7: protocol suite with bot clients (scripts/bot.mjs) against a spawned server
+scripts/e2e-construction-coop.cjs M7: browser suite: G construction, H decorations, I station relocation, J blueprint progression, X real browser co-op
 src/core/Flow.ts           session controller: Input, Profile, HQ <-> arena scene swaps, run lifecycle, debug API
 src/core/Game.ts           ONE survival run (arena world): scene/lights/pipeline, damage pipeline, checkpoints, HUD
 src/home/HomeBase.ts       HQ world: scene, lights, Player reuse, station interaction, live station screens

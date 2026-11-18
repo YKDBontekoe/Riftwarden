@@ -35,8 +35,9 @@ In a co-op run the server owns enemies, waves, the reactor, towers, loot, reward
 | `npm run server` | Co-op server (WebSocket `/ws`, also serves `dist/`) |
 | `npm run serve` | Build + co-op server: a complete deployment on one port |
 | `npm test` | Unit tests (Vitest) |
-| `node scripts/e2e-m1.cjs` … `e2e-m7.cjs` | Browser acceptance suites (Playwright; `RIFT_URL` selects the client) |
-| `node scripts/e2e-m7-net.mjs` | Co-op protocol suite (starts its own server, 4 bot clients) |
+| `node scripts/e2e-m1.cjs` … `e2e-m6.cjs` | Browser acceptance suites per earlier milestone (Playwright; `RIFT_URL` selects the client) |
+| `node scripts/e2e-construction-coop.cjs [G,H,I,J,X]` | Browser suite: HQ construction, decorations, station relocation, blueprints, real browser co-op |
+| `node scripts/e2e-coop-protocol.mjs` | Co-op protocol suite (starts its own server, 4 bot clients) |
 
 ### HQ construction
 

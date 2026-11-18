@@ -249,4 +249,4 @@ export const crawlerBehavior: Behavior = {
 
 const rig = (e: Enemy) => (e.ai as unknown as JammerAI).rig;
 
-export const M7_BEHAVIORS = { jammer: jammerBehavior, crawler: crawlerBehavior } as const;
+export const JAMMER_CRAWLER_BEHAVIORS = { jammer: jammerBehavior, crawler: crawlerBehavior } as const;
