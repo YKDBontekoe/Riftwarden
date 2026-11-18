@@ -1,0 +1,18 @@
+name: riftwarden
+services:
+  web:
+    image: ${RIFTWARDEN_IMAGE:?The deploy script must select the image digest}
+    container_name: riftwarden-web
+    ports:
+      - "127.0.0.1:18084:8080"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, 'http://127.0.0.1:8080/build.txt']
+      interval: 5s
+      timeout: 3s
+      retries: 4

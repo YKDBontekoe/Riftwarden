@@ -1,0 +1,10 @@
+[Unit]
+Description=Cloudflare Tunnel for Riftwarden
+
+[Service]
+ExecStart=/usr/local/bin/cloudflared tunnel --config %h/.cloudflared/riftwarden.yml --no-autoupdate run riftwarden
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=default.target

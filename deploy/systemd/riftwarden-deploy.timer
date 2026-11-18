@@ -1,0 +1,10 @@
+[Unit]
+Description=Check GitHub Container Registry for a Riftwarden update
+
+[Timer]
+OnBootSec=20s
+OnUnitInactiveSec=60s
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target

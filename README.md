@@ -6,7 +6,7 @@ A first-person sci-fi action tower-defense roguelite for the browser. You are a 
 
 ## Run it
 
-Requires Node 20+ and a desktop browser with WebGL2.
+Use Node 24 (the version used in CI) and a desktop browser with WebGL2.
 
 ```bash
 npm install
@@ -36,6 +36,12 @@ Before merging, resolve review conversations and wait for **Build and unit tests
 GitHub squash-merges pull requests and automatically deletes merged branches in this repository. Use the pull request title to summarize the change in `main` history.
 
 See the [security policy](.github/SECURITY.md) for private vulnerability reporting.
+
+## Production deployment
+
+Merges to `main` run the tests and build, publish a container to GitHub Container Registry, and verify the deployed commit at [riftwarden.ykdbonte.dev](https://riftwarden.ykdbonte.dev). The `production` GitHub environment only accepts `main`. You can also run the CI workflow manually on `main` to redeploy it.
+
+The Ubuntu server checks for a new image every minute and serves the game on loopback. Its dedicated Cloudflare Tunnel publishes the site over HTTPS. The Compose file and user systemd units are in [`deploy/`](deploy/). On the server, `systemctl --user start riftwarden-deploy.service` checks for an update immediately. For deployment logs, use `journalctl --user -u riftwarden-deploy.service`.
 
 ## Controls
 
