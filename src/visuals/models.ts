@@ -64,6 +64,19 @@ export function buildWalker(kit: Kit, P: Palette, heavy: boolean): WalkerRig {
   kit.part('box', P.graphite, head, { pos: [0, 0, 0.31], scale: [0.54, 0.22, 0.075] });
   kit.part('box', P.orangeGlow, head, { pos: [0, 0.01, 0.353], scale: [0.39, 0.075, 0.02], shadow: false });
   kit.part('cyl8', P.metal, head, { pos: [0.22, 0.32, -0.15], scale: [0.04, 0.35, 0.04] });
+  kit.part('cyl8', P.metal, head, { pos: [-0.18, 0.28, -0.2], scale: [0.03, 0.22, 0.03] });
+  kit.part('sphere', P.orangeGlow, head, { pos: [0.22, 0.5, -0.15], scale: [0.06, 0.06, 0.06], shadow: false });
+  // Cheek sensor pods.
+  for (const side of [-1, 1]) kit.part('cyl8', P.graphite, head, { pos: [side * 0.31, -0.02, 0.12], rot: [Math.PI / 2, 0, 0], scale: [0.12, 0.3, 0.12] });
+
+  // Chest vent slats and back exhaust stacks with hot tips.
+  for (let i = 0; i < 3; i++) kit.part('box', P.graphite, torso, { pos: [0, 0.22 - i * 0.1, 0.545], scale: [0.5, 0.035, 0.03], rot: [-0.18, 0, 0] });
+  for (const side of [-1, 1]) {
+    kit.part('cyl8', P.metal, torso, { pos: [side * 0.3, 0.55, -0.62], rot: [-0.25, 0, 0], scale: [0.16, 0.6, 0.16] });
+    kit.part('cyl8', P.orangeDim, torso, { pos: [side * 0.3, 0.86, -0.7], rot: [-0.25, 0, 0], scale: [0.12, 0.04, 0.12], shadow: false });
+    // Cable bundle from the back pack into the hips.
+    kit.part('cyl8', P.enemyDark, torso, { pos: [side * 0.32, -0.32, -0.5], rot: [0.5, 0, 0], scale: [0.07, 0.5, 0.07] });
+  }
 
   // Right arm: plasma cannon
   const cannon = kit.node('cannon', torso, [0.82, 0.05, 0.1]);
@@ -75,6 +88,7 @@ export function buildWalker(kit: Kit, P: Palette, heavy: boolean): WalkerRig {
   kit.part('cyl', P.enemyDark, barrel, { pos: [0.05, -0.05, 0.5], rot: [Math.PI / 2, 0, 0], scale: [0.26, 1.0, 0.26] });
   kit.part('box', P.enemyArmor, barrel, { pos: [0.08, 0.08, 0.3], scale: [0.18, 0.12, 0.7] });
   if (heavy) kit.part('cyl', P.enemyDark, cannon, { pos: [-0.12, -0.18, 0.45], rot: [Math.PI / 2, 0, 0], scale: [0.2, 0.9, 0.2] });
+  for (let i = 0; i < 4; i++) kit.part('box', P.graphite, cannon, { pos: [0.05, -0.05, 0.12 + i * 0.09], scale: [0.42, 0.42, 0.025] });
   const muzzleGlow = kit.part('torus', P.orangeGlow, barrel, { pos: [0.05, -0.05, 1.0], rot: [Math.PI / 2, 0, 0], scale: [0.3, 0.3, 0.3] });
 
   // Left arm: armored blade plate
@@ -82,6 +96,8 @@ export function buildWalker(kit: Kit, P: Palette, heavy: boolean): WalkerRig {
   kit.part('sphere', P.enemyArmor, arm, { scale: [0.46, 0.46, 0.46] });
   kit.part('box', P.enemyArmor, arm, { pos: [-0.1, -0.35, 0.25], scale: [0.14, 0.75, 0.6], rot: [0.3, 0, 0.1] });
   kit.part('box', P.orangeDim, arm, { pos: [-0.18, -0.35, 0.25], scale: [0.02, 0.6, 0.06], rot: [0.3, 0, 0.1] });
+  kit.part('box', P.enemyArmor, arm, { pos: [-0.08, 0.22, 0], scale: [0.5, 0.12, 0.56], rot: [0, 0, 0.35] });
+  kit.part('box', P.enemyDark, arm, { pos: [-0.12, 0.16, 0], scale: [0.52, 0.05, 0.58], rot: [0, 0, 0.35] });
 
   if (heavy) {
     for (const side of [-1, 1]) {
@@ -97,6 +113,10 @@ export function buildWalker(kit: Kit, P: Palette, heavy: boolean): WalkerRig {
     const thigh = kit.node('thigh', hips, [side * 0.42, -0.05, 0]);
     kit.part('box', P.enemyArmor, thigh, { pos: [0, -0.36, 0.05], scale: [0.3, 0.78, 0.36], rot: [-0.15, 0, 0] });
     kit.part('sphere', P.enemyDark, thigh, { scale: [0.34, 0.34, 0.34] });
+    // Hydraulic ram on the front of the thigh + armoured hip skirt.
+    kit.part('cyl8', P.metal, thigh, { pos: [side * 0.12, -0.34, 0.25], rot: [-0.15, 0, 0], scale: [0.07, 0.6, 0.07] });
+    kit.part('cyl8', P.graphite, thigh, { pos: [side * 0.12, -0.2, 0.27], rot: [-0.15, 0, 0], scale: [0.11, 0.26, 0.11] });
+    kit.part('box', P.enemyArmor, thigh, { pos: [side * 0.08, -0.08, 0.02], scale: [0.36, 0.3, 0.46], rot: [0, 0, side * 0.12] });
     const knee = kit.node('knee', thigh, [0, -WALKER_THIGH, 0]);
     kit.part('sphere', P.metal, knee, { scale: [0.24, 0.24, 0.24] });
     kit.part('box', P.enemyDark, knee, { pos: [0, -0.32, -0.12], scale: [0.22, 0.7, 0.24], rot: [0.35, 0, 0] });
@@ -104,6 +124,9 @@ export function buildWalker(kit: Kit, P: Palette, heavy: boolean): WalkerRig {
     const ankle = kit.node('ankle', knee, [0, -WALKER_SHIN, 0]);
     kit.part('box', P.enemyDark, ankle, { pos: [0, -0.026, 0.09], scale: [0.39, 0.09, 0.69] });
     kit.part('box', P.enemyArmor, ankle, { pos: [0, 0.045, 0.1], scale: [0.36, 0.10, 0.61] });
+    // Three toe claws and a heel spur.
+    for (const t of [-1, 0, 1]) kit.part('box', P.metal, ankle, { pos: [t * 0.12, -0.03, 0.47], rot: [0.25, t * 0.25, 0], scale: [0.07, 0.07, 0.18] });
+    kit.part('box', P.metal, ankle, { pos: [0, -0.02, -0.29], rot: [-0.3, 0, 0], scale: [0.09, 0.07, 0.14] });
     thigh.rotationQuaternion = Quaternion.Identity();
     knee.rotationQuaternion = Quaternion.Identity();
     ankle.rotationQuaternion = Quaternion.Identity();
@@ -145,6 +168,14 @@ export function buildRusher(kit: Kit, P: Palette): DroneRig {
   kit.part('box', P.enemyDark, body, { pos: [0, 0.45, -0.3], scale: [0.05, 0.35, 0.45], rot: [-0.3, 0, 0] });
   const ring = kit.part('torus', P.orangeGlow, body, { pos: [0, 0, -0.5], rot: [Math.PI / 2, 0, 0], scale: [0.62, 0.62, 0.62] });
   kit.part('cyl', P.metal, body, { pos: [0, 0, -0.45], rot: [Math.PI / 2, 0, 0], scale: [0.4, 0.2, 0.4] });
+  // Twin vectoring thrusters with hot nozzles, a sensor cluster and belly vents.
+  for (const side of [-1, 1]) {
+    kit.part('cyl8', P.graphite, body, { pos: [side * 0.42, -0.12, -0.42], rot: [Math.PI / 2, 0, 0], scale: [0.2, 0.36, 0.2] });
+    kit.part('cyl8', P.orangeGlow, body, { pos: [side * 0.42, -0.12, -0.61], rot: [Math.PI / 2, 0, 0], scale: [0.14, 0.03, 0.14], shadow: false });
+    kit.part('box', P.metal, body, { pos: [side * 0.2, 0.3, 0.35], scale: [0.05, 0.05, 0.22] });
+  }
+  kit.part('cyl8', P.metal, body, { pos: [0, 0.48, 0.15], scale: [0.03, 0.3, 0.03] });
+  for (let i = 0; i < 3; i++) kit.part('box', P.graphite, body, { pos: [0, -0.38, -0.05 + i * 0.14], scale: [0.4, 0.03, 0.05] });
   return { root, body, ring };
 }
 

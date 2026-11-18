@@ -114,6 +114,7 @@ src/core/settings.ts       versioned/validated localStorage settings     [pure]
 src/world/layout.ts        ARENA data: boxes, ramps, lane routes, reactor, spawn [pure, single source of truth]
 src/world/geometry.ts      distance helpers                              [pure]
 src/world/physicsGroups.ts Havok filter masks (ENV vs PLAYER)
+src/visuals/arenaDressing.ts arena set dressing (wall services, partition detail, tunnel ribs, drains, industrial skyline): visual only, no collision, merged per material
 src/visuals/arena.ts       builds arena meshes (merged per material, box-projected world UVs) + one static compound Havok body
 src/visuals/kit.ts         unit-primitive model kit; one hidden source mesh per (shape, material), GPU instances everywhere
 src/visuals/models.ts      walker/bulwark, rush drone, Sentinel turret, reactor rigs (animated plasma core, glass shell, beam)
