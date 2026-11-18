@@ -1,11 +1,9 @@
 // Browser acceptance (construction, persistence, co-op clients, tutorial, settings).
 // Usage: npm run dev (5173) [+ npm run server for co-op sections], then node scripts/e2e-construction-coop.cjs [G,H,I,J,K,L,M,O,P,X]
-const { chromium } = require('playwright');
-const OUT = process.env.E2E_OUT || require('os').tmpdir();
+const H = require('./lib/harness.cjs');
+const { chromium, OUT, check } = H;
 const FILTER = process.argv[2] || '';
-const want = (k) => !FILTER || FILTER.split(',').some((f) => k.startsWith(f));
-let failures = 0, passes = 0;
-const check = (n, ok, info = '') => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${n}${info ? '  ' + info : ''}`); ok ? passes++ : failures++; };
+const want = H.sectionFilter(FILTER);
 const QUALITY = process.env.Q || 'low';
 
 async function open(b, { fresh = true, keep = null } = {}) {
@@ -372,6 +370,6 @@ const cell = (i, j) => [2 + 5 * i + 2.5, -2.5 + 5 * j + 2.5];
   console.log(p.errs.slice(0, 6).join('\n'));
   check('Z no page errors', !p.errs.some((e) => e.startsWith('PAGEERR')), p.errs.find((e) => e.startsWith('PAGEERR')) ?? '');
   await b.close();
-  console.log(`\n${failures === 0 ? 'ALL PASSED' : 'FAILURES'}  ${passes} passed, ${failures} failed`);
-  process.exit(failures ? 1 : 0);
+  console.log(`\n${H.stats.failures === 0 ? 'ALL PASSED' : 'FAILURES'}  ${H.stats.passes} passed, ${H.stats.failures} failed`);
+  process.exit(H.stats.failures ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(1); });

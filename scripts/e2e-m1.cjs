@@ -3,30 +3,12 @@
 // set NODE_PATH to the global node_modules if playwright is installed globally).
 // Runs in ?test mode: fixed-step simulation, low graphics preset, no real pointer lock.
 // Screenshots go to $E2E_OUT (default: OS temp dir). Exit code 0 = all checks passed.
-const { chromium } = require('playwright');
 const fs = require('fs');
-const OUT = process.env.E2E_OUT || require('os').tmpdir();
-let failures = 0;
-const check = (name, ok, info = '') => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${info ? '  ' + info : ''}`); if (!ok) failures++; };
-
-async function launch(storageState) {
-  const b = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--js-flags=--expose-gc'] });
-  const ctx = await b.newContext({ viewport: { width: 1280, height: 720 }, storageState });
-  if (!storageState) await ctx.addInitScript(() => { if (!localStorage.getItem('riftwarden.settings')) localStorage.setItem('riftwarden.settings', JSON.stringify({ v: 1, data: { sensitivity: 1, fov: 90, quality: 'low', volume: 0 } })); });
-  await ctx.addInitScript(() => { window.__skipUpgrades = true; });
-  const p = await ctx.newPage();
-  const errs = [];
-  p.on('pageerror', (e) => errs.push('PAGEERR ' + e.message));
-  p.on('console', (m) => { if (m.type() === 'error') errs.push('console.error ' + m.text().slice(0, 300)); });
-  await p.goto((process.env.RIFT_URL || 'http://localhost:5173/') + '?test');
-  await p.waitForFunction(() => window.__rift && window.__rift.state().screen === 'menu', null, { timeout: 180000 });
-  await p.evaluate(() => window.__rift.stopLoop());
-  await p.evaluate(() => { window.__rift.flow.skipUpgrades = true; });
-  return { b, ctx, p, errs };
-}
-const S = (p) => p.evaluate(() => window.__rift.state());
-const waitFor = (p, fn, arg, t = 60000) => p.waitForFunction(fn, arg, { timeout: t, polling: 100 });
-const shot = async (p, name) => { await p.evaluate(() => window.__rift.render(2)); await p.screenshot({ path: `${OUT}/${name}.png`, timeout: 120000 }); };
+const H = require('./lib/harness.cjs');
+const { OUT, check, S, ev } = H;
+const waitFor = (p, fn, arg, t = 60000) => H.waitFor(p, fn, arg, t);
+const launch = (storageState) => H.launch({ storageState, skipUpgrades: true, gc: true });
+const shot = (p, name) => H.shot(p, name, { frames: 2 });
 
 /** Fast-forward a live run through waves, killing everything, until `wave` is cleared. */
 async function clearThrough(p, wave) {
@@ -355,8 +337,8 @@ async function clearThrough(p, wave) {
 
   const allErrs = [...errs, ...(errs2 || [])].filter((e) => !/favicon|404/.test(e));
   check('Z no runtime errors', allErrs.length === 0, allErrs.slice(0, 5).join(' | '));
-  console.log(`\n${failures ? failures + ' FAILURE(S)' : 'ALL PASSED'} in ${Math.round((Date.now() - t0) / 1000)}s`);
+  console.log(`\n${H.stats.failures ? H.stats.failures + ' FAILURE(S)' : 'ALL PASSED'} in ${Math.round((Date.now() - t0) / 1000)}s`);
   fs.writeFileSync(`${OUT}/leak.json`, JSON.stringify(stats, null, 1));
   await b.close();
-  process.exit(failures ? 1 : 0);
+  process.exit(H.stats.failures ? 1 : 0);
 })().catch((e) => { console.error('DRIVER ERROR', e); process.exit(2); });
