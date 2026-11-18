@@ -1,5 +1,6 @@
 import { beveledBoxData } from './bevel';
-import { type AbstractMesh, type Material, Matrix, Mesh, MeshBuilder, type Scene, TransformNode, Vector3 } from '@babylonjs/core';
+import { enableHitFlash, initFlash, registerFlashBuffer } from './hitFlashPlugin';
+import { type AbstractMesh, type Material, Matrix, Mesh, MeshBuilder, PBRMaterial, type Scene, TransformNode, Vector3 } from '@babylonjs/core';
 
 export type Shape = 'box' | 'cyl' | 'cyl6' | 'cyl8' | 'sphere' | 'ico' | 'cone' | 'torus' | 'torusThin' | 'arc' | 'cone4';
 
@@ -21,6 +22,22 @@ export class Kit {
   private templates = new Map<string, Mesh>();
   private root: TransformNode;
   shadowSink: ((m: AbstractMesh) => void) | null = null;
+  /**
+   * While true, new parts are flashable: their templates (kept apart by a `|f` key suffix) register the
+   * per-instance hit-flash buffer and their material gets the flash plugin. Enemy rigs are built in this mode.
+   */
+  flashMode = false;
+
+  /** Run `fn` with flashable parts (enemy rigs, elite hardware, threat marks). */
+  flashable<T>(fn: () => T): T {
+    const prev = this.flashMode;
+    this.flashMode = true;
+    try {
+      return fn();
+    } finally {
+      this.flashMode = prev;
+    }
+  }
 
   constructor(private scene: Scene) {
     this.root = new TransformNode('kitTemplates', scene);
@@ -63,8 +80,13 @@ export class Kit {
     }
   }
 
+  /** Only PBR materials carry the flash plugin. */
+  private flashes(mat: Material): boolean {
+    return this.flashMode && mat instanceof PBRMaterial;
+  }
+
   template(shape: Shape, mat: Material): Mesh {
-    const key = `${shape}|${mat.uniqueId}`;
+    const key = `${shape}|${mat.uniqueId}${this.flashes(mat) ? '|f' : ''}`;
     let t = this.templates.get(key);
     if (!t) {
       t = this.makeShape(shape);
@@ -75,6 +97,10 @@ export class Kit {
       t.position.y = -500;
       t.alwaysSelectAsActiveMesh = false;
       t.receiveShadows = true;
+      if (this.flashes(mat)) {
+        enableHitFlash(mat);
+        registerFlashBuffer(t);
+      }
       this.templates.set(key, t);
     }
     return t;
@@ -98,6 +124,7 @@ export class Kit {
       m = c;
     } else {
       m = t.createInstance(o.name ?? 'part');
+      if (this.flashes(mat)) initFlash(m);
     }
     m.parent = parent;
     m.isPickable = false;

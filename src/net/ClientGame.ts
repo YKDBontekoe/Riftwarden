@@ -848,6 +848,7 @@ export class ClientGame extends Game {
         if (!e) return;
         e.flinch = Math.min(1, e.flinch + 0.35);
         if (ev[2]) e.shieldFlash = 1;
+        this.enemies.flash(e, ev[2] ? [0.25, 0.7, 1] : [1, 0.92, 0.8]);
         e.lastHit = performance.now();
         return;
       }
