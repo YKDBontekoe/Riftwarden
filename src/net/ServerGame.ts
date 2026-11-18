@@ -700,8 +700,8 @@ export class ServerGame extends Game {
             this.waves.update(1, 1);
             for (const e of [...this.enemies.active]) if (e.alive) this.damageEnemy('player', e, 1e9, e.center(), false, undefined, 'plasma', a.player.eye);
           }
-        } else if (m.op === 'jump') this.devJump(m.n ?? 5);
-        else if (m.op === 'boss') this.devForce({ boss: 'colossus' });
+        } else if (m.op === 'jump') this.dev.jump(m.n ?? 5);
+        else if (m.op === 'boss') this.dev.force({ boss: 'colossus' });
         else if (m.op === 'reactor') this.debugDamageReactor(m.n ?? 100);
         return null;
       }

@@ -15,6 +15,7 @@ import { equipFromStorage, uninstallModule } from '../progression/save';
 import { applyLoadout, bankRewards, beginRun, deployBlocker, equippedItem, recordRun, selectTier } from '../progression/save';
 import { getTier, THREAT_TIERS } from '../progression/tiers';
 import { hudStore, type Location, uiEvents } from '../ui/store';
+import type { DevTools } from '../arena/DevTools';
 import { Game } from './Game';
 import { SurvivalPlanner } from '../survival/plan';
 import { tutorialActive } from '../progression/tutorial';
@@ -652,11 +653,11 @@ export class Flow {
       planFor: (seed: number, tier: number, n: number) => new SurvivalPlanner((seed >>> 0) ^ 0x6d2b79f5, tier).plan(n),
       /** M6 development tools (every call marks the run as non-record-eligible). */
       dev: {
-        jump: (n: number) => flow.arena?.devJump(n),
-        spawn: (kind: Parameters<Game['devSpawn']>[0], mods: Parameters<Game['devSpawn']>[1] = [], gate: Parameters<Game['devSpawn']>[2] = 'north') => flow.arena?.devSpawn(kind, mods, gate) ?? null,
-        force: (o: Parameters<Game['devForce']>[0]) => flow.arena?.devForce(o),
-        evolve: (id: Parameters<Game['devEvolve']>[0]) => flow.arena?.devEvolve(id),
-        reset: () => flow.arena?.devReset(),
+        jump: (n: number) => flow.arena?.dev.jump(n),
+        spawn: (kind: Parameters<DevTools['spawn']>[0], mods: Parameters<DevTools['spawn']>[1] = [], gate: Parameters<DevTools['spawn']>[2] = 'north') => flow.arena?.dev.spawn(kind, mods, gate) ?? null,
+        force: (o: Parameters<DevTools['force']>[0]) => flow.arena?.dev.force(o),
+        evolve: (id: Parameters<DevTools['evolve']>[0]) => flow.arena?.dev.evolve(id),
+        reset: () => flow.arena?.dev.reset(),
         /** Deploy on any tier (ignores unlocks) as a development session. */
         deploy: (tier: number) => flow.devDeploy(tier),
       },

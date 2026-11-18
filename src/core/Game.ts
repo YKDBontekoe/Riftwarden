@@ -27,6 +27,7 @@ import { type ShotOutcome, type ShotRequest, type SurfaceImpact, Weapon, type We
 import type { WeaponFamily } from '../data/defs';
 import { WeaponFx } from '../fx/WeaponFx';
 import { ECONOMY } from '../data/defs';
+import { DevTools } from '../arena/DevTools';
 import { pickInteractable } from '../home/interaction';
 import { DROP_SOURCES, type DropSourceId, rollDrops } from '../loot/drops';
 import { equipmentModifiers, weaponDefFor } from '../loot/equipment';
@@ -60,15 +61,13 @@ import { type Impact, Ordnance, Telegraphs } from '../fx/Hostile';
 import { M6_BEHAVIORS } from '../enemies/behaviors';
 import { JAMMER_CRAWLER_BEHAVIORS } from '../enemies/jammerCrawlerBehaviors';
 import { BOSS_BEHAVIORS } from '../enemies/bosses';
-import { bossMults, type EvolutionId, SurvivalPlanner } from '../survival/plan';
+import { bossMults, SurvivalPlanner } from '../survival/plan';
 import { SurvivalRuntime } from '../survival/SurvivalRuntime';
 import { ArenaDynamics } from '../world/ArenaDynamics';
 import type { DropSource } from '../loot/drops';
 import type { BossHud } from '../ui/store';
 import type { EnemyKind } from '../data/defs';
 import type { EliteModId } from '../survival/elites';
-import type { EventId } from '../survival/events';
-import type { BossId } from '../survival/bosses';
 import type { Input } from './Input';
 import { type Settings, saveSettings } from './settings';
 import { TacticalEnergy, Wallet } from './tactical';
@@ -214,6 +213,8 @@ export class Game {
   readonly dynamics: ArenaDynamics;
   readonly planner: SurvivalPlanner;
   readonly survival: SurvivalRuntime;
+  /** Development lab actions (F4 panel / `__rift.dev`); every action taints the run. */
+  readonly dev: DevTools;
   readonly layout: ArenaLayout = ARENA;
   /** Hostile time since the run started (enemy animation phase). */
   protected hostileT = 0;
@@ -499,6 +500,24 @@ export class Game {
       em('machine', p.x, 2, p.z, 0.8, 5);
     }
     if (cfg.tutorial) this.tut = new TutorialDirector('arena', cfg.tutorial, { available: (id) => this.tutAvailable(id), complete: (id, t) => this.tutComplete(id, t) });
+    this.dev = new DevTools({
+      cfg: this.cfg,
+      enemies: this.enemies,
+      ordnance: this.ordnance,
+      tele: this.tele,
+      survival: this.survival,
+      waves: this.waves,
+      planner: this.planner,
+      turrets: this.turrets,
+      enemyCtx: this.enemyCtx,
+      restoreReactor: () => { this.reactorHp = ECONOMY.reactorMaxHp; },
+      resetToPlayable: () => {
+        this.offer = null;
+        this.upgradeDue = false;
+        this.checkpointOpen = false;
+        if (this.screen !== 'playing' && this.screen !== 'defeat') this.setScreen('playing');
+      },
+    });
   }
 
   // ---------------------------------------------------------------- M7 onboarding
@@ -1837,69 +1856,6 @@ export class Game {
       this.fx.onShake?.(this.player.position, 0.5);
       uiEvents.emit('alert', { text: `${e.def.name.toUpperCase()} HAS ENTERED THE FACILITY`, tone: 'red' });
     }
-  }
-
-  // ---------------------------------------------------------------- M6: development tools (taint the run)
-
-  /** Development tools mark the run: no records, no banking of permanent rewards. */
-  protected devMark(): void {
-    if (!this.cfg.run.survival.dev) {
-      this.cfg.run.survival.dev = true;
-      uiEvents.emit('alert', { text: 'DEVELOPMENT SESSION · RECORDS AND BANKING DISABLED', tone: 'white' });
-    }
-  }
-
-  /** Jump to the preparation phase of wave n (clears the field; catches up arena evolutions). */
-  devJump(n: number): void {
-    this.devMark();
-    this.enemies.clear();
-    this.ordnance.reset();
-    this.tele.reset();
-    this.survival.endEvent();
-    this.waves.jumpTo(Math.max(1, Math.floor(n)));
-  }
-
-  devSpawn(kind: EnemyKind, mods: EliteModId[] = [], gate: GateId = 'north'): Enemy {
-    this.devMark();
-    const w = this.waves.wave;
-    const enc = 1;
-    const boss = kind === 'colossus' || kind === 'overseer';
-    const b = boss ? bossMults(enc, this.cfg.tier) : { hp: 1, damage: 1 };
-    return this.enemies.spawn(kind, gate, ARENA, w.hpMult * b.hp, w.damageMult * b.damage, w.speedMult, { mods, tag: boss ? 'boss' : kind === 'courier' ? 'hvt' : undefined, encounter: enc, ctx: this.enemyCtx });
-  }
-
-  /** Force the next wave (or the current prep) to be a boss / event wave. */
-  devForce(o: { boss?: BossId | null; event?: EventId | null }): void {
-    this.devMark();
-    const n = this.waves.phase === 'prep' ? this.waves.number : this.waves.number + 1;
-    this.planner.force(n, o);
-    if (this.waves.phase === 'prep') {
-      this.waves.recompose();
-      this.survival.prep(this.waves.wave);
-    }
-  }
-
-  devEvolve(id: EvolutionId): void {
-    this.devMark();
-    this.planner.forceEvolution(this.waves.number, id);
-    this.survival.applyEvolution(id);
-    if (this.waves.phase === 'prep') this.waves.recompose();
-  }
-
-  /** Reset the arena: clear machines and hazards, restore the reactor and the drone. */
-  devReset(): void {
-    this.devMark();
-    this.enemies.clear();
-    this.ordnance.reset();
-    this.tele.reset();
-    this.survival.endEvent();
-    this.reactorHp = ECONOMY.reactorMaxHp;
-    for (const t of this.turrets.turrets) t.disabledT = 0;
-    // Back to a playable state (a long dev session may have reached a checkpoint/upgrade screen).
-    this.offer = null;
-    this.upgradeDue = false;
-    this.checkpointOpen = false;
-    if (this.screen !== 'playing' && this.screen !== 'defeat') this.setScreen('playing');
   }
 
   /** Copy measured damage totals into the run ledger (before the run is finalized/recorded). */
