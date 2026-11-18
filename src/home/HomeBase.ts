@@ -765,6 +765,7 @@ export class HomeBase {
       if (e) this.emitters.push(e);
     }
     this.ambient.startSound();
+    this.layer.startSound();
   }
 
   /** M7: enter construction mode (from the architect console). Owner only. */

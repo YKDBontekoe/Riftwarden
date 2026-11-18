@@ -1,4 +1,5 @@
 import { Color3, type Material, MeshBuilder, PhysicsBody, PhysicsMotionType, PhysicsShapeBox, PhysicsShapeContainer, PointLight, Quaternion, type Scene, type TransformNode, Vector3 } from '@babylonjs/core';
+import { type Emitter, sfx } from '../../audio/Sfx';
 import type { Kit } from '../../visuals/kit';
 import { unlit } from '../../visuals/materials';
 import { PHYS_ENV } from '../../world/physicsGroups';
@@ -13,7 +14,18 @@ interface Built {
   body: PhysicsBody | null;
   sig: string;
   light?: PointLight | null;
+  /** Positional hum of working machines (server racks, machinery, reactor models). */
+  hum?: Emitter | null;
+  /** Where the hum comes from, kept so it can be started once audio is unlocked. */
+  humAt?: { kind: HumKind; x: number; y: number; z: number; gain: number };
 }
+
+type HumKind = 'hum' | 'machine';
+const HUMS: Partial<Record<string, { kind: HumKind; y: number; gain: number }>> = {
+  serverRack: { kind: 'hum', y: 1.4, gain: 0.3 },
+  machinery: { kind: 'machine', y: 1.2, gain: 0.35 },
+  reactorModel: { kind: 'hum', y: 1.5, gain: 0.3 },
+};
 
 /**
  * Renders the player-built part of the HQ from save data and keeps it in sync incrementally:
@@ -79,6 +91,7 @@ export class ExpansionLayer {
     if (!b) return;
     b.body?.dispose();
     b.light?.dispose();
+    b.hum?.dispose();
     b.root.dispose(false, false);
     this.built.delete(k);
     this.doors = this.doors.filter((d) => d.key !== k);
@@ -86,6 +99,17 @@ export class ExpansionLayer {
 
   dispose(): void {
     for (const k of [...this.built.keys()]) this.drop(k);
+  }
+
+  /** Start the machine hums that could not start earlier (audio unlocks after the first gesture). */
+  startSound(): void {
+    for (const b of this.built.values()) this.startHum(b);
+  }
+
+  private startHum(b: Built): void {
+    const h = b.humAt;
+    if (!h || b.hum || !sfx.ready) return;
+    b.hum = sfx.emitter(h.kind, h.x, h.y, h.z, h.gain, 2.5);
   }
 
   update(dt: number): void {
@@ -347,7 +371,13 @@ export class ExpansionLayer {
         light.range = 10;
       }
     }
-    return { root, body: this.body(boxes), sig: '', light };
+    const built: Built = { root, body: this.body(boxes), sig: '', light };
+    const hum = HUMS[p.type];
+    if (hum) {
+      built.humAt = { kind: hum.kind, x: p.position[0], y: hum.y * p.scale, z: p.position[2], gain: hum.gain };
+      this.startHum(built);
+    }
+    return built;
   }
 
   get realLights(): number {

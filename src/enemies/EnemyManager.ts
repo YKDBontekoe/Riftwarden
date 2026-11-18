@@ -549,6 +549,10 @@ export class EnemyManager {
       const i = this.active.indexOf(e);
       if (i >= 0) this.active.splice(i, 1);
       for (const h of e.hitboxes) h.isPickable = false;
+      // Statuses end with the enemy (nothing ticks on a wreck).
+      resetStatus(e.status);
+      e.mark?.setEnabled(false);
+      e.markKind = '';
       this.flash(e, [1, 0.55, 0.2]);
       this.wrecks.push({ e, t: 0, dur, finish: () => burst(), spark: 0 });
       return;
