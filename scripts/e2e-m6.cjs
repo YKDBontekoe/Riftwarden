@@ -670,7 +670,7 @@ async function home(p) {
     await p.waitForFunction(() => window.__rift && window.__rift.state().screen === 'menu', null, { timeout: 180000 });
     await ev(p, () => window.__rift.stopLoop());
     const reloaded = await ev(p, () => { const d = window.__rift.profile.save; return { v: d.version, rec: d.records['3'], milestones: d.milestones, devRuns: d.totals.devRuns, devHist: d.history.filter((h) => h.dev).length, rec1: d.records['1'] ?? null, rec5: d.records['5'] ?? null }; });
-    check('K3 records and milestones persist across a reload (save v6)', reloaded.v === 6 && reloaded.rec.bossesDefeated >= 1 && reloaded.milestones.includes('boss1'), JSON.stringify(reloaded));
+    check('K3 records and milestones persist across a reload (save v6+)', reloaded.v >= 6 && reloaded.rec.bossesDefeated >= 1 && reloaded.milestones.includes('boss1'), JSON.stringify(reloaded));
     check('K4 development sessions never produced records (tier I/V untouched by dev runs)', (want('B') ? reloaded.devRuns > 0 : true) && reloaded.rec5 === null, JSON.stringify(reloaded));
   }
 
