@@ -1,5 +1,6 @@
 import { coreCell, connectedFloors, edgeCells, cellKey, emptyStructure, inBounds, isMovableStation, parseCell, type StationPose, type Structure } from '../home/build/model';
 import { pieceDef } from '../home/build/catalog';
+import { rollSignature, signatureDef } from '../loot/signatures';
 import { TECH_LIST, techKey } from '../towers/components';
 import { ACCENTS, DEFAULT_PLACEABLES, type Placeable, PLACEABLE_BOUNDS, PROP_TYPES, type PropType, type PropValue } from '../home/placeables';
 import { isStatKey, type StatOp } from '../combat/stats';
@@ -398,7 +399,7 @@ export function sanitizeItem(v: unknown, repairs: string[] = [], nested = false,
     // Only weapons have sockets (M3); the count is bounded by the build's socket list below.
     sockets: category === 'weapon' ? int(r.sockets, rarity(r.rarity).sockets, 0, 8) : 0,
     socketed: [],
-    signature: typeof r.signature === 'string' ? r.signature.slice(0, 64) : null,
+    signature: typeof r.signature === 'string' && signatureDef(r.signature) ? r.signature : null,
     seed: int(r.seed, 0, 0, 0xffffffff),
     gen: int(r.gen, 1, 0, 1000),
   };
@@ -470,6 +471,8 @@ export function sanitizeItem(v: unknown, repairs: string[] = [], nested = false,
     void compat;
     item.module = { type: str(m.type, base?.module?.type ?? 'unknown', 32), compatible: ['weapon'], socketCost: 1 };
   }
+  // M7: legendary/exotic weapons from before signatures receive theirs (deterministic from uid + seed).
+  if (!item.signature) item.signature = rollSignature(item);
   return item;
 }
 

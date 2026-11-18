@@ -379,6 +379,15 @@ export class ServerGame extends Game {
     return this.fx;
   }
 
+  protected weaponSignature(): string | null {
+    const a = this.rec.owner ? this.avatar(this.rec.owner) : undefined;
+    return a ? a.inventory.equipped('weapon')?.signature ?? null : null;
+  }
+  protected weaponHeat(): number {
+    const a = this.rec.owner ? this.avatar(this.rec.owner) : undefined;
+    return a ? a.heat : 0;
+  }
+
   protected droneSpeed(): number {
     const a = this.rec.owner ? this.avatar(this.rec.owner) : undefined;
     return a ? (a.flags & 1 ? 40 : a.speed) : 0;

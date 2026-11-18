@@ -1478,12 +1478,17 @@ export class Game {
       if (ex && e.hp < e.maxHp * UP.exec.hp) base *= 1 + UP.exec.bonus(ex);
       const mo = this.director.build.count('m_momentum');
       if (mo && this.droneSpeed() > UP.momentum.speed) base *= 1 + UP.momentum.bonus(mo);
+      // M7 legendary / exotic signatures (damage shaping).
+      const sig = family !== 'arc' ? this.weaponSignature() : null;
+      if (sig === 'overdrive' && this.weaponHeat() > 0.7) base *= 1.35;
+      if (sig === 'phase' && (e.shield > 0 || e.armor > 0 || e.kind === 'enforcer' || e.kind === 'crawler')) base *= 1.8;
     }
     const roll = rollDamage(base, crit, weakpoint, Math.random, 'energy', source);
     // Arc Conductor: a player hit may jump to the nearest other enemy (no chains of arcs).
     if (player && family !== 'arc' && this.stats.arcChance > 0 && Math.random() < this.stats.arcChance) this.arcFrom(e, point, roll.amount * this.stats.arcDamage);
     const src = family === 'arc' ? { kind: 'effect' as const, id: 'arc_conductor' } : player ? { kind: 'weapon' as const, id: family ?? 'plasma' } : { kind: 'tower' as const, id: 'sentinel', towerId: turret?.id };
     const res = this.director.deal({ target: e, amount: roll.amount, base, crit: roll.crit, weak: weakpoint, element: 'none', source: src, chain: this.director.bus.newChain(), point, family: family ?? (player ? 'plasma' : 'tower'), from: from ?? (player ? this.player.eye : undefined) });
+    if (player && family !== 'arc') this.signatureAfterHit(e, point, roll.amount, roll.crit, res);
     if (player) {
       const kind = res.kind;
       uiEvents.emit('hit', kind);
@@ -1502,6 +1507,37 @@ export class Game {
   }
 
   private wasOverheated = false;
+  private sigHits = 0;
+
+  /** Signature of the weapon firing right now (co-op server: the shooter's). */
+  protected weaponSignature(): string | null {
+    return this.inventory.equipped('weapon')?.signature ?? null;
+  }
+  protected weaponHeat(): number {
+    return this.weapon.heat / 100;
+  }
+
+  /** M7 signatures that react to a landed hit. */
+  private signatureAfterHit(e: Enemy, point: Vector3, amount: number, crit: boolean, res: { dealt: number; killed: boolean }): void {
+    const sig = this.weaponSignature();
+    if (!sig) return;
+    const d = this.director;
+    const src = { kind: 'effect' as const, id: `sig:${sig}` };
+    if (sig === 'chain_reaction' && res.killed) {
+      d.blast(point, 3.5, amount * 0.6, 'thermal', src, d.bus.newChain(), { falloff: 0.35, exclude: e });
+      d.explosionFx(point, 3.5, 'thermal');
+    } else if (sig === 'stormcaller' && ++this.sigHits % 6 === 0 && e.alive) {
+      const sky = point.add(new Vector3(0, 9, 0));
+      this.wfx.arc(sky, point);
+      d.chainLightning({ from: point, first: e, count: 3, amount: amount * 2, falloff: 0.7, source: src, chain: d.bus.newChain(), shock: true });
+      sfx.play('arc', { volume: 0.9, pitch: 0.7 });
+    } else if (sig === 'siphon' && res.dealt > 0 && this.player.maxShield > 0) {
+      this.player.shield = Math.min(this.player.maxShield, this.player.shield + res.dealt * 0.03);
+    } else if (sig === 'rift_echo' && crit) {
+      for (const o of d.enemiesNear(point, 4)) d.inflict(o, { chill: 40 }, src, d.bus.newChain(), o.center(new Vector3()));
+      this.fx.ring(point, 4, 0.4, new Color3(1.6, 0.5, 3.0), false);
+    }
+  }
   /** Current drone speed (m/s); dashes count as fast. The co-op server reports the shooter's. */
   protected droneSpeed(): number {
     return this.player.dashing ? 40 : this.player.speed;
