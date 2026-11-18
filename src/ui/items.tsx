@@ -1,3 +1,4 @@
+import { signatureDef } from '../loot/signatures';
 import { type ReactNode, useMemo, useState } from 'react';
 import { formatModifier, STAT_DEFS } from '../combat/stats';
 import { affixDef } from '../loot/affixes';
@@ -195,6 +196,13 @@ export function ItemDetail({ item, status }: { item: ItemInstance; status?: Entr
           })}
         </div>
       )}
+      {signatureDef(item.signature) && (
+        <div className="id-block signature" data-testid="item-signature">
+          <div className="id-label">SIGNATURE · {signatureDef(item.signature)!.exotic ? 'EXOTIC' : 'LEGENDARY'}</div>
+          <div className="sig-name">{signatureDef(item.signature)!.name}</div>
+          <div className="sig-text">{signatureDef(item.signature)!.text}</div>
+        </div>
+      )}
       <div className="id-block">
         <div className="id-label">{item.category === 'module' ? `MODULE AFFIXES · ${item.affixes.length}` : `AFFIXES · ${item.affixes.length}`}</div>
         {item.affixes.length === 0 && <div className="id-none">No affixes</div>}
@@ -235,7 +243,7 @@ export function WeaponBlock({ item, compact }: { item: ItemInstance; compact?: b
           {fam.label.toUpperCase()} · {MECH_LABEL[w.mechanism] ?? w.mechanism}
         </div>
         <div className="id-row">
-          <span>{w.family === 'beam' ? 'Damage / tick · ticks/s' : w.family === 'rail' && w.mechanism === 'charge' ? 'Damage (full charge) · cycle' : 'Damage / shot · fire rate'}</span>
+          <span>{w.mechanism === 'pulse' ? 'Damage / pulse (splash 60%) · pulses/s' : w.mechanism === 'scatter' ? 'Damage / pellet ×7 · shots/s' : w.family === 'beam' ? 'Damage / tick · ticks/s' : w.family === 'rail' && w.mechanism === 'charge' ? 'Damage (full charge) · cycle' : 'Damage / shot · fire rate'}</span>
           <b>
             {fmtNum(w.damage)} · {fmtNum(w.fireRate)}/s
           </b>

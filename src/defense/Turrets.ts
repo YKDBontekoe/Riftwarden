@@ -67,6 +67,9 @@ export class Turret {
   suppressedFor = 0;
 
   /** Knock the tower offline for `seconds` (longest wins; does not stack). */
+  /** M7: boost from the strongest covering Support Amplifier (0 = none; set when stats recompose). */
+  amplified = 0;
+
   disable(seconds: number): void {
     if (!(seconds > 0) || this.building) return;
     this.disabledT = Math.max(this.disabledT, seconds);
@@ -153,11 +156,12 @@ export class Turret {
       const dx = c.x - this.pos.x;
       const dz = c.z - this.pos.z;
       if (dx * dx + dz * dz > range * range) continue;
-      // Priority: closest to the reactor (least remaining path).
-      if (e.remaining >= bestScore) continue;
+      // Priority: closest to the reactor (least remaining path); missile batteries prefer bosses and elites.
+      const score = e.remaining - (this.st.archetype === 'missile' ? (e.def.role === 'boss' ? 1e6 : 0) + (e.elite || e.def.role === 'hvt' ? 1e4 : 0) : 0);
+      if (score >= bestScore) continue;
       if (!ctx.los(this.head, c)) continue;
       best = e;
-      bestScore = e.remaining;
+      bestScore = score;
     }
     return best;
   }
@@ -176,6 +180,7 @@ export class Turret {
   /** Fire immediately regardless of cooldown/aim (network discharge, conductor link). */
   forceFire(ctx: TurretContext, mult = 1): boolean {
     if (this.building || this.disabledT > 0) return false;
+    if (this.st.archetype === 'support') return false;
     if (this.st.archetype === 'cryo') {
       if (!this.anyInRange(this.st.range, ctx)) return false;
       ctx.attack(this, null, mult);
@@ -227,6 +232,19 @@ export class Turret {
     this.cooldown -= dt;
     const pulse = this.empowerT > 0 ? 1.4 + Math.sin(performance.now() * 0.02) * 0.3 : 1;
 
+    if (st.archetype === 'support') {
+      // Amplifier: rotating field rings, periodic field pulse (no target).
+      this.scanT += dt;
+      this.yaw += dt * 0.6;
+      r.yaw.rotation.y = this.yaw;
+      r.pitch.rotation.y = -this.scanT * 2.2;
+      if (this.cooldown <= 0) {
+        this.cooldown = 1 / st.fireRate;
+        ctx.attack(this, null, 1);
+      }
+      r.coreGlow.scaling.setAll(0.42 + Math.sin(this.scanT * 2.4) * 0.06);
+      return;
+    }
     if (st.archetype === 'cryo') {
       this.scanT += dt;
       this.yaw += dt * 0.9;

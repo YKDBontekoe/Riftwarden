@@ -91,6 +91,34 @@ export function buildTowerRig(kit: Kit, P: Palette, cfg: TowerConfig, level = 1,
     for (const side of [-1, 1]) part('box', P.metal, pitch, { pos: [side * 0.26, 0.05, 1.15], rot: [0, side * 0.35, 0], scale: [0.05, 0.05, 0.55] });
     part('sphere', P.whiteGlow, pitch, { pos: [0, 0, 1.25], scale: [0.3, 0.3, 0.3], shadow: false });
     muzzles.push(kit.node('muzzle', pitch, [0, 0, 1.3]));
+  } else if (weapon.archetype === 'missile') {
+    // Missile battery: armoured launcher box, 2x2 tube grid with glowing caps, side loaders.
+    part('box', P.graphite, yaw, { pos: [0, 0.1, -0.15], scale: [1.05, 0.45, 1.0] });
+    for (const side of [-1, 1]) part('box', P.white, yaw, { pos: [side * 0.6, 0.25, -0.1], scale: [0.14, 0.8, 0.9] });
+    coreGlow = part('cyl', accent, yaw, { pos: [0, 0.12, -0.7], rot: [Math.PI / 2, 0, 0], scale: [0.32, 0.1, 0.32] });
+    part('box', P.white, pitch, { pos: [0, 0.18, 0.25], scale: [1.0, 0.72, 0.95] });
+    part('box', P.graphite, pitch, { pos: [0, 0.18, 0.72], scale: [0.92, 0.64, 0.04] });
+    for (const x of [-0.24, 0.24]) {
+      for (const y of [0.0, 0.36]) {
+        part('cyl8', P.metal, pitch, { pos: [x, y, 0.55], rot: [Math.PI / 2, 0, 0], scale: [0.28, 0.42, 0.28] });
+        part('cyl8', P.orangeGlow, pitch, { pos: [x, y, 0.76], rot: [Math.PI / 2, 0, 0], scale: [0.2, 0.02, 0.2], shadow: false });
+        muzzles.push(kit.node('muzzle', pitch, [x, y, 0.82]));
+      }
+    }
+    part('box', accent, pitch, { pos: [0, 0.56, 0.3], scale: [0.7, 0.04, 0.6], shadow: false });
+  } else if (weapon.archetype === 'support') {
+    // Support amplifier: slim mast, counter-rotating field rings, emitter crown.
+    part('cyl', P.white, yaw, { pos: [0, 0.2, 0], scale: [0.8, 0.4, 0.8] });
+    part('cyl', P.graphite, yaw, { pos: [0, 0.9, 0], scale: [0.26, 1.4, 0.26] });
+    coreGlow = part('sphere', P.cyanGlow, yaw, { pos: [0, 1.75, 0], scale: [0.42, 0.42, 0.42], shadow: false });
+    part('torus', P.white, yaw, { pos: [0, 0.6, 0], scale: [1.3, 1, 1.3] });
+    part('torusThin', P.cyanGlow, pitch, { pos: [0, 0.9, -0.3], rot: [0.35, 0, 0.2], scale: [1.5, 1, 1.5], shadow: false });
+    part('torusThin', P.cyanGlow, pitch, { pos: [0, 1.25, -0.3], rot: [-0.3, 0, -0.25], scale: [1.1, 1, 1.1], shadow: false });
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2;
+      part('box', P.metal, yaw, { pos: [Math.sin(a) * 0.32, 1.6, Math.cos(a) * 0.32], rot: [Math.cos(a) * 0.4, a, -Math.sin(a) * 0.4], scale: [0.06, 0.5, 0.06] });
+    }
+    muzzles.push(kit.node('muzzle', yaw, [0, 1.75, 0]));
   } else {
     // Cryogenic field projector: dome, crystal array, orbiting emitter ring.
     part('cyl', P.white, yaw, { pos: [0, 0.1, 0], scale: [1.1, 0.5, 1.1] });

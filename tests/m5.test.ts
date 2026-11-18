@@ -339,7 +339,7 @@ describe('modular towers', () => {
     expect(isUnlocked(new Set(STARTER_TECH), 'weapon', 'chain_emitter')).toBe(false);
     expect(availableParts(DEFAULT_CONFIG, 'weapon', STARTER_TECH).map((p) => p.id)).toEqual(['autocannon']);
     const all = new Set([...STARTER_TECH, ...TECH_LIST.map((t) => `${t.slot}:${t.id}`)]);
-    expect(availableParts(DEFAULT_CONFIG, 'weapon', all).map((p) => p.id).sort()).toEqual(['autocannon', 'chain_emitter', 'frost_projector', 'marksman']);
+    expect(availableParts(DEFAULT_CONFIG, 'weapon', all).map((p) => p.id).sort()).toEqual(['autocannon', 'chain_emitter', 'frost_projector', 'marksman', 'missile_battery', 'support_amp']);
     expect(TECH_LIST.length).toBeGreaterThanOrEqual(10);
   });
 });

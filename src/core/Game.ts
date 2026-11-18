@@ -16,7 +16,7 @@ import {
   ShadowGenerator,
   Vector3,
 } from '@babylonjs/core';
-import { sfx } from '../audio/Sfx';
+import { type Emitter, sfx } from '../audio/Sfx';
 import { mulberry32, rollDamage } from '../combat/damage';
 import { Director } from '../combat/Director';
 import { isChilled, speedFactor } from '../combat/status';
@@ -58,6 +58,7 @@ import { ARENA, type ArenaLayout, type GateId } from '../world/layout';
 import { ENV_QUERY } from '../world/physicsGroups';
 import { type Impact, Ordnance, Telegraphs } from '../fx/Hostile';
 import { M6_BEHAVIORS } from '../enemies/behaviors';
+import { JAMMER_CRAWLER_BEHAVIORS } from '../enemies/jammerCrawlerBehaviors';
 import { BOSS_BEHAVIORS } from '../enemies/bosses';
 import { bossMults, type EvolutionId, SurvivalPlanner } from '../survival/plan';
 import { SurvivalRuntime } from '../survival/SurvivalRuntime';
@@ -71,6 +72,7 @@ import type { BossId } from '../survival/bosses';
 import type { Input } from './Input';
 import { type Settings, saveSettings } from './settings';
 import { TacticalEnergy, Wallet } from './tactical';
+import { type TutorialHost, TutorialDirector } from './TutorialDirector';
 
 const TMP = new Vector3();
 /** Sun intensity (directional, range-free). */
@@ -78,6 +80,8 @@ const SUN = 2.65;
 const TMP2 = new Vector3();
 /** Arc Conductor reach (m): enemies on the lanes are spread a few metres apart. */
 export const ARC_RANGE = 12;
+/** M7: Pulse Capacitor splash radius (m). */
+export const PULSE_SPLASH = 3;
 
 /** Callbacks into the session flow (persistence and scene transitions live there). */
 export interface ArenaHooks {
@@ -101,6 +105,8 @@ export interface ArenaConfig {
   towerTech?: readonly string[];
   /** M6: milestones already reached on this profile (first-time milestone rewards). */
   milestones?: readonly string[];
+  /** M7: onboarding host (solo runs of profiles that have not finished the tutorial). */
+  tutorial?: TutorialHost;
 }
 
 /**
@@ -109,8 +115,8 @@ export interface ArenaConfig {
  */
 export class Game {
   readonly scene: Scene;
-  private pal: Palette;
-  private kit: Kit;
+  protected pal: Palette;
+  protected kit: Kit;
   readonly player: Player;
   readonly weapon: Weapon;
   readonly fx: Effects;
@@ -123,17 +129,17 @@ export class Game {
   readonly waves: WaveManager;
   readonly tactical = new TacticalEnergy();
   readonly wallet = new Wallet(ECONOMY.startingCores);
-  private reactor: ReactorRig;
-  private reactorLight: PointLight;
+  protected reactor: ReactorRig;
+  protected reactorLight: PointLight;
   reactorHp: number = ECONOMY.reactorMaxHp;
-  private reactorHitT = 0;
-  private reactorSfxT = 0;
-  private post: PostFx;
-  private atmosphere: Atmosphere;
-  private moon: DirectionalLight;
-  private hurtFx = 0;
-  private lastFlash = 0;
-  private arenaVisuals: ArenaBuilder;
+  protected reactorHitT = 0;
+  protected reactorSfxT = 0;
+  protected post: PostFx;
+  protected atmosphere: Atmosphere;
+  protected moon: DirectionalLight;
+  protected hurtFx = 0;
+  protected lastFlash = 0;
+  protected arenaVisuals: ArenaBuilder;
 
   /** Extra modifiers (debug); equipment, run upgrades and temporary buffs are composed in rebuildStats. */
   modifiers: StatModifier[] = [];
@@ -144,7 +150,7 @@ export class Game {
   statsVersion = 0;
   /** Upgrade choice currently on screen (mandatory selection after a wave). */
   offer: UpgradeDef[] | null = null;
-  private upgradeDue = false;
+  protected upgradeDue = false;
   /** Automation only: legacy milestone suites fight many waves without choosing upgrades. */
   skipUpgrades = false;
   /** M6: development panel (F4) available. Set by Flow from the URL (?dev / ?test). */
@@ -164,8 +170,8 @@ export class Game {
   /** Run inventory + loadout (ownership rules live in RunInventory/RunLedger). */
   readonly inventory: RunInventory;
   readonly loot: LootField;
-  private lootRand: () => number;
-  private lootCounter = 0;
+  protected lootRand: () => number;
+  protected lootCounter = 0;
   lootTarget: Pickup | null = null;
   /** Bumped on every inventory/loadout change so UI can refresh without polling. */
   inventoryVersion = 0;
@@ -178,23 +184,23 @@ export class Game {
   dropsSpawned = 0;
   dropsConverted = 0;
   dropsExpired = 0;
-  private screenBeforeInventory: Screen = 'playing';
+  protected screenBeforeInventory: Screen = 'playing';
 
   screen: Screen = 'loading';
-  private runTime = 0;
-  private kills = 0;
-  private turretsBuilt = 0;
-  private defeatT = 0;
-  private hudT = 0;
-  private inspected: Turret | null = null;
-  private recycleT = 0;
-  private perfOn = false;
-  private instrumentation: SceneInstrumentation | null = null;
-  private fpsSmooth = 60;
+  protected runTime = 0;
+  protected kills = 0;
+  protected turretsBuilt = 0;
+  protected defeatT = 0;
+  protected hudT = 0;
+  protected inspected: Turret | null = null;
+  protected recycleT = 0;
+  protected perfOn = false;
+  protected instrumentation: SceneInstrumentation | null = null;
+  protected fpsSmooth = 60;
 
-  private shotRay = new Ray(Vector3.Zero(), Vector3.Forward(), 1);
-  private physResult = new PhysicsRaycastResult();
-  private enemyCtx: EnemyContext;
+  protected shotRay = new Ray(Vector3.Zero(), Vector3.Forward(), 1);
+  protected physResult = new PhysicsRaycastResult();
+  protected enemyCtx: EnemyContext;
   turretCtx: TurretContext;
 
   /** Return-home window: open from checkpoint prep until the next wave starts. */
@@ -210,11 +216,16 @@ export class Game {
   readonly survival: SurvivalRuntime;
   readonly layout: ArenaLayout = ARENA;
   /** Hostile time since the run started (enemy animation phase). */
-  private hostileT = 0;
-  private playerWasAlive = true;
+  protected hostileT = 0;
+  protected playerWasAlive = true;
   /** Boss entrance announced (enemy id). */
-  private bossSeen = 0;
-  private disposed = false;
+  protected bossSeen = 0;
+  protected disposed = false;
+  /** M7 onboarding. */
+  protected tut: TutorialDirector | null = null;
+  /** M7 positional ambience loops (disposed with the scene). */
+  protected emitters: Emitter[] = [];
+  private tutTrack = { dist: 0, x: 0, z: 0, air: false, dash: false, tactical: false };
 
   constructor(
     private engine: Engine,
@@ -283,7 +294,9 @@ export class Game {
     // Shadows (high quality only); enemies & turrets register as casters via the kit.
     {
       // Cascaded shadows: crisp contact shadows near the player, coverage across the arena.
-      const sg = high ? new CascadedShadowGenerator(2048, moon) : new ShadowGenerator(1024, moon);
+      const shadows = settings.shadows ?? (high ? 'high' : 'low');
+      const sg = shadows === 'off' ? null : shadows === 'high' && high ? new CascadedShadowGenerator(2048, moon) : new ShadowGenerator(shadows === 'high' ? 2048 : 1024, moon);
+      if (sg) {
       if (sg instanceof CascadedShadowGenerator) {
         sg.numCascades = 4;
         sg.lambda = 0.82;
@@ -303,9 +316,10 @@ export class Game {
       for (const m of arena.shadowCasters) sg.addShadowCaster(m);
       for (const m of this.reactor.root.getChildMeshes()) sg.addShadowCaster(m);
       this.kit.shadowSink = (m) => sg.addShadowCaster(m);
+      }
     }
     this.enemies = new EnemyManager(scene, this.kit, this.pal);
-    for (const [kind, b] of Object.entries({ ...M6_BEHAVIORS, ...BOSS_BEHAVIORS })) if (b) this.enemies.register(kind as EnemyKind, b as Behavior);
+    for (const [kind, b] of Object.entries({ ...M6_BEHAVIORS, ...JAMMER_CRAWLER_BEHAVIORS, ...BOSS_BEHAVIORS })) if (b) this.enemies.register(kind as EnemyKind, b as Behavior);
     this.tele = new Telegraphs(scene);
     this.ordnance = new Ordnance(scene, this.tele);
     this.dynamics = new ArenaDynamics(scene, this.pal, ARENA, {
@@ -474,6 +488,76 @@ export class Game {
     };
     this.applySettings(settings);
     this.refreshEquipment();
+    // M7 spatial ambience: reactor core hum and machinery at the rift gates.
+    const em = (k: Parameters<typeof sfx.emitter>[0], x: number, y: number, z: number, g: number, ref?: number) => {
+      const e = sfx.emitter(k, x, y, z, g, ref);
+      if (e) this.emitters.push(e);
+    };
+    em('reactor', ARENA.reactor.x, 3, ARENA.reactor.z, 1, 6);
+    for (const gate of ['north', 'east', 'west'] as const) {
+      const p = ARENA.routes[gate].points[0];
+      em('machine', p.x, 2, p.z, 0.8, 5);
+    }
+    if (cfg.tutorial) this.tut = new TutorialDirector('arena', cfg.tutorial, { available: (id) => this.tutAvailable(id), complete: (id, t) => this.tutComplete(id, t) });
+  }
+
+  // ---------------------------------------------------------------- M7 onboarding
+
+  private tutAvailable(id: string): boolean {
+    const w = this.waves;
+    const play = this.screen === 'playing';
+    switch (id) {
+      case 'move':
+      case 'dash':
+      case 'reactor':
+        return play;
+      case 'tower':
+        return play && w.phase === 'prep';
+      case 'wave':
+        return play && w.phase === 'prep' && this.turrets.turrets.length > 0;
+      case 'shoot':
+        return play && w.phase === 'combat';
+      case 'heat':
+        return play && this.weapon.heat > 45;
+      case 'loot':
+        return play && this.loot.count > 0;
+      case 'upgrade':
+        return this.screen === 'upgrade';
+      case 'tactical':
+        return play && w.number >= 2 && this.tactical.energy >= 99;
+      case 'bank':
+        return this.screen === 'checkpoint' || this.canReturnHome;
+    }
+    return false;
+  }
+
+  private tutComplete(id: string, t: number): boolean {
+    const k = this.tutTrack;
+    switch (id) {
+      case 'move':
+        return k.dist > 8 && k.air;
+      case 'dash':
+        return k.dash;
+      case 'reactor':
+        return t > 7;
+      case 'tower':
+        return this.turrets.turrets.length > 0;
+      case 'wave':
+        return this.waves.phase === 'combat';
+      case 'shoot':
+        return this.kills >= 3;
+      case 'heat':
+        return this.weapon.overheated || t > 7;
+      case 'loot':
+        return this.inventory.cargoUsed > 0 || t > 20;
+      case 'upgrade':
+        return this.director.build.total > 0 || this.screen !== 'upgrade';
+      case 'tactical':
+        return k.tactical || t > 25;
+      case 'bank':
+        return t > 9 || this.screen === 'playing';
+    }
+    return t > 10;
   }
 
   // ---------------------------------------------------------------- lifecycle
@@ -490,7 +574,13 @@ export class Game {
     // User FOV is horizontal at 16:9; convert to the vertical FOV Babylon uses.
     const h = (s.fov * Math.PI) / 180;
     this.player.baseFov = 2 * Math.atan(Math.tan(h / 2) / (16 / 9));
+    this.player.reduceMotion = s.reduceMotion;
+    this.player.shakeScale = s.shake;
+    this.weapon.anim.reduceMotion = s.reduceMotion;
+    this.fx.setDensity(s.particles);
+    this.post.setOptions({ bloom: s.bloom, reduceMotion: s.reduceMotion });
     sfx.setVolume(s.volume);
+    sfx.setMix(s.sfxVolume, s.uiVolume, s.ambienceVolume);
     saveSettings(s);
   }
 
@@ -568,7 +658,7 @@ export class Game {
 
   // ---------------------------------------------------------------- loot
 
-  private lootContext(wave: number) {
+  protected lootContext(wave: number) {
     return { wave, tierLevelBonus: this.cfg.tier.lootLevelBonus, tierLuck: this.cfg.tier.lootLuck };
   }
 
@@ -608,7 +698,7 @@ export class Game {
   }
 
   /** A walkable landing point near `at` (Havok ray down; never on top of tall geometry). */
-  private groundPoint(at: Vector3): Vector3 {
+  protected groundPoint(at: Vector3): Vector3 {
     const physics = this.scene.getPhysicsEngine() as PhysicsEngineV2 | null;
     for (let attempt = 0; attempt < 6; attempt++) {
       const a = Math.random() * Math.PI * 2;
@@ -626,7 +716,7 @@ export class Game {
     return new Vector3(at.x, 0, at.z);
   }
 
-  private onLootLanded(p: Pickup): void {
+  protected onLootLanded(p: Pickup): void {
     const r = rarity(p.item.rarity);
     const c = LootField.color(p.item.rarity);
     this.fx.ring(p.ground.add(new Vector3(0, 0.08, 0)), 1.2 + r.index * 0.5, 0.45 + r.index * 0.08, c.scale(0.8), true);
@@ -660,7 +750,7 @@ export class Game {
     return true;
   }
 
-  private updateLootTarget(controls: boolean): void {
+  protected updateLootTarget(controls: boolean): void {
     this.lootTarget = null;
     if (!this.player.alive || this.construction.active || this.loot.count === 0) return;
     const eye = this.player.eye;
@@ -740,7 +830,7 @@ export class Game {
     return true;
   }
 
-  private async afterUpgrade(): Promise<void> {
+  protected async afterUpgrade(): Promise<void> {
     if (this.checkpointOpen && this.cfg.run.atCheckpoint) {
       this.openCheckpoint();
       return;
@@ -813,7 +903,7 @@ export class Game {
     return null;
   }
 
-  private towerFail(text: string): { ok: false; reason: string } {
+  protected towerFail(text: string): { ok: false; reason: string } {
     this.towerNote = { text, t: 3 };
     sfx.play('buildDeny');
     return { ok: false, reason: text };
@@ -849,6 +939,7 @@ export class Game {
     if (!this.wallet.spend(cost)) return this.towerFail(`Not enough cores (need ${cost})`);
     t.paid += cost;
     t.refit(cfg, level, this.turretCtx);
+    this.bumpStats();
     this.fx.burst('build', t.head, 24);
     this.fx.ring(new Vector3(t.pos.x, t.pos.y + 0.1, t.pos.z), 3, 0.4, new Color3(0.4, 1.8, 2.2), true);
     sfx.play('equip', { pitch: 1.1 });
@@ -881,7 +972,7 @@ export class Game {
   }
 
   /** Cycle helper for hotkeys: next owned+compatible component of a slot. */
-  private nextPart(cfg: TowerConfig, slot: TowerSlot): string | null {
+  protected nextPart(cfg: TowerConfig, slot: TowerSlot): string | null {
     const list = availableParts(cfg, slot, this.towerTech);
     if (list.length < 2) return null;
     const i = list.findIndex((p) => p.id === cfg[slot]);
@@ -889,7 +980,7 @@ export class Game {
   }
 
   /** In-world tower hotkeys: while aiming at a tower (refit) or in build mode (template). R level, C weapon, V core, N modifier, M base. */
-  private towerKeys(input: Input): void {
+  protected towerKeys(input: Input): void {
     const t = this.inspected;
     const slots: [string, TowerSlot][] = [['KeyC', 'weapon'], ['KeyV', 'core'], ['KeyN', 'modifier'], ['KeyM', 'base']];
     if (this.construction.active) {
@@ -970,6 +1061,9 @@ export class Game {
 
   dispose(): void {
     if (this.disposed) return;
+    this.tut?.dispose();
+    for (const e of this.emitters) e.dispose();
+    this.emitters = [];
     this.disposed = true;
     this.input.onLockChange = () => {};
     this.director.bus.reset();
@@ -978,7 +1072,7 @@ export class Game {
     this.scene.dispose();
   }
 
-  private newRun(): void {
+  protected newRun(): void {
     this.enemies.clear();
     this.turrets.clear();
     this.fx.reset();
@@ -1024,12 +1118,24 @@ export class Game {
     const t0 = performance.now();
     if (this.screen === 'playing' || this.screen === 'defeat') this.update(dt);
     else this.idleAnimate(dt);
+    const cam = this.player.camera.position;
+    sfx.listen(cam.x, cam.y, cam.z, this.player.yaw);
+    if (this.tut) {
+      const p = this.player.position;
+      this.tutTrack.dist += Math.min(2, Math.hypot(p.x - this.tutTrack.x, p.z - this.tutTrack.z));
+      this.tutTrack.x = p.x;
+      this.tutTrack.z = p.z;
+      if (!this.player.grounded) this.tutTrack.air = true;
+      if (this.player.dashing) this.tutTrack.dash = true;
+      if (this.tactical.active) this.tutTrack.tactical = true;
+      this.tut.update(dt, this.input.pressed('F10'));
+    }
     this.frameMs += (performance.now() - t0 - this.frameMs) * 0.05;
   }
   /** Smoothed simulation cost per frame (ms, diagnostics). */
   frameMs = 0;
 
-  private idleAnimate(dt: number): void {
+  protected idleAnimate(dt: number): void {
     this.dynamics.update(dt, 0);
     const flash = this.updateSky(dt);
     this.post.update(dt, 0, 0, flash);
@@ -1037,7 +1143,7 @@ export class Game {
     this.updateArenaVisuals(dt, dt);
   }
 
-  private update(dt: number): void {
+  protected update(dt: number): void {
     const input = this.input;
     const playing = this.screen === 'playing';
     const controls = playing && input.captured;
@@ -1097,6 +1203,8 @@ export class Game {
     // ---- shooting
     const trigger = controls && input.mouse(0) && !this.construction.active;
     this.weapon.update(dt, trigger, this.stats, this.shoot, this.weaponFx);
+    if (this.weapon.overheated && !this.wasOverheated) this.director.bus.emit({ type: 'overheat', chain: this.director.bus.newChain(), source: { kind: 'weapon', id: 'heat' }, value: 1 });
+    this.wasOverheated = this.weapon.overheated;
     this.wfx.update(dt, this.player.camera.position);
 
     // ---- inspect / recycle, loot
@@ -1143,7 +1251,7 @@ export class Game {
     }
   }
 
-  private updateArenaVisuals(dt: number, hostileDt: number): void {
+  protected updateArenaVisuals(dt: number, hostileDt: number): void {
     const phase = this.waves.phase;
     const warning = this.screen === 'defeat' || phase === 'cleared' ? 0 : phase === 'combat' ? 1 : 0.5;
     this.arenaVisuals.update(dt, hostileDt, warning);
@@ -1154,7 +1262,7 @@ export class Game {
   }
 
   /** Storm: sky lightning brightens the moonlight and rolls thunder. */
-  private updateSky(dt: number): number {
+  protected updateSky(dt: number): number {
     const flash = this.atmosphere.update(dt, this.player.camera.position);
     if (flash > 0.9 && this.lastFlash < 0.5) sfx.thunder(0.4 + Math.random() * 1.2);
     this.lastFlash = flash;
@@ -1171,8 +1279,8 @@ export class Game {
     return Math.round(this.instrumentation?.drawCallsCounter.current ?? 0);
   }
 
-  private wasTactical = false;
-  private toggleTactical(): void {
+  protected wasTactical = false;
+  protected toggleTactical(): void {
     if (this.tactical.toggle()) {
       if (this.tactical.active) {
         this.wasTactical = true;
@@ -1183,14 +1291,14 @@ export class Game {
     } else sfx.play('buildDeny');
   }
 
-  private setBuildMode(on: boolean): void {
+  protected setBuildMode(on: boolean): void {
     if (on === this.construction.active) return;
     this.construction.setActive(on);
     this.weapon.setHolstered(on);
     sfx.play('ui');
   }
 
-  private tryPlace(): void {
+  protected tryPlace(): void {
     const c = this.construction;
     const cost = configCost(this.buildConfig, this.stats.buildCostMult);
     if (!c.valid || !this.wallet.spend(cost)) {
@@ -1199,12 +1307,13 @@ export class Game {
     }
     this.turrets.add(c.point, this.player.yaw, this.turretCtx, this.buildConfig).paid = cost;
     this.turretsBuilt++;
+    this.bumpStats();
     this.fx.burst('build', c.point.add(new Vector3(0, 0.5, 0)), 40);
     // Rapid multi-placement while tactical mode is active.
     if (!this.tactical.active) this.setBuildMode(false);
   }
 
-  private updateInspect(dt: number, controls: boolean): void {
+  protected updateInspect(dt: number, controls: boolean): void {
     let t: Turret | null = null;
     if (controls && !this.construction.active) {
       const cam = this.player.camera;
@@ -1227,6 +1336,7 @@ export class Game {
         this.fx.burst('build', t.head, 30);
         this.fx.debrisBurst(t.head, 6, 4, 0.8);
         this.turrets.remove(t);
+        this.bumpStats();
         sfx.play('recycle');
         this.inspected = null;
         this.recycleT = 0;
@@ -1242,7 +1352,7 @@ export class Game {
    * surface stops them; beams get an aim-assist radius (`width`) around their axis.
    * Damage is applied here, immediately; `weaponFx` only visualises the outcome.
    */
-  private shoot = (r: ShotRequest): ShotOutcome => {
+  protected shoot = (r: ShotRequest): ShotOutcome => {
     this.director.bus.emit({ type: 'fire', chain: this.director.bus.newChain(), source: { kind: 'weapon', id: r.family }, value: 1 });
     // Hitboxes must reflect this frame's enemy poses, not last frame's render.
     for (const e of this.enemies.active) {
@@ -1276,6 +1386,7 @@ export class Game {
       const point = h.pickedPoint!.clone();
       if (!first) first = { point, target: shielded ? 'shield' : 'enemy' };
       this.damageEnemy('player', e, dmg, point, weak, undefined, r.family);
+      if (this.weapon.def.mechanism === 'pulse') this.pulseSplash(point, dmg, e);
       if (struck.length > r.pierce) break;
       dmg *= 0.85;
     }
@@ -1316,9 +1427,18 @@ export class Game {
   };
 
   /** World-space shot visuals and impacts per family (presentation only). */
-  private beamFxT = 0;
-  private weaponFx: WeaponFxHooks = {
+  protected beamFxT = 0;
+  protected weaponFx: WeaponFxHooks = {
     shot: (family, from, out, power, speed) => {
+      if (power < 0) {
+        // M7 Pulse Capacitor: bright streak + detonation at the impact.
+        this.wfx.rail(from, out.point, 0.7);
+        if (out.target !== 'none') {
+          this.fx.explode(out.point, { scale: 0.45, debris: 1, color: this.weapon.rig.energyBase.scale(1.4) });
+          this.fx.ring(out.point, PULSE_SPLASH, 0.22, this.weapon.rig.energyBase.scale(0.8), false);
+        }
+        return;
+      }
       const impact = () => this.impactFx(family, out, power);
       if (family === 'plasma') {
         this.wfx.bolt(from, out.point, speed, 0.34, out.target === 'none' ? null : impact);
@@ -1338,7 +1458,7 @@ export class Game {
     beam: (on, from, to, intensity, contact) => this.wfx.beam(on, from, to, intensity, contact),
   };
 
-  private impactFx(family: WeaponFamily, out: ShotOutcome, power: number): void {
+  protected impactFx(family: WeaponFamily, out: ShotOutcome, power: number): void {
     const p = out.point;
     if (out.target === 'surface' && out.normal) {
       const pos = p.add(out.normal.scale(0.03));
@@ -1368,11 +1488,23 @@ export class Game {
     const player = source === 'player';
     const prec = this.director.build.count('s_precision');
     const crit = player && prec && (isChilled(e.status, 1) || speedFactor(e.status) < 0.95) ? { critChance: this.stats.critChance + UP.precision.crit(prec), critMultiplier: this.stats.critMultiplier + UP.precision.critDmg(prec) } : this.stats;
+    // M7 run upgrades that scale weapon hits from the situation.
+    if (player) {
+      const ex = this.director.build.count('w_exec');
+      if (ex && e.hp < e.maxHp * UP.exec.hp) base *= 1 + UP.exec.bonus(ex);
+      const mo = this.director.build.count('m_momentum');
+      if (mo && this.droneSpeed() > UP.momentum.speed) base *= 1 + UP.momentum.bonus(mo);
+      // M7 legendary / exotic signatures (damage shaping).
+      const sig = family !== 'arc' ? this.weaponSignature() : null;
+      if (sig === 'overdrive' && this.weaponHeat() > 0.7) base *= 1.35;
+      if (sig === 'phase' && (e.shield > 0 || e.armor > 0 || e.kind === 'enforcer' || e.kind === 'crawler')) base *= 1.8;
+    }
     const roll = rollDamage(base, crit, weakpoint, Math.random, 'energy', source);
     // Arc Conductor: a player hit may jump to the nearest other enemy (no chains of arcs).
     if (player && family !== 'arc' && this.stats.arcChance > 0 && Math.random() < this.stats.arcChance) this.arcFrom(e, point, roll.amount * this.stats.arcDamage);
     const src = family === 'arc' ? { kind: 'effect' as const, id: 'arc_conductor' } : player ? { kind: 'weapon' as const, id: family ?? 'plasma' } : { kind: 'tower' as const, id: 'sentinel', towerId: turret?.id };
     const res = this.director.deal({ target: e, amount: roll.amount, base, crit: roll.crit, weak: weakpoint, element: 'none', source: src, chain: this.director.bus.newChain(), point, family: family ?? (player ? 'plasma' : 'tower'), from: from ?? (player ? this.player.eye : undefined) });
+    if (player && family !== 'arc') this.signatureAfterHit(e, point, roll.amount, roll.crit, res);
     if (player) {
       const kind = res.kind;
       uiEvents.emit('hit', kind);
@@ -1385,8 +1517,50 @@ export class Game {
     }
   }
 
+  /** M7 Pulse Capacitor: every pulse detonates (60% damage in PULSE_SPLASH m). */
+  protected pulseSplash(point: Vector3, dmg: number, hit: Enemy | null): void {
+    this.director.blast(point, PULSE_SPLASH, dmg * 0.6, 'none', { kind: 'weapon', id: 'beam' }, this.director.bus.newChain(), { falloff: 0.4, exclude: hit, family: 'splash' });
+  }
+
+  private wasOverheated = false;
+  private sigHits = 0;
+
+  /** Signature of the weapon firing right now (co-op server: the shooter's). */
+  protected weaponSignature(): string | null {
+    return this.inventory.equipped('weapon')?.signature ?? null;
+  }
+  protected weaponHeat(): number {
+    return this.weapon.heat / 100;
+  }
+
+  /** M7 signatures that react to a landed hit. */
+  private signatureAfterHit(e: Enemy, point: Vector3, amount: number, crit: boolean, res: { dealt: number; killed: boolean }): void {
+    const sig = this.weaponSignature();
+    if (!sig) return;
+    const d = this.director;
+    const src = { kind: 'effect' as const, id: `sig:${sig}` };
+    if (sig === 'chain_reaction' && res.killed) {
+      d.blast(point, 3.5, amount * 0.6, 'thermal', src, d.bus.newChain(), { falloff: 0.35, exclude: e });
+      d.explosionFx(point, 3.5, 'thermal');
+    } else if (sig === 'stormcaller' && ++this.sigHits % 6 === 0 && e.alive) {
+      const sky = point.add(new Vector3(0, 9, 0));
+      this.wfx.arc(sky, point);
+      d.chainLightning({ from: point, first: e, count: 3, amount: amount * 2, falloff: 0.7, source: src, chain: d.bus.newChain(), shock: true });
+      sfx.play('arc', { volume: 0.9, pitch: 0.7 });
+    } else if (sig === 'siphon' && res.dealt > 0 && this.player.maxShield > 0) {
+      this.player.shield = Math.min(this.player.maxShield, this.player.shield + res.dealt * 0.03);
+    } else if (sig === 'rift_echo' && crit) {
+      for (const o of d.enemiesNear(point, 4)) d.inflict(o, { chill: 40 }, src, d.bus.newChain(), o.center(new Vector3()));
+      this.fx.ring(point, 4, 0.4, new Color3(1.6, 0.5, 3.0), false);
+    }
+  }
+  /** Current drone speed (m/s); dashes count as fast. The co-op server reports the shooter's. */
+  protected droneSpeed(): number {
+    return this.player.dashing ? 40 : this.player.speed;
+  }
+
   /** Arc to the nearest other living enemy within ARC_RANGE of the struck one. */
-  private arcFrom(src: Enemy, point: Vector3, amount: number): void {
+  protected arcFrom(src: Enemy, point: Vector3, amount: number): void {
     if (amount <= 0) return;
     let best: Enemy | null = null;
     let bestD = ARC_RANGE * ARC_RANGE;
@@ -1431,15 +1605,40 @@ export class Game {
     if (boss) at.y = Math.min(at.y, 6);
     if (e.kind in DROP_SOURCES && e.def.role !== 'hvt' && e.tag !== 'summon') this.dropLoot(e.kind as DropSourceId, at);
     if (e.elite) this.dropFrom(this.survival.eliteSource(e), at);
-    this.enemies.kill(e, this.fx, this.enemyCtx);
+    this.enemies.kill(e, this.enemyFx, this.enemyCtx);
   }
 
   // ---------------------------------------------------------------- M6: hostile mechanics
 
   /** Every hostile hit on the drone goes through here. */
-  hurtPlayer(amount: number, from: Vector3): void {
-    if (!this.player.alive || !(amount > 0) || !Number.isFinite(amount)) return;
-    this.player.damage(amount, from);
+  hurtPlayer(amount: number, from: Vector3, target: Player = this.player): void {
+    if (!target.alive || !(amount > 0) || !Number.isFinite(amount)) return;
+    target.damage(amount, from);
+  }
+
+  /** Drones hostile area effects and projectiles can hit (co-op: every deployed drone). */
+  targets(): readonly Player[] {
+    return [this.player];
+  }
+
+  /** Living drone nearest to `p` (co-op ordnance and direct hits). */
+  nearestTarget(p: Vector3): Player | null {
+    let best: Player | null = null;
+    let bd = Infinity;
+    for (const t of this.targets()) {
+      if (!t.alive) continue;
+      const d = Vector3.DistanceSquared(t.position, p);
+      if (d < bd) {
+        bd = d;
+        best = t;
+      }
+    }
+    return best;
+  }
+
+  /** Effects sink for enemy-internal presentation (deaths, shield hits). The co-op server silences it. */
+  get enemyFx(): Effects {
+    return this.fx;
   }
 
   /**
@@ -1448,15 +1647,15 @@ export class Game {
    * `enemies` > 0 also damages machines (volatile chains, grid strikes) through the shared pipeline.
    */
   hostileBlast(center: Vector3, radius: number, o: { player: number; reactor?: number; disable?: number; enemies?: number; owner?: Enemy | null; color?: 'orange' | 'blue' | 'red' | 'violet'; shock?: boolean }): void {
-    const pl = this.player;
-    if (pl.alive && o.player > 0) {
+    for (const pl of this.targets()) {
+      if (!pl.alive || !(o.player > 0)) continue;
       const pp = pl.position;
       const d = Math.hypot(pp.x - center.x, pp.z - center.z);
       const dy = pp.y - center.y;
       if (d < radius && dy < 3.2) {
         const lift = TMP.copyFrom(center);
         lift.y += 0.6;
-        if (this.los(lift, pl.eye)) this.hurtPlayer(o.player * (1 - 0.45 * (d / radius)), center);
+        if (this.los(lift, pl.eye)) this.hurtPlayer(o.player * (1 - 0.45 * (d / radius)), center, pl);
       }
     }
     const R = ARENA.reactor;
@@ -1470,7 +1669,7 @@ export class Game {
   }
 
   /** A plasma-vent eruption tick: burns the drone and every machine standing in it. */
-  private ventTick(at: Vector3, r: number): void {
+  protected ventTick(at: Vector3, r: number): void {
     const w = this.waves.wave;
     this.hostileBlast(at, r, { player: 9 * w.damageMult, enemies: 0, color: 'orange' });
     const chain = this.director.bus.newChain();
@@ -1485,9 +1684,9 @@ export class Game {
    * kit renders them), telegraphs, ordnance and the hidden arena machinery. Avoids hitches and late pop-in the first
    * time a boss, elite or event appears.
    */
-  private warmShaders(): Promise<unknown> {
+  protected warmShaders(): Promise<unknown> {
     // One of every rig (and all elite hardware) so every (shape, material) template exists, then compile them all.
-    this.enemies.prebuild(['walker', 'rusher', 'bulwark', 'enforcer', 'artillery', 'engineer', 'courier', 'colossus', 'overseer', 'pylon']);
+    this.enemies.prebuild(['walker', 'rusher', 'bulwark', 'enforcer', 'artillery', 'engineer', 'courier', 'colossus', 'overseer', 'pylon', 'jammer', 'crawler']);
     const jobs: Promise<unknown>[] = [this.tele.warm(), this.ordnance.warm(), this.kit.warmAll()];
     for (const m of this.scene.meshes) {
       if (m.isEnabled() || !m.material || !/^(dynPart|ventPlume|ventWarn|volatileCharge)/.test(m.name)) continue;
@@ -1531,8 +1730,11 @@ export class Game {
     return e;
   }
 
-  private ordnanceCtx = {
-    player: () => (this.player.alive ? this.player.eye : null),
+  protected ordnanceCtx = {
+    player: (at?: Vector3) => {
+      const t = at ? this.nearestTarget(at) : this.player.alive ? this.player : null;
+      return t ? t.eye : null;
+    },
     ray: (a: Vector3, b: Vector3) => {
       const physics = this.scene.getPhysicsEngine() as PhysicsEngineV2 | null;
       if (!physics) return null;
@@ -1547,10 +1749,11 @@ export class Game {
     },
   };
 
-  private ordnanceImpact(i: Impact): void {
+  protected ordnanceImpact(i: Impact): void {
     const p = i.pos;
     if (i.direct) {
-      this.hurtPlayer(i.damage, p);
+      const t = this.nearestTarget(p);
+      if (t) this.hurtPlayer(i.damage, p, t);
       this.fx.burst(i.kind === 'orb' ? 'zap' : 'enemySpark', p, 12);
       return;
     }
@@ -1600,10 +1803,12 @@ export class Game {
   }
 
   /** First sighting of each M6 archetype / elite modifier this run: one line of counterplay intel. */
-  private seenKinds = new Set<string>();
-  private static readonly INTEL: Record<string, string> = {
+  protected seenKinds = new Set<string>();
+  protected static readonly INTEL: Record<string, string> = {
     enforcer: 'NEW THREAT · SHIELDED ENFORCER · frontal shield: flank it, hit the rear generator, or shock it',
     artillery: 'NEW THREAT · ARTILLERY DRONE · interrupt its charge with burst damage before the shell lands',
+    jammer: 'NEW THREAT · JAMMER DRONE · it locks onto towers and shuts them down: shoot its dish or shock it to break the beam',
+    crawler: 'NEW THREAT · SIEGE CRAWLER · armoured prow: hit the rear pods; it releases rush drones when damaged',
     engineer: 'NEW THREAT · SUPPORT ENGINEER · repairs and empowers allies: eliminate it first',
     overcharged: 'ELITE · OVERCHARGED · blue ring = discharge incoming: back off or freeze/shock it',
     armored: 'ELITE · ARMORED · plating absorbs body hits: aim for weakpoints',
@@ -1611,7 +1816,7 @@ export class Game {
     volatile: 'ELITE · VOLATILE · detonates 1.4 s after death: keep your distance',
   };
 
-  private watchIntel(): void {
+  protected watchIntel(): void {
     for (const e of this.enemies.active) {
       const keys = [e.kind as string, ...e.mods];
       for (const k of keys) {
@@ -1623,7 +1828,7 @@ export class Game {
   }
 
   /** Boss entrance: camera shake, roar, banner (once per boss). */
-  private watchBoss(): void {
+  protected watchBoss(): void {
     if (this.hudT <= 0) this.watchIntel();
     for (const e of this.enemies.active) {
       if (e.def.role !== 'boss' || !e.alive || e.id === this.bossSeen) continue;
@@ -1637,7 +1842,7 @@ export class Game {
   // ---------------------------------------------------------------- M6: development tools (taint the run)
 
   /** Development tools mark the run: no records, no banking of permanent rewards. */
-  private devMark(): void {
+  protected devMark(): void {
     if (!this.cfg.run.survival.dev) {
       this.cfg.run.survival.dev = true;
       uiEvents.emit('alert', { text: 'DEVELOPMENT SESSION · RECORDS AND BANKING DISABLED', tone: 'white' });
@@ -1709,7 +1914,7 @@ export class Game {
     this.damageReactor(amount, new Vector3(0, 2, 0));
   }
 
-  private damageReactor(amount: number, at: Vector3): void {
+  protected damageReactor(amount: number, at: Vector3): void {
     if (this.reactorHp <= 0 || !(amount > 0)) return;
     this.cfg.run.survival.reactorDamage += Math.min(this.reactorHp, amount);
     this.reactorHp = Math.max(0, this.reactorHp - amount);
@@ -1722,7 +1927,7 @@ export class Game {
     if (this.reactorHp <= 0) this.onDefeat();
   }
 
-  private onDefeat(): void {
+  protected onDefeat(): void {
     if (this.screen !== 'playing') return;
     this.setScreen('defeat');
     this.defeatT = 0;
@@ -1742,21 +1947,24 @@ export class Game {
     return { kills: this.kills, time: this.runTime, wave: this.waves.number, coresEarned: this.wallet.earned, turretsBuilt: this.turretsBuilt };
   }
 
-  private updateProjectiles(hdt: number): void {
+  protected updateProjectiles(hdt: number): void {
     if (hdt <= 0) return;
-    const player = this.player;
-    const pc = TMP2.copyFrom(player.eye);
-    pc.y -= 0.3;
     const physics = this.scene.getPhysicsEngine() as PhysicsEngineV2 | null;
-    for (const p of this.fx.projectiles) {
+    const targets = this.targets();
+    outer: for (const p of this.fx.projectiles) {
       if (!p.active) continue;
       const next = TMP.copyFrom(p.vel).scaleInPlace(hdt).addInPlace(p.pos);
-      // Player (segment vs sphere)
-      if (player.alive && segmentSphere(p.pos, next, pc, 0.8)) {
-        this.hurtPlayer(p.damage, p.pos.subtract(p.vel));
-        this.fx.burst('enemySpark', next, 10);
-        this.fx.killProjectile(p);
-        continue;
+      // Drones (segment vs sphere)
+      for (const player of targets) {
+        if (!player.alive || p.damage <= 0) continue;
+        const pc = TMP2.copyFrom(player.eye);
+        pc.y -= 0.3;
+        if (segmentSphere(p.pos, next, pc, 0.8)) {
+          this.hurtPlayer(p.damage, p.pos.subtract(p.vel), player);
+          this.fx.burst('enemySpark', next, 10);
+          this.fx.killProjectile(p);
+          continue outer;
+        }
       }
       if (physics) {
         physics.raycastToRef(p.pos, next, this.physResult, ENV_QUERY);
@@ -1773,7 +1981,7 @@ export class Game {
     }
   }
 
-  private updateReactor(dt: number, live: boolean): void {
+  protected updateReactor(dt: number, live: boolean): void {
     this.reactorHitT = Math.max(0, this.reactorHitT - dt * 2.5);
     this.reactorSfxT -= dt;
     const f = live ? this.reactorHp / ECONOMY.reactorMaxHp : 1;
@@ -1824,7 +2032,7 @@ export class Game {
     return { x: p.x * scale, y: p.y * scale };
   }
 
-  private perfHud() {
+  protected perfHud() {
     const d = this.director.diag();
     let projectiles = this.wfx.liveBolts;
     for (const p of this.fx.projectiles) if (p.active) projectiles++;
@@ -1839,7 +2047,7 @@ export class Game {
     };
   }
 
-  private m5Hud() {
+  protected m5Hud() {
     const dir = this.director;
     const ts = this.turrets.turrets;
     return {
@@ -1857,7 +2065,7 @@ export class Game {
 
   // ---------------------------------------------------------------- HUD
 
-  private publishHud(force = false): void {
+  protected publishHud(force = false): void {
     const w = this.waves;
     const c = this.construction;
     const t = this.inspected;
@@ -1869,7 +2077,7 @@ export class Game {
       else if (w.number === 2 && w.phase === 'combat' && this.tactical.energy >= 99 && !this.tactical.active) hint = 'Q: tactical slow-time lets you place several turrets mid-fight.';
       if (this.canReturnHome) hint = 'Checkpoint secured. Press H to return to HQ, or start the next wave with G.';
     }
-    if (!this.player.alive || c.active) hint = '';
+    if (!this.player.alive || c.active || this.tut?.showing) hint = '';
     const run = this.cfg.run;
     const lt = this.lootTarget;
     let lootTarget: LootTargetInfo | null = null;

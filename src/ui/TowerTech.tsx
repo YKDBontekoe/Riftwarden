@@ -1,5 +1,5 @@
 import type { Flow } from '../core/Flow';
-import { bestWaveCleared, researchBlocker, researchTower } from '../economy/transactions';
+import { bestWaveCleared, researchBlocker } from '../economy/transactions';
 import type { SaveData } from '../progression/save';
 import { archetypeOf, partDef, TECH_LIST } from '../towers/components';
 import { TxMessage, useTx } from './economy';
@@ -26,7 +26,7 @@ export function TowerTech({ flow, save }: { flow: Flow; save: SaveData }) {
               {done ? (
                 <b style={{ color: 'var(--cyan)' }}>RESEARCHED</b>
               ) : (
-                <button className="mini" disabled={!!why} title={why ?? ''} onClick={() => tx.run('research', (d, id) => researchTower(d, t.slot, t.id, id), () => `${p.name} researched`)}>
+                <button className="mini" disabled={!!why} title={why ?? ''} onClick={() => tx.run('research', 'researchTower', [t.slot, t.id], () => `${p.name} researched`)}>
                   {why ?? 'RESEARCH'}
                 </button>
               )}

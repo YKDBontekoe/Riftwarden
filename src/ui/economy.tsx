@@ -59,13 +59,14 @@ export function useTx(flow: Flow, station: string) {
   const [msg, setMsg] = useState<Msg>(null);
   const busy = useRef(false);
   const run = useCallback(
-    <T extends object>(kind: string, rule: (d: SaveData, txId: string) => ({ ok: true } & T) | { ok: false; reason: string }, okText: (r: { ok: true } & T) => string): (({ ok: true } & T) | null) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (kind: string, op: string, args: unknown[], okText: (r: any) => string): any => {
       if (busy.current) return null;
       busy.current = true;
       try {
         const before = { ...flow.profile.save.resources };
         const txId = newUid('tx');
-        const res = flow.profile.transact((d) => rule(d, txId)) as ({ ok: true } & T) | { ok: false; reason: string };
+        const res = flow.profile.op(op, args, txId) as any;
         if (!res.ok) {
           setMsg({ text: res.reason, ok: false });
           sfx.play('buildDeny');

@@ -14,7 +14,7 @@ import {
   ShadowGenerator,
   Vector3,
 } from '@babylonjs/core';
-import { sfx } from '../audio/Sfx';
+import { type Emitter, sfx } from '../audio/Sfx';
 import type { Input } from '../core/Input';
 import type { Settings } from '../core/settings';
 import { HQ_MOVE, Player } from '../player/Player';
@@ -33,11 +33,16 @@ import { PostFx } from '../visuals/postfx';
 import { canvas, rng, toTexture } from '../visuals/textures';
 import { ENV_QUERY } from '../world/physicsGroups';
 import { HqBuilder, type HqMaterials } from './HqBuilder';
+import { ExpansionLayer } from './build/ExpansionLayer';
+import { BuildMode } from './build/BuildMode';
+import { buildWardenDrone } from '../visuals/droneModel';
+import type { Palette } from '../visuals/materials';
+import { type TutorialHost, TutorialDirector } from '../core/TutorialDirector';
+import { LIMITS } from './build/catalog';
 import { pickInteractable } from './interaction';
 import { areaAt, HQ_SPAWN, HQ_STATIONS, type Station } from './layout';
 import {
   type Animator,
-  buildPlaceable,
   commandTable,
   consoleDesk,
   drawScreenFrame,
@@ -57,6 +62,12 @@ import {
 
 export interface HomeHooks {
   deploy(): void;
+  /** M7: the HQ shell must be rebuilt (station moved, gateway opened/closed). */
+  rebuild?(): void;
+  /** M7: onboarding host. */
+  tutorial?: TutorialHost;
+  /** M7 co-op visit: the host's headquarters layout replaces this player's own (read-only). */
+  hostBase?: () => SaveData['base'] | null;
 }
 
 /** One interactive station in the HQ (data + its live screen). */
@@ -92,6 +103,19 @@ export class HomeBase {
   private unsubProfile: () => void;
   private disposed = false;
   private wallScreens: { left: ScreenTex; right: ScreenTex } | null = null;
+  /** M7 construction. */
+  layer!: ExpansionLayer;
+  build!: BuildMode;
+  private layoutSig = '';
+  litMaterials: PBRMaterial[] = [];
+  /** Visiting someone else's HQ: no construction, no persistent services. */
+  readOnly = false;
+  private tut: TutorialDirector | null = null;
+  private emitters: Emitter[] = [];
+  private pal!: Palette;
+  private tutDist = 0;
+  private tutPos: [number, number] = [0, 0];
+  private openedTerminals = new Set<string>();
   /** Lights whose intensity breathes slightly (subtle "alive" feel). */
   private pulseLights: { light: PointLight; base: number; phase: number }[] = [];
   /** Transaction feedback per station (1 -> 0 over PULSE_TIME). */
@@ -121,6 +145,7 @@ export class HomeBase {
     const high = settings.quality === 'high';
 
     const pal = createPalette(scene, high, true);
+    this.pal = pal;
     this.kit = new Kit(scene);
 
     // HQ material set: brighter, cleaner interior variants of the shared palette.
@@ -143,8 +168,8 @@ export class HomeBase {
       return m;
     };
     const floor = pal.floor;
-    const wall = composite('hqWall', [0.95, 0.96, 0.97], 0.62, 0.15);
-    const ceiling = composite('hqCeiling', [0.8, 0.82, 0.84], 0.85, 0);
+    const wall = composite('hqWall', [0.8, 0.83, 0.86], 0.58, 0.18);
+    const ceiling = composite('hqCeiling', [0.6, 0.63, 0.66], 0.85, 0);
     ceiling.albedoTexture = null; // plain acoustic panels: keeps the vents for walls/floor
     ceiling.bumpTexture = null;
     const glass = new PBRMaterial('hqGlass', scene);
@@ -201,17 +226,21 @@ export class HomeBase {
       animators: this.animators,
       pulse: (id) => this.pulses.get(id) ?? 0,
     };
-    const save = profile.save;
+    this.readOnly = !!hooks.hostBase?.();
+    const save = this.layoutSave();
     this.buildStations(ctx, save);
-    for (const p of save.base.placeables) buildPlaceable(ctx, p);
     builder.finish();
+    // M7: player-built modules and every placed object (incremental, own colliders).
+    this.layer = new ExpansionLayer(scene, this.kit, ctx, () => this.player?.position ?? Vector3.Zero(), high);
+    this.layer.sync(save);
+    this.layoutSig = layoutSignature(save);
     this.buildBackdrop();
     this.buildSignage(ctx);
     stationWayfinding(ctx);
 
     // ---- lighting: cool fill, moonlight through the window, cyan/teal accents, warm workshop
     const hemi = new HemisphericLight('hqFill', new Vector3(0, 1, 0), scene);
-    hemi.intensity = 0.65;
+    hemi.intensity = 0.5;
     hemi.diffuse = new Color3(0.86, 0.93, 1);
     hemi.groundColor = new Color3(0.5, 0.53, 0.56);
     hemi.specular = Color3.Black();
@@ -230,18 +259,18 @@ export class HomeBase {
       return l;
     };
     point('hqCommand', [0, 6.2, -2], [0.9, 0.97, 1], 2.65, 26);
-    point('hqHolo', [0, 2.2, 0], [0.25, 0.85, 1], 0.95, 8, true);
     point('hqLaunch', [0, 6.5, 16.5], [0.45, 0.9, 1], 3.0, 18, true);
     point('hqBay', [-16.5, 4.4, 0], [0.42, 1, 0.76], 2.65, 12);
-    point('hqStorage', [17, 4.4, 4.5], [0.9, 0.95, 1], 2.5, 12);
-    point('hqWorkshop', [17, 4.4, -5], [1, 0.71, 0.42], 2.7, 11);
+    // Storage + workshop share one light (frees a slot for the player's light budget).
+    point('hqWorks', [17, 4.6, 0], [0.98, 0.86, 0.72], 3.0, 16);
     point('hqMarket', [30, 5.2, 0], [0.86, 0.94, 1], 2.8, 14);
     point('hqReclaim', [-27, 5.2, 0], [1, 0.8, 0.55], 2.6, 13, true);
-    // Ten lights in total: let the interior materials see all of them.
-    for (const m of lit) m.maxSimultaneousLights = 10;
+    // Eight fixed lights plus the player's light budget (12 is the portable per-material maximum).
+    for (const m of lit) m.maxSimultaneousLights = 8 + LIMITS.lights;
+    this.litMaterials = lit;
 
-    if (high) {
-      const sg = new ShadowGenerator(2048, moon);
+    if (settings.shadows !== 'off' && (high || settings.shadows === 'high')) {
+      const sg = new ShadowGenerator(settings.shadows === 'high' ? 2048 : 1024, moon);
       sg.usePercentageCloserFiltering = true;
       sg.filteringQuality = ShadowGenerator.QUALITY_MEDIUM;
       sg.bias = 0.004;
@@ -262,22 +291,46 @@ export class HomeBase {
     this.post.pipeline.bloomWeight = 0.22;
     this.post.pipeline.bloomKernel = high ? 64 : 48;
     this.post.baseGrain = 0.7;
-    this.post.baseExposure = 0.92;
+    this.post.baseExposure = 0.86;
+    this.post.pipeline.imageProcessing.contrast = 1.2;
 
     this.input.onLockChange = (locked) => {
       if (!locked && this.screen === 'home') this.setScreen('paused');
     };
-    this.unsubProfile = profile.store.subscribe(() => this.refreshScreens());
+    this.unsubProfile = profile.store.subscribe(() => {
+      this.refreshScreens();
+      this.syncConstruction();
+    });
+    this.build = new BuildMode(scene, canvas, input, () => this.profile.save, (name, args) => this.profile.op(name, args), () => this.layer.realLights);
     this.unsubEcon = uiEvents.on('econ', (e) => this.stationFx(e.station, e.kind));
     this.applySettings(settings);
+    if (hooks.tutorial)
+      this.tut = new TutorialDirector('hq', hooks.tutorial, {
+        available: (id) => this.screen === 'home' && (id !== 'hq_return' || this.profile.save.history.length > 0),
+        complete: (id, t) => (id === 'hq_look' ? this.tutDist > 4 || t > 9 : id === 'hq_deploy' ? this.openedTerminals.has('deploy') : this.openedTerminals.has('storage') || t > 12),
+      });
   }
 
   // ------------------------------------------------------------------ construction
 
   private buildStations(ctx: EconCtx, save: Readonly<SaveData>): void {
-    for (const st of HQ_STATIONS) {
+    for (const base of HQ_STATIONS) {
       let screen: ScreenTex | null = null;
+      const pose = save.base.stations[base.id];
+      if (pose) {
+        // Relocated: the station's terminal moves on a modular console (same service, same interface).
+        const st: Station = { ...base, pos: [pose.x, pose.z], yaw: pose.yaw, focus: [pose.x + Math.sin(pose.yaw) * 0.45, 1.3, pose.z + Math.cos(pose.yaw) * 0.45], area: areaAt(pose.x, pose.z) };
+        screen = makeScreen(this.scene, st.id);
+        consoleDesk(ctx, st, screen, 1.6);
+        this.rigs.push({ station: st, screen });
+        continue;
+      }
+      const st = base;
       switch (st.id) {
+        case 'architect':
+          screen = makeScreen(this.scene, st.id);
+          consoleDesk(ctx, st, screen, 1.6);
+          break;
         case 'deploy':
           screen = makeScreen(this.scene, st.id);
           consoleDesk(ctx, st, screen, 1.7);
@@ -539,7 +592,11 @@ export class HomeBase {
     this.player.sensitivity = s.sensitivity;
     const h = (s.fov * Math.PI) / 180;
     this.player.baseFov = 2 * Math.atan(Math.tan(h / 2) / (16 / 9));
+    this.player.reduceMotion = s.reduceMotion;
+    this.player.shakeScale = s.shake;
+    this.post?.setOptions({ bloom: s.bloom, reduceMotion: s.reduceMotion });
     sfx.setVolume(s.volume);
+    sfx.setMix(s.sfxVolume, s.uiVolume, s.ambienceVolume);
   }
 
   /** Give the player control (pointer lock); falls back to the pause overlay. */
@@ -556,6 +613,7 @@ export class HomeBase {
     if (this.screen !== 'home') return;
     sfx.play('ui');
     this.screen = 'terminal';
+    this.openedTerminals.add(id);
     hudStore.set({ screen: 'terminal', terminal: id, prompt: null });
     this.input.releaseLock();
   }
@@ -579,7 +637,24 @@ export class HomeBase {
     const input = this.input;
     const controls = this.screen === 'home' && input.captured;
     if (this.screen === 'menu') this.orbit();
-    else this.player.update(dt, input, 1, controls);
+    else if (this.screen !== 'construct') this.player.update(dt, input, 1, controls);
+    if (this.screen === 'construct') {
+      this.build.update(dt);
+      if (input.pressed('Escape') || input.pressed('KeyB')) void this.exitConstruction();
+    }
+    this.layer.update(dt);
+    this.animateOthers(dt);
+    if (!this.emitters.length && sfx.ready) this.startAmbience();
+    {
+      const c = this.scene.activeCamera?.globalPosition ?? this.player.camera.position;
+      sfx.listen(c.x, c.y, c.z, this.screen === 'construct' ? -this.build.camera.alpha - Math.PI / 2 : this.player.yaw);
+    }
+    if (this.tut) {
+      const p = this.player.position;
+      this.tutDist += Math.min(2, Math.hypot(p.x - this.tutPos[0], p.z - this.tutPos[1]));
+      this.tutPos = [p.x, p.z];
+      this.tut.update(dt, input.pressed('F10'));
+    }
 
     if (controls && input.pressed('F3')) this.togglePerf();
     this.updateTarget(controls);
@@ -660,8 +735,117 @@ export class HomeBase {
     });
   }
 
+  /** M7 spatial ambience: launch ring, machinery, ventilation (started once audio is unlocked). */
+  private startAmbience(): void {
+    for (const [k, x, y, z, g, r] of [
+      ['hum', 0, 4, 19.6, 1, 6],
+      ['air', 0, 6.5, -2, 0.7, 8],
+      ['machine', 21.5, 1.2, -5.2, 0.7, 3],
+      ['machine', -27, 1.2, -3.6, 0.8, 3],
+      ['hum', 30, 3, 0, 0.6, 5],
+      ['air', -16, 4.5, 0, 0.5, 5],
+    ] as const) {
+      const e = sfx.emitter(k, x, y, z, g, r);
+      if (e) this.emitters.push(e);
+    }
+  }
+
+  /** M7: enter construction mode (from the architect console). Owner only. */
+  enterConstruction(): void {
+    if (this.readOnly) return;
+    sfx.play('ui');
+    hudStore.set({ terminal: null, prompt: null });
+    this.screen = 'construct';
+    hudStore.set({ screen: 'construct', location: 'home' });
+    this.input.releaseLock();
+    this.input.freeKeys = true;
+    this.build.enter(this.player.position);
+  }
+
+  async exitConstruction(): Promise<void> {
+    if (this.screen !== 'construct') return;
+    this.build.exit();
+    this.input.freeKeys = false;
+    await this.takeControl();
+  }
+
+  /** The layout shown: this player's own, or the host's while visiting their HQ in a co-op session. */
+  private layoutSave(): Readonly<SaveData> {
+    const host = this.hooks.hostBase?.();
+    return host ? { ...this.profile.save, base: host } : this.profile.save;
+  }
+
+  /** Host changed their HQ while we visit: apply it (incremental, or a rebuild for relocated stations). */
+  applyHostBase(): void {
+    this.syncConstruction();
+  }
+
+  // ---------------------------------------------------------------- M7 co-op presence
+
+  private others = new Map<string, { rig: ReturnType<typeof buildWardenDrone>; tx: number; tz: number; ty: number; yaw: number; t: number }>();
+  /** Other wardens in this HQ (lobby presence, 10 Hz). */
+  setPresence(list: readonly { id: string; name: string; p: [number, number, number]; yaw: number }[]): void {
+    const seen = new Set<string>();
+    for (const o of list) {
+      seen.add(o.id);
+      let r = this.others.get(o.id);
+      if (!r) {
+        const rig = buildWardenDrone(this.scene, this.kit, this.pal, 1 + (this.others.size % 3));
+        rig.root.position.set(o.p[0], o.p[1] + 0.55, o.p[2]);
+        r = { rig, tx: o.p[0], ty: o.p[1], tz: o.p[2], yaw: o.yaw, t: 0 };
+        this.others.set(o.id, r);
+      }
+      r.tx = o.p[0];
+      r.ty = o.p[1];
+      r.tz = o.p[2];
+      r.yaw = o.yaw;
+    }
+    for (const [id, r] of this.others) {
+      if (seen.has(id)) continue;
+      r.rig.root.dispose(false, false);
+      r.rig.accent.dispose();
+      this.others.delete(id);
+    }
+  }
+
+  private animateOthers(dt: number): void {
+    const k = 1 - Math.exp(-dt * 10);
+    for (const r of this.others.values()) {
+      const p = r.rig.root.position;
+      p.x += (r.tx - p.x) * k;
+      p.y += (r.ty + 0.55 - p.y) * k;
+      p.z += (r.tz - p.z) * k;
+      r.rig.root.rotation.y = r.yaw;
+      r.t += dt;
+      r.rig.body.position.y = Math.sin(r.t * 2.2) * 0.05;
+      r.rig.ring.rotation.y += dt * 6;
+    }
+  }
+
+  get presenceCount(): number {
+    return this.others.size;
+  }
+
+  /** Re-sync construction after a profile change; structural changes to the shell need a rebuild. */
+  private syncConstruction(): void {
+    if (this.disposed) return;
+    const save = this.layoutSave();
+    const sig = layoutSignature(save);
+    if (sig !== this.layoutSig) {
+      this.layoutSig = sig;
+      this.hooks.rebuild?.();
+      return;
+    }
+    this.layer.sync(save);
+  }
+
   dispose(): void {
     if (this.disposed) return;
+    this.build?.dispose();
+    this.layer?.dispose();
+    this.tut?.dispose();
+    for (const e of this.emitters) e.dispose();
+    this.emitters = [];
     this.disposed = true;
     this.unsubProfile();
     this.unsubEcon();
@@ -680,4 +864,9 @@ export class HomeBase {
       fps: Math.round(this.fpsSmooth),
     };
   }
+}
+
+/** Things that need a full HQ rebuild when they change: relocated stations (their rigs are static). */
+function layoutSignature(save: Readonly<SaveData>): string {
+  return JSON.stringify(save.base.stations);
 }

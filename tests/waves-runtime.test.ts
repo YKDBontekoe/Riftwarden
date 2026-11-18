@@ -88,7 +88,22 @@ describe('settings persistence', () => {
     });
   });
   it('clamps and repairs invalid data', () => {
-    expect(sanitizeSettings({ sensitivity: 99, fov: 'x', quality: 'ultra', volume: -1 })).toEqual({ sensitivity: 3, fov: DEFAULT_SETTINGS.fov, quality: 'high', volume: 0 });
+    expect(sanitizeSettings({ sensitivity: 99, fov: 'x', quality: 'ultra', volume: -1 })).toMatchObject({ sensitivity: 3, fov: DEFAULT_SETTINGS.fov, quality: 'high', volume: 0 });
+  });
+  it('M7: v1 settings derive performance options from their preset; v2 values are clamped', () => {
+    const v1 = sanitizeSettings({ quality: 'low', volume: 0.5 }, 1);
+    expect(v1).toMatchObject({ quality: 'low', shadows: 'off', particles: 'low', bloom: false, renderScale: 0.75, sfxVolume: 1 });
+    const v2 = sanitizeSettings({ quality: 'medium', shadows: 'high', uiScale: 9, shake: -2, renderScale: 0.1, colorblind: 'x', reduceMotion: true }, 2);
+    expect(v2).toMatchObject({ quality: 'medium', shadows: 'high', uiScale: 1.3, shake: 0, renderScale: 0.5, colorblind: 'off', reduceMotion: true });
+  });
+  it('M7: key bindings never contain duplicates and remap physical keys', async () => {
+    const { keyRemap } = await import('../src/core/settings');
+    const s = sanitizeSettings({ keys: { dash: 'KeyC', jump: 'KeyC' } }, 2);
+    expect(s.keys.jump).toBe('KeyC');
+    expect(s.keys.dash).toBe('ShiftLeft');
+    const m = keyRemap(s);
+    expect(m.get('KeyC')).toBe('Space');
+    expect(m.get('Space')).toBe('__unbound');
   });
   it('recovers from corrupt storage', () => {
     localStorage.setItem('riftwarden.settings', '{not json');

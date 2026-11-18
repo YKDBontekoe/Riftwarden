@@ -235,7 +235,7 @@ describe('M6 survival records', () => {
     const m = migrate(d5, 5);
     expect(m.ok).toBe(true);
     const { data } = sanitizeSave(m.data);
-    expect(data.version).toBe(6);
+    expect(data.version).toBe(7);
     expect(data.records['1']).toMatchObject({ bestWave: 9, highestWave: 9, bossesDefeated: 0 });
     expect(data.milestones).toEqual([]);
     expect(data.totals.bossesDefeated).toBe(0);

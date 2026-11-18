@@ -1,13 +1,14 @@
 # Riftwarden: project notes for future sessions
 
-Browser FPS + tower-defense roguelite. Current milestone: **M6 complete** (see "Milestones"). Read this before changing code.
+Browser FPS + tower-defense roguelite. Current milestone: **M7** (co-op, HQ construction, content, presentation) (see "Milestones"). Read this before changing code.
 
 ## Stack
 
 - **Babylon.js 8** (`@babylonjs/core`) for rendering, picking, particles, post-processing.
 - **Havok** (`@babylonjs/havok`, Babylon Physics v2) for the static level collider, the player's `PhysicsCharacterController`, and line-of-sight raycasts.
 - **React 18** for HUD and menus (`src/ui`), fed by a tiny external store.
-- **Vite 7 + TypeScript (strict)**, **Vitest** for unit tests. No backend.
+- **Vite 7 + TypeScript (strict)**, **Vitest** for unit tests.
+- **M7 co-op server**: Node + `ws` + `tsx` (`server/`), runs the real `Game` headless (Babylon `NullEngine` + Havok wasm).
 
 Use engine features before writing custom systems (user direction): collision, picking, raycasts and particles come from Babylon/Havok.
 
@@ -15,6 +16,26 @@ Use engine features before writing custom systems (user direction): collision, p
 
 ```
 src/main.tsx               boot: Havok WASM, Engine, Flow, React root, ?test hook; the ONLY render loop
+server/main.ts             M7: HTTP (serves dist/, /health) + WebSocket /ws, hello/version, rate limit, rooms, profile ops, presence
+server/room.ts             M7: lobby (code, ready, tier = min unlocked, host transfer, reconnect window 120 s)
+server/sim.ts              M7: CoopSim: 60 Hz fixed loop around ServerGame, snapshots 20 Hz, banking/closing per player
+server/profiles.ts         M7: file-backed online profiles (sha256(secret) ids, atomic writes), ProfileStore.op
+server/headless.ts         M7: browser stubs (canvas 2D, document, localStorage) so Game runs in Node
+src/net/protocol.ts        M7: message types, PROTOCOL_VERSION, structural validation, RateLimiter         [pure]
+src/net/ServerGame.ts      M7: authoritative Game subclass: Avatars per player, Recorder (fx/sfx/ui -> events), shot validation, acts, TeamLedger, votes
+src/net/ClientGame.ts      M7: replica Game subclass: puppet enemies (interpolated 100 ms), shot claims, actions with replies, remote wardens
+src/net/NetClient.ts       M7: browser WebSocket session: identity, reconnect/backoff, act() with timeout, RTT
+src/progression/ops.ts     M7: named profile operations shared by client (Profile.op) and server (ProfileStore.op) [pure]
+src/progression/tutorial.ts M7: onboarding steps + ops                                                      [pure]
+src/core/TutorialDirector.ts M7: shows one tutorial card at a time (F10 skips)
+src/home/build/            M7: catalog.ts (pieces, limits), model.ts (grid, validation, reachability) [pure], ops.ts (BUILD_OPS) [pure],
+                           ExpansionLayer.ts (incremental meshes/colliders/lights), BuildMode.ts (construction camera + tools)
+src/enemies/jammerCrawlerBehaviors.ts M7: Jammer Drone, Siege Crawler behaviours
+src/loot/signatures.ts     M7: legendary/exotic signature effects                                          [pure]
+src/visuals/droneModel.ts  M7: warden drone rig for teammates (slot colours)
+src/ui/Coop.tsx, TeamHud.tsx, Construction.tsx, SettingsPanel.tsx, TutorialCard.tsx   M7 UI
+scripts/e2e-coop-protocol.mjs M7: protocol suite with bot clients (scripts/bot.mjs) against a spawned server
+scripts/e2e-construction-coop.cjs M7: browser suite: G construction, H decorations, I station relocation, J blueprint progression, X real browser co-op
 src/core/Flow.ts           session controller: Input, Profile, HQ <-> arena scene swaps, run lifecycle, debug API
 src/core/Game.ts           ONE survival run (arena world): scene/lights/pipeline, damage pipeline, checkpoints, HUD
 src/home/HomeBase.ts       HQ world: scene, lights, Player reuse, station interaction, live station screens
@@ -120,6 +141,21 @@ scripts/e2e-m6.cjs         M6 browser acceptance suite (A-L: plans, enemies, eli
 ```
 
 ## Key design decisions
+
+### M7: co-op, HQ construction, content, presentation
+
+- **Co-op architecture.** The server runs the *same* `Game` code (`ServerGame extends Game`) in Node: `server/headless.ts` stubs the browser, Babylon `NullEngine`, Havok loaded from wasm. One `Avatar` (a real `Player` body, stats, weapon def, RunLedger, RunInventory) per player; `as(avatar, fn)` swaps `this.player/stats/weapon.def` so every existing pipeline (damage, director, upgrades, loot, banking) works unchanged per player. Presentation is captured by the `Recorder` (fx/wfx/telegraph/ordnance/sfx/uiEvents are monkeypatched) and streamed as event tuples (`ev`), with per-player routing (`to`/`not`). Snapshots (20 Hz) carry wave/reactor/cores/tactical, enemy rows + deltas of AI primitives, avatars, towers, ordnance, boss/survival HUD, checkpoint/vote/offer state and a personal block (`me`: ledger view, inventory when dirty).
+- **Replica.** `ClientGame extends Game` never simulates hostiles: enemies are spawned from `es` events and their behaviour code runs only as an animation driver through a puppet context; positions are interpolated 100 ms behind (`Track`). The local drone is client-predicted; the server checks movement (`MAX_SPEED` 46 m/s + slack, arena bounds) and sends `mv` corrections. Shots are resolved locally for feedback and sent as **claims** (`ShotClaim`: family, origin, dir, power, heat, hits [netId, weak, point]); the server checks family, fire-rate budget, origin vs its eye (3.5 m), range, reach around the enemy (latency allowance), LOS (Havok), then computes damage itself from the server-side loadout. Rejections are counted per reason (`ServerGame.why`, logged on test servers). All other intents are `act` messages with replies (place/recycle/modify towers, tactical, startWave, collect, upgrade, vote, equip/unequip/discard, `test` only with `RIFT_TEST=1`).
+- **Shared vs personal.** Shared: reactor, towers (any player refits/recycles; refunds to the shared cores), cores, tactical energy (anyone toggles), waves. Personal: equipment, run cargo, loot (drops are rolled per player with their own RNG and only visible/collectable by the owner), ledgers. `TeamLedger` mirrors shared resource rewards into each player's ledger; each player banks at checkpoints into their own online profile (`bankRewards`, guarded per player). Team upgrades: the chooser rotates between players, 30 s auto-pick. Checkpoint vote: unanimous among connected players to return; 45 s timeout = continue. Team defeat ends the run for everyone; unsecured rewards are lost per player.
+- **Online profiles.** Server-owned (`server-data/profiles/<sha256(secret)>`); the client identity is a random secret in localStorage (`riftwarden.identity`). Profile import is a one-time copy of the local save, sanitised by the server; the local save is never touched by co-op. All profile mutations are named ops (`progression/ops.ts`) executed by the same code on both sides: `Profile.op` runs locally in single player and is forwarded (`op` message, tx id) when online (`attachRemote`/`adoptRemote`). Ops are refused while the profile is in a run.
+- **Reliability.** Protocol version check on `hello`; `parseClientMsg` validates every message structurally (malformed traffic and token-bucket rate limits close the socket after 50 strikes); max 64 KiB per message. Disconnect: the slot (and unsecured rewards) is held 120 s, a reconnect with the same identity rejoins the running operation (`runStart` with `rejoin`). Host transfer on leave/disconnect. Duplicate sign-in replaces the older socket.
+- **HQ visit.** In the lobby a guest can visit the host's HQ (`visit` message; `Flow.visitHostHq`): the HQ is rebuilt with the host's `base` read-only (`HomeBase.readOnly`, `hooks.hostBase`), host `hq*` ops are pushed live (`hostHq`), terminals act on the guest's own profile, presence (10 Hz) shows the other wardens as drones. The guest returns automatically when the session ends or they become host.
+- **Construction.** 5 m grid (`x0 = 2, z0 = -2.5`) outside the core HQ; gateways at cells (-8,0) and (7,0) behind the side walls. `save.base.structure` holds floors/ceilings (by cell), edges (`i,j,n|e`: walls, doorways, doors, windows, corners) and pillars (vertices). Validation (`build/model.ts`): structural connectivity BFS from the gateways (no floating rooms), overlap rules, keep-out zones (spawn, launch pad, portals, gateways, doorways, station access points), gateways cannot be walled off, stations must stay reachable (walkability BFS). Free placeables keep the M1 `Placeable` shape with per-object colliders; lights have colour/intensity/on and a real-light budget (`LIMITS.lights` = 4, the rest glow only). Stations can be relocated (`base.stations`). Removal refunds in full so undo/redo is value-neutral. Blueprints: starter, merchant (bought at the architect console), milestone/tier/boss unlocks derived from persisted records, fabrication (machinery). Facilities: storage annex (+10 bays), market uplink (+market progress), calibrator. Everything costs secured HQ resources, so unsecured run rewards cannot bypass banking.
+- **Lights per material**: SwiftShader fails to compile PBR shaders with 14+ lights; the HQ uses 8 base lights + 4 player lights (`maxSimultaneousLights = 12`).
+- **Save v7**: `base.structure/stations/blueprints/owned`, `tutorial`; `MIGRATIONS[6]` marks the tutorial complete for existing players. Signatures are validated and backfilled (`rollSignature`).
+- **Content**: Scatter Choke (7-pellet cone) and Pulse Capacitor (beam family pulse with 3 m splash) firing styles; Missile Battery (salvos, splash) and Support Amplifier (boosts nearby towers, no attack) towers; Jammer Drone (locks and jams towers, interruptible) and Siege Crawler (front plating x0.5, releases drones, drills the reactor) enemies; 10 run upgrades (w_vent, x_bounty, d_rebound, l_singularity, l_echo, t_overload, t_cluster, ...); 6 signatures (overdrive, chain_reaction, stormcaller, siphon; phase and rift_echo exotic only).
+- **Presentation**: settings v2 (audio buses sfx/ui/ambience, UI scale, shake, reduced motion, colour-vision rarity palettes, particle density, shadows, bloom, render scale, key rebinding via `Input.remap`), onboarding tutorial (persisted, skippable, resettable), audio voice cap 40, HRTF spatial emitters (reactor, vents, machines, HQ hum) started lazily once audio is unlocked.
+- **Limitations / not done**: no client-side prediction of shared hostiles beyond interpolation (high RTT feels laggy for hits); no NAT traversal/matchmaking (direct server URL + codes); server profiles are files (no database, single process); boss visuals are still transform-animated kit geometry.
 
 ### M6: advanced endless survival
 
@@ -283,6 +319,7 @@ scripts/e2e-m6.cjs         M6 browser acceptance suite (A-L: plans, enemies, eli
 - **M3 (done):** three weapon families with distinct mechanics/effects/sound, procedural components baked into rolls, procedural first-person models with mechanical animation and heat visuals, 8 functional module types in rarity-based typed sockets, HQ weapon engineering (install/remove/transfer for salvage) with live 3D inspection, save v3 migration.
 - **M4 (done):** credits + advanced components, equipment exchange and module broker with persisted rotating stock and material exchange, reclamation press with batch dismantling and item locks, affix recalibration with locks and escalation, enhancement, component refits, fabrication recipes with quality grades, two new HQ rooms with live station displays, transactional saves with rollback, save v4.
 - **M5 (done):** see the M5 section.
+- **M7:** 2-4 player co-op with an authoritative server, HQ construction with blueprints, new firing styles/towers/enemies/upgrades/signatures, onboarding, settings v2, spatial audio.
 - **M6 (done):** survival director (budgets, themes, seeded plans), Shielded Enforcer / Artillery Drone / Support Engineer / Vault Courier, four elite modifiers with combinations, four dynamic events, two arena evolutions, Siege Colossus and Overseer Core bosses with dynamic scheduling, tiers IV-V with unlock rules, boss/elite/event/HVT loot (target farming), survival records + milestones (save v6), run summaries, F4 dev lab, shader/pool pre-warming.
 - **Next:** legendary signature effects (`signature` is still reserved; rerolls already preserve it).
 - Later: combat depth (second tower, turret upgrades, enemy variety, hit flash, audio pass, deep-import bundle split), run upgrades, M4 modular towers, M5 advanced endless (bosses/events), M6 content, M7 co-op evaluation.

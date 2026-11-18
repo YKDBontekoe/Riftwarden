@@ -46,6 +46,8 @@ export interface MarketProgress {
   level: number;
   /** Highest unlocked threat tier. */
   tier: number;
+  /** M7: extra equipment slots from HQ facilities (Market Uplink). */
+  extra?: number;
 }
 
 /**
@@ -89,7 +91,7 @@ export function generateMarket(profileId: string, rotation: number, progress: Ma
     return { id, item, sold: false, featured: false };
   };
   const equipment: MarketEntry[] = [];
-  for (let i = 0; i < MARKET.equipmentSlots; i++) {
+  for (let i = 0; i < MARKET.equipmentSlots + Math.max(0, Math.min(4, progress.extra ?? 0)); i++) {
     const featured = i === 0;
     const rar = cap(rollRarity(rand, MARKET.equipmentLuck * luckT, featured ? 'rare' : 'common'));
     const e = make('equipment', i, pickCategory(rand), rar);
