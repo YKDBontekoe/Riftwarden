@@ -19,4 +19,12 @@ describe('legendary and exotic weapon signatures', () => {
     const { data } = sanitizeSave(JSON.parse(JSON.stringify(d)));
     expect(data.items.find((i) => i.uid === 'L1')!.signature).toBe(leg.signature);
   });
+  it('the signature depends on the seed only (same seed => same item, whatever the uid)', async () => {
+    const { generateItem } = await import('../src/loot/generate');
+    for (let seed = 1; seed <= 30; seed++) {
+      const a = generateItem({ uid: `a${seed}`, seed, level: 10, rarity: 'exotic', baseId: 'beam_prism', source: 't', now: 1 });
+      const b = generateItem({ uid: `b${seed}`, seed, level: 10, rarity: 'exotic', baseId: 'beam_prism', source: 't', now: 1 });
+      expect(b.signature).toBe(a.signature);
+    }
+  });
 });

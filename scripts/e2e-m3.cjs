@@ -286,7 +286,8 @@ const M = (p, fn, arg) => p.evaluate(fn, arg);
   check('A0 viewmodel is steady at idle charge and smooth at sprint speed', stability.chargedTravel < 1e-6 && stability.sprintTravel < 0.004, JSON.stringify(stability));
   check('A0 viewmodel keeps the same turn sway and projection across frame rates and FOV kicks', stability.swayDelta < 1e-5 && stability.fovDrift < 1e-5, JSON.stringify(stability));
   const fam = {};
-  for (const [baseId, seed] of [['plasma_repeater', 11], ['rail_lancer', 3], ['beam_prism', 5]]) {
+  // beam_prism seed 6 rolls the continuous mc_beam mechanism (M7 added mc_pulse to the beam pool; pulse is covered by the unit tests).
+  for (const [baseId, seed] of [['plasma_repeater', 11], ['rail_lancer', 3], ['beam_prism', 6]]) {
     const eq = await M(p, ([b, s]) => window.__m3.equipNew({ seed: s, rarity: 'rare', baseId: b, level: 3 }), [baseId, seed]);
     await M(p, () => window.__m3.trackDamage());
     if (eq.family === 'rail') {

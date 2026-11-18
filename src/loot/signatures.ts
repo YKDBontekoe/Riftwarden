@@ -34,9 +34,10 @@ const BY_ID = new Map(SIGNATURES.map((s) => [s.id, s]));
 export const signatureDef = (id: string | null | undefined): SignatureDef | null => (id ? BY_ID.get(id) ?? null : null);
 
 /** Deterministic signature for a legendary/exotic weapon (exotics may roll exotic-only ones). */
-export function rollSignature(item: Pick<ItemInstance, 'uid' | 'seed' | 'rarity' | 'category'>): string | null {
+/** Deterministic from the item's seed (same seed + spec => same item, like every other rolled value). */
+export function rollSignature(item: Pick<ItemInstance, 'seed' | 'rarity' | 'category'>): string | null {
   if (item.category !== 'weapon' || (item.rarity !== 'legendary' && item.rarity !== 'exotic')) return null;
   const pool = SIGNATURES.filter((s) => item.rarity === 'exotic' || !s.exotic);
-  const h = hashSeed(`sig:${item.seed}:${item.uid}`);
+  const h = hashSeed(`sig:${item.seed}`);
   return pool[h % pool.length].id;
 }
