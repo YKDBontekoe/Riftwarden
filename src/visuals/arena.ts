@@ -12,7 +12,6 @@ import {
   type Material,
   TransformNode,
   Vector3,
-  type VertexData,
 } from '@babylonjs/core';
 import type { ArenaLayout, Box, GateId, Ramp } from '../world/layout';
 import { PHYS_ENV } from '../world/physicsGroups';
@@ -23,7 +22,6 @@ import { createPathLight } from './pathLighting';
 import { segmentedRing } from './rings';
 import { ArenaDecals } from './arenaDecals';
 import { ArenaDressing } from './arenaDressing';
-import { loftData, smoothLatheData } from './sculpt';
 
 interface GateVisual {
   lane: ReturnType<typeof createPathLight>;
@@ -75,15 +73,6 @@ export class ArenaBuilder {
     const bevel = Math.min(0.09, Math.min(w, h, d) * 0.22);
     const m = createBeveledBox('b', w, h, d, bevel, this.scene);
     m.position.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
-    this.add(m, mat, surface);
-    return m;
-  }
-
-  /** Add sculpted vertex data at (x, y, z) into the merged geometry. */
-  private sculpt(name: string, vd: VertexData, x: number, z: number, mat: Material, surface: string | null, y = 0): Mesh {
-    const m = new Mesh(name, this.scene);
-    vd.applyToMesh(m);
-    m.position.set(x, y, z);
     this.add(m, mat, surface);
     return m;
   }
@@ -192,44 +181,13 @@ export class ArenaBuilder {
         break;
       }
       case 'block': {
-        // Sculpted barrier: rounded-rectangle body tapering slightly upward, a graphite plinth and cap lip.
-        const cx = (x0 + x1) / 2;
-        const cz = (z0 + z1) / 2;
-        const hw = (x1 - x0) / 2;
-        const hd = (z1 - z0) / 2;
-        const top = y1 - 0.4;
-        this.sculpt('blockBody', loftData([
-          { t: y0 + 0.3, w: hw - 0.03, h: hd - 0.03, n: 9 },
-          { t: top * 0.5, w: hw - 0.05, h: hd - 0.05, n: 9 },
-          { t: top, w: hw - 0.09, h: hd - 0.09, n: 9 },
-        ], 'y', 40), cx, cz, P.white, 'wall');
-        this.sculpt('blockPlinth', loftData([
-          { t: y0, w: hw, h: hd, n: 10 },
-          { t: y0 + 0.24, w: hw, h: hd, n: 10 },
-          { t: y0 + 0.34, w: hw - 0.05, h: hd - 0.05, n: 10 },
-        ], 'y', 40), cx, cz, P.graphite, 'wall');
-        this.sculpt('blockCap', loftData([
-          { t: top - 0.02, w: hw - 0.08, h: hd - 0.08, n: 10 },
-          { t: top + 0.06, w: hw + 0.04, h: hd + 0.04, n: 10 },
-          { t: y1 - 0.08, w: hw + 0.04, h: hd + 0.04, n: 10 },
-          { t: y1, w: hw - 0.04, h: hd - 0.04, n: 10 },
-        ], 'y', 40), cx, cz, P.graphite, 'wall');
-        this.sculpt('blockStrip', loftData([
-          { t: 0.5, w: hw - 0.025, h: hd - 0.025, n: 9 },
-          { t: 0.6, w: hw - 0.025, h: hd - 0.025, n: 9 },
-        ], 'y', 40), cx, cz, P.orangeDim, null);
+        this.box(x0, y0, z0, x1, y1 - 0.4, z1, P.white, 'wall');
+        this.box(x0 - 0.05, y1 - 0.4, z0 - 0.05, x1 + 0.05, y1, z1 + 0.05, P.graphite, 'wall');
+        this.box(x0 - 0.04, 0.5, z0 - 0.04, x1 + 0.04, 0.62, z1 + 0.04, P.orangeDim, null);
         break;
       }
       case 'machine': {
-        {
-          const hw = (x1 - x0) / 2;
-          const hd = (z1 - z0) / 2;
-          this.sculpt('machineBody', loftData([
-            { t: y0, w: hw, h: hd, n: 8 },
-            { t: y1 - 0.25, w: hw, h: hd, n: 8 },
-            { t: y1, w: hw - 0.18, h: hd - 0.18, n: 6 },
-          ], 'y', 40), (x0 + x1) / 2, (z0 + z1) / 2, P.graphite, 'wall');
-        }
+        this.box(x0, y0, z0, x1, y1, z1, P.graphite, 'wall');
         // capacitor cylinders on top
         const alongX = x1 - x0 > z1 - z0;
         const n = 3;
@@ -237,7 +195,9 @@ export class ArenaBuilder {
           const f = (i + 0.5) / n;
           const cx = alongX ? x0 + (x1 - x0) * f : (x0 + x1) / 2;
           const cz = alongX ? (z0 + z1) / 2 : z0 + (z1 - z0) * f;
-          this.sculpt('cap', smoothLatheData([[0.62, 0], [0.75, 0.08], [0.75, 0.25], [0.7, 0.3], [0.7, 1.3], [0.75, 1.35], [0.75, 1.5], [0.6, 1.6], [0.3, 1.65]], 24), cx, cz, P.metal, 'wall', y1);
+          const c = MeshBuilder.CreateCylinder('cap', { height: 1.6, diameter: 1.5, tessellation: 20 }, this.scene);
+          c.position.set(cx, y1 + 0.8, cz);
+          this.add(c, P.metal, 'wall');
           const ring = MeshBuilder.CreateCylinder('capRing', { height: 0.12, diameter: 1.56, tessellation: 20 }, this.scene);
           ring.position.set(cx, y1 + 1.2, cz);
           this.add(ring, i % 2 ? P.cyanGlow : P.cyanDim, null);

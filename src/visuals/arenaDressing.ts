@@ -111,21 +111,26 @@ export class ArenaDressing {
 
   private block(b: Box): void {
     const P = this.P;
-    const [x0, , z0] = b.min;
+    const [x0, y0, z0] = b.min;
     const [x1, y1, z1] = b.max;
     const top = y1 - 0.4;
+    // Corner guards (metal angles on the four vertical edges).
+    for (const [cx, cz] of [[x0, z0], [x1, z0], [x0, z1], [x1, z1]]) this.cbox(cx, (y0 + top) / 2, cz, 0.09, (top - y0) / 2, 0.09, P.metal, 'wall');
     // Vertical panel seams every ~1.8 m on every face.
     const seams = (len: number) => Math.max(1, Math.round(len / 1.8));
     const nx = seams(x1 - x0);
     for (let i = 1; i < nx; i++) {
       const x = x0 + ((x1 - x0) * i) / nx;
-      for (const z of [z0 + 0.05, z1 - 0.05]) this.cbox(x, (0.7 + top) / 2, z, 0.04, (top - 0.7) / 2, 0.025, P.graphite, 'wall');
+      for (const z of [z0, z1]) this.cbox(x, (0.7 + top) / 2, z, 0.04, (top - 0.7) / 2, 0.025, P.graphite, 'wall');
     }
     const nz = seams(z1 - z0);
     for (let i = 1; i < nz; i++) {
       const z = z0 + ((z1 - z0) * i) / nz;
-      for (const x of [x0 + 0.05, x1 - 0.05]) this.cbox(x, (0.7 + top) / 2, z, 0.025, (top - 0.7) / 2, 0.04, P.graphite, 'wall');
+      for (const x of [x0, x1]) this.cbox(x, (0.7 + top) / 2, z, 0.025, (top - 0.7) / 2, 0.04, P.graphite, 'wall');
     }
+    // Horizontal service band two thirds up.
+    const by = y0 + (top - y0) * 0.68;
+    this.h.box(x0 - 0.03, by - 0.07, z0 - 0.03, x1 + 0.03, by + 0.07, z1 + 0.03, P.graphite, 'wall');
     // Roof units: a vent box and a small fan housing (low, no collision needed).
     const cx = (x0 + x1) / 2;
     const cz = (z0 + z1) / 2;
