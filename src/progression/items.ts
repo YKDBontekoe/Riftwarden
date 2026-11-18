@@ -56,5 +56,7 @@ export function itemDef(item: ItemInstance | null | undefined): BaseDef | null {
 let uidCounter = 0;
 export function newUid(prefix = 'it'): string {
   uidCounter = (uidCounter + 1) % 1_000_000;
-  return `${prefix}_${Date.now().toString(36)}_${uidCounter.toString(36)}_${Math.floor(Math.random() * 1e6).toString(36)}`;
+  const rnd = new Uint32Array(2);
+  globalThis.crypto.getRandomValues(rnd);
+  return `${prefix}_${Date.now().toString(36)}_${uidCounter.toString(36)}_${rnd[0].toString(36)}${rnd[1].toString(36)}`;
 }

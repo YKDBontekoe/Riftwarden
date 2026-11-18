@@ -199,9 +199,10 @@ export class NetClient {
         this.handlers.events?.(m.e as unknown[][]);
         return;
       case 'actResult': {
+        if (typeof m.id !== 'number') return;
         const r = this.pending.get(m.id);
         this.pending.delete(m.id);
-        r?.({ ok: m.ok, reason: m.reason });
+        if (typeof r === 'function') r({ ok: m.ok === true, reason: typeof m.reason === 'string' ? m.reason : undefined });
         return;
       }
       case 'runEnd':

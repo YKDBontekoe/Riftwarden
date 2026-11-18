@@ -23,7 +23,7 @@ export class Bot {
         if (m.t === 'profile') this.profile = m.save;
         if (m.t === 'runStart') this.run = m.run;
         if (m.t === 'runEnd') this.end = m;
-        if (m.t === 'actResult') { this.acts.get(m.id)?.(m); this.acts.delete(m.id); }
+        if (m.t === 'actResult' && typeof m.id === 'number') { const r = this.acts.get(m.id); this.acts.delete(m.id); if (typeof r === 'function') r(m); }
         for (const w of [...this.waiters]) if (w.fn(m)) { this.waiters.splice(this.waiters.indexOf(w), 1); w.res(m); }
       });
       this.ws.on('error', rej);
