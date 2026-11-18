@@ -302,8 +302,8 @@ export class EnemyManager {
       if (!this.pool.has(kind)) this.pool.set(kind, []);
       this.pool.get(kind)!.push(e);
       if (kind === 'walker') {
-        for (const mod of ['overcharged', 'armored', 'accelerated', 'volatile'] as EliteModId[]) e.eliteParts.set(mod, this.kit.flashable(() => buildEliteParts(this.kit, this.P, e.root, e.def, mod)));
-        e.threat = this.kit.flashable(() => buildThreatMark(this.kit, this.P, e.root, e.def));
+        for (const mod of ['overcharged', 'armored', 'accelerated', 'volatile'] as EliteModId[]) e.eliteParts.set(mod, this.kit.flashable(() => this.kit.soft(() => buildEliteParts(this.kit, this.P, e.root, e.def, mod))));
+        e.threat = this.kit.flashable(() => this.kit.soft(() => buildThreatMark(this.kit, this.P, e.root, e.def)));
         e.flashVecs = null;
       }
     }
@@ -344,7 +344,7 @@ export class EnemyManager {
     const def = ENEMIES[kind];
     const b = this.behaviors[kind];
     if (!b) throw new Error(`No behaviour registered for enemy kind '${kind}'`);
-    const r = this.kit.flashable(() => b.rig?.(this) ?? { root: this.kit.node(kind, null) });
+    const r = this.kit.flashable(() => this.kit.soft(() => b.rig?.(this) ?? { root: this.kit.node(kind, null) }));
     const e = new Enemy(def, r.root, r.walker ?? null, r.drone ?? null, b);
     b.create?.(e, this);
     if (!e.hitboxes.length) {
@@ -428,7 +428,7 @@ export class EnemyManager {
     for (const id of e.mods) {
       let parts = e.eliteParts.get(id);
       if (!parts) {
-        parts = this.kit.flashable(() => buildEliteParts(this.kit, this.P, e.root, e.def, id));
+        parts = this.kit.flashable(() => this.kit.soft(() => buildEliteParts(this.kit, this.P, e.root, e.def, id)));
         e.eliteParts.set(id, parts);
         e.flashVecs = null;
       }
@@ -439,7 +439,7 @@ export class EnemyManager {
     const support = e.def.role === 'support' && e.kind !== 'pylon';
     const marked = e.mods.length > 0 || support;
     if (marked && !e.threat) {
-      e.threat = this.kit.flashable(() => buildThreatMark(this.kit, this.P, e.root, e.def));
+      e.threat = this.kit.flashable(() => this.kit.soft(() => buildThreatMark(this.kit, this.P, e.root, e.def)));
       e.flashVecs = null;
     }
     if (e.threat) {

@@ -1,5 +1,6 @@
 import { beveledBoxData } from './bevel';
 import { enableHitFlash, initFlash, registerFlashBuffer } from './hitFlashPlugin';
+import { loftData, smoothLatheData } from './sculpt';
 import { type AbstractMesh, type Material, Matrix, Mesh, MeshBuilder, PBRMaterial, type Scene, TransformNode, Vector3, type VertexData } from '@babylonjs/core';
 
 export type Shape = 'box' | 'cyl' | 'cyl6' | 'cyl8' | 'sphere' | 'ico' | 'cone' | 'torus' | 'torusThin' | 'arc' | 'cone4' | `s:${string}`;
@@ -29,6 +30,38 @@ export class Kit {
    * per-instance hit-flash buffer and their material gets the flash plugin. Enemy rigs are built in this mode.
    */
   flashMode = false;
+
+  /** While true, boxes become softened hard-surface blocks and spheres smooth (enemy rigs). */
+  softMode = false;
+
+  /** Run `fn` with softened primitives. */
+  soft<T>(fn: () => T): T {
+    const prev = this.softMode;
+    this.softMode = true;
+    try {
+      return fn();
+    } finally {
+      this.softMode = prev;
+    }
+  }
+
+  /** Primitive substitution in soft mode (registered lazily as sculpted shapes). */
+  private softShape(shape: Shape): Shape {
+    if (!this.softMode) return shape;
+    if (shape === 'box') {
+      return this.sculpt('softBox', () => loftData([
+        { t: -0.5, w: 0.43, h: 0.43, n: 4 },
+        { t: -0.455, w: 0.5, h: 0.5, n: 5 },
+        { t: 0.455, w: 0.5, h: 0.5, n: 5 },
+        { t: 0.5, w: 0.43, h: 0.43, n: 4 },
+      ], 'y', 28));
+    }
+    if (shape === 'sphere') return this.sculpt('softSphere', () => smoothLatheData(Array.from({ length: 13 }, (_, i) => {
+      const a = -Math.PI / 2 + (i / 12) * Math.PI;
+      return [Math.max(0.0005, Math.cos(a) * 0.5), Math.sin(a) * 0.5] as [number, number];
+    }), 28));
+    return shape;
+  }
 
   /** Run `fn` with flashable parts (enemy rigs, elite hardware, threat marks). */
   flashable<T>(fn: () => T): T {
@@ -135,6 +168,7 @@ export class Kit {
 
   /** Create a part. If `unique` material is given, makes a standalone clone with that material. */
   part(shape: Shape, mat: Material, parent: TransformNode, o: PartOpts = {}, unique?: Material): AbstractMesh {
+    shape = this.softShape(shape);
     const t = this.template(shape, mat);
     let m: AbstractMesh;
     if (unique) {
