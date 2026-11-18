@@ -45,7 +45,7 @@ jobs:
       - run: npm run lint
       - run: npm test
         env:
-          RIFT_TEST_DATABASE_URL: postgresql://riftwarden:test-only@127.0.0.1:${{ job.services.postgres.ports[5432] }}/riftwarden
+          RIFT_TEST_DATABASE_URL: postgresql://riftwarden:test-only@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/riftwarden
       - run: npm run build
       - if: github.ref == 'refs/heads/main'
         run: printf '%s\n' "$GITHUB_SHA" > dist/build.txt
@@ -88,7 +88,8 @@ jobs:
           docker build --file deploy/Dockerfile --label "org.opencontainers.image.revision=$GITHUB_SHA" \
             --tag "$IMAGE:$GITHUB_SHA" .
           export RIFTWARDEN_IMAGE="$IMAGE:$GITHUB_SHA"
-          export RIFT_POSTGRES_PASSWORD="$(openssl rand -hex 24)"
+          RIFT_POSTGRES_PASSWORD="$(openssl rand -hex 24)"
+          export RIFT_POSTGRES_PASSWORD
           trap 'docker compose -f deploy/compose.yml down --volumes >/dev/null 2>&1 || true' EXIT
           if ! docker compose -f deploy/compose.yml up --detach --wait --wait-timeout 45; then
             docker compose -f deploy/compose.yml logs
