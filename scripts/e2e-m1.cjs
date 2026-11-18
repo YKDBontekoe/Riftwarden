@@ -18,7 +18,7 @@ async function launch(storageState) {
   const errs = [];
   p.on('pageerror', (e) => errs.push('PAGEERR ' + e.message));
   p.on('console', (m) => { if (m.type() === 'error') errs.push('console.error ' + m.text().slice(0, 300)); });
-  await p.goto('http://localhost:5173/?test');
+  await p.goto((process.env.RIFT_URL || 'http://localhost:5173/') + '?test');
   await p.waitForFunction(() => window.__rift && window.__rift.state().screen === 'menu', null, { timeout: 180000 });
   await p.evaluate(() => window.__rift.stopLoop());
   await p.evaluate(() => { window.__rift.flow.skipUpgrades = true; });
