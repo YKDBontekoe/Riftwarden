@@ -8,9 +8,10 @@ import type { Input } from '../core/Input';
 import type { Settings } from '../core/settings';
 import type { WeaponDef, WeaponFamily } from '../data/defs';
 import { type Enemy, type EnemyHitboxMeta } from '../enemies/EnemyManager';
-import { DROP_SOURCES, type DropSource, type DropSourceId, rollDrops } from '../loot/drops';
+import { DROP_SOURCES, type DropSource, type DropSourceId } from '../loot/drops';
+import { rollLoot } from '../loot/roll';
 import { equipmentModifiers, weaponDefFor } from '../loot/equipment';
-import { generateItem, hashSeed } from '../loot/generate';
+import { hashSeed } from '../loot/generate';
 import { convertsToSalvage, expiresAfterWave, PICKUP_RANGE, type Pickup } from '../loot/LootField';
 import { scrapValue } from '../loot/economy';
 import { RunInventory } from '../loot/runInventory';
@@ -25,79 +26,9 @@ import type { Turret } from '../defense/Turrets';
 import { uiEvents } from '../ui/store';
 import { ARENA } from '../world/layout';
 import type { ActMsg, InputMsg, ShotClaim } from './protocol';
+import { capturePresentation, enterRecorder, patchGlobals, Recorder, withRecorder } from './recorder';
+export { Recorder, type NetEvent } from './recorder';
 import { arr, enc } from './wire';
-
-/** Replicated event (tuple, see ClientGame for the decoder). `to` restricts delivery to one player. */
-export interface NetEvent {
-  e: unknown[];
-  to?: string;
-  /** Everyone except this player (presentation the actor already showed locally). */
-  not?: string;
-}
-
-/**
- * Presentation recorder for the headless server: effects, sounds and HUD events produced by the
- * authoritative simulation are captured and streamed to the replicas. `pause` silences paths the
- * replicas reproduce on their own (enemy deaths, shield hits) so nothing is shown twice.
- */
-export class Recorder {
-  out: NetEvent[] = [];
-  /** Player that owns the presentation currently being produced (shots, hits): personal events go only to them. */
-  owner: string | null = null;
-  paused = 0;
-  /** Last world position asked for panning: attached to the next sound (positional audio on replicas). */
-  panPos: Vector3 | null = null;
-
-  push(e: unknown[], to?: string | null): void {
-    if (this.paused > 0) return;
-    this.out.push(to ? { e, to } : { e });
-  }
-  pushExcept(e: unknown[], not: string): void {
-    if (this.paused > 0) return;
-    this.out.push({ e, not });
-  }
-  quiet<T>(fn: () => T): T {
-    this.paused++;
-    try {
-      return fn();
-    } finally {
-      this.paused--;
-    }
-  }
-  take(): NetEvent[] {
-    const o = this.out;
-    this.out = [];
-    return o;
-  }
-}
-
-/** Sounds and HUD events emitted while this recorder is current (one simulation runs at a time). */
-let current: Recorder | null = null;
-const PERSONAL_UI = new Set(['hit', 'damageNumber', 'hurt', 'loot']);
-let patched = false;
-function patchGlobals(): void {
-  if (patched) return;
-  patched = true;
-  const play = sfx.play.bind(sfx);
-  sfx.play = ((name: string, o: Record<string, unknown> = {}) => {
-    const r = current;
-    if (r && r.paused === 0) {
-      const pos = r.panPos;
-      r.panPos = null;
-      r.push(['s', name, enc({ ...o, pan: undefined }), pos ? arr(pos) : null], r.owner);
-    }
-    void play;
-  }) as typeof sfx.play;
-  const emit = uiEvents.emit.bind(uiEvents);
-  uiEvents.emit = ((k: string, v: unknown) => {
-    const r = current;
-    if (r && r.paused === 0) {
-      const personal = PERSONAL_UI.has(k);
-      if (!personal || r.owner) r.push(['u', k, enc(v)], personal ? r.owner : null);
-    }
-    void emit;
-  }) as typeof uiEvents.emit;
-}
 
 export interface ServerPlayerInit {
   id: string;
@@ -179,24 +110,24 @@ export function spawnFor(slot: number): { x: number; z: number; yaw: number } {
 /** Run ledger shared by the team: every collected resource is mirrored to each player's own ledger. */
 class TeamLedger extends RunLedger {
   members: () => RunLedger[] = () => [];
-  collect(r: Partial<Rewards>): boolean {
+  override collect(r: Partial<Rewards>): boolean {
     const res = super.collect({ salvage: r.salvage, credits: r.credits, components: r.components });
     for (const m of this.members()) m.collect({ salvage: r.salvage, credits: r.credits, components: r.components });
     return res;
   }
-  tick(dt: number): void {
+  override tick(dt: number): void {
     super.tick(dt);
     for (const m of this.members()) m.tick(dt);
   }
-  addKill(): void {
+  override addKill(): void {
     super.addKill();
     for (const m of this.members()) m.addKill();
   }
-  waveReached(n: number): void {
+  override waveReached(n: number): void {
     super.waveReached(n);
     for (const m of this.members()) m.waveReached(n);
   }
-  waveCleared(n: number): void {
+  override waveCleared(n: number): void {
     super.waveCleared(n);
     for (const m of this.members()) m.waveCleared(n);
   }
@@ -247,11 +178,10 @@ export class ServerGame extends Game {
     const canvas = { focus() {}, clientWidth: 1280, clientHeight: 720 } as unknown as HTMLCanvasElement;
     const input = { onLockChange: null, captured: false, locked: false, pressed: () => false, isDown: () => false, mouse: () => false, mousePressed: () => false, mouseDx: 0, mouseDy: 0, releaseLock() {}, requestLock: async () => true, isLockedNow: () => false } as unknown as Input;
     const settings = { quality: 'low', sensitivity: 1, fov: 90, volume: 0 } as unknown as Settings;
-    const prev = current;
     const rec = new Recorder();
-    current = rec;
     rec.paused++;
     const box: { g?: ServerGame } = {};
+    const prev = enterRecorder(rec);
     try {
       super(engine, canvas, havok, settings, input, {
         ...cfg,
@@ -260,7 +190,7 @@ export class ServerGame extends Game {
         hooks: { bank: () => true, checkpoint: () => {}, defeat: () => box.g?.serverDefeat() },
       });
     } finally {
-      current = prev;
+      enterRecorder(prev);
     }
     box.g = this;
     (this as { rec: Recorder }).rec = rec;
@@ -287,7 +217,7 @@ export class ServerGame extends Game {
       released: (e) => this.rec.push(['er', e.id]),
     };
     this.enemyCtx.focus = (e) => this.focus(e);
-    this.wrapPresentation();
+    capturePresentation(this, this.rec);
     // Headless: nothing renders, so world matrices of the static level are computed once here (picking needs them).
     for (const m of this.scene.meshes) m.computeWorldMatrix(true);
     this.setScreen('playing');
@@ -314,92 +244,25 @@ export class ServerGame extends Game {
   // ------------------------------------------------------------------ presentation capture
 
   /** Route the game's presentation objects into the recorder (the headless server renders nothing). */
-  private wrapPresentation(): void {
-    const rec = this.rec;
-    const fx = this.fx as unknown as Record<string, (...a: unknown[]) => unknown>;
-    for (const m of ['burst', 'explode', 'impact', 'ring', 'tracer', 'flashLight', 'debrisBurst', 'shieldRipple']) {
-      fx[m] = (...args: unknown[]) => rec.push(['f', m, enc(args)]);
-    }
-    const spawnProjectile = fx.spawnProjectile.bind(this.fx);
-    fx.spawnProjectile = (...args: unknown[]) => {
-      rec.push(['f', 'spawnProjectile', enc([args[0], args[1], 0])]);
-      return rec.quiet(() => spawnProjectile(...args));
-    };
-    const wfx = this.wfx as unknown as Record<string, (...a: unknown[]) => unknown>;
-    wfx.arc = (...args: unknown[]) => rec.push(['w', 'arc', enc(args)]);
-    wfx.rail = () => {};
-    wfx.bolt = () => {};
-    wfx.beam = () => {};
-    const tele = this.tele as unknown as Record<string, (...a: unknown[]) => unknown>;
-    for (const m of ['marker', 'line']) {
-      const orig = tele[m].bind(this.tele);
-      tele[m] = (...args: unknown[]) => {
-        const id = orig(...args) as number;
-        rec.push(['t', m, id, enc(args)]);
-        return id;
-      };
-    }
-    for (const m of ['moveLine', 'cancel']) {
-      const orig = tele[m].bind(this.tele);
-      tele[m] = (...args: unknown[]) => {
-        rec.push(['t', m, args[0], enc(args.slice(1))]);
-        return orig(...args);
-      };
-    }
-    const ord = this.ordnance as unknown as Record<string, (...a: unknown[]) => unknown>;
-    for (const m of ['lob', 'orb', 'missile']) {
-      const orig = ord[m].bind(this.ordnance);
-      ord[m] = (...args: unknown[]) => {
-        const ok = rec.quiet(() => orig(...args));
-        if (ok) rec.push(['o', m, this.ordnance.lastId, enc(args)]);
-        return ok;
-      };
-    }
-    // Enemy-internal presentation (deaths, shield/armor hits) is reproduced by the replicas themselves.
-    const kill = this.enemies.kill.bind(this.enemies);
-    this.enemies.kill = (e, fx2, ctx, det) => {
-      if (e.alive) this.enemies.hooks.killed?.(e, !!det);
-      const h = this.enemies.hooks.killed;
-      this.enemies.hooks.killed = undefined;
-      try {
-        rec.quiet(() => kill(e, fx2, ctx, det));
-      } finally {
-        this.enemies.hooks.killed = h;
-      }
-    };
-    const damage = this.enemies.damage.bind(this.enemies);
-    this.enemies.damage = (e, ...rest) => {
-      const res = rec.quiet(() => damage(e, ...rest));
-      if (res && res.toShield + res.toHp > 0) rec.push(['ed', e.id, res.toShield > 0 ? 1 : 0]);
-      return res;
-    };
-    // Evolution / gates.
-    const evo = this.survival.applyEvolution.bind(this.survival);
-    this.survival.applyEvolution = (id, instant) => {
-      rec.push(['ev', id, instant ? 1 : 0]);
-      return evo(id, instant);
-    };
-  }
-
-  get enemyFx() {
+  override get enemyFx() {
     return this.fx;
   }
 
-  protected weaponSignature(): string | null {
+  protected override weaponSignature(): string | null {
     const a = this.rec.owner ? this.avatar(this.rec.owner) : undefined;
     return a ? a.inventory.equipped('weapon')?.signature ?? null : null;
   }
-  protected weaponHeat(): number {
+  protected override weaponHeat(): number {
     const a = this.rec.owner ? this.avatar(this.rec.owner) : undefined;
     return a ? a.heat : 0;
   }
 
-  protected droneSpeed(): number {
+  protected override droneSpeed(): number {
     const a = this.rec.owner ? this.avatar(this.rec.owner) : undefined;
     return a ? (a.flags & 1 ? 40 : a.speed) : 0;
   }
 
-  panFor(p: Vector3): { pan: number; volume: number } {
+  override panFor(p: Vector3): { pan: number; volume: number } {
     this.rec.panPos = p.clone();
     return { pan: 0, volume: 1 };
   }
@@ -426,7 +289,7 @@ export class ServerGame extends Game {
 
   // ------------------------------------------------------------------ targeting
 
-  targets(): readonly Player[] {
+  override targets(): readonly Player[] {
     return this.avatars.filter((a) => a.active).map((a) => a.player);
   }
 
@@ -453,7 +316,7 @@ export class ServerGame extends Game {
     (this as { player: Player }).player = body;
   }
 
-  hurtPlayer(amount: number, from: Vector3, target: Player = this.player): void {
+  override hurtPlayer(amount: number, from: Vector3, target: Player = this.player): void {
     const a = this.avatars.find((x) => x.player === target);
     if (!a || !a.active) return;
     this.rec.quiet(() => super.hurtPlayer(amount, from, target));
@@ -461,7 +324,7 @@ export class ServerGame extends Game {
 
   // ------------------------------------------------------------------ stats
 
-  rebuildStats(): void {
+  override rebuildStats(): void {
     if (!this.avatars) {
       super.rebuildStats();
       return;
@@ -489,14 +352,14 @@ export class ServerGame extends Game {
     this.turretCtx.statsVersion = this.statsVersion;
   }
 
-  refreshEquipment(): void {
+  override refreshEquipment(): void {
     this.rebuildStats();
     this.inventoryVersion++;
   }
 
   // ------------------------------------------------------------------ loot (individual ownership)
 
-  rollItems(source: DropSourceId, wave = this.waves.number): ItemInstance[] {
+  override rollItems(source: DropSourceId, wave = this.waves.number): ItemInstance[] {
     // Checkpoint caches: one per player, straight into that player's run (banked with the checkpoint).
     for (const a of this.avatars) {
       if (a.left) continue;
@@ -509,19 +372,15 @@ export class ServerGame extends Game {
   }
 
   private rollFor(a: Avatar, src: DropSource, wave: number): ItemInstance[] {
-    const table = this.dropChanceMult === 1 ? src : { ...src, chance: Math.min(1, src.chance * this.dropChanceMult) };
-    const ctx = { wave, tierLevelBonus: this.cfg.tier.lootLevelBonus, tierLuck: this.cfg.tier.lootLuck };
-    return rollDrops(table, ctx, a.rand).map((d) =>
-      generateItem({ uid: `${this.team.id}.${a.slot}.${++a.lootCounter}`, seed: d.seed, level: d.level, rarity: d.rarity, category: d.category, baseId: d.baseId, allowExclusive: d.baseId ? [d.baseId] : [], source: this.team.id }),
-    );
+    return rollLoot({ source: src, wave, tier: this.cfg.tier, rand: a.rand, nextUid: () => `${this.team.id}.${a.slot}.${++a.lootCounter}`, originId: this.team.id, chanceMult: this.dropChanceMult });
   }
 
-  dropLoot(source: DropSourceId, at: Vector3, wave = this.waves.number): Pickup[] {
+  override dropLoot(source: DropSourceId, at: Vector3, wave = this.waves.number): Pickup[] {
     this.dropFrom(DROP_SOURCES[source], at, wave);
     return [];
   }
 
-  dropFrom(src: DropSource, at: Vector3, wave = this.waves.number): Pickup[] {
+  override dropFrom(src: DropSource, at: Vector3, wave = this.waves.number): Pickup[] {
     for (const a of this.avatars) {
       if (a.left) continue;
       for (const item of this.rollFor(a, src, wave)) this.placeFor(a, item, at, wave);
@@ -700,8 +559,8 @@ export class ServerGame extends Game {
             this.waves.update(1, 1);
             for (const e of [...this.enemies.active]) if (e.alive) this.damageEnemy('player', e, 1e9, e.center(), false, undefined, 'plasma', a.player.eye);
           }
-        } else if (m.op === 'jump') this.devJump(m.n ?? 5);
-        else if (m.op === 'boss') this.devForce({ boss: 'colossus' });
+        } else if (m.op === 'jump') this.dev.jump(m.n ?? 5);
+        else if (m.op === 'boss') this.dev.force({ boss: 'colossus' });
         else if (m.op === 'reactor') this.debugDamageReactor(m.n ?? 100);
         return null;
       }
@@ -816,7 +675,7 @@ export class ServerGame extends Game {
   // ------------------------------------------------------------------ team upgrades + checkpoint vote
 
   /** Between waves: one shared offer, the choice rotates between connected players (30 s, then auto). */
-  openUpgrade(): void {
+  override openUpgrade(): void {
     this.upgradeDue = false;
     const offer = this.director.build.nextOffer(this.offerContext);
     if (!offer.length) return this.openVoteIfCheckpoint();
@@ -867,25 +726,15 @@ export class ServerGame extends Game {
 
   /** One authoritative step (60 Hz). */
   tick(dt: number): void {
-    const prev = current;
-    current = this.rec;
-    try {
+    withRecorder(this.rec, () => {
       this.clock += dt;
       this.serverUpdate(dt);
-    } finally {
-      current = prev;
-    }
+    });
   }
 
   /** Run a message handler with this game's recorder current (presentation stays in this room). */
   within<T>(fn: () => T): T {
-    const prev = current;
-    current = this.rec;
-    try {
-      return fn();
-    } finally {
-      current = prev;
-    }
+    return withRecorder(this.rec, fn);
   }
 
   private serverUpdate(dt: number): void {
@@ -931,16 +780,16 @@ export class ServerGame extends Game {
   }
 
   /** Headless: no pointer lock, the simulation is always 'playing' (defeat, refits and offers depend on it). */
-  start(): void {
+  override start(): void {
     this.newRun();
     this.setScreen('playing');
   }
 
-  openCheckpoint(): void {
+  override openCheckpoint(): void {
     this.openVoteIfCheckpoint();
   }
 
-  onEnemyKilled(e: Enemy): void {
+  override onEnemyKilled(e: Enemy): void {
     const a = this.rec.owner ? this.avatar(this.rec.owner) : undefined;
     if (a) a.kills++;
     super.onEnemyKilled(e);
@@ -966,7 +815,7 @@ export class ServerGame extends Game {
   }
 
   /** Per-player result statistics folded into each ledger before finalize. */
-  syncStats(): void {
+  override syncStats(): void {
     super.syncStats();
     for (const a of this.avatars) {
       const s = a.run.survival;

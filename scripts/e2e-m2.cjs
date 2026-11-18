@@ -3,51 +3,12 @@
 // Usage: npm run dev (port 5173), then: node scripts/e2e-m2.cjs   (needs `playwright` + Chromium).
 // Runs in ?test mode: fixed-step simulation, low graphics preset, no real pointer lock.
 // Screenshots go to $E2E_OUT (default: OS temp dir). Exit code 0 = all checks passed.
-const { chromium } = require('playwright');
-const OUT = process.env.E2E_OUT || require('os').tmpdir();
-let failures = 0;
-let passes = 0;
-const check = (name, ok, info = '') => {
-  console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${info ? '  ' + info : ''}`);
-  if (ok) passes++;
-  else failures++;
-};
-
-const SETTINGS = JSON.stringify({ v: 1, data: { sensitivity: 1, fov: 90, quality: 'low', volume: 0 } });
-
-async function launch(init) {
-  const b = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--js-flags=--expose-gc'] });
-  const ctx = await b.newContext({ viewport: { width: 1280, height: 720 } });
-  await ctx.addInitScript(([s, extra]) => {
-    if (!localStorage.getItem('riftwarden.settings')) localStorage.setItem('riftwarden.settings', s);
-    if (extra && !sessionStorage.getItem('seeded')) {
-      sessionStorage.setItem('seeded', '1');
-      for (const [k, v] of Object.entries(extra)) localStorage.setItem(k, v);
-    }
-  }, [SETTINGS, init ?? null]);
-  await ctx.addInitScript(() => { window.__skipUpgrades = true; });
-  const p = await ctx.newPage();
-  const errs = [];
-  p.on('pageerror', (e) => errs.push('PAGEERR ' + e.message));
-  p.on('console', (m) => {
-    if (m.type() === 'error') errs.push('console.error ' + m.text().slice(0, 300));
-  });
-  await boot(p);
-  return { b, ctx, p, errs };
-}
-async function boot(p, reload = false) {
-  if (reload) await p.reload();
-  else await p.goto((process.env.RIFT_URL || 'http://localhost:5173/') + '?test');
-  await p.waitForFunction(() => window.__rift && window.__rift.state().screen === 'menu', null, { timeout: 180000 });
-  await p.evaluate(() => window.__rift.stopLoop());
-  await p.evaluate(() => { window.__rift.flow.skipUpgrades = true; });
-}
-const S = (p) => p.evaluate(() => window.__rift.state());
-const waitFor = (p, fn, arg, t = 90000) => p.waitForFunction(fn, arg, { timeout: t, polling: 100 });
-const shot = async (p, name) => {
-  await p.evaluate(() => window.__rift.render(2));
-  await p.screenshot({ path: `${OUT}/m2_${name}.png`, timeout: 120000 });
-};
+const H = require('./lib/harness.cjs');
+const { OUT, check, S, ev } = H;
+const waitFor = (p, fn, arg, t = 90000) => H.waitFor(p, fn, arg, t);
+const boot = (p, reload = false) => H.boot(p, { reload, skipUpgrades: true });
+const launch = (init) => H.launch({ init, skipUpgrades: true, gc: true });
+const shot = (p, name) => H.shot(p, 'm2_' + name, { frames: 2 });
 async function deploy(p, tier = 1) {
   await p.evaluate((t) => window.__rift.flow.deploy(t), tier);
   await waitFor(p, () => window.__rift.state().location === 'arena' && !window.__rift.state().busy && window.__rift.game);
@@ -631,8 +592,8 @@ const savedItems = (p) => p.evaluate(() => JSON.parse(JSON.stringify(window.__ri
   check('H6 no runtime errors', errs.length === 0, errs.slice(0, 3).join(' | '));
   await b.close();
 
-  console.log(`\n${passes} passed, ${failures} failed · ${Math.round((Date.now() - t0) / 1000)} s`);
-  process.exit(failures ? 1 : 0);
+  console.log(`\n${H.stats.passes} passed, ${H.stats.failures} failed · ${Math.round((Date.now() - t0) / 1000)} s`);
+  process.exit(H.stats.failures ? 1 : 0);
 })().catch((e) => {
   console.error(e);
   process.exit(2);

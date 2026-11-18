@@ -1,29 +1,12 @@
 // M6 acceptance (browser): advanced enemies, elite modifiers, events, arena evolution, bosses, scheduling,
 // threat tiers, high-wave scaling, banking, records, performance, dev-session isolation.
 // Usage: npm run dev (5173), then node scripts/e2e-m6.cjs [filter]
-const { chromium } = require('playwright');
-const OUT = process.env.E2E_OUT || require('os').tmpdir();
+const H = require('./lib/harness.cjs');
+const { OUT, check, S, ev } = H;
 const FILTER = process.argv[2] || '';
-let failures = 0, passes = 0;
-const check = (n, ok, info = '') => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${n}${info ? '  ' + info : ''}`); ok ? passes++ : failures++; };
-const SETTINGS = JSON.stringify({ v: 1, data: { sensitivity: 1, fov: 90, quality: 'low', volume: 0 } });
-const want = (k) => !FILTER || FILTER.split(',').some((f) => k.startsWith(f));
-
-async function launch() {
-  const b = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
-  const ctx = await b.newContext({ viewport: { width: 1280, height: 720 } });
-  await ctx.addInitScript((s) => { if (!localStorage.getItem('riftwarden.settings')) localStorage.setItem('riftwarden.settings', s); }, SETTINGS);
-  const p = await ctx.newPage();
-  const errs = [];
-  p.on('pageerror', (e) => errs.push('PAGEERR ' + e.message));
-  p.on('console', (m) => { if (m.type() === 'error') errs.push('console.error ' + m.text().slice(0, 300)); });
-  await p.goto((process.env.RIFT_URL || 'http://localhost:5173/') + '?test');
-  await p.waitForFunction(() => window.__rift && window.__rift.state().screen === 'menu', null, { timeout: 180000 });
-  await p.evaluate(() => window.__rift.stopLoop());
-  return { b, p, errs };
-}
-const waitFor = (p, fn, arg, t = 180000) => p.waitForFunction(fn, arg, { timeout: t, polling: 100 });
-const ev = (p, fn, arg) => p.evaluate(fn, arg);
+const want = H.sectionFilter(FILTER);
+const waitFor = (p, fn, arg, t = 180000) => H.waitFor(p, fn, arg, t);
+const launch = () => H.launch();
 async function deploy(p, tier = 1, dev = true, seed = null) {
   await ev(p, ([t, d, s]) => { const R = window.__rift; R.flow.skipUpgrades = true; R.flow.nextUpgradeSeed = s; return d ? R.dev.deploy(t) : R.flow.deploy(t); }, [tier, dev, seed]);
   await waitFor(p, () => window.__rift.state().location === 'arena' && !window.__rift.state().busy && window.__rift.game);
@@ -747,7 +730,7 @@ async function home(p) {
 
   console.log(errs.length ? 'ERRORS:\n' + errs.slice(0, 10).join('\n') : 'no page errors');
   check('Z page errors', errs.length === 0, String(errs.length));
-  console.log(`\n${passes} passed, ${failures} failed`);
+  console.log(`\n${H.stats.passes} passed, ${H.stats.failures} failed`);
   await b.close();
-  process.exit(failures ? 1 : 0);
+  process.exit(H.stats.failures ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(2); });

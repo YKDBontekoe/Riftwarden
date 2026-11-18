@@ -1,11 +1,9 @@
 // Browser acceptance (construction, persistence, co-op clients, tutorial, settings).
 // Usage: npm run dev (5173) [+ npm run server for co-op sections], then node scripts/e2e-construction-coop.cjs [G,H,I,J,K,L,M,O,P,X]
-const { chromium } = require('playwright');
-const OUT = process.env.E2E_OUT || require('os').tmpdir();
+const H = require('./lib/harness.cjs');
+const { chromium, OUT, check } = H;
 const FILTER = process.argv[2] || '';
-const want = (k) => !FILTER || FILTER.split(',').some((f) => k.startsWith(f));
-let failures = 0, passes = 0;
-const check = (n, ok, info = '') => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${n}${info ? '  ' + info : ''}`); ok ? passes++ : failures++; };
+const want = H.sectionFilter(FILTER);
 const QUALITY = process.env.Q || 'low';
 
 async function open(b, { fresh = true, keep = null } = {}) {
@@ -242,6 +240,9 @@ const cell = (i, j) => [2 + 5 * i + 2.5, -2.5 + 5 * j + 2.5];
     const wsUrl = process.env.RIFT_WS || 'ws://localhost:8787/ws';
     const A = (await open(b)).p;
     const B = (await open(b)).p;
+    // Two live software-GL render loops starve Playwright's actionability checks (clicks time out): the lobby UI is
+    // React-driven and the arena transition renders by itself, so the clients run with the loop stopped.
+    for (const pg of [A, B]) await ev(pg, () => window.__rift.stopLoop());
     for (const [pg, name] of [[A, 'Alpha'], [B, 'Bravo']]) {
       await ev(pg, (n) => window.__rift.flow.coopConnect(n), name);
       await waitFor(pg, () => window.__rift.flow.net.state.status === 'online');
@@ -335,6 +336,8 @@ const cell = (i, j) => [2 + 5 * i + 2.5, -2.5 + 5 * j + 2.5];
     }
     const banks = await Promise.all([A, B].map((pg) => ev(pg, () => window.__rift.game.cfg.run.secured.salvage)));
     check('X5 the wave-5 checkpoint banks for each client', banks.every((v) => v > 0), JSON.stringify(banks));
+    const rejectedEvents = await Promise.all([A, B].map((pg) => ev(pg, () => ({ events: window.__rift.game.netStats.events, bad: window.__rift.game.netStats.badEvents }))));
+    check('X5b the clients accepted every replicated event (none rejected by the parser)', rejectedEvents.every((r) => r.events > 200 && r.bad === 0), JSON.stringify(rejectedEvents));
     for (const pg of [A, B]) await ev(pg, () => window.__rift.game.openCheckpoint());
     await A.click('[data-testid="cp-home"]');
     await B.click('[data-testid="cp-home"]');
@@ -372,6 +375,6 @@ const cell = (i, j) => [2 + 5 * i + 2.5, -2.5 + 5 * j + 2.5];
   console.log(p.errs.slice(0, 6).join('\n'));
   check('Z no page errors', !p.errs.some((e) => e.startsWith('PAGEERR')), p.errs.find((e) => e.startsWith('PAGEERR')) ?? '');
   await b.close();
-  console.log(`\n${failures === 0 ? 'ALL PASSED' : 'FAILURES'}  ${passes} passed, ${failures} failed`);
-  process.exit(failures ? 1 : 0);
+  console.log(`\n${H.stats.failures === 0 ? 'ALL PASSED' : 'FAILURES'}  ${H.stats.passes} passed, ${H.stats.failures} failed`);
+  process.exit(H.stats.failures ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(1); });

@@ -8,12 +8,10 @@ import {
   Matrix,
   type PhysicsEngineV2,
   PhysicsRaycastResult,
-  CascadedShadowGenerator,
   PointLight,
   Ray,
   Scene,
   SceneInstrumentation,
-  ShadowGenerator,
   Vector3,
 } from '@babylonjs/core';
 import { type Emitter, sfx } from '../audio/Sfx';
@@ -21,17 +19,24 @@ import { mulberry32, rollDamage } from '../combat/damage';
 import { Director } from '../combat/Director';
 import { isChilled, speedFactor } from '../combat/status';
 import { hashRunSeed, type OfferContext, UP, type UpgradeDef, upgradeDef } from '../roguelite/upgrades';
-import { availableParts, canInstall, configCost, DEFAULT_CONFIG, levelCost, MAX_TOWER_LEVEL, partDef, STARTER_TECH, swapCost, type TowerConfig, type TowerSlot } from '../towers/components';
+import { availableParts, configCost, DEFAULT_CONFIG, levelCost, MAX_TOWER_LEVEL, partDef, STARTER_TECH, swapCost, type TowerConfig, type TowerSlot } from '../towers/components';
 import { BASE_STATS, type CombatStats, computeStats, type StatModifier } from '../combat/stats';
 import { type ShotOutcome, type ShotRequest, type SurfaceImpact, Weapon, type WeaponFxHooks } from '../combat/Weapon';
 import type { WeaponFamily } from '../data/defs';
 import { WeaponFx } from '../fx/WeaponFx';
 import { ECONOMY } from '../data/defs';
+import { DevTools } from '../arena/DevTools';
+import { planBlast } from '../combat/blast';
+import { hintFor, lootTargetInfo, runHud } from '../ui/hudModel';
+import { planBuildConfig, planRefit } from '../towers/refit';
+import { rollLoot } from '../loot/roll';
+import { createSunShadows } from '../arena/shadows';
+import { CORE_BEHAVIORS } from '../enemies/coreBehaviors';
 import { pickInteractable } from '../home/interaction';
-import { DROP_SOURCES, type DropSourceId, rollDrops } from '../loot/drops';
+import { DROP_SOURCES, type DropSourceId } from '../loot/drops';
 import { equipmentModifiers, weaponDefFor } from '../loot/equipment';
-import { flatScale, generateItem, hashSeed } from '../loot/generate';
-import { convertsToSalvage, expiresAfterWave, LootField, type Pickup, PICKUP_RANGE } from '../loot/LootField';
+import { flatScale, hashSeed } from '../loot/generate';
+import { convertsToSalvage, LootField, type Pickup, PICKUP_RANGE } from '../loot/LootField';
 import { rarity } from '../loot/rarity';
 import { scrapValue } from '../loot/economy';
 import { RUN_INCOME } from '../economy/config';
@@ -45,7 +50,7 @@ import { Effects } from '../fx/Effects';
 import { MOVE, Player } from '../player/Player';
 import { type HitKind, hudStore, type LootTargetInfo, type Screen, uiEvents } from '../ui/store';
 import type { Rewards, RunLedger } from '../progression/run';
-import { isCheckpointWave, nextCheckpoint, type ThreatTier } from '../progression/tiers';
+import { isCheckpointWave, type ThreatTier } from '../progression/tiers';
 import { ArenaBuilder } from '../visuals/arena';
 import { Atmosphere } from '../visuals/atmosphere';
 import { PostFx } from '../visuals/postfx';
@@ -60,15 +65,13 @@ import { type Impact, Ordnance, Telegraphs } from '../fx/Hostile';
 import { M6_BEHAVIORS } from '../enemies/behaviors';
 import { JAMMER_CRAWLER_BEHAVIORS } from '../enemies/jammerCrawlerBehaviors';
 import { BOSS_BEHAVIORS } from '../enemies/bosses';
-import { bossMults, type EvolutionId, SurvivalPlanner } from '../survival/plan';
+import { bossMults, SurvivalPlanner } from '../survival/plan';
 import { SurvivalRuntime } from '../survival/SurvivalRuntime';
 import { ArenaDynamics } from '../world/ArenaDynamics';
 import type { DropSource } from '../loot/drops';
 import type { BossHud } from '../ui/store';
 import type { EnemyKind } from '../data/defs';
 import type { EliteModId } from '../survival/elites';
-import type { EventId } from '../survival/events';
-import type { BossId } from '../survival/bosses';
 import type { Input } from './Input';
 import { type Settings, saveSettings } from './settings';
 import { TacticalEnergy, Wallet } from './tactical';
@@ -163,7 +166,7 @@ export class Game {
   towerNote = { text: '', t: 0 };
   towerPanelFocus: number | null = null;
   /** Cost of the next tower from the build template (UI). */
-  get m5Cost(): number {
+  get nextTowerCost(): number {
     return configCost(this.buildConfig, this.stats.buildCostMult);
   }
 
@@ -208,12 +211,14 @@ export class Game {
 
   // ---- M6 survival
   /** Resolves once every M6 shader (enemy/boss/telegraph/ordnance/arena-machinery) is compiled. */
-  readonly m6Warmup: Promise<unknown>;
+  readonly shaderWarmup: Promise<unknown>;
   readonly tele: Telegraphs;
   readonly ordnance: Ordnance;
   readonly dynamics: ArenaDynamics;
   readonly planner: SurvivalPlanner;
   readonly survival: SurvivalRuntime;
+  /** Development lab actions (F4 panel / `__rift.dev`); every action taints the run. */
+  readonly dev: DevTools;
   readonly layout: ArenaLayout = ARENA;
   /** Hostile time since the run started (enemy animation phase). */
   protected hostileT = 0;
@@ -292,34 +297,10 @@ export class Game {
       this.post.kick(k * 0.8);
     };
     // Shadows (high quality only); enemies & turrets register as casters via the kit.
-    {
-      // Cascaded shadows: crisp contact shadows near the player, coverage across the arena.
-      const shadows = settings.shadows ?? (high ? 'high' : 'low');
-      const sg = shadows === 'off' ? null : shadows === 'high' && high ? new CascadedShadowGenerator(2048, moon) : new ShadowGenerator(shadows === 'high' ? 2048 : 1024, moon);
-      if (sg) {
-      if (sg instanceof CascadedShadowGenerator) {
-        sg.numCascades = 4;
-        sg.lambda = 0.82;
-        sg.stabilizeCascades = true;
-        sg.shadowMaxZ = 140;
-        sg.cascadeBlendPercentage = 0.08;
-        sg.autoCalcDepthBounds = false;
-      } else {
-        moon.shadowMinZ = 1;
-        moon.shadowMaxZ = 260;
-      }
-      sg.usePercentageCloserFiltering = true;
-      sg.filteringQuality = high ? ShadowGenerator.QUALITY_HIGH : ShadowGenerator.QUALITY_LOW;
-      sg.bias = 0.004;
-      sg.normalBias = 0.025;
-      sg.darkness = 0;
-      for (const m of arena.shadowCasters) sg.addShadowCaster(m);
-      for (const m of this.reactor.root.getChildMeshes()) sg.addShadowCaster(m);
-      this.kit.shadowSink = (m) => sg.addShadowCaster(m);
-      }
-    }
+    const sg = createSunShadows(moon, settings.shadows ?? (high ? 'high' : 'low'), high, [...arena.shadowCasters, ...this.reactor.root.getChildMeshes()]);
+    if (sg) this.kit.shadowSink = (m) => sg.addShadowCaster(m);
     this.enemies = new EnemyManager(scene, this.kit, this.pal);
-    for (const [kind, b] of Object.entries({ ...M6_BEHAVIORS, ...JAMMER_CRAWLER_BEHAVIORS, ...BOSS_BEHAVIORS })) if (b) this.enemies.register(kind as EnemyKind, b as Behavior);
+    for (const [kind, b] of Object.entries({ ...CORE_BEHAVIORS, ...M6_BEHAVIORS, ...JAMMER_CRAWLER_BEHAVIORS, ...BOSS_BEHAVIORS })) if (b) this.enemies.register(kind as EnemyKind, b as Behavior);
     this.tele = new Telegraphs(scene);
     this.ordnance = new Ordnance(scene, this.tele);
     this.dynamics = new ArenaDynamics(scene, this.pal, ARENA, {
@@ -346,7 +327,7 @@ export class Game {
       },
       shake: (pos, k) => this.fx.onShake?.(pos, k),
     });
-    this.m6Warmup = this.warmShaders();
+    this.shaderWarmup = this.warmShaders();
     this.planner = new SurvivalPlanner(((cfg.seed ?? hashRunSeed(cfg.run.id)) >>> 0) ^ 0x6d2b79f5, cfg.tier);
     this.survival = new SurvivalRuntime(this);
     this.turrets = new TurretManager(scene, this.kit, this.pal);
@@ -499,6 +480,24 @@ export class Game {
       em('machine', p.x, 2, p.z, 0.8, 5);
     }
     if (cfg.tutorial) this.tut = new TutorialDirector('arena', cfg.tutorial, { available: (id) => this.tutAvailable(id), complete: (id, t) => this.tutComplete(id, t) });
+    this.dev = new DevTools({
+      cfg: this.cfg,
+      enemies: this.enemies,
+      ordnance: this.ordnance,
+      tele: this.tele,
+      survival: this.survival,
+      waves: this.waves,
+      planner: this.planner,
+      turrets: this.turrets,
+      enemyCtx: this.enemyCtx,
+      restoreReactor: () => { this.reactorHp = ECONOMY.reactorMaxHp; },
+      resetToPlayable: () => {
+        this.offer = null;
+        this.upgradeDue = false;
+        this.checkpointOpen = false;
+        if (this.screen !== 'playing' && this.screen !== 'defeat') this.setScreen('playing');
+      },
+    });
   }
 
   // ---------------------------------------------------------------- M7 onboarding
@@ -658,18 +657,15 @@ export class Game {
 
   // ---------------------------------------------------------------- loot
 
-  protected lootContext(wave: number) {
-    return { wave, tierLevelBonus: this.cfg.tier.lootLevelBonus, tierLuck: this.cfg.tier.lootLuck };
-  }
-
   /** Roll a source's drops and generate the items (deterministic per run seed). */
   rollItems(source: DropSourceId, wave = this.waves.number): ItemInstance[] {
-    const src = DROP_SOURCES[source];
-    const table = this.dropChanceMult === 1 ? src : { ...src, chance: Math.min(1, src.chance * this.dropChanceMult) };
+    return this.rollFrom(DROP_SOURCES[source], wave);
+  }
+
+  /** The run's own loot stream (single player): one place that knows the uid scheme and the debug chance multiplier. */
+  private rollFrom(src: DropSource, wave: number): ItemInstance[] {
     const run = this.cfg.run;
-    return rollDrops(table, this.lootContext(wave), this.lootRand).map((d) =>
-      generateItem({ uid: `${run.id}.${++this.lootCounter}`, seed: d.seed, level: d.level, rarity: d.rarity, category: d.category, baseId: d.baseId, allowExclusive: d.baseId ? [d.baseId] : [], source: run.id }),
-    );
+    return rollLoot({ source: src, wave, tier: this.cfg.tier, rand: this.lootRand, nextUid: () => `${run.id}.${++this.lootCounter}`, originId: run.id, chanceMult: this.dropChanceMult });
   }
 
   /** Roll drops for a source and place them physically around `at`. */
@@ -914,59 +910,37 @@ export class Game {
    * resources first, then spends, recomposes numbers from scratch, rebuilds the model and resets attack state.
    */
   modifyTower(t: Turret, what: 'level' | TowerSlot, id?: string): { ok: true; cost: number } | { ok: false; reason: string } {
-    const phase = this.towerEditReason();
-    if (phase) return this.towerFail(phase);
-    if (!this.turrets.turrets.includes(t)) return this.towerFail('Tower no longer exists');
-    if (t.building) return this.towerFail('Tower is still deploying');
-    const mult = this.stats.buildCostMult;
-    let cost: number;
-    let cfg = t.config;
-    let level = t.level;
-    if (what === 'level') {
-      if (t.level >= MAX_TOWER_LEVEL) return this.towerFail('Tower is at maximum level');
-      cost = levelCost(t.config, t.level, mult);
-      level = t.level + 1;
-    } else {
-      if (what === 'base') return this.towerFail('The base is fixed once built');
-      if (!id || !partDef(what, id)) return this.towerFail('Unknown component');
-      if (t.config[what] === id) return this.towerFail('Already installed');
-      if (!this.towerTech.has(`${what}:${id}`) && partDef(what, id)?.tech) return this.towerFail('Blueprint not researched (HQ tower technology)');
-      const bad = canInstall(t.config, what, id);
-      if (bad) return this.towerFail(bad);
-      cost = swapCost(t.config, what, id, mult);
-      cfg = { ...t.config, [what]: id };
-    }
-    if (!this.wallet.spend(cost)) return this.towerFail(`Not enough cores (need ${cost})`);
-    t.paid += cost;
-    t.refit(cfg, level, this.turretCtx);
+    const plan = planRefit({
+      phaseBlock: this.towerEditReason(),
+      exists: this.turrets.turrets.includes(t),
+      building: t.building,
+      config: t.config,
+      level: t.level,
+      what,
+      id,
+      tech: this.towerTech,
+      cores: this.wallet.cores,
+      costMult: this.stats.buildCostMult,
+    });
+    if (!plan.ok) return this.towerFail(plan.reason);
+    if (!this.wallet.spend(plan.cost)) return this.towerFail(`Not enough cores (need ${plan.cost})`);
+    t.paid += plan.cost;
+    t.refit(plan.config, plan.level, this.turretCtx);
     this.bumpStats();
     this.fx.burst('build', t.head, 24);
     this.fx.ring(new Vector3(t.pos.x, t.pos.y + 0.1, t.pos.z), 3, 0.4, new Color3(0.4, 1.8, 2.2), true);
     sfx.play('equip', { pitch: 1.1 });
-    this.towerNote = { text: `${t.name} refit${what === 'level' ? ` · level ${level}` : ''}${cost ? ` · -${cost} cores` : ''}`, t: 3 };
+    this.towerNote = { text: `${t.name} refit${what === 'level' ? ` · level ${plan.level}` : ''}${plan.cost ? ` · -${plan.cost} cores` : ''}`, t: 3 };
     this.inventoryVersion++;
-    return { ok: true, cost };
+    return { ok: true, cost: plan.cost };
   }
 
   /** Choose the configuration for towers built from now on (no cost). Incompatible dependants reset to defaults. */
   setBuildConfig(slot: TowerSlot, id: string): { ok: true } | { ok: false; reason: string } {
-    const def = partDef(slot, id);
-    if (!def) return { ok: false, reason: 'Unknown component' };
-    if (def.tech && !this.towerTech.has(`${slot}:${id}`)) return { ok: false, reason: 'Blueprint not researched' };
-    let cfg: TowerConfig = { ...this.buildConfig, [slot]: id };
-    // Auto-repair dependants (weapon -> core/modifier, base -> weapon) so the template is always valid.
-    for (let i = 0; i < 3; i++) {
-      const bad = canInstall(cfg, slot, id);
-      if (!bad) break;
-      if (!bad.includes('cannot mount') && slot === 'weapon') {
-        if (bad.includes(partDef('core', cfg.core)?.name ?? '#')) cfg = { ...cfg, core: 'standard_core' };
-        if (bad.includes(partDef('modifier', cfg.modifier)?.name ?? '#')) cfg = { ...cfg, modifier: 'none' };
-      } else if (slot === 'base') cfg = { ...cfg, weapon: 'autocannon', core: 'standard_core', modifier: 'none' };
-      else return { ok: false, reason: bad };
-    }
-    if (canInstall(cfg, slot, id)) return { ok: false, reason: canInstall(cfg, slot, id)! };
-    this.buildConfig = cfg;
-    this.construction.setTemplate(cfg);
+    const plan = planBuildConfig(this.buildConfig, slot, id, this.towerTech);
+    if (!plan.ok) return plan;
+    this.buildConfig = plan.config;
+    this.construction.setTemplate(plan.config);
     this.inventoryVersion++;
     return { ok: true };
   }
@@ -1647,24 +1621,20 @@ export class Game {
    * `enemies` > 0 also damages machines (volatile chains, grid strikes) through the shared pipeline.
    */
   hostileBlast(center: Vector3, radius: number, o: { player: number; reactor?: number; disable?: number; enemies?: number; owner?: Enemy | null; color?: 'orange' | 'blue' | 'red' | 'violet'; shock?: boolean }): void {
-    for (const pl of this.targets()) {
-      if (!pl.alive || !(o.player > 0)) continue;
-      const pp = pl.position;
-      const d = Math.hypot(pp.x - center.x, pp.z - center.z);
-      const dy = pp.y - center.y;
-      if (d < radius && dy < 3.2) {
-        const lift = TMP.copyFrom(center);
-        lift.y += 0.6;
-        if (this.los(lift, pl.eye)) this.hurtPlayer(o.player * (1 - 0.45 * (d / radius)), center, pl);
-      }
-    }
-    const R = ARENA.reactor;
-    if (o.reactor && o.reactor > 0 && Math.hypot(center.x - R.x, center.z - R.z) < radius + R.radius) this.damageReactor(o.reactor, center);
-    if (o.disable && o.disable > 0) {
-      for (const t of this.turrets.turrets) if ((t.pos.x - center.x) ** 2 + (t.pos.z - center.z) ** 2 < radius * radius) t.disable(o.disable);
-    }
-    if (o.enemies && o.enemies > 0) {
-      this.director.blast(center, radius, o.enemies, 'none', { kind: 'effect', id: 'hazard' }, this.director.bus.newChain(), { falloff: 0.4, exclude: o.owner ?? null, shock: o.shock });
+    const drones = this.targets();
+    const lift = TMP.copyFrom(center);
+    lift.y += 0.6;
+    const plan = planBlast(center, radius, o, {
+      drones: drones.map((d) => ({ alive: d.alive, pos: d.position })),
+      clearShot: (i) => this.los(lift, drones[i].eye),
+      towers: this.turrets.turrets,
+      reactor: ARENA.reactor,
+    });
+    for (const h of plan.droneHits) this.hurtPlayer(h.amount, center, drones[h.index]);
+    if (plan.reactorDamage > 0) this.damageReactor(plan.reactorDamage, center);
+    for (const i of plan.disableTowers) this.turrets.turrets[i].disable(plan.disableSeconds);
+    if (plan.machineDamage > 0) {
+      this.director.blast(center, radius, plan.machineDamage, 'none', { kind: 'effect', id: 'hazard' }, this.director.bus.newChain(), { falloff: 0.4, exclude: o.owner ?? null, shock: o.shock });
     }
   }
 
@@ -1769,11 +1739,8 @@ export class Game {
 
   /** Roll an arbitrary drop source (elites, events, HVT) and place the items. */
   dropFrom(src: DropSource, at: Vector3, wave = this.waves.number): Pickup[] {
-    const table = this.dropChanceMult === 1 ? src : { ...src, chance: Math.min(1, src.chance * this.dropChanceMult) };
-    const run = this.cfg.run;
     const out: Pickup[] = [];
-    for (const d of rollDrops(table, this.lootContext(wave), this.lootRand)) {
-      const item = generateItem({ uid: `${run.id}.${++this.lootCounter}`, seed: d.seed, level: d.level, rarity: d.rarity, category: d.category, baseId: d.baseId, allowExclusive: d.baseId ? [d.baseId] : [], source: run.id });
+    for (const item of this.rollFrom(src, wave)) {
       const p = this.spawnPickup(item, at, wave);
       if (p) out.push(p);
     }
@@ -1837,69 +1804,6 @@ export class Game {
       this.fx.onShake?.(this.player.position, 0.5);
       uiEvents.emit('alert', { text: `${e.def.name.toUpperCase()} HAS ENTERED THE FACILITY`, tone: 'red' });
     }
-  }
-
-  // ---------------------------------------------------------------- M6: development tools (taint the run)
-
-  /** Development tools mark the run: no records, no banking of permanent rewards. */
-  protected devMark(): void {
-    if (!this.cfg.run.survival.dev) {
-      this.cfg.run.survival.dev = true;
-      uiEvents.emit('alert', { text: 'DEVELOPMENT SESSION · RECORDS AND BANKING DISABLED', tone: 'white' });
-    }
-  }
-
-  /** Jump to the preparation phase of wave n (clears the field; catches up arena evolutions). */
-  devJump(n: number): void {
-    this.devMark();
-    this.enemies.clear();
-    this.ordnance.reset();
-    this.tele.reset();
-    this.survival.endEvent();
-    this.waves.jumpTo(Math.max(1, Math.floor(n)));
-  }
-
-  devSpawn(kind: EnemyKind, mods: EliteModId[] = [], gate: GateId = 'north'): Enemy {
-    this.devMark();
-    const w = this.waves.wave;
-    const enc = 1;
-    const boss = kind === 'colossus' || kind === 'overseer';
-    const b = boss ? bossMults(enc, this.cfg.tier) : { hp: 1, damage: 1 };
-    return this.enemies.spawn(kind, gate, ARENA, w.hpMult * b.hp, w.damageMult * b.damage, w.speedMult, { mods, tag: boss ? 'boss' : kind === 'courier' ? 'hvt' : undefined, encounter: enc, ctx: this.enemyCtx });
-  }
-
-  /** Force the next wave (or the current prep) to be a boss / event wave. */
-  devForce(o: { boss?: BossId | null; event?: EventId | null }): void {
-    this.devMark();
-    const n = this.waves.phase === 'prep' ? this.waves.number : this.waves.number + 1;
-    this.planner.force(n, o);
-    if (this.waves.phase === 'prep') {
-      this.waves.recompose();
-      this.survival.prep(this.waves.wave);
-    }
-  }
-
-  devEvolve(id: EvolutionId): void {
-    this.devMark();
-    this.planner.forceEvolution(this.waves.number, id);
-    this.survival.applyEvolution(id);
-    if (this.waves.phase === 'prep') this.waves.recompose();
-  }
-
-  /** Reset the arena: clear machines and hazards, restore the reactor and the drone. */
-  devReset(): void {
-    this.devMark();
-    this.enemies.clear();
-    this.ordnance.reset();
-    this.tele.reset();
-    this.survival.endEvent();
-    this.reactorHp = ECONOMY.reactorMaxHp;
-    for (const t of this.turrets.turrets) t.disabledT = 0;
-    // Back to a playable state (a long dev session may have reached a checkpoint/upgrade screen).
-    this.offer = null;
-    this.upgradeDue = false;
-    this.checkpointOpen = false;
-    if (this.screen !== 'playing' && this.screen !== 'defeat') this.setScreen('playing');
   }
 
   /** Copy measured damage totals into the run ledger (before the run is finalized/recorded). */
@@ -2047,7 +1951,7 @@ export class Game {
     };
   }
 
-  protected m5Hud() {
+  protected towerHud() {
     const dir = this.director;
     const ts = this.turrets.turrets;
     return {
@@ -2069,33 +1973,29 @@ export class Game {
     const w = this.waves;
     const c = this.construction;
     const t = this.inspected;
-    let hint = '';
-    if (this.screen === 'playing') {
-      if (w.phase === 'prep' && w.number === 1) hint = 'Build Sentinel turrets beside the orange enemy lanes (2 / B). Press G to start the wave.';
-      else if (w.phase === 'prep') hint = 'Preparation: build and reposition. Press G to start early.';
-      else if (w.number === 1 && w.phase === 'combat' && this.kills < 3) hint = 'Aim for the glowing visors: weakpoints always crit.';
-      else if (w.number === 2 && w.phase === 'combat' && this.tactical.energy >= 99 && !this.tactical.active) hint = 'Q: tactical slow-time lets you place several turrets mid-fight.';
-      if (this.canReturnHome) hint = 'Checkpoint secured. Press H to return to HQ, or start the next wave with G.';
-    }
-    if (!this.player.alive || c.active || this.tut?.showing) hint = '';
+    const hint = hintFor({
+      playing: this.screen === 'playing',
+      phase: w.phase,
+      wave: w.number,
+      kills: this.kills,
+      tacticalEnergy: this.tactical.energy,
+      tacticalActive: this.tactical.active,
+      canReturnHome: this.canReturnHome,
+      playerAlive: this.player.alive,
+      suppress: c.active || !!this.tut?.showing,
+    });
     const run = this.cfg.run;
     const lt = this.lootTarget;
     let lootTarget: LootTargetInfo | null = null;
     if (lt && this.screen === 'playing') {
       const cur = this.inventory.equipped(this.inventory.targetSlot(lt.item) ?? 'weapon');
-      lootTarget = {
-        uid: lt.item.uid,
-        name: lt.item.name,
-        rarity: lt.item.rarity,
-        level: lt.item.level,
-        category: lt.item.category,
-        expiresAfterWave: expiresAfterWave(lt.droppedWave),
+      lootTarget = lootTargetInfo({
+        item: lt.item,
+        droppedWave: lt.droppedWave,
         expiring: lt.expiring,
         cargoFull: this.inventory.cargoFull,
-        equippedName: lt.item.category === 'module' ? null : (cur?.name ?? null),
-        equippedLevel: cur?.level ?? 0,
-        equippedRarity: cur?.rarity ?? null,
-      };
+        equipped: cur ? { name: cur.name, level: cur.level, rarity: cur.rarity } : null,
+      });
     }
     hudStore.set({
       lootTarget,
@@ -2106,20 +2006,7 @@ export class Game {
       playerShield: this.player.shield,
       playerShieldMax: this.player.maxShield,
       location: 'arena',
-      run: {
-        tier: this.cfg.tier.id,
-        salvageUnsecured: run.unsecured.salvage,
-        salvageSecured: run.secured.salvage,
-        creditsUnsecured: run.unsecured.credits,
-        creditsSecured: run.secured.credits,
-        componentsUnsecured: run.unsecured.components,
-        componentsSecured: run.secured.components,
-        nextCheckpoint: nextCheckpoint(run.wavesCleared + 1),
-        checkpointOpen: this.canReturnHome,
-        lastBankedWave: run.lastBankedWave,
-        kills: run.kills,
-        duration: run.duration,
-      },
+      run: runHud(this.cfg.tier.id, run, this.canReturnHome),
       wave: w.number,
       phase: w.phase,
       phaseTimer: Math.max(0, w.timer),
@@ -2144,7 +2031,7 @@ export class Game {
       buildValid: c.valid,
       buildMessage: c.message,
       buildCost: configCost(this.buildConfig, this.stats.buildCostMult),
-      m5: this.m5Hud(),
+      m5: this.towerHud(),
       inspect: t ? { name: t.name, kills: t.kills, damage: Math.round(t.damageDealt), refund: Math.round(t.paid * t.refundRatio), recycle: this.recycleT, card: this.towerInfo(t), edit: this.towerEditReason() } : null,
       hint,
       spread: 6 + this.weapon.spread * 900,

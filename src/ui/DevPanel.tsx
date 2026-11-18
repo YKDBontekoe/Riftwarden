@@ -45,23 +45,23 @@ export function DevPanel({ game, flow }: { game: Game; flow: Flow }) {
             <h4>WAVES</h4>
             <div className="row">
               <input value={wave} onChange={(e) => setWave(e.target.value)} size={6} />
-              <button onClick={act(`Jumped to wave ${wave}`, () => game.devJump(Number(wave) || 1))}>JUMP TO WAVE</button>
+              <button onClick={act(`Jumped to wave ${wave}`, () => game.dev.jump(Number(wave) || 1))}>JUMP TO WAVE</button>
             </div>
             <div className="row">
-              <button onClick={act('Arena reset', () => game.devReset())}>RESET ARENA</button>
+              <button onClick={act('Arena reset', () => game.dev.reset())}>RESET ARENA</button>
             </div>
             <h4>ARENA EVOLUTION</h4>
             <div className="row">
-              <button onClick={act('Secondary access route opened', () => game.devEvolve('routes'))}>OPEN SOUTH ROUTE</button>
-              <button onClick={act('Reactor instability activated', () => game.devEvolve('instability'))}>REACTOR INSTABILITY</button>
+              <button onClick={act('Secondary access route opened', () => game.dev.evolve('routes'))}>OPEN SOUTH ROUTE</button>
+              <button onClick={act('Reactor instability activated', () => game.dev.evolve('instability'))}>REACTOR INSTABILITY</button>
             </div>
             <h4>NEXT WAVE</h4>
             <div className="row wrap">
               {(['colossus', 'overseer'] as BossId[]).map((b) => (
-                <button key={b} onClick={act(`Boss forced: ${b}`, () => game.devForce({ boss: b }))}>BOSS · {b.toUpperCase()}</button>
+                <button key={b} onClick={act(`Boss forced: ${b}`, () => game.dev.force({ boss: b }))}>BOSS · {b.toUpperCase()}</button>
               ))}
               {EVENT_IDS.map((id: EventId) => (
-                <button key={id} onClick={act(`Event forced: ${EVENTS[id].name}`, () => game.devForce({ event: id }))}>{EVENTS[id].name.toUpperCase()}</button>
+                <button key={id} onClick={act(`Event forced: ${EVENTS[id].name}`, () => game.dev.force({ event: id }))}>{EVENTS[id].name.toUpperCase()}</button>
               ))}
             </div>
             <h4>THREAT TIER (NEW DEV RUN)</h4>
@@ -94,7 +94,7 @@ export function DevPanel({ game, flow }: { game: Game; flow: Flow }) {
               ))}
             </div>
             <div className="row">
-              <button onClick={act(`Spawned ${kind}`, () => game.devSpawn(kind, mods, gate))}>SPAWN</button>
+              <button onClick={act(`Spawned ${kind}`, () => game.dev.spawn(kind, mods, gate))}>SPAWN</button>
             </div>
             <h4>HIGH-WAVE SCALING (THIS SEED + TIER)</h4>
             <table className="rec-table small">

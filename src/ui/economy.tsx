@@ -66,9 +66,9 @@ export function useTx(flow: Flow, station: string) {
       try {
         const before = { ...flow.profile.save.resources };
         const txId = newUid('tx');
-        const res = flow.profile.op(op, args, txId) as any;
+        const res = flow.profile.op(op, args, txId) as { ok: boolean; reason?: string };
         if (!res.ok) {
-          setMsg({ text: res.reason, ok: false });
+          setMsg({ text: res.reason ?? 'failed', ok: false });
           sfx.play('buildDeny');
           return null;
         }

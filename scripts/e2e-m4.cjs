@@ -4,46 +4,12 @@
 // Runs in ?test mode: fixed-step simulation, low graphics preset, no real pointer lock. UI actions are real
 // DOM clicks on the HQ terminals; state is verified through the save (window.__rift.profile) and reloads.
 // Screenshots go to $E2E_OUT (default: OS temp dir). Exit code 0 = all checks passed.
-const { chromium } = require('playwright');
-const OUT = process.env.E2E_OUT || require('os').tmpdir();
-let failures = 0;
-let passes = 0;
-const check = (name, ok, info = '') => {
-  console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${info ? '  ' + info : ''}`);
-  if (ok) passes++;
-  else failures++;
-};
-
-const SETTINGS = JSON.stringify({ v: 1, data: { sensitivity: 1, fov: 90, quality: 'low', volume: 0 } });
-
-async function launch() {
-  const b = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--js-flags=--expose-gc'] });
-  const ctx = await b.newContext({ viewport: { width: 1440, height: 900 } });
-  await ctx.addInitScript((s) => {
-    if (!localStorage.getItem('riftwarden.settings')) localStorage.setItem('riftwarden.settings', s);
-  }, SETTINGS);
-  await ctx.addInitScript(() => { window.__skipUpgrades = true; });
-  const p = await ctx.newPage();
-  const errs = [];
-  p.on('pageerror', (e) => errs.push('PAGEERR ' + e.message));
-  p.on('console', (m) => {
-    if (m.type() === 'error') errs.push('console.error ' + m.text().slice(0, 300));
-  });
-  await boot(p);
-  return { b, ctx, p, errs };
-}
-async function boot(p, reload = false) {
-  if (reload) await p.reload();
-  else await p.goto((process.env.RIFT_URL || 'http://localhost:5173/') + '?test');
-  await p.waitForFunction(() => window.__rift && window.__rift.state().screen === 'menu', null, { timeout: 180000 });
-  await p.evaluate(() => window.__rift.stopLoop());
-  await p.evaluate(() => { window.__rift.flow.skipUpgrades = true; });
-}
-const waitFor = (p, fn, arg, t = 120000) => p.waitForFunction(fn, arg, { timeout: t, polling: 100 });
-const shot = async (p, name) => {
-  await p.evaluate(() => window.__rift.render(1));
-  await p.screenshot({ path: `${OUT}/m4_${name}.png`, timeout: 120000 });
-};
+const H = require('./lib/harness.cjs');
+const { OUT, check, S, ev } = H;
+const waitFor = (p, fn, arg, t = 120000) => H.waitFor(p, fn, arg, t);
+const boot = (p, reload = false) => H.boot(p, { reload, skipUpgrades: true });
+const launch = () => H.launch({ viewport: { width: 1440, height: 900 }, skipUpgrades: true, gc: true });
+const shot = (p, name) => H.shot(p, 'm4_' + name);
 const save = (p) => p.evaluate(() => JSON.parse(JSON.stringify(window.__rift.profile.save)));
 const econ = (p, name, ...args) => p.evaluate(([n, a]) => window.__rift.econ(n, ...a), [name, args]);
 
@@ -512,9 +478,9 @@ const fire = (p) =>
   const flat = (k) => leak.every((l) => l[k] === leak[0][k]);
   check('K5 HQ resources flat over 3 terminal + deploy cycles', flat('meshes') && flat('materials') && flat('textures') && flat('scenes') && flat('uiListeners') && flat('profileListeners'), JSON.stringify(leak.map((l) => [l.meshes, l.materials, l.textures, l.uiListeners])));
   check('K6 no page errors', errs.length === 0, errs.slice(0, 3).join(' || '));
-  console.log(`\n${passes} passed, ${failures} failed in ${((Date.now() - t0) / 1000).toFixed(0)} s`);
+  console.log(`\n${H.stats.passes} passed, ${H.stats.failures} failed in ${((Date.now() - t0) / 1000).toFixed(0)} s`);
   await b.close();
-  process.exit(failures ? 1 : 0);
+  process.exit(H.stats.failures ? 1 : 0);
 })().catch((e) => {
   console.error(e);
   process.exit(2);
