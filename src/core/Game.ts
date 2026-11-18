@@ -580,6 +580,7 @@ export class Game {
     this.player.shakeScale = s.shake;
     this.weapon.anim.reduceMotion = s.reduceMotion;
     this.fx.setDensity(s.particles);
+    this.atmosphere.setDensity(s.particles === 'low' ? 0.45 : s.particles === 'medium' ? 0.75 : 1);
     this.post.setOptions({ bloom: s.bloom, reduceMotion: s.reduceMotion });
     sfx.setVolume(s.volume);
     sfx.setMix(s.sfxVolume, s.uiVolume, s.ambienceVolume);

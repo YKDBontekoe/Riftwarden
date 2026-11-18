@@ -81,6 +81,27 @@ async function deploy(p, tier = 1) {
       check('C2 boss darkens fog and exposure', r.boss.lum < r.calm.lum - 0.1 && r.boss.exp < r.calm.exp, `lum ${r.calm.lum.toFixed(2)} -> ${r.boss.lum.toFixed(2)}`);
       check('C3 mood recovers after the boss dies', Math.abs(r.after.d - r.calm.d) < r.calm.d * 0.05, `${r.after.d.toFixed(4)}`);
     }
+    if (want('D')) {
+      await ev(p, async () => { const R = window.__rift; await R.flow.enterHq(); });
+      await p.waitForFunction(() => window.__rift.state().location === 'home' && !window.__rift.state().busy, null, { timeout: 120000 });
+      await ev(p, () => { const R = window.__rift; if (R.state().screen !== 'home') R.home.takeControl(false); R.advance(0.3); });
+      const r = await ev(p, async () => {
+        const R = window.__rift;
+        const h = R.home;
+        const cam = h.player.camera;
+        R.advance(0.5);
+        const before = { x: cam.position.x, z: cam.position.z, ry: cam.rotation.y };
+        h.openTerminal('deploy');
+        R.advance(1);
+        const opened = { x: cam.position.x, z: cam.position.z, ry: cam.rotation.y, dolly: h.focus.dolly };
+        await h.closeTerminal();
+        R.advance(1.5);
+        return { before, opened, closed: { dolly: h.focus.dolly, ry: cam.rotation.y, yaw: h.player.yaw }, screen: R.state().screen };
+      });
+      const moved = Math.hypot(r.opened.x - r.before.x, r.opened.z - r.before.z);
+      check('D1 opening a terminal pushes the camera in', r.opened.dolly > 0.9 && moved > 0.05, `dolly=${r.opened.dolly.toFixed(2)} moved=${moved.toFixed(2)}`);
+      check('D2 closing returns to the exact view', r.closed.dolly === 0 && Math.abs(r.closed.ry - r.closed.yaw) < 0.03, JSON.stringify(r.closed));
+    }
   } catch (e) {
     check('suite ran without exception', false, String(e && e.stack || e).slice(0, 400));
   }

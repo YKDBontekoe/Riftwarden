@@ -29,6 +29,7 @@ import { fabricationLevel } from '../economy/transactions';
 import { captureEnvironment } from '../visuals/envCapture';
 import { Kit } from '../visuals/kit';
 import { createPalette, unlit } from '../visuals/materials';
+import { StationFocus } from './StationFocus';
 import { PostFx } from '../visuals/postfx';
 import { canvas, rng, toTexture } from '../visuals/textures';
 import { ENV_QUERY } from '../world/physicsGroups';
@@ -120,6 +121,8 @@ export class HomeBase {
   private pulseLights: { light: PointLight; base: number; phase: number }[] = [];
   /** Transaction feedback per station (1 -> 0 over PULSE_TIME). */
   private pulses = new Map<string, number>();
+  private focus!: StationFocus;
+  private reduceMotion = false;
   private unsubEcon: () => void = () => {};
   private displays: {
     exchange?: ReturnType<typeof equipmentExchange>;
@@ -287,6 +290,7 @@ export class HomeBase {
     // Reflections: capture the finished static HQ once into a prefiltered cube map.
     captureEnvironment(scene, scene.meshes.filter((m) => m.isEnabled() && m.isVisible && m.getTotalVertices() > 0), lit, new Vector3(0, 2.6, 0), high ? 256 : 128);
     this.post = new PostFx(scene, engine, this.player.camera, high);
+    this.focus = new StationFocus(scene, this.player.camera);
     // Interior grade: calmer than the arena (less bloom spread, grain and aberration).
     this.post.pipeline.bloomWeight = 0.22;
     this.post.pipeline.bloomKernel = high ? 64 : 48;
@@ -593,6 +597,7 @@ export class HomeBase {
     const h = (s.fov * Math.PI) / 180;
     this.player.baseFov = 2 * Math.atan(Math.tan(h / 2) / (16 / 9));
     this.player.reduceMotion = s.reduceMotion;
+    this.reduceMotion = s.reduceMotion;
     this.player.shakeScale = s.shake;
     this.post?.setOptions({ bloom: s.bloom, reduceMotion: s.reduceMotion });
     sfx.setVolume(s.volume);
@@ -613,6 +618,8 @@ export class HomeBase {
     if (this.screen !== 'home') return;
     sfx.play('ui');
     this.screen = 'terminal';
+    const rig = this.rigs.find((r) => r.station.id === id);
+    if (rig) this.focus.openStation(rig.station);
     this.openedTerminals.add(id);
     hudStore.set({ screen: 'terminal', terminal: id, prompt: null });
     this.input.releaseLock();
@@ -620,6 +627,7 @@ export class HomeBase {
 
   async closeTerminal(): Promise<void> {
     if (this.screen !== 'terminal') return;
+    this.focus.closeStation();
     await this.takeControl();
   }
 
@@ -642,6 +650,8 @@ export class HomeBase {
       this.build.update(dt);
       if (input.pressed('Escape') || input.pressed('KeyB')) void this.exitConstruction();
     }
+    if (this.screen !== 'terminal') this.focus.closeStation();
+    this.focus.update(dt, this.reduceMotion);
     this.layer.update(dt);
     this.animateOthers(dt);
     if (!this.emitters.length && sfx.ready) this.startAmbience();
@@ -706,6 +716,7 @@ export class HomeBase {
       next?.screen?.mat.emissiveColor.setAll(1.6);
       if (next) sfx.play('ui', { volume: 0.25, pitch: 1.6 });
       this.target = next;
+      this.focus.setTarget(next?.station ?? null);
     }
   }
 
