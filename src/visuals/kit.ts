@@ -1,8 +1,8 @@
 import { beveledBoxData } from './bevel';
 import { enableHitFlash, initFlash, registerFlashBuffer } from './hitFlashPlugin';
-import { type AbstractMesh, type Material, Matrix, Mesh, MeshBuilder, PBRMaterial, type Scene, TransformNode, Vector3 } from '@babylonjs/core';
+import { type AbstractMesh, type Material, Matrix, Mesh, MeshBuilder, PBRMaterial, type Scene, TransformNode, Vector3, type VertexData } from '@babylonjs/core';
 
-export type Shape = 'box' | 'cyl' | 'cyl6' | 'cyl8' | 'sphere' | 'ico' | 'cone' | 'torus' | 'torusThin' | 'arc' | 'cone4';
+export type Shape = 'box' | 'cyl' | 'cyl6' | 'cyl8' | 'sphere' | 'ico' | 'cone' | 'torus' | 'torusThin' | 'arc' | 'cone4' | `s:${string}`;
 
 export interface PartOpts {
   pos?: [number, number, number];
@@ -20,6 +20,8 @@ export interface PartOpts {
  */
 export class Kit {
   private templates = new Map<string, Mesh>();
+  /** Sculpted shapes (`s:name`): generated once per kit, then instanced like the primitives. */
+  private sculpted = new Map<string, () => VertexData>();
   private root: TransformNode;
   shadowSink: ((m: AbstractMesh) => void) | null = null;
   /**
@@ -43,8 +45,24 @@ export class Kit {
     this.root = new TransformNode('kitTemplates', scene);
   }
 
+  /**
+   * Register a sculpted shape under `s:name` (first registration wins, so rig builders can call this
+   * every time they build). Returns the shape id to pass to part().
+   */
+  sculpt(name: string, gen: () => VertexData): Shape {
+    const id = `s:${name}` as const;
+    if (!this.sculpted.has(id)) this.sculpted.set(id, gen);
+    return id;
+  }
+
   private makeShape(shape: Shape): Mesh {
     const s = this.scene;
+    const gen = this.sculpted.get(shape);
+    if (gen) {
+      const m = new Mesh(`k_${shape}`, s);
+      gen().applyToMesh(m);
+      return m;
+    }
     switch (shape) {
       case 'box': {
         const m = new Mesh('k_box', s);
@@ -77,6 +95,8 @@ export class Kit {
         m.bakeTransformIntoVertices(Matrix.RotationY(-Math.atan2(c.x, c.z)));
         return m;
       }
+      default:
+        throw new Error(`Unknown kit shape ${shape}`);
     }
   }
 
