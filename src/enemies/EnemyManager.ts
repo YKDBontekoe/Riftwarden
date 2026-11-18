@@ -616,7 +616,7 @@ export class EnemyManager {
       }
     }
     const [r, g, b] = e.flashRgb;
-    const a = k * k * 1.6;
+    const a = k * k * 0.55;
     for (const v of e.flashVecs) v.set(r, g, b, a);
   }
 

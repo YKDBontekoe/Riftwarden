@@ -28,7 +28,7 @@ async function deploy(p, tier = 1) {
         return { n: vecs.length, afterHit, afterDecay, spawned: !!e };
       });
       check('A1 walker parts carry a flash buffer', r.n > 10, `parts=${r.n}`);
-      check('A2 damage raises flash', r.afterHit > 0.5, `w=${r.afterHit}`);
+      check('A2 damage raises flash', r.afterHit > 0.3, `w=${r.afterHit}`);
       check('A3 flash decays to 0', r.afterDecay === 0, `w=${r.afterDecay}`);
       await ev(p, () => { const R = window.__rift; const en = R.game.enemies.active[0]; R.approach(en.id ?? 0); R.advance(1 / 60); R.game.damageEnemy('player', en, 5, en.center(), false); });
       await shot(p, 'polish-flash', { frames: 2 });
@@ -128,6 +128,26 @@ async function deploy(p, tier = 1) {
       check('E3 drones stay inside the floor plan at hover height', r.outside === 0 && r.badY === 0 && r.nan === 0, JSON.stringify(r));
       await ev(p, () => window.__rift.render(2));
       await p.screenshot({ path: `${H.OUT}/polish-hq.png`, timeout: 120000 });
+    }
+    if (want('V')) {
+      await deploy(p);
+      await ev(p, () => {
+        const R = window.__rift;
+        R.dev.spawn('walker'); R.dev.spawn('rusher'); R.dev.spawn('bulwark');
+        R.advance(0.2);
+        const list = R.game.enemies.active;
+        list.forEach((en, i) => { en.pos.set(-4 + i * 4, 0, -4); en.root.position.copyFrom(en.pos); });
+        R.teleport(0, -12, 1.5);
+        R.advance(1 / 60);
+        R.look(0, 0.1);
+        R.advance(1 / 60);
+        R.game.damageEnemy('player', list[0], 3, list[0].center(), false);
+        R.game.damageEnemy('player', list[1], 3, list[1].center(), false);
+        R.game.damageEnemy('player', list[2], 3, list[2].center(), false);
+      });
+      await shot(p, 'polish-flash-view', { frames: 2 });
+      await ev(p, () => { const R = window.__rift; R.game.enemies.active.forEach((en) => R.game.damageEnemy('player', en, 1e6, en.center(), false)); R.advance(0.35); });
+      await shot(p, 'polish-death-view', { frames: 2 });
     }
   } catch (e) {
     check('suite ran without exception', false, String(e && e.stack || e).slice(0, 400));
