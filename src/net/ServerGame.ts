@@ -179,24 +179,24 @@ export function spawnFor(slot: number): { x: number; z: number; yaw: number } {
 /** Run ledger shared by the team: every collected resource is mirrored to each player's own ledger. */
 class TeamLedger extends RunLedger {
   members: () => RunLedger[] = () => [];
-  collect(r: Partial<Rewards>): boolean {
+  override collect(r: Partial<Rewards>): boolean {
     const res = super.collect({ salvage: r.salvage, credits: r.credits, components: r.components });
     for (const m of this.members()) m.collect({ salvage: r.salvage, credits: r.credits, components: r.components });
     return res;
   }
-  tick(dt: number): void {
+  override tick(dt: number): void {
     super.tick(dt);
     for (const m of this.members()) m.tick(dt);
   }
-  addKill(): void {
+  override addKill(): void {
     super.addKill();
     for (const m of this.members()) m.addKill();
   }
-  waveReached(n: number): void {
+  override waveReached(n: number): void {
     super.waveReached(n);
     for (const m of this.members()) m.waveReached(n);
   }
-  waveCleared(n: number): void {
+  override waveCleared(n: number): void {
     super.waveCleared(n);
     for (const m of this.members()) m.waveCleared(n);
   }
@@ -381,25 +381,25 @@ export class ServerGame extends Game {
     };
   }
 
-  get enemyFx() {
+  override get enemyFx() {
     return this.fx;
   }
 
-  protected weaponSignature(): string | null {
+  protected override weaponSignature(): string | null {
     const a = this.rec.owner ? this.avatar(this.rec.owner) : undefined;
     return a ? a.inventory.equipped('weapon')?.signature ?? null : null;
   }
-  protected weaponHeat(): number {
+  protected override weaponHeat(): number {
     const a = this.rec.owner ? this.avatar(this.rec.owner) : undefined;
     return a ? a.heat : 0;
   }
 
-  protected droneSpeed(): number {
+  protected override droneSpeed(): number {
     const a = this.rec.owner ? this.avatar(this.rec.owner) : undefined;
     return a ? (a.flags & 1 ? 40 : a.speed) : 0;
   }
 
-  panFor(p: Vector3): { pan: number; volume: number } {
+  override panFor(p: Vector3): { pan: number; volume: number } {
     this.rec.panPos = p.clone();
     return { pan: 0, volume: 1 };
   }
@@ -426,7 +426,7 @@ export class ServerGame extends Game {
 
   // ------------------------------------------------------------------ targeting
 
-  targets(): readonly Player[] {
+  override targets(): readonly Player[] {
     return this.avatars.filter((a) => a.active).map((a) => a.player);
   }
 
@@ -453,7 +453,7 @@ export class ServerGame extends Game {
     (this as { player: Player }).player = body;
   }
 
-  hurtPlayer(amount: number, from: Vector3, target: Player = this.player): void {
+  override hurtPlayer(amount: number, from: Vector3, target: Player = this.player): void {
     const a = this.avatars.find((x) => x.player === target);
     if (!a || !a.active) return;
     this.rec.quiet(() => super.hurtPlayer(amount, from, target));
@@ -461,7 +461,7 @@ export class ServerGame extends Game {
 
   // ------------------------------------------------------------------ stats
 
-  rebuildStats(): void {
+  override rebuildStats(): void {
     if (!this.avatars) {
       super.rebuildStats();
       return;
@@ -489,14 +489,14 @@ export class ServerGame extends Game {
     this.turretCtx.statsVersion = this.statsVersion;
   }
 
-  refreshEquipment(): void {
+  override refreshEquipment(): void {
     this.rebuildStats();
     this.inventoryVersion++;
   }
 
   // ------------------------------------------------------------------ loot (individual ownership)
 
-  rollItems(source: DropSourceId, wave = this.waves.number): ItemInstance[] {
+  override rollItems(source: DropSourceId, wave = this.waves.number): ItemInstance[] {
     // Checkpoint caches: one per player, straight into that player's run (banked with the checkpoint).
     for (const a of this.avatars) {
       if (a.left) continue;
@@ -516,12 +516,12 @@ export class ServerGame extends Game {
     );
   }
 
-  dropLoot(source: DropSourceId, at: Vector3, wave = this.waves.number): Pickup[] {
+  override dropLoot(source: DropSourceId, at: Vector3, wave = this.waves.number): Pickup[] {
     this.dropFrom(DROP_SOURCES[source], at, wave);
     return [];
   }
 
-  dropFrom(src: DropSource, at: Vector3, wave = this.waves.number): Pickup[] {
+  override dropFrom(src: DropSource, at: Vector3, wave = this.waves.number): Pickup[] {
     for (const a of this.avatars) {
       if (a.left) continue;
       for (const item of this.rollFor(a, src, wave)) this.placeFor(a, item, at, wave);
@@ -816,7 +816,7 @@ export class ServerGame extends Game {
   // ------------------------------------------------------------------ team upgrades + checkpoint vote
 
   /** Between waves: one shared offer, the choice rotates between connected players (30 s, then auto). */
-  openUpgrade(): void {
+  override openUpgrade(): void {
     this.upgradeDue = false;
     const offer = this.director.build.nextOffer(this.offerContext);
     if (!offer.length) return this.openVoteIfCheckpoint();
@@ -931,16 +931,16 @@ export class ServerGame extends Game {
   }
 
   /** Headless: no pointer lock, the simulation is always 'playing' (defeat, refits and offers depend on it). */
-  start(): void {
+  override start(): void {
     this.newRun();
     this.setScreen('playing');
   }
 
-  openCheckpoint(): void {
+  override openCheckpoint(): void {
     this.openVoteIfCheckpoint();
   }
 
-  onEnemyKilled(e: Enemy): void {
+  override onEnemyKilled(e: Enemy): void {
     const a = this.rec.owner ? this.avatar(this.rec.owner) : undefined;
     if (a) a.kills++;
     super.onEnemyKilled(e);
@@ -966,7 +966,7 @@ export class ServerGame extends Game {
   }
 
   /** Per-player result statistics folded into each ledger before finalize. */
-  syncStats(): void {
+  override syncStats(): void {
     super.syncStats();
     for (const a of this.avatars) {
       const s = a.run.survival;

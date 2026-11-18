@@ -242,17 +242,17 @@ export class ClientGame extends Game {
     });
   }
 
-  startWave(): void {
+  override startWave(): void {
     void this.request({ a: 'startWave' });
   }
 
-  protected toggleTactical(): void {
+  protected override toggleTactical(): void {
     void this.request({ a: 'tactical' }).then((ok) => {
       if (ok && !this.tactical.active) this.setBuildMode(true);
     });
   }
 
-  protected tryPlace(): void {
+  protected override tryPlace(): void {
     const c = this.construction;
     const cost = configCost(this.buildConfig, this.stats.buildCostMult);
     if (!c.valid || this.wallet.cores < cost) {
@@ -264,7 +264,7 @@ export class ClientGame extends Game {
     if (!this.tactical.active) this.setBuildMode(false);
   }
 
-  modifyTower(t: Turret, what: 'level' | TowerSlot, id?: string): { ok: true; cost: number } | { ok: false; reason: string } {
+  override modifyTower(t: Turret, what: 'level' | TowerSlot, id?: string): { ok: true; cost: number } | { ok: false; reason: string } {
     const phase = this.towerEditReason();
     if (phase) return { ok: false, reason: phase };
     if (what === 'base') return { ok: false, reason: 'The base is fixed once built' };
@@ -284,7 +284,7 @@ export class ClientGame extends Game {
     return null;
   }
 
-  collectPickup(p: Pickup): boolean {
+  override collectPickup(p: Pickup): boolean {
     let sid = -1;
     for (const [id, x] of this.pickupMap) if (x === p) sid = id;
     if (sid < 0 || !this.loot.landed(p) || !this.player.alive) return false;
@@ -295,7 +295,7 @@ export class ClientGame extends Game {
     return true;
   }
 
-  chooseUpgrade(id: string): boolean {
+  override chooseUpgrade(id: string): boolean {
     if (!this.offer || this.offerChooser !== this.you) return false;
     void this.request({ a: 'upgrade', pick: id });
     return true;
@@ -306,7 +306,7 @@ export class ClientGame extends Game {
     void this.request({ a: 'vote', home });
   }
 
-  equip(uid: string, slot?: SlotId): boolean {
+  override equip(uid: string, slot?: SlotId): boolean {
     if (!this.equipAllowed) {
       sfx.play('buildDeny');
       return false;
@@ -315,22 +315,22 @@ export class ClientGame extends Game {
     return true;
   }
 
-  unequip(slot: SlotId): boolean {
+  override unequip(slot: SlotId): boolean {
     void this.request({ a: 'unequip', slot }).then((ok) => ok && sfx.play('ui'));
     return true;
   }
 
-  discard(uid: string): boolean {
+  override discard(uid: string): boolean {
     void this.request({ a: 'discard', uid }).then((ok) => ok && sfx.play('recycle'));
     return true;
   }
 
-  get canReturnHome(): boolean {
+  override get canReturnHome(): boolean {
     return this.voteOpen && this.screen !== 'defeat';
   }
 
   /** Recycle (hold X) is a server request; inspection stays local. */
-  protected updateInspect(dt: number, controls: boolean): void {
+  protected override updateInspect(dt: number, controls: boolean): void {
     const holding = this.input.isDown('KeyX');
     const before = this.recycleT;
     if (holding) (this.input as unknown as { downKeys?: Set<string> }).downKeys;
@@ -354,7 +354,7 @@ export class ClientGame extends Game {
   }
 
   /** Local hit resolution for responsiveness; the server re-validates and applies damage. */
-  protected shoot = (r: ShotRequest): ShotOutcome => {
+  protected override shoot = (r: ShotRequest): ShotOutcome => {
     for (const e of this.enemies.active) {
       e.root.computeWorldMatrix(true);
       for (const h of e.hitboxes) h.computeWorldMatrix(true);
@@ -413,7 +413,7 @@ export class ClientGame extends Game {
     return { point: r.origin.add(r.dir.scale(r.range)), normal: null, target: 'none', enemyId: null };
   };
 
-  async closePanel(): Promise<void> {
+  override async closePanel(): Promise<void> {
     if (this.screen === 'upgrade') {
       sfx.play('ui');
       this.setScreen('paused');
@@ -424,22 +424,22 @@ export class ClientGame extends Game {
   }
 
   // The replica never applies damage or rewards itself.
-  hurtPlayer(): void {}
-  hostileBlast(): void {}
-  protected ventTick(): void {}
-  targets(): readonly Player[] {
+  override hurtPlayer(): void {}
+  override hostileBlast(): void {}
+  protected override ventTick(): void {}
+  override targets(): readonly Player[] {
     return [];
   }
-  onEnemyKilled(): void {}
-  protected onDefeat(): void {}
-  openUpgrade(): void {}
-  protected watchBoss(): void {
+  override onEnemyKilled(): void {}
+  protected override onDefeat(): void {}
+  override openUpgrade(): void {}
+  protected override watchBoss(): void {
     if (this.hudT <= 0) this.watchIntel();
   }
 
   // ------------------------------------------------------------------ frame
 
-  protected update(dt: number): void {
+  protected override update(dt: number): void {
     const input = this.input;
     const playing = this.screen === 'playing';
     const controls = playing && input.captured;
@@ -1009,7 +1009,7 @@ export class ClientGame extends Game {
     hudStore.set({ coop: { team, voteOpen: this.voteOpen, voteLeft: this.voteLeft, offerChooser: this.offerChooser === this.you ? null : this.offerChooserName || this.offerChooser, offerLeft: this.offerLeft, rtt: Math.round(this.link.rtt) } });
   }
 
-  bossHud(e: Enemy) {
+  override bossHud(e: Enemy) {
     const b = this.bossData as Record<string, unknown> | 0;
     if (!b) return super.bossHud(e);
     return { ...super.bossHud(e), ...(b as object), hp: e.hp, max: e.maxHp };
@@ -1019,7 +1019,7 @@ export class ClientGame extends Game {
     return (this as unknown as { netEnemiesLeft?: number }).netEnemiesLeft ?? this.enemies.count;
   }
 
-  dispose(): void {
+  override dispose(): void {
     for (const id of [...this.remotes.keys()]) this.removeRemote(id);
     super.dispose();
   }
