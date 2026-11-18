@@ -26,12 +26,13 @@ import type { WeaponFamily } from '../data/defs';
 import { WeaponFx } from '../fx/WeaponFx';
 import { ECONOMY } from '../data/defs';
 import { DevTools } from '../arena/DevTools';
+import { rollLoot } from '../loot/roll';
 import { createSunShadows } from '../arena/shadows';
 import { CORE_BEHAVIORS } from '../enemies/coreBehaviors';
 import { pickInteractable } from '../home/interaction';
-import { DROP_SOURCES, type DropSourceId, rollDrops } from '../loot/drops';
+import { DROP_SOURCES, type DropSourceId } from '../loot/drops';
 import { equipmentModifiers, weaponDefFor } from '../loot/equipment';
-import { flatScale, generateItem, hashSeed } from '../loot/generate';
+import { flatScale, hashSeed } from '../loot/generate';
 import { convertsToSalvage, expiresAfterWave, LootField, type Pickup, PICKUP_RANGE } from '../loot/LootField';
 import { rarity } from '../loot/rarity';
 import { scrapValue } from '../loot/economy';
@@ -653,18 +654,15 @@ export class Game {
 
   // ---------------------------------------------------------------- loot
 
-  protected lootContext(wave: number) {
-    return { wave, tierLevelBonus: this.cfg.tier.lootLevelBonus, tierLuck: this.cfg.tier.lootLuck };
-  }
-
   /** Roll a source's drops and generate the items (deterministic per run seed). */
   rollItems(source: DropSourceId, wave = this.waves.number): ItemInstance[] {
-    const src = DROP_SOURCES[source];
-    const table = this.dropChanceMult === 1 ? src : { ...src, chance: Math.min(1, src.chance * this.dropChanceMult) };
+    return this.rollFrom(DROP_SOURCES[source], wave);
+  }
+
+  /** The run's own loot stream (single player): one place that knows the uid scheme and the debug chance multiplier. */
+  private rollFrom(src: DropSource, wave: number): ItemInstance[] {
     const run = this.cfg.run;
-    return rollDrops(table, this.lootContext(wave), this.lootRand).map((d) =>
-      generateItem({ uid: `${run.id}.${++this.lootCounter}`, seed: d.seed, level: d.level, rarity: d.rarity, category: d.category, baseId: d.baseId, allowExclusive: d.baseId ? [d.baseId] : [], source: run.id }),
-    );
+    return rollLoot({ source: src, wave, tier: this.cfg.tier, rand: this.lootRand, nextUid: () => `${run.id}.${++this.lootCounter}`, originId: run.id, chanceMult: this.dropChanceMult });
   }
 
   /** Roll drops for a source and place them physically around `at`. */
@@ -1764,11 +1762,8 @@ export class Game {
 
   /** Roll an arbitrary drop source (elites, events, HVT) and place the items. */
   dropFrom(src: DropSource, at: Vector3, wave = this.waves.number): Pickup[] {
-    const table = this.dropChanceMult === 1 ? src : { ...src, chance: Math.min(1, src.chance * this.dropChanceMult) };
-    const run = this.cfg.run;
     const out: Pickup[] = [];
-    for (const d of rollDrops(table, this.lootContext(wave), this.lootRand)) {
-      const item = generateItem({ uid: `${run.id}.${++this.lootCounter}`, seed: d.seed, level: d.level, rarity: d.rarity, category: d.category, baseId: d.baseId, allowExclusive: d.baseId ? [d.baseId] : [], source: run.id });
+    for (const item of this.rollFrom(src, wave)) {
       const p = this.spawnPickup(item, at, wave);
       if (p) out.push(p);
     }

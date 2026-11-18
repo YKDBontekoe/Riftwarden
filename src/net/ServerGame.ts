@@ -8,9 +8,10 @@ import type { Input } from '../core/Input';
 import type { Settings } from '../core/settings';
 import type { WeaponDef, WeaponFamily } from '../data/defs';
 import { type Enemy, type EnemyHitboxMeta } from '../enemies/EnemyManager';
-import { DROP_SOURCES, type DropSource, type DropSourceId, rollDrops } from '../loot/drops';
+import { DROP_SOURCES, type DropSource, type DropSourceId } from '../loot/drops';
+import { rollLoot } from '../loot/roll';
 import { equipmentModifiers, weaponDefFor } from '../loot/equipment';
-import { generateItem, hashSeed } from '../loot/generate';
+import { hashSeed } from '../loot/generate';
 import { convertsToSalvage, expiresAfterWave, PICKUP_RANGE, type Pickup } from '../loot/LootField';
 import { scrapValue } from '../loot/economy';
 import { RunInventory } from '../loot/runInventory';
@@ -371,11 +372,7 @@ export class ServerGame extends Game {
   }
 
   private rollFor(a: Avatar, src: DropSource, wave: number): ItemInstance[] {
-    const table = this.dropChanceMult === 1 ? src : { ...src, chance: Math.min(1, src.chance * this.dropChanceMult) };
-    const ctx = { wave, tierLevelBonus: this.cfg.tier.lootLevelBonus, tierLuck: this.cfg.tier.lootLuck };
-    return rollDrops(table, ctx, a.rand).map((d) =>
-      generateItem({ uid: `${this.team.id}.${a.slot}.${++a.lootCounter}`, seed: d.seed, level: d.level, rarity: d.rarity, category: d.category, baseId: d.baseId, allowExclusive: d.baseId ? [d.baseId] : [], source: this.team.id }),
-    );
+    return rollLoot({ source: src, wave, tier: this.cfg.tier, rand: a.rand, nextUid: () => `${this.team.id}.${a.slot}.${++a.lootCounter}`, originId: this.team.id, chanceMult: this.dropChanceMult });
   }
 
   override dropLoot(source: DropSourceId, at: Vector3, wave = this.waves.number): Pickup[] {
