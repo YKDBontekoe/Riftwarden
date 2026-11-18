@@ -163,7 +163,7 @@ export class Game {
   towerNote = { text: '', t: 0 };
   towerPanelFocus: number | null = null;
   /** Cost of the next tower from the build template (UI). */
-  get m5Cost(): number {
+  get nextTowerCost(): number {
     return configCost(this.buildConfig, this.stats.buildCostMult);
   }
 
@@ -208,7 +208,7 @@ export class Game {
 
   // ---- M6 survival
   /** Resolves once every M6 shader (enemy/boss/telegraph/ordnance/arena-machinery) is compiled. */
-  readonly m6Warmup: Promise<unknown>;
+  readonly shaderWarmup: Promise<unknown>;
   readonly tele: Telegraphs;
   readonly ordnance: Ordnance;
   readonly dynamics: ArenaDynamics;
@@ -346,7 +346,7 @@ export class Game {
       },
       shake: (pos, k) => this.fx.onShake?.(pos, k),
     });
-    this.m6Warmup = this.warmShaders();
+    this.shaderWarmup = this.warmShaders();
     this.planner = new SurvivalPlanner(((cfg.seed ?? hashRunSeed(cfg.run.id)) >>> 0) ^ 0x6d2b79f5, cfg.tier);
     this.survival = new SurvivalRuntime(this);
     this.turrets = new TurretManager(scene, this.kit, this.pal);
@@ -2047,7 +2047,7 @@ export class Game {
     };
   }
 
-  protected m5Hud() {
+  protected towerHud() {
     const dir = this.director;
     const ts = this.turrets.turrets;
     return {
@@ -2144,7 +2144,7 @@ export class Game {
       buildValid: c.valid,
       buildMessage: c.message,
       buildCost: configCost(this.buildConfig, this.stats.buildCostMult),
-      m5: this.m5Hud(),
+      m5: this.towerHud(),
       inspect: t ? { name: t.name, kills: t.kills, damage: Math.round(t.damageDealt), refund: Math.round(t.paid * t.refundRatio), recycle: this.recycleT, card: this.towerInfo(t), edit: this.towerEditReason() } : null,
       hint,
       spread: 6 + this.weapon.spread * 900,

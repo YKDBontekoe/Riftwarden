@@ -539,7 +539,7 @@ export class Flow {
       this.transitions++;
       const t2 = performance.now();
       const ready = await Promise.race([
-        Promise.all([scene.whenReadyAsync(), this.arena?.loot.warmup, this.arena?.m6Warmup]).then(
+        Promise.all([scene.whenReadyAsync(), this.arena?.loot.warmup, this.arena?.shaderWarmup]).then(
           () => true,
           () => true,
         ),

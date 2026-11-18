@@ -240,7 +240,7 @@ export function TowerPanel({ game }: { game: Game }) {
         {msg && <div className="tp-msg">{msg}</div>}
         <div className="tp-grid">
           <div className="tp-col">
-            <div className="cp-label">BUILD TEMPLATE · next tower ◆{game.m5Cost}</div>
+            <div className="cp-label">BUILD TEMPLATE · next tower ◆{game.nextTowerCost}</div>
             {TOWER_SLOTS.map((slot) => (
               <div key={slot} className="tp-slot">
                 <div className="tp-slot-h">{SLOT_LABEL[slot]}: <b>{partDef(slot, tpl[slot])?.name}</b></div>
