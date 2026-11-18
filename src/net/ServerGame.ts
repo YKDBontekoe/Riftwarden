@@ -234,6 +234,12 @@ export class ServerGame extends Game {
   defeated = false;
   /** Statistics: rejected claims (tests / diagnostics). */
   rejected = { shots: 0, hits: 0, moves: 0, acts: 0 };
+  /** Rejection reasons (diagnostics). */
+  why: Record<string, number> = {};
+  private reject(kind: 'shots' | 'hits' | 'moves', why: string): void {
+    this.rejected[kind]++;
+    this.why[why] = (this.why[why] ?? 0) + 1;
+  }
 
   constructor(engine: Engine, havok: unknown, players: ServerPlayerInit[], cfg: Omit<ArenaConfig, 'hooks' | 'loadout' | 'run'> & { runId: string }, hooks: ServerHooks) {
     patchGlobals();
@@ -571,7 +577,7 @@ export class ServerGame extends Game {
       const inside = Math.abs(to.x) < 140 && Math.abs(to.z) < 140 && to.y > -6 && to.y < 40;
       const d = Vector3.Distance(to, a.lastPos);
       if (!inside || d > MAX_SPEED * dt + 2.5) {
-        this.rejected.moves++;
+        this.reject('moves', inside ? 'move-speed' : 'move-bounds');
         this.rec.push(['mv', arr(a.lastPos)], a.id);
       } else {
         a.lastPos.copyFrom(to);
@@ -592,18 +598,18 @@ export class ServerGame extends Game {
   shot(a: Avatar, s: ShotClaim): void {
     const def = a.weaponDef;
     if (!a.player.alive || s.f !== def.family) {
-      this.rejected.shots++;
+      this.reject('shots', a.player.alive ? `family ${s.f}/${def.family}` : 'dead');
       return;
     }
     if (a.budget < 1) {
-      this.rejected.shots++;
+      this.reject('shots', 'budget');
       return;
     }
     a.budget -= 1;
     const o = new Vector3(s.o[0], s.o[1], s.o[2]);
     const eye = a.player.camera.position;
     if (Vector3.Distance(o, eye) > 3.5) {
-      this.rejected.shots++;
+      this.reject('shots', 'origin');
       return;
     }
     const st = a.stats;
@@ -621,8 +627,9 @@ export class ServerGame extends Game {
         if (n >= maxHits) break;
         const e = this.enemies.active.find((x) => x.id === h[0]);
         const point = new Vector3(h[2], h[3], h[4]);
-        if (!e || !e.alive || !this.validHit(a, e, o, point, range, h[1] === 1)) {
-          this.rejected.hits++;
+        const bad = !e ? 'hit-unknown' : !e.alive ? 'hit-dead' : this.invalidHit(e, o, point, range);
+        if (bad || !e) {
+          this.reject('hits', bad ?? 'hit-unknown');
           continue;
         }
         let amount = dmg;
@@ -647,17 +654,16 @@ export class ServerGame extends Game {
     });
   }
 
-  private validHit(a: Avatar, e: Enemy, o: Vector3, p: Vector3, range: number, _weak: boolean): boolean {
-    if (Vector3.Distance(o, p) > range + 2) return false;
+  private invalidHit(e: Enemy, o: Vector3, p: Vector3, range: number): string | null {
+    if (Vector3.Distance(o, p) > range + 2) return 'hit-range';
     const c = e.center(new Vector3());
     const reach = e.def.bodyR * e.def.scale + e.def.radius + 2.2 + e.def.speed * e.moveMult * 0.35;
-    if (Vector3.Distance(c, p) > Math.max(reach, e.def.topY + 1.5)) return false;
+    if (Vector3.Distance(c, p) > Math.max(reach, e.def.topY + 1.5)) return 'hit-reach';
     // Line of sight from the muzzle to just short of the point.
     const dir = p.subtract(o);
     const len = dir.length();
-    if (len > 1.2 && !this.los(o, o.add(dir.scale((len - 1) / len)))) return false;
-    void a;
-    return true;
+    if (len > 1.2 && !this.los(o, o.add(dir.scale((len - 1) / len)))) return 'hit-los';
+    return null;
   }
 
   private weakAt(e: Enemy, p: Vector3): boolean {

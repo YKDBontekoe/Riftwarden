@@ -43,6 +43,8 @@ export class CoopSim {
   private upgrades: string[] = [];
   readonly seed: number;
   /** Diagnostics. */
+  private whyT = 0;
+  private whyLast = '{}';
   stats = { ticks: 0, simMs: 0, maxMs: 0, bytes: 0, snaps: 0, events: 0 };
 
   constructor(
@@ -180,6 +182,15 @@ export class CoopSim {
     this.stats.simMs = this.stats.simMs * 0.95 + ms * 0.05;
     this.stats.maxMs = Math.max(this.stats.maxMs * 0.999, ms);
     this.flushEvents();
+    if (this.game.testMode) {
+      this.whyT += elapsed;
+      const why = JSON.stringify(this.game.why);
+      if (this.whyT > 3 && why !== this.whyLast) {
+        this.whyT = 0;
+        this.whyLast = why;
+        this.log(`run ${this.runId.slice(-6)}: rejected ${why}`);
+      }
+    }
     this.snapAcc += elapsed;
     if (this.snapAcc >= 1 / SNAP_HZ) {
       this.snapAcc = 0;

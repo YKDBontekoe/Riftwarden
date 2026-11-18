@@ -35,6 +35,8 @@ import { ENV_QUERY } from '../world/physicsGroups';
 import { HqBuilder, type HqMaterials } from './HqBuilder';
 import { ExpansionLayer } from './build/ExpansionLayer';
 import { BuildMode } from './build/BuildMode';
+import { buildWardenDrone } from '../visuals/droneModel';
+import type { Palette } from '../visuals/materials';
 import { type TutorialHost, TutorialDirector } from '../core/TutorialDirector';
 import { LIMITS } from './build/catalog';
 import { pickInteractable } from './interaction';
@@ -64,6 +66,8 @@ export interface HomeHooks {
   rebuild?(): void;
   /** M7: onboarding host. */
   tutorial?: TutorialHost;
+  /** M7 co-op visit: the host's headquarters layout replaces this player's own (read-only). */
+  hostBase?: () => SaveData['base'] | null;
 }
 
 /** One interactive station in the HQ (data + its live screen). */
@@ -108,6 +112,7 @@ export class HomeBase {
   readOnly = false;
   private tut: TutorialDirector | null = null;
   private emitters: Emitter[] = [];
+  private pal!: Palette;
   private tutDist = 0;
   private tutPos: [number, number] = [0, 0];
   private openedTerminals = new Set<string>();
@@ -140,6 +145,7 @@ export class HomeBase {
     const high = settings.quality === 'high';
 
     const pal = createPalette(scene, high, true);
+    this.pal = pal;
     this.kit = new Kit(scene);
 
     // HQ material set: brighter, cleaner interior variants of the shared palette.
@@ -220,7 +226,8 @@ export class HomeBase {
       animators: this.animators,
       pulse: (id) => this.pulses.get(id) ?? 0,
     };
-    const save = profile.save;
+    this.readOnly = !!hooks.hostBase?.();
+    const save = this.layoutSave();
     this.buildStations(ctx, save);
     builder.finish();
     // M7: player-built modules and every placed object (incremental, own colliders).
@@ -636,6 +643,7 @@ export class HomeBase {
       if (input.pressed('Escape') || input.pressed('KeyB')) void this.exitConstruction();
     }
     this.layer.update(dt);
+    this.animateOthers(dt);
     if (!this.emitters.length && sfx.ready) this.startAmbience();
     {
       const c = this.scene.activeCamera?.globalPosition ?? this.player.camera.position;
@@ -761,10 +769,67 @@ export class HomeBase {
     await this.takeControl();
   }
 
+  /** The layout shown: this player's own, or the host's while visiting their HQ in a co-op session. */
+  private layoutSave(): Readonly<SaveData> {
+    const host = this.hooks.hostBase?.();
+    return host ? { ...this.profile.save, base: host } : this.profile.save;
+  }
+
+  /** Host changed their HQ while we visit: apply it (incremental, or a rebuild for relocated stations). */
+  applyHostBase(): void {
+    this.syncConstruction();
+  }
+
+  // ---------------------------------------------------------------- M7 co-op presence
+
+  private others = new Map<string, { rig: ReturnType<typeof buildWardenDrone>; tx: number; tz: number; ty: number; yaw: number; t: number }>();
+  /** Other wardens in this HQ (lobby presence, 10 Hz). */
+  setPresence(list: readonly { id: string; name: string; p: [number, number, number]; yaw: number }[]): void {
+    const seen = new Set<string>();
+    for (const o of list) {
+      seen.add(o.id);
+      let r = this.others.get(o.id);
+      if (!r) {
+        const rig = buildWardenDrone(this.scene, this.kit, this.pal, 1 + (this.others.size % 3));
+        rig.root.position.set(o.p[0], o.p[1] + 0.55, o.p[2]);
+        r = { rig, tx: o.p[0], ty: o.p[1], tz: o.p[2], yaw: o.yaw, t: 0 };
+        this.others.set(o.id, r);
+      }
+      r.tx = o.p[0];
+      r.ty = o.p[1];
+      r.tz = o.p[2];
+      r.yaw = o.yaw;
+    }
+    for (const [id, r] of this.others) {
+      if (seen.has(id)) continue;
+      r.rig.root.dispose(false, false);
+      r.rig.accent.dispose();
+      this.others.delete(id);
+    }
+  }
+
+  private animateOthers(dt: number): void {
+    const k = 1 - Math.exp(-dt * 10);
+    for (const r of this.others.values()) {
+      const p = r.rig.root.position;
+      p.x += (r.tx - p.x) * k;
+      p.y += (r.ty + 0.55 - p.y) * k;
+      p.z += (r.tz - p.z) * k;
+      r.rig.root.rotation.y = r.yaw;
+      r.t += dt;
+      r.rig.body.position.y = Math.sin(r.t * 2.2) * 0.05;
+      r.rig.ring.rotation.y += dt * 6;
+    }
+  }
+
+  get presenceCount(): number {
+    return this.others.size;
+  }
+
   /** Re-sync construction after a profile change; structural changes to the shell need a rebuild. */
   private syncConstruction(): void {
     if (this.disposed) return;
-    const save = this.profile.save;
+    const save = this.layoutSave();
     const sig = layoutSignature(save);
     if (sig !== this.layoutSig) {
       this.layoutSig = sig;

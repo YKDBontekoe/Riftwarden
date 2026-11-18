@@ -220,7 +220,7 @@ setInterval(() => {
 setInterval(() => {
   for (const r of rooms.values()) {
     if (r.state !== 'lobby') continue;
-    const players = r.connected.filter((m) => m.peer?.presence && m.peer.visiting).map((m) => ({ id: m.id, name: m.name, p: m.peer!.presence!.p, yaw: m.peer!.presence!.yaw }));
+    const players = r.connected.filter((m) => m.peer?.presence && (m.peer.visiting || m.id === r.hostId)).map((m) => ({ id: m.id, name: m.name, p: m.peer!.presence!.p, yaw: m.peer!.presence!.yaw }));
     for (const m of r.connected) m.peer!.send({ t: 'presence', players: players.filter((x) => x.id !== m.id) });
   }
 }, 100);

@@ -185,7 +185,18 @@ export function CoopPanel({ flow, compact }: { flow: Flow; compact?: boolean }) 
             {allReady ? `DEPLOY TEAM · TIER ${tier.roman}` : 'WAITING FOR READY'}
           </button>
         )}
-        <button data-testid="lobby-leave" onClick={() => flow.net?.send({ t: 'leave' })}>
+        {!host && lobby.state === 'lobby' && (
+          <button data-testid="lobby-visit" onClick={() => void flow.visitHostHq(!flow.visiting)}>
+            {flow.visiting ? 'RETURN TO MY HQ' : 'VISIT HOST HQ'}
+          </button>
+        )}
+        <button
+          data-testid="lobby-leave"
+          onClick={() => {
+            flow.net?.send({ t: 'leave' });
+            if (flow.visiting) void flow.visitHostHq(false);
+          }}
+        >
           LEAVE SESSION
         </button>
       </div>

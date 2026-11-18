@@ -81,6 +81,28 @@ export class Flow {
   /** M6: development tools available (URL ?dev or ?test). Never shown in the ordinary player experience. */
   devTools = false;
   private renderQuality: Settings['quality'];
+  /** M7: walking the lobby host's headquarters (co-op visit). */
+  visiting = false;
+  private presenceT = 0;
+
+  /** Visit (or leave) the lobby host's HQ. Guests see the host's layout read-only and use their own terminals. */
+  async visitHostHq(on: boolean): Promise<void> {
+    const net = this.net;
+    if (!net || this.busy || this.location !== 'home') return;
+    if (on) {
+      net.send({ t: 'visit', on: true });
+      for (let i = 0; i < 40 && !net.state.hostHq; i++) await new Promise((r) => setTimeout(r, 50));
+      if (!net.state.hostHq) return;
+    } else net.send({ t: 'visit', on: false });
+    this.visiting = on;
+    await this.transition(on ? 'VISITING HOST HQ' : 'RETURNING TO YOUR HQ', on ? 'Co-op lobby · read-only headquarters' : 'Own headquarters', () => {
+      this.buildHome(true);
+      this.location = 'home';
+      return this.home!.scene;
+    });
+    await this.home!.takeControl(false);
+  }
+
   /** Automation: show onboarding even in ?test mode. */
   forceTutorial = false;
   /** M7 co-op session (null = single player). */
@@ -137,6 +159,7 @@ export class Flow {
     const w = this.world;
     if (!w || this.building) return;
     const dt = Math.min(this.engine.getDeltaTime() / 1000, 1 / 20);
+    this.coopPresence(dt);
     // While a new scene warms up behind the transit overlay it renders but does not simulate.
     if (!this.busy) w.step(dt, this.engine.getFps());
     w.scene.render();
@@ -325,6 +348,19 @@ export class Flow {
     return this.net.connect();
   }
 
+  /** Lobby presence: publish our HQ position, show the others who share this HQ (10 Hz). */
+  coopPresence(dt: number): void {
+    const net = this.net;
+    if (!net || !this.home || this.location !== 'home' || !net.state.lobby) return;
+    this.presenceT -= dt;
+    if (this.presenceT > 0) return;
+    this.presenceT = 0.1;
+    const p = this.home.player.position;
+    net.send({ t: 'presence', p: [Math.round(p.x * 100) / 100, Math.round(p.y * 100) / 100, Math.round(p.z * 100) / 100], yaw: Math.round(this.home.player.yaw * 1000) / 1000 });
+    const host = net.state.lobby.hostId === net.state.playerId;
+    this.home.setPresence(host || this.visiting ? net.state.presence : []);
+  }
+
   private wireNet(net: NetClient): void {
     net.handlers = {
       welcome: (m) => {
@@ -467,6 +503,7 @@ export class Flow {
       // Station relocations rebuild the HQ shell; construction mode resumes where it was.
       rebuild: () => setTimeout(() => this.home && !this.busy && this.rebuildHomeKeepScreen(), 0),
       tutorial: this.tutorialHost(),
+      hostBase: () => (this.visiting ? (this.net?.state.hostHq?.base as SaveData['base']) ?? null : null),
     });
     if (this.loopStopped) this.home.scene.useConstantAnimationDeltaTime = true;
   }

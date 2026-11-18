@@ -289,52 +289,46 @@ const cell = (i, j) => [2 + 5 * i + 2.5, -2.5 + 5 * j + 2.5];
     for (let i = 0; i < 6; i++) await tick(0.3);
     const towers = await Promise.all([A, B].map((pg) => ev(pg, () => window.__rift.game.turrets.turrets.length)));
     check('X3 a tower built by one player appears for every player', valid && towers[0] === 1 && towers[1] === 1, JSON.stringify({ valid, towers }));
-    // Combat: B aims at the nearest enemy and fires its real weapon.
+    // Combat: wait until an enemy is inside the arena with a clear line from B, then B aims and fires its real weapon.
     await ev(A, () => window.__rift.game.startWave());
-    for (let i = 0; i < 16; i++) await tick(0.5);
+    for (let i = 0; i < 60; i++) {
+      await tick(0.5);
+      const close = await ev(B, () => { const g = window.__rift.game; const eye = g.player.eye; return g.enemies.active.some((e) => e.alive && e.center().subtract(eye).length() < 34); });
+      if (close) break;
+    }
     const fired = await ev(B, async () => {
       const R = window.__rift;
       const g = R.game;
-      let shots = 0;
       for (let k = 0; k < 40; k++) {
-        const e = g.enemies.active.filter((x) => x.alive).sort((a, b) => a.remaining - b.remaining)[0];
-        if (!e) { R.advance(0.25); continue; }
         const eye = g.player.eye;
+        const e = g.enemies.active.filter((x) => x.alive).sort((a, b) => a.center().subtract(eye).length() - b.center().subtract(eye).length())[0];
+        if (!e) { R.advance(0.25); await new Promise((r) => setTimeout(r, 60)); continue; }
         const c = e.center();
         R.look(Math.atan2(c.x - eye.x, c.z - eye.z), -Math.atan2(c.y - eye.y, Math.hypot(c.x - eye.x, c.z - eye.z)));
         g.input.simulateMouse(0, true);
         R.advance(0.25);
-        shots = g.weapon.shotsFired;
         await new Promise((r) => setTimeout(r, 60));
       }
       g.input.simulateMouse(0, false);
-      return { shots, kills: g.cfg.run.kills, rejected: g.netStats.rejected };
+      return { shots: g.weapon.shotsFired, kills: g.cfg.run.kills, rejected: g.netStats.rejected };
     });
     for (let i = 0; i < 4; i++) await tick();
     const kills = await ev(A, () => window.__rift.game.cfg.run.kills);
     check('X4 a client\'s real weapon fire is validated and kills authoritative enemies', fired.shots > 5 && kills > 0, JSON.stringify({ ...fired, teamKills: kills }));
     await shot(A, 'X-coop');
-    // Reach the first checkpoint quickly (test server) and vote home through the UI.
-    for (let w = 0; w < 6; w++) {
+    // Reach the first checkpoint quickly (test server): pick team upgrades (bots or browser chooser), start, clear.
+    const pickOffer = async () => {
       const snap = bots[0].snap;
-      if (snap.of) {
-        const chooser = snap.of[1];
-        const bt = bots.find((x) => x.welcome.playerId === chooser);
-        if (bt) await bt.act({ a: 'upgrade', id: snap.of[0][0] });
-        else for (const pg of [A, B]) await ev(pg, () => { const g = window.__rift.game; if (g.offer && g.offerChooser === g.you) g.chooseUpgrade(g.offer[0].id); });
-      }
-      if (snap.cp[2]) break;
-      if (snap.w[1] === 'prep') await bots[0].act({ a: 'startWave' });
-      await bots[0].act({ a: 'test', op: 'clear' });
-      for (let i = 0; i < 4; i++) await tick(0.3);
-    }
-    for (let i = 0; i < 40 && !bots[0].snap.cp[2]; i++) {
+      if (!snap.of) return;
+      const bt = bots.find((x) => x.welcome.playerId === snap.of[1]);
+      if (bt) await bt.act({ a: 'upgrade', id: snap.of[0][0] }).catch(() => null);
+      else for (const pg of [A, B]) await ev(pg, () => { const g = window.__rift.game; if (g.offer && g.offerChooser === g.you) g.chooseUpgrade(g.offer[0].id); });
+    };
+    for (let guard = 0; guard < 60 && !(bots[0].snap.cp[2]); guard++) {
+      await pickOffer();
       const snap = bots[0].snap;
-      if (snap.of) {
-        const bt = bots.find((x) => x.welcome.playerId === snap.of[1]);
-        if (bt) await bt.act({ a: 'upgrade', id: snap.of[0][0] });
-        else for (const pg of [A, B]) await ev(pg, () => { const g = window.__rift.game; if (g.offer && g.offerChooser === g.you) g.chooseUpgrade(g.offer[0].id); });
-      }
+      if (snap.w[1] === 'prep' && !snap.of) await bots[0].act({ a: 'startWave' }).catch(() => null);
+      else if (snap.w[1] === 'combat') await bots[0].act({ a: 'test', op: 'clear' }).catch(() => null);
       await tick(0.3);
     }
     const banks = await Promise.all([A, B].map((pg) => ev(pg, () => window.__rift.game.cfg.run.secured.salvage)));
