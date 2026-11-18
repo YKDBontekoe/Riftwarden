@@ -36,6 +36,12 @@ src/enemies/jammerCrawlerBehaviors.ts M7: Jammer Drone, Siege Crawler behaviours
 src/enemies/coreBehaviors.ts Walker / Bulwark / Rush Drone as Behavior plug-ins (CORE_BEHAVIORS); EnemyManager has one dispatch path
 src/arena/DevTools.ts      dev lab actions behind `game.dev` (narrow DevHost interface, no Game dependency)
 src/arena/shadows.ts       createSunShadows(): cascaded / single sun shadow generator
+src/loot/roll.ts           rollLoot(): one pure roll+generate for run, team and per-player streams (Game.rollFrom, ServerGame.rollFor)   [pure]
+src/towers/refit.ts        planRefit / planBuildConfig: tower refit + build-template rules; Game applies the plan (spend, model, fx)      [pure]
+src/combat/blast.ts        planBlast(): hostile area-blast rules (falloff, cover via injected clearShot, tower suppression)              [pure]
+src/ui/hudModel.ts         hintFor / lootTargetInfo / runHud: HUD view-model pieces from plain data                                       [pure]
+src/ui/hud/                Hud.tsx parts: widgets (SegBar, Key, Num, fmtClock), Radar, Feedback (crosshair, hitmarker, numbers, bars), Panels
+src/net/events.ts          ReplicatedEvent union + parseEvent (structural validation); ClientGame.applyEvent switches on it exhaustively
 src/loot/signatures.ts     M7: legendary/exotic signature effects                                          [pure]
 src/visuals/droneModel.ts  M7: warden drone rig for teammates (slot colours)
 src/ui/Coop.tsx, TeamHud.tsx, Construction.tsx, SettingsPanel.tsx, TutorialCard.tsx   M7 UI
@@ -154,16 +160,18 @@ scripts/e2e-m6.cjs         M6 browser acceptance suite (A-L: plans, enemies, eli
 - **Extract by narrow interface, not by passing `Game`**: new arena systems take a small host interface (see `DevTools`/`DevHost`) so they are testable and do not grow the god object. `Game.ts` is still the biggest hotspot (see "Refactoring backlog").
 - **Behaviours**: every enemy archetype is a `Behavior` registered by `Game` (`CORE_BEHAVIORS`, `M6_BEHAVIORS`, ...). `EnemyManager` is pool + routing + damage resolution only, and must not import a behaviour module (cycle).
 - **Replicated presentation**: add a call to the lists in `net/replicated.ts` (compile-checked against the real classes) instead of new string literals on either side.
+- **Rules before effects**: decision logic (what is rolled, what a refit costs, who a blast hits, which hint shows) lives in pure functions with injected randomness/ids/line-of-sight; `Game` only applies the result. New logic of that kind goes in a pure module with an equivalence/property test, not into `Game`.
+- **Typed wire events**: every server-emitted tuple tag is in `net/events.ts` and handled in `ClientGame.applyEvent`; `tests/net-events.test.ts` greps the emitters and the handler so neither side can drift, and the e2e asserts the client rejected nothing.
 - **No milestone names in APIs**: name by intent (`nextTowerCost`, `shaderWarmup`, `towerHud`). The HUD snapshot keys `m5`/`m6` are legacy store shape.
 - **Architecture tests** (`tests/architecture.test.ts`) enforce the boundaries above (acyclic `progression/save`, no behaviour imports in `EnemyManager`, no `Game` value import in `src/arena`, pure modules free of Babylon values); `tests/save-surface.test.ts` pins the save barrel's exports. Extend them when adding a boundary.
 - **e2e scripts import `scripts/lib/harness.cjs`**; do not copy launch/boot helpers again. Restart `vite` if you delete/rename files while it runs (it caches module resolution and the page then never boots).
 
 ## Refactoring backlog (not done yet)
 
-- `Game.ts` (~2100 lines): loot (rollItems..collectPickup), towers (modifyTower, tryPlace, updateInspect), upgrade flow, hostile hooks (hurtPlayer, hostileBlast, ventTick, summon), HUD publishing (`publishHud`/`snapshot`, reads ~40 members, many `protected`) and the constructor's scene setup are still inside. ServerGame/ClientGame override many of these, so extract them as systems that the net subclasses replace (`ServerLootSystem`, ...) rather than overriding Game methods.
-- Presentation is still captured by wrapping `fx/wfx/tele/ordnance/enemies` at runtime (`capturePresentation`); the target is a `PresentationSink` port that Game systems call explicitly, plus a typed discriminated union for event tuples (`ClientGame.applyEvent` still switches on string tags).
-- UI: `Hud.tsx` (815 lines), `Terminals.tsx`, `items.tsx` should be split per panel; the run-phase booleans on Game (`checkpointOpen`, `upgradeDue`, `screen`) want a small state machine.
-- Browser co-op section X of `e2e-construction-coop.cjs` needs a test server (`RIFT_TEST=1 RIFT_PORT=8787 npx tsx server/main.ts`) and runs both clients with the render loop stopped: two live software-GL render loops starve Playwright's actionability checks and clicks time out. It passes (12/12) and is the real test of the client replay path, along with `e2e-coop-protocol.mjs`.
+- `Game.ts` (~2000 lines) is still the largest hotspot. Done so far: dev tools, shadows, loot rolling, tower refit rules, blast rules, HUD hint/loot/run pieces. Still inside: loot placement/pickup (spawnPickup, groundPoint, collectPickup, updateLootTarget), tower input (`updateInspect`, `towerKeys`, `tryPlace`), the upgrade flow, summon/ordnance impact, the rest of `publishHud`/`snapshot` (reads many `protected` members) and the constructor's scene setup. ServerGame/ClientGame override loot/tower methods, so extract those as systems that the net subclasses inject a strategy into (per-player placement, remote collect) rather than overriding Game methods.
+- Presentation is still captured by wrapping `fx/wfx/tele/ordnance/enemies` at runtime (`capturePresentation`). The next step is an observer/sink on `Telegraphs` and `Ordnance` (7 methods, constructor-injected) before touching `fx`/`wfx`, which have hundreds of call sites.
+- UI: `Terminals.tsx` (642) and `items.tsx` (593) could be split per panel; the run-phase booleans on Game (`checkpointOpen`, `upgradeDue`, `screen`) want a small state machine with a transition-table test.
+- Browser co-op section X of `e2e-construction-coop.cjs` needs a test server (`RIFT_TEST=1 RIFT_PORT=8787 npx tsx server/main.ts`) and runs both clients with the render loop stopped: two live software-GL render loops starve Playwright's actionability checks and clicks time out. It passes (13/13, including "no replicated event rejected") and is the real test of the client replay path, along with `e2e-coop-protocol.mjs`.
 
 ## Key design decisions
 
