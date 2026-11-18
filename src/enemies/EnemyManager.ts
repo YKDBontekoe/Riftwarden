@@ -216,6 +216,8 @@ const BLAST: Partial<Record<EnemyKind, [number, number, number]>> = {
   artillery: [1.4, 14, 0.85],
   engineer: [1.2, 12, 1.1],
   courier: [2.4, 26, 0.6],
+  jammer: [1.0, 10, 1.3],
+  crawler: [1.9, 20, 0.6],
 };
 
 export class EnemyManager {

@@ -235,7 +235,7 @@ export function WeaponBlock({ item, compact }: { item: ItemInstance; compact?: b
           {fam.label.toUpperCase()} · {MECH_LABEL[w.mechanism] ?? w.mechanism}
         </div>
         <div className="id-row">
-          <span>{w.family === 'beam' ? 'Damage / tick · ticks/s' : w.family === 'rail' && w.mechanism === 'charge' ? 'Damage (full charge) · cycle' : 'Damage / shot · fire rate'}</span>
+          <span>{w.mechanism === 'pulse' ? 'Damage / pulse (splash 60%) · pulses/s' : w.mechanism === 'scatter' ? 'Damage / pellet ×7 · shots/s' : w.family === 'beam' ? 'Damage / tick · ticks/s' : w.family === 'rail' && w.mechanism === 'charge' ? 'Damage (full charge) · cycle' : 'Damage / shot · fire rate'}</span>
           <b>
             {fmtNum(w.damage)} · {fmtNum(w.fireRate)}/s
           </b>

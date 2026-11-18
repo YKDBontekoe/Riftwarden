@@ -1,3 +1,4 @@
+import { SCATTER_PELLETS } from '../combat/Weapon';
 import { type Engine, Vector3 } from '@babylonjs/core';
 import { sfx } from '../audio/Sfx';
 import { mulberry32 } from '../combat/damage';
@@ -609,7 +610,7 @@ export class ServerGame extends Game {
           continue;
         }
         let amount = dmg;
-        if (def.family === 'beam') {
+        if (def.family === 'beam' && def.mechanism !== 'pulse') {
           // Server-side ramp: sustained contact on one target.
           if (a.beamTarget === e.id && this.clock - a.beamT < 0.25) a.beamT = this.clock;
           else {
@@ -622,6 +623,7 @@ export class ServerGame extends Game {
         }
         const before = this.director.dealt.player;
         this.damageEnemy('player', e, amount, point, h[1] === 1 && this.weakAt(e, point), undefined, def.family as WeaponFamily, o);
+        if (def.mechanism === 'pulse') this.pulseSplash(point, amount, e);
         a.damage += this.director.dealt.player - before;
         dmg *= 0.85;
         n++;
@@ -698,6 +700,7 @@ export class ServerGame extends Game {
         t.paid = cost;
         (t as Turret & { owner?: string }).owner = a.id;
         this.turretsBuilt++;
+        this.bumpStats();
         this.rec.push(['T+', t.id, cfg, arr(t.pos), Math.round(m.yaw * 1000) / 1000, a.id, a.name]);
         this.fx.burst('build', v.point.add(new Vector3(0, 0.5, 0)), 40);
         return null;
@@ -711,6 +714,7 @@ export class ServerGame extends Game {
         this.fx.burst('build', t.head, 30);
         this.fx.debrisBurst(t.head, 6, 4, 0.8);
         this.turrets.remove(t);
+        this.bumpStats();
         this.rec.push(['T-', t.id]);
         this.rec.push(['u', 'coresGained', refund], a.id);
         sfx.play('recycle');
@@ -883,8 +887,8 @@ export class ServerGame extends Game {
         a.lastPos.copyFrom(pl.position);
         this.rec.push(['mv', arr(pl.position)], a.id);
       }
-      const rate = a.weaponDef.mechanism === 'beam' ? 16 : a.weaponDef.fireRate * a.stats.fireRateMult * Math.max(1, Math.floor(a.stats.projectiles)) * (a.weaponDef.mechanism === 'burst' ? 1.6 : 1.25) + 0.5;
-      a.budget = Math.min(rate * 0.6 + 3, a.budget + rate * dt);
+      const rate = a.weaponDef.mechanism === 'beam' ? 16 : a.weaponDef.fireRate * a.stats.fireRateMult * Math.max(1, Math.floor(a.stats.projectiles)) * (a.weaponDef.mechanism === 'scatter' ? SCATTER_PELLETS + 2 : 1) * (a.weaponDef.mechanism === 'burst' ? 1.6 : 1.25) + 0.5;
+      a.budget = Math.min(rate * 0.6 + 3 + (a.weaponDef.mechanism === 'scatter' ? SCATTER_PELLETS * 2 : 0), a.budget + rate * dt);
     }
     // Offers / votes hold the preparation countdown (never the combat).
     if (this.offer && this.clock > this.offerDeadline) this.applyTeamUpgrade(this.offer[0].id, 'Auto-select');

@@ -58,6 +58,7 @@ import { ARENA, type ArenaLayout, type GateId } from '../world/layout';
 import { ENV_QUERY } from '../world/physicsGroups';
 import { type Impact, Ordnance, Telegraphs } from '../fx/Hostile';
 import { M6_BEHAVIORS } from '../enemies/behaviors';
+import { M7_BEHAVIORS } from '../enemies/behaviorsM7';
 import { BOSS_BEHAVIORS } from '../enemies/bosses';
 import { bossMults, type EvolutionId, SurvivalPlanner } from '../survival/plan';
 import { SurvivalRuntime } from '../survival/SurvivalRuntime';
@@ -79,6 +80,8 @@ const SUN = 2.65;
 const TMP2 = new Vector3();
 /** Arc Conductor reach (m): enemies on the lanes are spread a few metres apart. */
 export const ARC_RANGE = 12;
+/** M7: Pulse Capacitor splash radius (m). */
+export const PULSE_SPLASH = 3;
 
 /** Callbacks into the session flow (persistence and scene transitions live there). */
 export interface ArenaHooks {
@@ -314,7 +317,7 @@ export class Game {
       }
     }
     this.enemies = new EnemyManager(scene, this.kit, this.pal);
-    for (const [kind, b] of Object.entries({ ...M6_BEHAVIORS, ...BOSS_BEHAVIORS })) if (b) this.enemies.register(kind as EnemyKind, b as Behavior);
+    for (const [kind, b] of Object.entries({ ...M6_BEHAVIORS, ...M7_BEHAVIORS, ...BOSS_BEHAVIORS })) if (b) this.enemies.register(kind as EnemyKind, b as Behavior);
     this.tele = new Telegraphs(scene);
     this.ordnance = new Ordnance(scene, this.tele);
     this.dynamics = new ArenaDynamics(scene, this.pal, ARENA, {
@@ -924,6 +927,7 @@ export class Game {
     if (!this.wallet.spend(cost)) return this.towerFail(`Not enough cores (need ${cost})`);
     t.paid += cost;
     t.refit(cfg, level, this.turretCtx);
+    this.bumpStats();
     this.fx.burst('build', t.head, 24);
     this.fx.ring(new Vector3(t.pos.x, t.pos.y + 0.1, t.pos.z), 3, 0.4, new Color3(0.4, 1.8, 2.2), true);
     sfx.play('equip', { pitch: 1.1 });
@@ -1285,6 +1289,7 @@ export class Game {
     }
     this.turrets.add(c.point, this.player.yaw, this.turretCtx, this.buildConfig).paid = cost;
     this.turretsBuilt++;
+    this.bumpStats();
     this.fx.burst('build', c.point.add(new Vector3(0, 0.5, 0)), 40);
     // Rapid multi-placement while tactical mode is active.
     if (!this.tactical.active) this.setBuildMode(false);
@@ -1313,6 +1318,7 @@ export class Game {
         this.fx.burst('build', t.head, 30);
         this.fx.debrisBurst(t.head, 6, 4, 0.8);
         this.turrets.remove(t);
+        this.bumpStats();
         sfx.play('recycle');
         this.inspected = null;
         this.recycleT = 0;
@@ -1362,6 +1368,7 @@ export class Game {
       const point = h.pickedPoint!.clone();
       if (!first) first = { point, target: shielded ? 'shield' : 'enemy' };
       this.damageEnemy('player', e, dmg, point, weak, undefined, r.family);
+      if (this.weapon.def.mechanism === 'pulse') this.pulseSplash(point, dmg, e);
       if (struck.length > r.pierce) break;
       dmg *= 0.85;
     }
@@ -1405,6 +1412,15 @@ export class Game {
   protected beamFxT = 0;
   protected weaponFx: WeaponFxHooks = {
     shot: (family, from, out, power, speed) => {
+      if (power < 0) {
+        // M7 Pulse Capacitor: bright streak + detonation at the impact.
+        this.wfx.rail(from, out.point, 0.7);
+        if (out.target !== 'none') {
+          this.fx.explode(out.point, { scale: 0.45, debris: 1, color: this.weapon.rig.energyBase.scale(1.4) });
+          this.fx.ring(out.point, PULSE_SPLASH, 0.22, this.weapon.rig.energyBase.scale(0.8), false);
+        }
+        return;
+      }
       const impact = () => this.impactFx(family, out, power);
       if (family === 'plasma') {
         this.wfx.bolt(from, out.point, speed, 0.34, out.target === 'none' ? null : impact);
@@ -1469,6 +1485,11 @@ export class Game {
       if (!beam || kind === 'kill' || kind === 'crit') sfx.play(kind === 'kill' ? 'kill' : kind === 'crit' ? 'crit' : kind === 'shield' ? 'shieldHit' : 'hit');
       else sfx.play('hit', { volume: 0.35 });
     }
+  }
+
+  /** M7 Pulse Capacitor: every pulse detonates (60% damage in PULSE_SPLASH m). */
+  protected pulseSplash(point: Vector3, dmg: number, hit: Enemy | null): void {
+    this.director.blast(point, PULSE_SPLASH, dmg * 0.6, 'none', { kind: 'weapon', id: 'beam' }, this.director.bus.newChain(), { falloff: 0.4, exclude: hit, family: 'splash' });
   }
 
   /** Arc to the nearest other living enemy within ARC_RANGE of the struck one. */
@@ -1598,7 +1619,7 @@ export class Game {
    */
   protected warmShaders(): Promise<unknown> {
     // One of every rig (and all elite hardware) so every (shape, material) template exists, then compile them all.
-    this.enemies.prebuild(['walker', 'rusher', 'bulwark', 'enforcer', 'artillery', 'engineer', 'courier', 'colossus', 'overseer', 'pylon']);
+    this.enemies.prebuild(['walker', 'rusher', 'bulwark', 'enforcer', 'artillery', 'engineer', 'courier', 'colossus', 'overseer', 'pylon', 'jammer', 'crawler']);
     const jobs: Promise<unknown>[] = [this.tele.warm(), this.ordnance.warm(), this.kit.warmAll()];
     for (const m of this.scene.meshes) {
       if (m.isEnabled() || !m.material || !/^(dynPart|ventPlume|ventWarn|volatileCharge)/.test(m.name)) continue;
@@ -1719,6 +1740,8 @@ export class Game {
   protected static readonly INTEL: Record<string, string> = {
     enforcer: 'NEW THREAT · SHIELDED ENFORCER · frontal shield: flank it, hit the rear generator, or shock it',
     artillery: 'NEW THREAT · ARTILLERY DRONE · interrupt its charge with burst damage before the shell lands',
+    jammer: 'NEW THREAT · JAMMER DRONE · it locks onto towers and shuts them down: shoot its dish or shock it to break the beam',
+    crawler: 'NEW THREAT · SIEGE CRAWLER · armoured prow: hit the rear pods; it releases rush drones when damaged',
     engineer: 'NEW THREAT · SUPPORT ENGINEER · repairs and empowers allies: eliminate it first',
     overcharged: 'ELITE · OVERCHARGED · blue ring = discharge incoming: back off or freeze/shock it',
     armored: 'ELITE · ARMORED · plating absorbs body hits: aim for weakpoints',

@@ -123,7 +123,7 @@ export function chargeFactor(c: number): number {
 export function weaponSummary(w: WeaponDef, stats: CombatStats = BASE_STATS) {
   const heat = w.heatPerShot / stats.heatEfficiency;
   const rate = w.fireRate * stats.fireRateMult;
-  const proj = w.family === 'beam' ? 1 : Math.floor(stats.projectiles);
+  const proj = w.family === 'beam' ? 1 : w.mechanism === 'scatter' ? 7 + 2 * Math.max(0, Math.floor(stats.projectiles) - 1) : Math.floor(stats.projectiles);
   const dmg = w.damage * stats.weaponDamageMult;
   const critFactor = 1 + stats.critChance * (stats.critMultiplier - 1);
   const chargeTime = w.chargeTime / stats.chargeRateMult;
@@ -132,7 +132,8 @@ export function weaponSummary(w: WeaponDef, stats: CombatStats = BASE_STATS) {
   const rampTime = w.rampTime / stats.chargeRateMult;
   const rampAvg = w.mechanism === 'beam' ? (1 + w.rampMax) / 2 : 1;
   const perShot = dmg * proj;
-  const dps = (perShot / cycle) * critFactor * rampAvg;
+  // Pulse: every pulse also detonates (60% splash, counted once for a single target group of ~2).
+  const dps = (perShot / cycle) * critFactor * rampAvg * (w.mechanism === 'pulse' ? 1.6 : 1);
   return {
     damage: dmg,
     projectiles: proj,

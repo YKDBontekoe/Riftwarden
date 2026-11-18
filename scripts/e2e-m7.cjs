@@ -119,16 +119,16 @@ const cell = (i, j) => [2 + 5 * i + 2.5, -2.5 + 5 * j + 2.5];
       bm.setTool({ kind: 'place', piece: 'sofa' });
       bm.rotate(1); bm.rotate(1); bm.rotate(1);
       bm.setScale(1.1);
-      bm.clickAt(44.3, 0.1);
+      bm.clickAt(43.3, 0.1);
       const sofa = S().placeables[S().placeables.length - 1];
       const placed = S().placeables.length === n0 + 1 && sofa.type === 'sofa';
       // Free placement: arbitrary coordinates, rotation and scale kept.
-      const free = sofa.position[0] === 44.5 && sofa.position[2] === 0 && Math.abs(sofa.rotationY - Math.PI / 4) < 0.01 && sofa.scale === 1.1;
+      const free = sofa.position[0] === 43.5 && sofa.position[2] === 0 && Math.abs(sofa.rotationY - Math.PI / 4) < 0.01 && sofa.scale === 1.1;
       // Collision: a planter on top of the sofa is refused.
-      bm.setTool({ kind: 'place', piece: 'planter' }); bm.clickAt(44.5, 0.2);
+      bm.setTool({ kind: 'place', piece: 'planter' }); bm.clickAt(43.5, 0.2);
       const overlap = bm.hud.message;
       // Move it
-      bm.setTool({ kind: 'select' }); bm.clickAt(44.5, 0);
+      bm.setTool({ kind: 'select' }); bm.clickAt(43.5, 0);
       bm.startMove(); bm.clickAt(51.5, -1);
       const moved = S().placeables.find((q) => q.uid === sofa.uid).position;
       bm.undo();
@@ -153,7 +153,7 @@ const cell = (i, j) => [2 + 5 * i + 2.5, -2.5 + 5 * j + 2.5];
     });
     check('H1 furniture placed freely with rotation and scale', res.placed && res.free);
     check('H2 overlapping placement refused with a reason', /overlap/i.test(res.overlap), res.overlap);
-    check('H3 move, undo and redo restore exact positions', res.moved[0] === 51.5 && res.undone[0] === 44.5 && res.redone[0] === 51.5, JSON.stringify([res.moved, res.undone, res.redone]));
+    check('H3 move, undo and redo restore exact positions', res.moved[0] === 51.5 && res.undone[0] === 43.5 && res.redone[0] === 51.5, JSON.stringify([res.moved, res.undone, res.redone]));
     check('H4 remove refunds and undo re-places without duplicating resources', res.gone && res.back && res.cr[1] > res.cr[0] && res.cr[2] === res.cr[0], JSON.stringify(res.cr));
     check('H5 functional light with colour and intensity', res.lit.color === 'amber' && res.lit.intensity === 1.4 && res.lights >= 1, JSON.stringify(res.lit));
     // Light budget
@@ -229,7 +229,7 @@ const cell = (i, j) => [2 + 5 * i + 2.5, -2.5 + 5 * j + 2.5];
     check('J2 a real 10-wave run earns the milestone (banked, recorded)', cleared >= 10 && ms.includes('w10'), `cleared ${cleared}, milestones ${ms}`);
     const ok = await ev(p, () => window.__rift.profile.op('hqFloor', [11, 0, 'floor_lab']));
     check('J3 the Laboratory Floor blueprint is now unlocked and buildable', ok.ok, ok.reason);
-    const fab = await ev(p, () => { const r1 = window.__rift.profile.op('hqFabricate', ['machinery']); const r2 = window.__rift.profile.op('hqPlace', ['pl_mach_test', 'machinery', 52.5, 4.6, 0, 1, {}]); return [r1.ok, r2.ok, r2.reason, window.__rift.profile.save.base.owned.machinery]; });
+    const fab = await ev(p, () => { const r1 = window.__rift.profile.op('hqFabricate', ['machinery']); const r2 = window.__rift.profile.op('hqPlace', ['pl_mach_test', 'machinery', 49.5, -5, 0, 1, {}]); return [r1.ok, r2.ok, r2.reason, window.__rift.profile.save.base.owned.machinery]; });
     check('J4 fabricated construction piece placed (consumed from owned stock)', fab[0] && fab[1] && fab[3] === 0, JSON.stringify(fab));
     await reload(p);
     const persisted = await ev(p, () => { const s = window.__rift.profile.save; return [s.base.structure.floors['11,0'], s.base.placeables.some((q) => q.uid === 'pl_mach_test'), s.milestones.includes('w10')]; });

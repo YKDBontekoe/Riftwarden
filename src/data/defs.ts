@@ -2,7 +2,7 @@
 
 export type WeaponFamily = 'plasma' | 'rail' | 'beam';
 /** How the trigger turns into shots. Each family supports a fixed subset (see weapons/families.ts). */
-export type Mechanism = 'auto' | 'burst' | 'charge' | 'cycle' | 'beam';
+export type Mechanism = 'auto' | 'burst' | 'charge' | 'cycle' | 'beam' | 'scatter' | 'pulse';
 
 export interface WeaponDef {
   id: string;
@@ -108,7 +108,7 @@ export const BEAM_EMITTER: WeaponDef = {
   rampTime: 1.6,
 };
 
-export type EnemyKind = 'walker' | 'rusher' | 'bulwark' | 'enforcer' | 'artillery' | 'engineer' | 'courier' | 'colossus' | 'overseer' | 'pylon';
+export type EnemyKind = 'walker' | 'rusher' | 'bulwark' | 'enforcer' | 'artillery' | 'engineer' | 'courier' | 'colossus' | 'overseer' | 'pylon' | 'jammer' | 'crawler';
 /** Targeting role: reactor attackers march on the objective, hunters pressure the drone, support buffs allies. */
 export type EnemyRole = 'reactor' | 'hunter' | 'support' | 'ranged' | 'hvt' | 'boss';
 
@@ -273,6 +273,58 @@ export const ENEMIES: Record<EnemyKind, EnemyDef> = {
     topY: 4.8,
     statusResist: 1,
     credits: 4,
+  },
+  /** M7: electronic-warfare drone that hunts towers and jams them. Fragile; weak dish in front. */
+  jammer: {
+    kind: 'jammer',
+    name: 'Jammer Drone',
+    hp: 95,
+    shield: 30,
+    speed: 4.6,
+    radius: 0.9,
+    bodyY: 4.4,
+    bodyR: 0.95,
+    weakY: 4.75,
+    weakR: 0.36,
+    weakForward: 0.6,
+    reactorDamage: 6,
+    attackInterval: 1,
+    playerDamage: 0,
+    playerShotInterval: 0,
+    playerShotRange: 0,
+    reward: 14,
+    salvage: 5,
+    scale: 1,
+    role: 'support',
+    topY: 5.3,
+    statusResist: 1,
+    credits: 5,
+  },
+  /** M7: six-legged siege breacher with a frontal prow, rear carrier pods and a reactor drill. */
+  crawler: {
+    kind: 'crawler',
+    name: 'Siege Crawler',
+    hp: 820,
+    shield: 0,
+    speed: 1.7,
+    radius: 1.7,
+    bodyY: 1.35,
+    bodyR: 1.45,
+    weakY: 1.9,
+    weakR: 0.55,
+    weakForward: -1.5,
+    reactorDamage: 46,
+    attackInterval: 2.4,
+    playerDamage: 0,
+    playerShotInterval: 0,
+    playerShotRange: 0,
+    reward: 30,
+    salvage: 12,
+    scale: 1,
+    role: 'reactor',
+    topY: 2.9,
+    statusResist: 0.9,
+    credits: 9,
   },
   /** Support unit: repairs, restores shields and empowers allies from behind the front line. */
   engineer: {
