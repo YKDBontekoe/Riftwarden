@@ -26,6 +26,7 @@ import type { WeaponFamily } from '../data/defs';
 import { WeaponFx } from '../fx/WeaponFx';
 import { ECONOMY } from '../data/defs';
 import { DevTools } from '../arena/DevTools';
+import { planBlast } from '../combat/blast';
 import { hintFor, lootTargetInfo, runHud } from '../ui/hudModel';
 import { planBuildConfig, planRefit } from '../towers/refit';
 import { rollLoot } from '../loot/roll';
@@ -1620,24 +1621,20 @@ export class Game {
    * `enemies` > 0 also damages machines (volatile chains, grid strikes) through the shared pipeline.
    */
   hostileBlast(center: Vector3, radius: number, o: { player: number; reactor?: number; disable?: number; enemies?: number; owner?: Enemy | null; color?: 'orange' | 'blue' | 'red' | 'violet'; shock?: boolean }): void {
-    for (const pl of this.targets()) {
-      if (!pl.alive || !(o.player > 0)) continue;
-      const pp = pl.position;
-      const d = Math.hypot(pp.x - center.x, pp.z - center.z);
-      const dy = pp.y - center.y;
-      if (d < radius && dy < 3.2) {
-        const lift = TMP.copyFrom(center);
-        lift.y += 0.6;
-        if (this.los(lift, pl.eye)) this.hurtPlayer(o.player * (1 - 0.45 * (d / radius)), center, pl);
-      }
-    }
-    const R = ARENA.reactor;
-    if (o.reactor && o.reactor > 0 && Math.hypot(center.x - R.x, center.z - R.z) < radius + R.radius) this.damageReactor(o.reactor, center);
-    if (o.disable && o.disable > 0) {
-      for (const t of this.turrets.turrets) if ((t.pos.x - center.x) ** 2 + (t.pos.z - center.z) ** 2 < radius * radius) t.disable(o.disable);
-    }
-    if (o.enemies && o.enemies > 0) {
-      this.director.blast(center, radius, o.enemies, 'none', { kind: 'effect', id: 'hazard' }, this.director.bus.newChain(), { falloff: 0.4, exclude: o.owner ?? null, shock: o.shock });
+    const drones = this.targets();
+    const lift = TMP.copyFrom(center);
+    lift.y += 0.6;
+    const plan = planBlast(center, radius, o, {
+      drones: drones.map((d) => ({ alive: d.alive, pos: d.position })),
+      clearShot: (i) => this.los(lift, drones[i].eye),
+      towers: this.turrets.turrets,
+      reactor: ARENA.reactor,
+    });
+    for (const h of plan.droneHits) this.hurtPlayer(h.amount, center, drones[h.index]);
+    if (plan.reactorDamage > 0) this.damageReactor(plan.reactorDamage, center);
+    for (const i of plan.disableTowers) this.turrets.turrets[i].disable(plan.disableSeconds);
+    if (plan.machineDamage > 0) {
+      this.director.blast(center, radius, plan.machineDamage, 'none', { kind: 'effect', id: 'hazard' }, this.director.bus.newChain(), { falloff: 0.4, exclude: o.owner ?? null, shock: o.shock });
     }
   }
 
