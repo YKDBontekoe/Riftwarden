@@ -328,7 +328,8 @@ const cell = (i, j) => [2 + 5 * i + 2.5, -2.5 + 5 * j + 2.5];
       await pickOffer();
       const snap = bots[0].snap;
       if (snap.w[1] === 'prep' && !snap.of) await bots[0].act({ a: 'startWave' }).catch(() => null);
-      else if (snap.w[1] === 'combat') await bots[0].act({ a: 'test', op: 'clear' }).catch(() => null);
+      else if (snap.w[1] === 'combat') await bots[0].act({ a: 'test', op: 'clear' }).then((r) => { if (!r.ok) console.log('  clear refused', r.reason); }).catch((e) => console.log('  clear failed', e.message));
+      if (guard % 4 === 0) console.log('  wave', JSON.stringify(snap.w), 'offer', !!snap.of, 'cp', JSON.stringify(snap.cp));
       await tick(0.3);
     }
     const banks = await Promise.all([A, B].map((pg) => ev(pg, () => window.__rift.game.cfg.run.secured.salvage)));
@@ -342,6 +343,27 @@ const cell = (i, j) => [2 + 5 * i + 2.5, -2.5 + 5 * j + 2.5];
     check('X6 unanimous UI vote returns both clients home with banked rewards in their online profiles', after.every((x) => x.salvage > 0 && !x.run && x.screen === 'summary'), JSON.stringify(after));
     botsAlive = false;
     for (const bt of bots) bt.close();
+    // Visit the host's HQ: B sees A's layout read-only, A's construction appears live, both see each other.
+    await waitFor(B, () => window.__rift.flow.net.state.lobby?.state === 'lobby', null, 30000);
+    for (const pg of [A, B]) await ev(pg, () => { window.__rift.flow.setScreen?.('playing'); });
+    await ev(B, () => window.__rift.flow.visitHostHq(true));
+    await waitFor(B, () => window.__rift.flow.visiting && window.__rift.state().location === 'home' && !window.__rift.state().busy, null, 60000);
+    const before = await ev(B, () => ({ ro: window.__rift.home.readOnly, n: window.__rift.home.layer.count }));
+    const built = await ev(A, () => { const r = window.__rift.profile.op('hqFloor', [8, 0, 'floor_basic']); return [r.ok, r.reason]; });
+    await waitFor(B, (n) => window.__rift.home.layer.count > n, before.n, 20000).catch(() => null);
+    const live = await ev(B, () => window.__rift.home.layer.count);
+    check('X8 a guest visits the host HQ read-only and sees the host build live', before.ro && built[0] && live > before.n, JSON.stringify({ before, built, live }));
+    for (let i = 0; i < 12; i++) {
+      for (const pg of [A, B]) await ev(pg, () => window.__rift.flow.coopPresence(1));
+      await sleep(120);
+    }
+    const pres = await Promise.all([A, B].map((pg) => ev(pg, () => window.__rift.home.presenceCount)));
+    const refused = await ev(B, () => { window.__rift.home.enterConstruction(); return window.__rift.state().screen !== 'construct'; });
+    check('X9 host and guest see each other in the host HQ; the guest cannot construct', pres[0] === 1 && pres[1] === 1 && refused, JSON.stringify({ pres, refused }));
+    await ev(B, () => window.__rift.flow.visitHostHq(false));
+    await waitFor(B, () => !window.__rift.flow.visiting && !window.__rift.state().busy, null, 60000);
+    const own = await ev(B, () => ({ ro: window.__rift.home.readOnly, mine: Object.keys(window.__rift.profile.save.base.structure.floors).length }));
+    check('X10 the guest returns to their own HQ (own layout, writable)', !own.ro, JSON.stringify(own));
     console.log([...A.errs, ...B.errs].filter((e) => e.startsWith('PAGEERR')).slice(0, 5).join('\n'));
     check('X7 no page errors on co-op clients', ![...A.errs, ...B.errs].some((e) => e.startsWith('PAGEERR')));
   }

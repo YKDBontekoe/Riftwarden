@@ -61,6 +61,7 @@ export interface NetHandlers {
   events?(e: unknown[][]): void;
   runEnd?(result: unknown, save: unknown): void;
   lost?(): void;
+  hostHq?(): void;
   error?(code: string, msg: string): void;
 }
 
@@ -186,6 +187,7 @@ export class NetClient {
         return;
       case 'hostHq':
         this.store.set({ hostHq: { owner: m.owner, base: m.base } });
+        this.handlers.hostHq?.();
         return;
       case 'runStart':
         this.handlers.runStart?.(m.run);

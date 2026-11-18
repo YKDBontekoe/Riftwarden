@@ -90,6 +90,7 @@ export class Flow {
     const net = this.net;
     if (!net || this.busy || this.location !== 'home') return;
     if (on) {
+      net.store.set({ hostHq: null });
       net.send({ t: 'visit', on: true });
       for (let i = 0; i < 40 && !net.state.hostHq; i++) await new Promise((r) => setTimeout(r, 50));
       if (!net.state.hostHq) return;
@@ -351,13 +352,20 @@ export class Flow {
   /** Lobby presence: publish our HQ position, show the others who share this HQ (10 Hz). */
   coopPresence(dt: number): void {
     const net = this.net;
-    if (!net || !this.home || this.location !== 'home' || !net.state.lobby) return;
+    if (!net || !this.home || this.location !== 'home' || this.busy) return;
+    // The session ended or we became the host: go back to our own HQ.
+    const lobby = net.state.lobby;
+    if (this.visiting && (!lobby || lobby.hostId === net.state.playerId || net.state.status !== 'online')) {
+      void this.visitHostHq(false);
+      return;
+    }
+    if (!lobby) return;
     this.presenceT -= dt;
     if (this.presenceT > 0) return;
     this.presenceT = 0.1;
     const p = this.home.player.position;
     net.send({ t: 'presence', p: [Math.round(p.x * 100) / 100, Math.round(p.y * 100) / 100, Math.round(p.z * 100) / 100], yaw: Math.round(this.home.player.yaw * 1000) / 1000 });
-    const host = net.state.lobby.hostId === net.state.playerId;
+    const host = lobby.hostId === net.state.playerId;
     this.home.setPresence(host || this.visiting ? net.state.presence : []);
   }
 
@@ -371,6 +379,9 @@ export class Flow {
         if (!m.ok) uiEvents.emit('banner', { title: 'SERVER REFUSED', sub: m.reason ?? 'Operation rejected', tone: 'red' });
       },
       runStart: (run) => void this.coopRunStart(run),
+      hostHq: () => {
+        if (this.visiting && this.home && this.location === 'home' && !this.busy) this.home.applyHostBase();
+      },
       snap: (s) => {
         if (this.arena instanceof ClientGame && !this.busy) this.arena.onSnapshot(s);
         else if (this.coopRun) this.netQueue.snaps = [s];
@@ -431,6 +442,7 @@ export class Flow {
       return;
     }
     this.coopRun = run;
+    this.visiting = false;
     this.netQueue = { snaps: [], events: [] };
     const tier = getTier(run.tier);
     void this.input.requestLock();
