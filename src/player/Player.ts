@@ -94,6 +94,10 @@ export class Player {
   /** Camera shake energy (0..1); shake amplitude is trauma squared. */
   trauma = 0;
   sensitivity = 1;
+  /** M7 accessibility: no FOV kicks, roll or camera shake. */
+  reduceMotion = false;
+  /** M7: camera shake multiplier (settings). */
+  shakeScale = 1;
 
   hp: number = ECONOMY.playerMaxHp;
   maxHp: number = ECONOMY.playerMaxHp;
@@ -228,8 +232,60 @@ export class Player {
     }
   }
 
+  /**
+   * M7: health regeneration, shield recharge and respawn. Runs inside `update` for a local drone;
+   * co-op replicas set `vitalsLocal = false` (the server owns vitals) and the server ticks remote bodies.
+   */
+  vitalsLocal = true;
+  tickVitals(dt: number): void {
+    this.sinceHurt += dt;
+    this.hurtFlash = Math.max(0, this.hurtFlash - dt * 1.6);
+    if (!this.alive) {
+      this.respawnT -= dt;
+      if (this.respawnT <= 0) {
+        this.reset();
+        this.respawns++;
+      }
+    } else if (this.sinceHurt > 4 && this.hp < this.maxHp) {
+      this.hp = Math.min(this.maxHp, this.hp + 18 * dt);
+    }
+    this.sinceShieldHit += dt;
+    if (this.alive && this.shield < this.maxShield && this.sinceShieldHit >= this.shieldDelay) {
+      this.shield = Math.min(this.maxShield, this.shield + this.shieldRegen * dt);
+    }
+  }
+  /** Number of respawns (co-op: replicas reset their drone when this changes). */
+  respawns = 0;
+
+  /** M7 replicas: adopt server vitals. */
+  setVitals(hp: number, maxHp: number, shield: number, maxShield: number, alive: boolean, respawnT: number): void {
+    this.hp = hp;
+    this.maxHp = maxHp;
+    this.shield = shield;
+    this.maxShield = maxShield;
+    if (this.alive && !alive) {
+      this.hv.setAll(0);
+      this.dashT = 0;
+    }
+    this.alive = alive;
+    this.respawnT = respawnT;
+  }
+
+  /** M7 replicas: feedback for a hit the server applied. */
+  feelHit(amount: number, toHull: boolean, from: Vector3 | null): void {
+    this.onHurt?.(amount, from);
+    if (!toHull) {
+      sfx.play('shieldHit', { volume: 0.7 });
+      return;
+    }
+    this.sinceHurt = 0;
+    this.hurtFlash = Math.min(1, this.hurtFlash + 0.35 + amount / 40);
+    sfx.play('playerHurt', { volume: Math.min(1, 0.5 + amount / 30) });
+  }
+
   addTrauma(amount: number): void {
-    this.trauma = Math.min(1, this.trauma + amount);
+    if (this.reduceMotion) return;
+    this.trauma = Math.min(1, this.trauma + amount * this.shakeScale);
   }
 
   knockback(dir: Vector3, strength: number): void {
@@ -255,20 +311,8 @@ export class Player {
     this.recoil *= Math.exp(-dt * 14);
 
     // --- Health / respawn ---
-    this.sinceHurt += dt;
-    this.hurtFlash = Math.max(0, this.hurtFlash - dt * 1.6);
-    if (!this.alive) {
-      this.respawnT -= dt;
-      if (this.respawnT <= 0) {
-        this.reset();
-      }
-    } else if (this.sinceHurt > 4 && this.hp < this.maxHp) {
-      this.hp = Math.min(this.maxHp, this.hp + 18 * dt);
-    }
-    this.sinceShieldHit += dt;
-    if (this.alive && this.shield < this.maxShield && this.sinceShieldHit >= this.shieldDelay) {
-      this.shield = Math.min(this.maxShield, this.shield + this.shieldRegen * dt);
-    }
+    if (this.vitalsLocal) this.tickVitals(dt);
+    else this.hurtFlash = Math.max(0, this.hurtFlash - dt * 1.6);
 
     // --- Movement intent ---
     let fx = 0;
@@ -410,6 +454,10 @@ export class Player {
     const sr = sh * 0.05 * Math.sin(t * 27.7 + 0.7);
     this.camera.rotation.set(this.pitch - this.recoil + sp, this.yaw + sy, (this.alive ? this.roll : 0.25) + sr);
     this.fovKick *= Math.exp(-dt * 8);
+    if (this.reduceMotion) {
+      this.fovKick = 0;
+      this.roll = 0;
+    }
     const sprintFov = this.sprinting ? this.move.sprintFov : 0;
     this.camera.fov += (this.baseFov + this.fovKick + sprintFov - this.camera.fov) * (1 - Math.exp(-dt * 14));
   }

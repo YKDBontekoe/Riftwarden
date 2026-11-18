@@ -67,6 +67,8 @@ class Spring {
 
 export class WeaponAnimator {
   readonly pose: Pose = { x: 0, y: 0, z: 0, pitch: 0, yaw: 0, roll: 0 };
+  /** M7 accessibility: damp sway and bob to a fraction. */
+  reduceMotion = false;
   private t = 0;
   private back: Spring;
   private pitch: Spring;
@@ -135,7 +137,7 @@ export class WeaponAnimator {
     this.swayX += (sx - this.swayX) * kSway;
     this.swayY += (sy - this.swayY) * kSway;
     const moving = i.grounded && !i.dashing ? Math.min(1, i.speed / 15) : 0;
-    this.bobAmt += (moving - this.bobAmt) * (1 - Math.exp(-dt * 10));
+    this.bobAmt += ((this.reduceMotion ? moving * 0.25 : moving) - this.bobAmt) * (1 - Math.exp(-dt * 10));
     // A hover drone drifts gently. Sprinting or dashing should not speed up a footstep cycle.
     this.bobPhase += dt * (3.5 + 4 * this.bobAmt);
     this.sprint += ((i.sprinting ? 1 : 0) - this.sprint) * (1 - Math.exp(-dt * 9));

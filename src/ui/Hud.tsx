@@ -1,3 +1,5 @@
+import { TutorialCard } from './TutorialCard';
+import { TeamHud } from './TeamHud';
 import { RunBadges } from './Roguelite';
 import { useEffect, useRef, useState } from 'react';
 import type { Game } from '../core/Game';
@@ -33,6 +35,8 @@ export function Hud({ game }: { game: Game }) {
       <Respawn />
       <RunBadges />
       <Perf />
+      <TeamHud />
+      <TutorialCard />
     </div>
   );
 }
@@ -412,7 +416,7 @@ function Radar({ game }: { game: Game }) {
         const y = Y(e.pos.z);
         const boss = e.def.role === 'boss';
         const r = (boss ? 7 : e.def.radius > 1.1 ? 4 : e.kind === 'rusher' || e.kind === 'pylon' ? 2.2 : 3) * dpr;
-        ctx.fillStyle = boss ? '#ff2a2a' : e.def.role === 'hvt' ? '#ffd25a' : e.def.role === 'support' ? (e.kind === 'pylon' ? '#b48cff' : '#5effb0') : e.elite ? '#ffffff' : e.kind === 'rusher' ? '#ffcf4a' : e.kind === 'artillery' ? '#ff3a7a' : '#ff5a2a';
+        ctx.fillStyle = boss ? '#ff2a2a' : e.def.role === 'hvt' ? '#ffd25a' : e.def.role === 'support' ? (e.kind === 'pylon' ? '#b48cff' : '#5effb0') : e.elite ? '#ffffff' : e.kind === 'rusher' ? '#ffcf4a' : e.kind === 'artillery' ? '#ff3a7a' : e.kind === 'jammer' ? '#c38bff' : '#ff5a2a';
         ctx.globalAlpha = 0.25 + 0.25 * pulse;
         ctx.beginPath();
         ctx.arc(x, y, r * 2, 0, Math.PI * 2);

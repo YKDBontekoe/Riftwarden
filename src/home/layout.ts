@@ -53,13 +53,17 @@ export const HQ_PORTALS: readonly Portal[] = [
   { axis: 'x', c: -21, a: -2.5, b: 2.5, height: 4.2 },
 ];
 
+/** M7: expansion gateways (hangar west, transit east): real openings, closed by blast doors until a wing is built. */
+export const GATEWAY_PORTALS: readonly Portal[] = [
+  { axis: 'x', c: -33, a: -2, b: 2, height: 3.6 },
+  { axis: 'x', c: 37, a: -2, b: 2, height: 3.6 },
+];
+
 /** Observation window in the command deck's south wall. */
 export const HQ_WINDOW = { z: -11, x0: -7.5, x1: 7.5, y0: 1.3, y1: 5.6 };
 
 /** Sealed doors reserved for future facilities (visual only, solid wall behind). */
 export const HQ_SEALED_DOORS: readonly { axis: 'x' | 'z'; c: number; a: number; b: number; facing: 1 | -1; label: string }[] = [
-  { axis: 'x', c: -33, a: -2, b: 2, facing: 1, label: 'HANGAR' },
-  { axis: 'x', c: 37, a: -2, b: 2, facing: -1, label: 'TRANSIT' },
   { axis: 'z', c: -11, a: -10.4, b: -8.4, facing: 1, label: 'QUARTERS' },
 ];
 
@@ -79,10 +83,13 @@ export const HQ_STATIONS: readonly Station[] = [
   { id: 'merchant', title: 'EQUIPMENT EXCHANGE', action: 'Buy and sell equipment', area: 'MARKET CONCOURSE', pos: [30, 5.6], yaw: Math.PI, focus: [30, 1.3, 5.15], range: INTERACT_RANGE },
   { id: 'modules', title: 'MODULE BROKER', action: 'Upgrade modules and material exchange', area: 'MARKET CONCOURSE', pos: [30, -5.6], yaw: 0, focus: [30, 1.3, -5.15], range: INTERACT_RANGE },
   { id: 'salvage', title: 'RECLAMATION PRESS', action: 'Dismantle equipment into materials', area: 'RECLAMATION', pos: [-26.6, -3.6], yaw: Math.PI / 2, focus: [-26.15, 1.3, -3.6], range: INTERACT_RANGE },
+  // M7: construction
+  { id: 'architect', title: 'ARCHITECT CONSOLE', action: 'Build and customise the headquarters', area: 'COMMAND DECK', pos: [-7.6, -8.7], yaw: 0, focus: [-7.6, 1.3, -8.25], range: INTERACT_RANGE },
 ];
 
 /** Name of the area containing (x, z), for the location readout. */
 export function areaAt(x: number, z: number): string {
+  if (x > 37 || x < -33 || z > 21 || z < -11) return 'EXPANSION WING';
   if (x > 23) return 'MARKET CONCOURSE';
   if (x < -21) return 'RECLAMATION';
   if (x > 11) return z >= 0 ? 'STORAGE' : 'WORKSHOP';

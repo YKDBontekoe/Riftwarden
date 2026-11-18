@@ -1,3 +1,4 @@
+import { rollSignature } from './signatures';
 import { mulberry32 } from '../combat/damage';
 import { STAT_DEFS, type StatKey } from '../combat/stats';
 import { AFFIXES, type AffixDef, affixPool, MAX_TIER, type Scaling, TIER_MULT } from './affixes';
@@ -214,6 +215,7 @@ export function generateItem(spec: GenSpec): ItemInstance {
     gen: GENERATOR_VERSION,
   };
   item.name = nameItem(item, base, mulberry32((spec.seed ^ 0x9e3779b9) >>> 0));
+  item.signature = rollSignature(item);
   return item;
 }
 

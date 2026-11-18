@@ -17,8 +17,14 @@ import { getTier, THREAT_TIERS } from '../progression/tiers';
 import { hudStore, type Location, uiEvents } from '../ui/store';
 import { Game } from './Game';
 import { SurvivalPlanner } from '../survival/plan';
+import { tutorialActive } from '../progression/tutorial';
 import { Input } from './Input';
-import { type Settings, saveSettings } from './settings';
+import { ClientGame } from '../net/ClientGame';
+import { NetClient } from '../net/NetClient';
+import type { RunStart } from '../net/protocol';
+import type { RunResult } from '../progression/run';
+import { keyRemap, type Settings, saveSettings } from './settings';
+import { setRarityPalette } from '../loot/rarity';
 
 /** A loaded location. Exactly one exists at a time. */
 interface World {
@@ -75,6 +81,36 @@ export class Flow {
   /** M6: development tools available (URL ?dev or ?test). Never shown in the ordinary player experience. */
   devTools = false;
   private renderQuality: Settings['quality'];
+  /** M7: walking the lobby host's headquarters (co-op visit). */
+  visiting = false;
+  private presenceT = 0;
+
+  /** Visit (or leave) the lobby host's HQ. Guests see the host's layout read-only and use their own terminals. */
+  async visitHostHq(on: boolean): Promise<void> {
+    const net = this.net;
+    if (!net || this.busy || this.location !== 'home') return;
+    if (on) {
+      net.store.set({ hostHq: null });
+      net.send({ t: 'visit', on: true });
+      for (let i = 0; i < 40 && !net.state.hostHq; i++) await new Promise((r) => setTimeout(r, 50));
+      if (!net.state.hostHq) return;
+    } else net.send({ t: 'visit', on: false });
+    this.visiting = on;
+    await this.transition(on ? 'VISITING HOST HQ' : 'RETURNING TO YOUR HQ', on ? 'Co-op lobby · read-only headquarters' : 'Own headquarters', () => {
+      this.buildHome(true);
+      this.location = 'home';
+      return this.home!.scene;
+    });
+    await this.home!.takeControl(false);
+  }
+
+  /** Automation: show onboarding even in ?test mode. */
+  forceTutorial = false;
+  /** M7 co-op session (null = single player). */
+  net: NetClient | null = null;
+  /** Co-op run in progress (server run id). */
+  coopRun: RunStart | null = null;
+  private netQueue: { snaps: Record<string, unknown>[]; events: unknown[][] } = { snaps: [], events: [] };
 
   constructor(
     readonly engine: Engine,
@@ -84,6 +120,7 @@ export class Flow {
   ) {
     this.renderQuality = settings.quality;
     this.input = new Input(canvas);
+    applyGlobalSettings(settings, this.input);
     this.profile = new Profile();
   }
 
@@ -97,7 +134,7 @@ export class Flow {
     const pixels = Math.max(1, clientWidth * clientHeight);
     // Keep HiDPI output sharp while bounding the cost of the full-resolution G-buffer and HDR passes.
     const pixelBudget = cinematic ? 2560 * 1440 : 1920 * 1080;
-    const scale = Math.min(cinematic ? Math.min(window.devicePixelRatio || 1, 2) : 1, Math.sqrt(pixelBudget / pixels));
+    const scale = Math.min(cinematic ? Math.min(window.devicePixelRatio || 1, 2) : 1, Math.sqrt(pixelBudget / pixels)) * (this.settings.renderScale ?? 1);
     this.engine.setHardwareScalingLevel(1 / scale);
   }
 
@@ -123,6 +160,7 @@ export class Flow {
     const w = this.world;
     if (!w || this.building) return;
     const dt = Math.min(this.engine.getDeltaTime() / 1000, 1 / 20);
+    this.coopPresence(dt);
     // While a new scene warms up behind the transit overlay it renders but does not simulate.
     if (!this.busy) w.step(dt, this.engine.getFps());
     w.scene.render();
@@ -130,9 +168,11 @@ export class Flow {
   }
 
   applySettings(s: Settings): void {
-    const qualityChanged = s.quality !== this.settings.quality;
+    const qualityChanged = s.quality !== this.settings.quality || s.shadows !== this.settings.shadows;
     this.settings = s;
     saveSettings(s);
+    applyGlobalSettings(s, this.input);
+    this.resize();
     this.world?.applySettings(s);
     // Graphics quality is applied when a scene is built: rebuild the HQ right away.
     if (qualityChanged && this.home && !this.busy) {
@@ -152,7 +192,7 @@ export class Flow {
   }
 
   selectTier(tier: number): boolean {
-    return this.profile.mutate((d) => selectTier(d, tier));
+    return this.profile.op('selectTier', [tier]).ok;
   }
 
   // ------------------------------------------------------------------ runs
@@ -160,6 +200,8 @@ export class Flow {
   /** Start a fresh run on the selected tier. Callable from HQ or after a defeat. */
   async deploy(tierId = this.profile.save.threat.selected): Promise<boolean> {
     if (this.busy || (this.run && !this.run.ended)) return false;
+    // Online profiles deploy through the co-op lobby only (the server owns their progression).
+    if (this.profile.online) return false;
     const save = this.profile.save;
     if (tierId < 1 || (tierId > save.threat.unlocked && !this.devNext) || tierId > THREAT_TIERS.length) return false;
     if (deployBlocker(save)) return false;
@@ -187,6 +229,7 @@ export class Flow {
         seed: this.nextUpgradeSeed ?? undefined,
         towerTech: [...save.towers.unlocked],
         milestones: [...save.milestones],
+        tutorial: this.tutorialHost(),
         hooks: {
           // Reported as secured only once the write succeeded.
           // Development sessions (M6 dev tools used) never commit permanent rewards.
@@ -245,6 +288,11 @@ export class Flow {
 
   /** Pause-menu forfeit: unsecured rewards are lost, secured ones stay banked. */
   async abandonRun(): Promise<boolean> {
+    if (this.coopRun && this.net) {
+      // Leaving a co-op operation: the server records it (secured rewards stay) and the team continues.
+      this.net.send({ t: 'leave' });
+      return true;
+    }
     if (this.busy || !this.arena || !this.run || this.run.ended) return false;
     this.endRun('abandoned');
     await this.toHome('summary');
@@ -253,6 +301,7 @@ export class Flow {
 
   /** From the defeat screen. */
   async leaveArena(): Promise<boolean> {
+    if (this.coopRun) return false;
     if (this.busy || !this.arena || !this.run?.ended) return false;
     sfx.play('ui');
     void this.input.requestLock();
@@ -277,6 +326,176 @@ export class Flow {
     else await this.home!.takeControl(false);
   }
 
+  /** Onboarding persistence (the profile op validates and saves each completed step). */
+  private tutorialHost() {
+    return {
+      done: () => this.profile.save.tutorial.done,
+      active: () => (this.forceTutorial || (!this.skipUpgrades && !this.devTools)) && tutorialActive(this.profile.save),
+      mark: (id: string) => void this.profile.op('tutorialStep', [id]),
+      skip: () => void this.profile.op('tutorialSkip', []),
+    };
+  }
+
+  // ------------------------------------------------------------------ M7 co-op
+
+  /** Connect to the co-op server (identity is a local secret; the server stores only its hash). */
+  async coopConnect(name?: string, url?: string): Promise<boolean> {
+    if (!this.net) {
+      this.net = new NetClient(url);
+      this.wireNet(this.net);
+    } else if (url) this.net.url = url;
+    if (name) this.net.setName(name);
+    sfx.init();
+    return this.net.connect();
+  }
+
+  /** Lobby presence: publish our HQ position, show the others who share this HQ (10 Hz). */
+  coopPresence(dt: number): void {
+    const net = this.net;
+    if (!net || !this.home || this.location !== 'home' || this.busy) return;
+    // The session ended or we became the host: go back to our own HQ.
+    const lobby = net.state.lobby;
+    if (this.visiting && (!lobby || lobby.hostId === net.state.playerId || net.state.status !== 'online')) {
+      void this.visitHostHq(false);
+      return;
+    }
+    if (!lobby) return;
+    this.presenceT -= dt;
+    if (this.presenceT > 0) return;
+    this.presenceT = 0.1;
+    const p = this.home.player.position;
+    net.send({ t: 'presence', p: [Math.round(p.x * 100) / 100, Math.round(p.y * 100) / 100, Math.round(p.z * 100) / 100], yaw: Math.round(this.home.player.yaw * 1000) / 1000 });
+    const host = lobby.hostId === net.state.playerId;
+    this.home.setPresence(host || this.visiting ? net.state.presence : []);
+  }
+
+  private wireNet(net: NetClient): void {
+    net.handlers = {
+      welcome: (m) => {
+        if (m.hasProfile && m.profile) this.adoptOnline(m.profile);
+      },
+      profile: (save) => this.adoptOnline(save),
+      opResult: (m) => {
+        if (!m.ok) uiEvents.emit('banner', { title: 'SERVER REFUSED', sub: m.reason ?? 'Operation rejected', tone: 'red' });
+      },
+      runStart: (run) => void this.coopRunStart(run),
+      hostHq: () => {
+        if (this.visiting && this.home && this.location === 'home' && !this.busy) this.home.applyHostBase();
+      },
+      snap: (s) => {
+        if (this.arena instanceof ClientGame && !this.busy) this.arena.onSnapshot(s);
+        else if (this.coopRun) this.netQueue.snaps = [s];
+      },
+      events: (e) => {
+        if (this.arena instanceof ClientGame && !this.busy) this.arena.onEvents(e);
+        else if (this.coopRun) this.netQueue.events.push(...e);
+      },
+      runEnd: (result, save) => void this.coopRunEnd(result as RunResult, save),
+      lost: () => {
+        if (this.coopRun) uiEvents.emit('banner', { title: 'CONNECTION LOST', sub: 'Reconnecting… your run slot is held for two minutes', tone: 'orange' });
+      },
+      error: (code, msg) => {
+        if (code !== 'malformed') uiEvents.emit('alert', { text: msg.toUpperCase(), tone: 'orange' });
+      },
+    };
+  }
+
+  /** Mirror the server-owned profile (the single-player save is kept aside, untouched). */
+  private adoptOnline(save: unknown): void {
+    const first = !this.profile.online;
+    if (first) this.profile.attachRemote({ send: (name, args, tx) => this.net?.send({ t: 'op', name, args, tx }), label: this.net?.url ?? '' }, save);
+    else this.profile.adoptRemote(save);
+    if (first && this.home && !this.busy && this.location === 'home') this.rebuildHomeKeepScreen();
+  }
+
+  /** Create the online profile: import a copy of the local save, or start fresh. */
+  coopProfileInit(mode: 'import' | 'fresh'): void {
+    this.net?.send({ t: 'profileInit', mode, save: mode === 'import' ? JSON.parse(JSON.stringify(this.profile.localSave)) : undefined });
+  }
+
+  /** Disconnect and return to the single-player profile. */
+  coopDisconnect(): void {
+    if (this.coopRun) return;
+    this.net?.close();
+    if (this.profile.online) {
+      this.profile.detachRemote();
+      if (this.home && !this.busy) this.rebuildHomeKeepScreen();
+    }
+  }
+
+  private rebuildHomeKeepScreen(): void {
+    const screen = this.home!.screen;
+    const pos = this.home!.player.position.clone();
+    const yaw = this.home!.player.yaw;
+    this.buildHome();
+    const h = this.home!;
+    h.player.controller.setPosition(pos);
+    h.player.yaw = yaw;
+    if (screen === 'construct') h.enterConstruction();
+    else h.setScreen(screen);
+  }
+
+  private async coopRunStart(run: RunStart): Promise<void> {
+    // Rejoining the operation this client is still showing: keep the scene, resync from events.
+    if (run.rejoin && this.coopRun?.runId === run.runId && this.arena instanceof ClientGame) {
+      uiEvents.emit('banner', { title: 'RECONNECTED', sub: 'Back in the operation', tone: 'cyan' });
+      return;
+    }
+    this.coopRun = run;
+    this.visiting = false;
+    this.netQueue = { snaps: [], events: [] };
+    const tier = getTier(run.tier);
+    void this.input.requestLock();
+    const me = run.players.find((p) => p.id === run.you);
+    const net = this.net!;
+    await this.transition(`CO-OP DEPLOYMENT · THREAT TIER ${tier.roman}`, `${run.players.length} wardens · Sector 07 reactor`, () => {
+      const ledger = new RunLedger(run.runId, run.tier, Date.now());
+      this.run = ledger;
+      this.renderQuality = this.settings.quality;
+      this.resize();
+      const g = new ClientGame(
+        this.engine,
+        this.canvas,
+        this.havok,
+        this.settings,
+        this.input,
+        {
+          tier,
+          loadout: run.loadout as never,
+          run: ledger,
+          seed: run.seed,
+          towerTech: run.towerTech,
+          milestones: run.milestones,
+          hooks: { bank: () => true, checkpoint: () => {}, defeat: () => {} },
+          you: run.you,
+          slot: me?.slot ?? 0,
+          players: run.players,
+        },
+        { send: (m) => net.send(m), act: (a) => net.act(a), get rtt() { return net.rtt; } },
+      );
+      g.myName = me?.name ?? 'You';
+      Object.defineProperty(g, 'devTools', { value: false });
+      this.arena = g;
+      this.location = 'arena';
+      return g.scene;
+    });
+    const g = this.arena as ClientGame;
+    g.start();
+    g.onEvents(this.netQueue.events);
+    for (const s of this.netQueue.snaps) g.onSnapshot(s);
+    this.netQueue = { snaps: [], events: [] };
+  }
+
+  private async coopRunEnd(result: RunResult, save: unknown): Promise<void> {
+    if (save) this.profile.adoptRemote(save);
+    hudStore.set({ lastRun: { ...result } });
+    this.coopRun = null;
+    if (this.run && !this.run.ended) this.run.finalize(result.outcome);
+    // Let the defeat moment play before leaving.
+    if (this.arena instanceof ClientGame && this.arena.defeatedByServer) await new Promise((r) => setTimeout(r, 2500));
+    await this.toHome('summary');
+  }
+
   // ------------------------------------------------------------------ scenes
 
   private disposeWorld(): void {
@@ -293,6 +512,10 @@ export class Flow {
     this.resize();
     this.home = new HomeBase(this.engine, this.canvas, this.havok, this.settings, this.input, this.profile, {
       deploy: () => void this.deploy(),
+      // Station relocations rebuild the HQ shell; construction mode resumes where it was.
+      rebuild: () => setTimeout(() => this.home && !this.busy && this.rebuildHomeKeepScreen(), 0),
+      tutorial: this.tutorialHost(),
+      hostBase: () => (this.visiting ? (this.net?.state.hostHq?.base as SaveData['base']) ?? null : null),
     });
     if (this.loopStopped) this.home.scene.useConstantAnimationDeltaTime = true;
   }
@@ -513,4 +736,14 @@ export class Flow {
       },
     };
   }
+}
+
+/** Settings that live outside any world: key remapping, interface scale, colour accessibility. */
+export function applyGlobalSettings(s: Settings, input: Input): void {
+  input.remap = keyRemap(s);
+  if (typeof document !== 'undefined') {
+    document.documentElement.style.setProperty('--ui-scale', String(s.uiScale));
+    document.documentElement.dataset.motion = s.reduceMotion ? 'reduced' : 'full';
+  }
+  setRarityPalette(s.colorblind);
 }

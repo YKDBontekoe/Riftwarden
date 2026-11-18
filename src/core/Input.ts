@@ -11,6 +11,10 @@ export class Input {
   private skipMouse = 0;
   /** Test hook: treat input as captured without real pointer lock (headless automation). */
   forceCapture = false;
+  /** M7: key rebinding (physical code -> code the game listens for). */
+  remap = new Map<string, string>();
+  /** M7: accept keys without pointer lock (construction mode uses a free cursor). */
+  freeKeys = false;
   onLockChange: (locked: boolean) => void = () => {};
   private lockAttempt: Promise<void> | null = null;
   /** When the browser's default Escape unlock happened (programmatic exits don't have a cooldown). */
@@ -28,13 +32,16 @@ export class Input {
         this.releaseLock();
         return;
       }
-      if (!this.captured) return;
+      if (!this.captured && !this.freeKeys) return;
       if (['Space', 'Tab', 'F3', 'ArrowUp', 'ArrowDown'].includes(e.code)) e.preventDefault();
-      if (!this.down.has(e.code)) this.pressedSet.add(e.code);
-      this.down.add(e.code);
+      if ((e.target as HTMLElement | null)?.tagName === 'INPUT') return;
+      const code = this.remap.get(e.code) ?? e.code;
+      if (!this.down.has(code)) this.pressedSet.add(code);
+      this.down.add(code);
     });
     window.addEventListener('keyup', (e) => {
-      if (this.down.delete(e.code)) this.releasedSet.add(e.code);
+      const code = this.remap.get(e.code) ?? e.code;
+      if (this.down.delete(code)) this.releasedSet.add(code);
     });
     document.addEventListener('mousemove', (e) => {
       if (!this.captured) return;

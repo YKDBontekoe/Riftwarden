@@ -14,24 +14,16 @@ import { type ItemInstance, type SlotId, SLOTS } from '../progression/items';
 import {
   deployBlocker,
   type EngineeringResult,
-  installModule,
-  transferModule,
-  uninstallModule,
-  equipFromStorage,
   equippedItem,
-  expandStorage,
-  loadPreset,
   type SaveData,
-  savePreset,
   storedItems,
-  unequipToStorage,
 } from '../progression/save';
 import { CHECKPOINT_INTERVAL, THREAT_TIERS, type ThreatTier, unlockText } from '../progression/tiers';
 import { MILESTONES } from '../survival/records';
 import { fmtTime, useSave } from './App';
 import { Shell } from './shell';
+import { CoopPanel } from './Coop';
 import { ResourceBar, useTx, TxMessage, CostLine } from './economy';
-import { dismantleItems, setItemLock } from '../economy/transactions';
 import { dismantleYield } from '../economy/config';
 import { uiEvents } from './store';
 import { type InvEntry, InventoryView, ItemCard, ItemDetail, RarityLegend, sortEntries } from './items';
@@ -43,6 +35,7 @@ const pct = (m: number) => (m === 1 ? '—' : `×${m.toFixed(2)}`);
 export function DeployTerminal({ flow, close }: { flow: Flow; close: () => void }) {
   const save = useSave(flow);
   const [busy, setBusy] = useState(false);
+  const [mode, setMode] = useState<'solo' | 'coop'>(flow.profile.online || flow.net ? 'coop' : 'solo');
   const selected = THREAT_TIERS.find((t) => t.id === save.threat.selected) ?? THREAT_TIERS[0];
   const weapon = equippedItem(save, 'weapon');
   const blocker = deployBlocker(save);
@@ -56,6 +49,19 @@ export function DeployTerminal({ flow, close }: { flow: Flow; close: () => void 
   };
   return (
     <Shell code="DP-01" title="DEPLOYMENT" sub="Launch bay · survival operations" close={close} wide>
+      <div className="tabs deploy-mode">
+        <button className={mode === 'solo' ? 'on' : ''} data-testid="deploy-solo" onClick={() => setMode('solo')}>
+          SOLO OPERATION
+        </button>
+        <button className={mode === 'coop' ? 'on' : ''} data-testid="deploy-coop" onClick={() => setMode('coop')}>
+          CO-OP OPERATION · 2-4 WARDENS
+        </button>
+      </div>
+      {mode === 'coop' ? (
+        <CoopPanel flow={flow} />
+      ) : flow.profile.online ? (
+        <div className="deploy-block">Your online profile is active. Online operations are deployed through the co-op lobby; disconnect from the co-op server to play solo with your local profile.</div>
+      ) : (
       <div className="deploy-grid">
         <div className="arena-card">
           <div className="arena-art">
@@ -100,6 +106,7 @@ export function DeployTerminal({ flow, close }: { flow: Flow; close: () => void 
           </button>
         </div>
       </div>
+      )}
     </Shell>
   );
 }
@@ -223,8 +230,8 @@ export function LoadoutTerminal({ flow, close }: { flow: Flow; close: () => void
   const save = useSave(flow);
   const equipped = useEquipped(save);
   const [msg, setMsg] = useState('');
-  const mutate = (fn: (d: SaveData) => boolean, ok: string, fail: string) => {
-    const done = flow.profile.mutate(fn);
+  const mutate = (op: string, args: unknown[], ok: string, fail: string) => {
+    const done = flow.profile.op(op, args).ok;
     setMsg(done ? ok : fail);
     sfx.play(done ? 'equip' : 'buildDeny');
   };
@@ -243,7 +250,7 @@ export function LoadoutTerminal({ flow, close }: { flow: Flow; close: () => void
                 <em>
                   {it ? `${r!.label.toUpperCase()} · LV ${fmtNum(it.level)} · ${it.affixes.length} affix${it.affixes.length === 1 ? '' : 'es'}` : 'Equip from the storage terminal'}
                   {it && !slot.required && (
-                    <button className="mini" onClick={() => mutate((d) => unequipToStorage(d, slot.id), 'Moved to storage', 'Storage full')}>
+                    <button className="mini" onClick={() => mutate('unequipToStorage', [slot.id], 'Moved to storage', 'Storage full')}>
                       UNEQUIP
                     </button>
                   )}
@@ -261,10 +268,10 @@ export function LoadoutTerminal({ flow, close }: { flow: Flow; close: () => void
                 <div key={i} className={`preset ${active ? 'on' : ''}`}>
                   <b>{p.name}</b>
                   <em>{n ? `${n} item${n === 1 ? '' : 's'}${missing ? ` · ${missing} missing` : ''}${active ? ' · ACTIVE' : ''}` : 'EMPTY'}</em>
-                  <button className="mini" onClick={() => mutate((d) => savePreset(d, i), `Saved to ${p.name}`, 'Cannot save')}>
+                  <button className="mini" onClick={() => mutate('savePreset', [i], `Saved to ${p.name}`, 'Cannot save')}>
                     SAVE
                   </button>
-                  <button className="mini" disabled={!n || active} onClick={() => mutate((d) => loadPreset(d, i), `${p.name} equipped`, 'Nothing to change')}>
+                  <button className="mini" disabled={!n || active} onClick={() => mutate('loadPreset', [i], `${p.name} equipped`, 'Nothing to change')}>
                     LOAD
                   </button>
                 </div>
@@ -300,8 +307,8 @@ export function StorageTerminal({ flow, close }: { flow: Flow; close: () => void
   const used = save.storage.uids.length;
   const over = used > save.storage.capacity;
   const cost = storageExpansionCost(save.storage.expansions);
-  const act = (fn: (d: SaveData) => boolean | number) => {
-    const ok = flow.profile.mutate((d) => !!fn(d));
+  const act = (op: string, args: unknown[]) => {
+    const ok = flow.profile.op(op, args).ok;
     sfx.play(ok ? 'equip' : 'buildDeny');
   };
   const tx = useTx(flow, 'salvage');
@@ -313,20 +320,20 @@ export function StorageTerminal({ flow, close }: { flow: Flow; close: () => void
         actions={{
           canChange: true,
           lockedReason: '',
-          equip: (uid, slot) => act((d) => equipFromStorage(d, uid, slot)),
-          unequip: (slot) => act((d) => unequipToStorage(d, slot)),
+          equip: (uid, slot) => act('equipFromStorage', [uid, slot ?? null]),
+          unequip: (slot) => act('unequipToStorage', [slot]),
           remove: {
             label: (e) => {
               const y = dismantleYield(e.item);
               return `DISMANTLE · +${y.salvage} SALVAGE${y.components ? ` · +${y.components} COMP` : ''}`;
             },
             allowed: (e) => e.status === 'stored' && !e.item.locked,
-            run: (uid) => void tx.run('dismantle', (d, id) => dismantleItems(d, [uid], id), (r) => `Dismantled · +${r.salvage} salvage${r.components ? ` · +${r.components} components` : ''}`),
+            run: (uid) => void tx.run('dismantle', 'dismantleItems', [[uid]], (r) => `Dismantled · +${r.salvage} salvage${r.components ? ` · +${r.components} components` : ''}`),
             confirm: 'Dismantle permanently?',
           },
           extra: (e) =>
             e.status === 'stored' || e.status === 'equipped' ? (
-              <button className="mini" onClick={() => void tx.run('lock', (d) => setItemLock(d, e.item.uid, !e.item.locked), () => (e.item.locked ? 'Unlocked' : 'Locked: protected from selling and dismantling'))}>
+              <button className="mini" onClick={() => void tx.run('lock', 'setItemLock', [e.item.uid, !e.item.locked], () => (e.item.locked ? 'Unlocked' : 'Locked: protected from selling and dismantling'))}>
                 {e.item.locked ? 'UNLOCK' : 'LOCK'}
               </button>
             ) : null,
@@ -342,7 +349,7 @@ export function StorageTerminal({ flow, close }: { flow: Flow; close: () => void
                 <i style={{ width: `${Math.min(100, (used / save.storage.capacity) * 100)}%` }} />
               </div>
             </div>
-            <button className="mini expand" disabled={save.resources.salvage < cost} onClick={() => act((d) => expandStorage(d))}>
+            <button className="mini expand" disabled={save.resources.salvage < cost} onClick={() => act('expandStorage', [])}>
               +{STORAGE_EXPANSION} BAYS · <CostLine cost={{ salvage: cost }} save={save} />
             </button>
             <RarityLegend />
@@ -374,13 +381,8 @@ export function ModuleBench({ flow, selW, setSelW }: { flow: Flow; selW: string 
   const after = useMemo(() => (shown && shown !== weapon ? weaponStatRows(shown) : null), [shown, weapon]);
   const removal = installed ? removalCost(installed) : 0;
 
-  const run = (fn: (d: SaveData) => EngineeringResult, okText: string, sound: 'install' | 'uninstall') => {
-    let res: EngineeringResult = { ok: false, reason: 'No change' };
-    flow.profile.mutate((d) => {
-      res = fn(d);
-      return res.ok;
-    });
-    const r = res as EngineeringResult;
+  const run = (op: string, args: unknown[], okText: string, sound: 'install' | 'uninstall') => {
+    const r = flow.profile.op(op, args) as EngineeringResult;
     setMsg(r.ok ? { text: `${okText}${r.cost ? ` · −${r.cost} salvage` : ''}`, ok: true } : { text: r.reason, ok: false });
     sfx.play(r.ok ? sound : 'buildDeny');
     if (r.ok) uiEvents.emit('econ', { station: 'workshop', kind: 'module', delta: r.cost ? { salvage: -r.cost } : {} });
@@ -479,7 +481,7 @@ export function ModuleBench({ flow, selW, setSelW }: { flow: Flow; selW: string 
               <button
                 className="mini wide"
                 disabled={save.resources.salvage < removal || save.storage.uids.length >= save.storage.capacity}
-                onClick={() => run((d) => uninstallModule(d, weapon.uid, socket), `${installed.name} returned to storage`, 'uninstall')}
+                onClick={() => run('uninstallModule', [weapon.uid, socket], `${installed.name} returned to storage`, 'uninstall')}
               >
                 REMOVE TO STORAGE · {removal} SALVAGE
               </button>
@@ -487,7 +489,7 @@ export function ModuleBench({ flow, selW, setSelW }: { flow: Flow; selW: string 
               <div className="col-label">TRANSFER · {removal} SALVAGE</div>
               {targets.length === 0 && <div className="id-none">No other weapon has a free compatible socket.</div>}
               {targets.map((t) => (
-                <button key={`${t.w.uid}.${t.i}`} className="mini wide" disabled={save.resources.salvage < removal} onClick={() => run((d) => transferModule(d, weapon.uid, socket, t.w.uid, t.i), `Transferred to ${t.w.name}`, 'install')}>
+                <button key={`${t.w.uid}.${t.i}`} className="mini wide" disabled={save.resources.salvage < removal} onClick={() => run('transferModule', [weapon.uid, socket, t.w.uid, t.i], `Transferred to ${t.w.name}`, 'install')}>
                   → {t.w.name} · {SOCKET_LABEL[t.w.build!.sockets[t.i]]} {t.i + 1}
                 </button>
               ))}
@@ -524,7 +526,7 @@ export function ModuleBench({ flow, selW, setSelW }: { flow: Flow; selW: string 
                         <small>{[...e.item.base, ...e.item.affixes].map((x) => `${formatModifier(x.stat, x.op, x.value)} ${STAT_DEFS[x.stat].label.toLowerCase()}`).join(' · ')}</small>
                         {!chk.ok && <em>{chk.reason}</em>}
                       </div>
-                      <button className="mini" disabled={!chk.ok} onFocus={() => setHover(e.item.uid)} onClick={() => run((d) => installModule(d, weapon.uid, socket, e.item.uid), `${e.item.name} installed`, 'install')}>
+                      <button className="mini" disabled={!chk.ok} onFocus={() => setHover(e.item.uid)} onClick={() => run('installModule', [weapon.uid, socket, e.item.uid], `${e.item.name} installed`, 'install')}>
                         INSTALL
                       </button>
                     </div>

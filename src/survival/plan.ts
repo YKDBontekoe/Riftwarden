@@ -19,7 +19,7 @@ import { EVENTS, EVENT_IDS, EVENT_TUNING, type EventId } from './events';
  *    never more simultaneous entities.
  */
 
-export type ThemeId = 'standard' | 'rush' | 'armor' | 'ranged' | 'support' | 'elite' | 'mixed' | 'swarm' | 'boss';
+export type ThemeId = 'standard' | 'rush' | 'armor' | 'ranged' | 'support' | 'elite' | 'mixed' | 'siege' | 'jamming' | 'swarm' | 'boss';
 export type EvolutionId = 'routes' | 'instability';
 
 export const EVOLUTIONS: Record<EvolutionId, { name: string; warning: string; blurb: string }> = {
@@ -47,6 +47,8 @@ export const ENEMY_COST: Record<EnemyKind, number> = {
   colossus: 0,
   overseer: 0,
   pylon: 0,
+  jammer: 2.6,
+  crawler: 6.5,
 };
 
 /** First wave each archetype can appear (tier `unlockShift` pulls these earlier, never below 4). */
@@ -57,6 +59,8 @@ export const ENEMY_UNLOCK: Partial<Record<EnemyKind, number>> = {
   enforcer: 6,
   artillery: 7,
   engineer: 9,
+  jammer: 8,
+  crawler: 11,
 };
 
 interface ThemeDef {
@@ -70,11 +74,13 @@ interface ThemeDef {
 export const THEMES: Record<Exclude<ThemeId, 'swarm' | 'boss'>, ThemeDef> = {
   standard: { minWave: 4, weight: 3, mix: { walker: 5, rusher: 2, bulwark: 1, enforcer: 0.6, artillery: 0.5, engineer: 0.4 }, label: 'Standard assault' },
   rush: { minWave: 4, weight: 1.2, mix: { rusher: 5, walker: 2, engineer: 0.3 }, label: 'Rush wave' },
-  armor: { minWave: 6, weight: 1, mix: { bulwark: 3, enforcer: 3, walker: 2, engineer: 0.8 }, label: 'Heavy armor' },
-  ranged: { minWave: 7, weight: 1, mix: { artillery: 3, walker: 3, rusher: 1, enforcer: 0.6 }, label: 'Ranged pressure' },
+  armor: { minWave: 6, weight: 1, mix: { bulwark: 3, enforcer: 3, walker: 2, engineer: 0.8, crawler: 1.2 }, label: 'Heavy armor' },
+  ranged: { minWave: 7, weight: 1, mix: { artillery: 3, walker: 3, rusher: 1, enforcer: 0.6, jammer: 0.8 }, label: 'Ranged pressure' },
   support: { minWave: 9, weight: 0.9, mix: { engineer: 2.2, walker: 3, bulwark: 1.5, enforcer: 1 }, label: 'Support-heavy' },
   elite: { minWave: 10, weight: 0.7, mix: { walker: 3, bulwark: 2, enforcer: 1, artillery: 1 }, label: 'Elite invasion' },
-  mixed: { minWave: 8, weight: 1.6, mix: { walker: 3, rusher: 2, bulwark: 1, enforcer: 1, artillery: 1, engineer: 0.8 }, label: 'Mixed assault' },
+  mixed: { minWave: 8, weight: 1.6, mix: { walker: 3, rusher: 2, bulwark: 1, enforcer: 1, artillery: 1, engineer: 0.8, jammer: 0.6, crawler: 0.6 }, label: 'Mixed assault' },
+  siege: { minWave: 12, weight: 0.8, mix: { crawler: 3, enforcer: 1, walker: 3, jammer: 1.2 }, label: 'Siege breach' },
+  jamming: { minWave: 10, weight: 0.7, mix: { jammer: 2.5, walker: 3, rusher: 2, artillery: 0.8 }, label: 'Electronic warfare' },
 };
 
 export const THEME_LABEL: Record<ThemeId, string> = {

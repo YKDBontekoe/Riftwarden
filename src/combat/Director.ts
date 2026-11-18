@@ -116,6 +116,8 @@ export class Director {
   /** New run: nothing from a previous run may survive. */
   reset(seed: number): void {
     this.bus.reset();
+    this.missiles = [];
+    this.delayed = [];
     this.build.reset(seed);
     this.buffs = [];
     this.networkCharge = 0;
@@ -171,11 +173,22 @@ export class Director {
     const s = this.g.stats;
     const par = this.build.count('t_parallel');
     const inf = this.build.count('t_infuse');
+    const clu = t.st?.archetype === 'missile' ? this.build.count('t_cluster') : 0;
+    // M7 Support Amplifier: the strongest field covering this tower (amplifiers do not boost each other).
+    let amp = 0;
+    if (t.st?.archetype !== 'support') {
+      for (const o of this.g.turrets.turrets) {
+        if (o === t || o.building || o.archetype !== 'support') continue;
+        const st = o.st;
+        if ((o.pos.x - t.pos.x) ** 2 + (o.pos.z - t.pos.z) ** 2 <= st.range * st.range) amp = Math.max(amp, st.damage);
+      }
+    }
+    t.amplified = amp;
     return {
-      damageMult: s.turretDamageMult,
-      fireRateMult: s.turretFireRateMult * this.g.towerFireBoost(t),
+      damageMult: s.turretDamageMult * (1 + amp),
+      fireRateMult: s.turretFireRateMult * this.g.towerFireBoost(t) * (1 + amp * 0.8),
       rangeMult: s.turretRangeMult,
-      extraTargets: par ? UP.parallel.extra(par) : 0,
+      extraTargets: (par ? UP.parallel.extra(par) : 0) + (clu ? UP.cluster.extra(clu) : 0),
       extraChain: par ? UP.parallel.extra(par) : 0,
       burnFrac: inf ? UP.infuse.burn(inf) : 0,
       empowered: t.empowerT > 0,
@@ -185,6 +198,15 @@ export class Director {
   // ------------------------------------------------------------------ frame
 
   update(dt: number, hdt: number): void {
+    this.updateMissiles(dt);
+    for (let i = this.delayed.length - 1; i >= 0; i--) {
+      const x = this.delayed[i];
+      x.t -= dt;
+      if (x.t <= 0) {
+        this.delayed.splice(i, 1);
+        x.fn();
+      }
+    }
     this.heavyFx = 0;
     this.arcs = 0;
     this.numbers = 0;
@@ -240,7 +262,9 @@ export class Director {
     const none: HitResult = { dealt: 0, killed: false, kind: 'hit' };
     if (!e.alive || !(r.amount > 0) || !Number.isFinite(r.amount)) return none;
     const gen = e.gen;
-    let amount = r.amount * vulnerability(e.status);
+    let amount = r.amount * vulnerability(e.status) * this.exposure(e);
+    const fb = this.build.count('e_frostbite');
+    if (fb && isFrozen(e.status)) amount *= 1 + UP.frostbite.bonus(fb);
     if (r.element !== 'none') amount *= this.g.stats.elementalPower;
     // M6: boss loot amplifies damage against elites, bosses and high-value targets.
     if (e.mods.length || e.def.role === 'boss' || e.def.role === 'hvt') amount *= this.g.stats.eliteDamageMult;
@@ -251,7 +275,7 @@ export class Director {
     const burnStacks = st.burnStacks;
     const chilled = isChilled(st, 1);
 
-    const res = this.g.enemies.damage(e, amount, DMG_TYPE[r.element], r.point, this.g.fx, { weak: r.weak, from: r.from ?? null, dot: r.dot });
+    const res = this.g.enemies.damage(e, amount, DMG_TYPE[r.element], r.point, this.g.enemyFx, { weak: r.weak, from: r.from ?? null, dot: r.dot });
     if (!res) return none;
     const dealt = res.toHp + res.toShield;
     this.damageBy[r.source.kind] += dealt;
@@ -488,8 +512,38 @@ export class Director {
       }
       return;
     }
+    if (st.archetype === 'support') {
+      // Field pulse (presentation; the boost itself is applied through towerInput / exposure).
+      this.g.fx.ring(new Vector3(t.pos.x, t.pos.y + 0.12, t.pos.z), st.range, 0.9, new Color3(0.4, 2.2, 1.4), true);
+      sfx.play('beep', { volume: a.volume * 0.15, pan: a.pan, pitch: 0.7 });
+      if (this.build.count('t_overload')) {
+        for (const e of this.enemiesNear(t.pos, st.range)) {
+          if (Math.random() > UP.overload.chance) continue;
+          const c = e.center(new Vector3());
+          this.arcFx(from, c);
+          this.deal({ target: e, amount: this.weaponBase() * UP.overload.dmg, element: 'electric', source: src, chain, point: c, apply: { shock: true }, quiet: true });
+        }
+      }
+      return;
+    }
     if (!target || !target.alive) return;
     const to = target.center(new Vector3());
+    if (st.archetype === 'missile') {
+      // Salvo: the primary target plus the most dangerous others in range (elites, bosses first).
+      const r2 = st.range * st.range;
+      const others = this.g.enemies.active
+        .filter((e) => e.alive && e !== target && (e.pos.x - t.pos.x) ** 2 + (e.pos.z - t.pos.z) ** 2 <= r2)
+        .sort((p, q) => threat(q) - threat(p));
+      const n = Math.max(1, Math.round(st.targets * Math.min(2, mult)));
+      for (let i = 0; i < n; i++) {
+        const e = i === 0 || !others.length ? target : others[(i - 1) % others.length];
+        const aim = e.center(new Vector3());
+        const crit = Math.random() < st.critChance;
+        this.missiles.push({ delay: i * 0.13, t: 0, dur: 0.35 + Vector3.Distance(from, aim) / 32, target: e, gen: e.gen, from: from.clone(), aim, dmg: st.damage * (crit ? this.g.stats.critMultiplier : 1), crit, splash: st.splash, src, chain, element: st.element, burn: st.burnFrac > 0 ? st.damage * st.burnFrac : 0, launched: false });
+      }
+      if (this.missiles.length > 160) this.missiles.splice(0, this.missiles.length - 160);
+      return;
+    }
     if (st.archetype === 'arc') {
       const dmg = st.damage * mult;
       this.arcFx(from, to);
@@ -538,6 +592,58 @@ export class Director {
       }
       void res;
     }
+  }
+
+  /** M7: machines inside a Support Amplifier field take +10% damage from every source. */
+  private exposure(e: Enemy): number {
+    for (const t of this.g.turrets.turrets) {
+      if (t.archetype !== 'support' || t.building || t.disabled) continue;
+      const r = t.st.range;
+      if ((t.pos.x - e.pos.x) ** 2 + (t.pos.z - e.pos.z) ** 2 <= r * r) return 1.1;
+    }
+    return 1;
+  }
+
+  /** M7 Missile Battery: rounds in flight (launch stagger, travel time, blast on arrival). */
+  private missiles: { delay: number; t: number; dur: number; target: Enemy; gen: number; from: Vector3; aim: Vector3; dmg: number; crit: boolean; splash: number; src: SourceRef; chain: ReturnType<Director['bus']['newChain']>; element: Element; burn: number; launched: boolean }[] = [];
+
+  private updateMissiles(dt: number): void {
+    for (let i = this.missiles.length - 1; i >= 0; i--) {
+      const m = this.missiles[i];
+      if (m.delay > 0) {
+        m.delay -= dt;
+        continue;
+      }
+      if (!m.launched) {
+        m.launched = true;
+        const top = m.from.add(m.aim).scale(0.5);
+        top.y += 3 + Vector3.Distance(m.from, m.aim) * 0.12;
+        this.g.fx.tracer(m.from, top, 2, 0.06, m.dur * 0.55);
+        this.g.fx.tracer(top, m.aim, 2, 0.06, m.dur);
+        this.g.fx.burst('smoke', m.from, 2, undefined, 0.6);
+        const a = this.g.panFor(m.from);
+        sfx.play('mortar', { volume: a.volume * 0.45, pan: a.pan, pitch: 1.5 });
+      }
+      m.t += dt;
+      if (m.t < m.dur) continue;
+      this.missiles.splice(i, 1);
+      const alive = m.target.alive && m.target.gen === m.gen;
+      const p = alive ? m.target.center(new Vector3()) : m.aim;
+      this.g.fx.explode(p, { scale: 0.5, debris: 2, color: new Color3(3, 1.4, 0.4) });
+      const a = this.g.panFor(p);
+      sfx.play('explosion', { volume: a.volume * 0.4, pitch: 1.5, pan: a.pan });
+      if (alive) this.deal({ target: m.target, amount: m.dmg, base: m.dmg, crit: m.crit, element: m.element, source: m.src, chain: m.chain, point: p, apply: m.burn > 0 ? { burn: m.burn } : undefined, family: 'missile' });
+      this.blast(p, m.splash, m.dmg * 0.6, m.element, m.src, m.chain, { falloff: 0.35, noReact: true, exclude: alive ? m.target : null, family: 'splash' });
+    }
+  }
+
+  /** M7: delayed effect callbacks (singularity, echoes), real time, cleared on reset. */
+  private delayed: { t: number; fn: () => void }[] = [];
+  later(seconds: number, fn: () => void): void {
+    if (this.delayed.length < 200) this.delayed.push({ t: seconds, fn });
+  }
+  enemiesNear(c: Vector3, r: number): Enemy[] {
+    return this.g.enemies.active.filter((e) => e.alive && Vector3.DistanceSquared(e.pos, c) <= r * r);
   }
 
   /** Empower towers within radius of a point (synergy). */
@@ -751,6 +857,55 @@ export function effectsFor(d: Director, id: string, n: number): Effect<GameEvent
         g.fx.ring(g.player.position.add(new Vector3(0, 0.1, 0)), 6, 0.4, COLOR.electric, true);
         sfx.play('arc', { volume: 1, pitch: 0.45 });
       } })];
+    // ---------------------------------------------------------------- M7
+    case 'w_vent':
+      return [eff({ on: 'overheat', cooldown: 1, run: (ev, api) => {
+        const c = g.player.position.clone();
+        c.y += 0.8;
+        d.blast(c, UP.vent.radius, d.weaponBase() * UP.vent.dmg, 'thermal', src(), api.child(ev), { falloff: 0.3, apply: { burn: d.weaponBase() * UP.vent.burn } });
+        d.explosionFx(c, UP.vent.radius, 'thermal');
+      } })];
+    case 'x_bounty':
+      return [eff({ on: 'kill', chainLimit: 99, filter: (ev) => { const t = hit(ev).target; return t.elite || t.def.role === 'boss' || t.def.role === 'hvt'; }, run: () => {
+        g.grantCores(UP.bounty.cores(n));
+        const p = g.player;
+        if (p.alive && p.maxShield > 0) p.shield = Math.min(p.maxShield, p.shield + p.maxShield * UP.bounty.shield);
+      } })];
+    case 'd_rebound':
+      return [eff({ on: 'dash', cooldown: 2, run: () => {
+        const p = g.player;
+        if (p.alive && p.maxShield > 0) p.shield = Math.min(p.maxShield, p.shield + p.maxShield * UP.rebound.shield(n));
+      } })];
+    case 'l_singularity': {
+      let kills = 0;
+      return [eff({ on: 'kill', chainLimit: 99, filter: fromWeapon, run: (ev, api) => {
+        if (++kills < UP.singularity.every) return;
+        kills = 0;
+        const c = vec(hit(ev).point);
+        const ch = api.child(ev);
+        for (const e of d.enemiesNear(c, UP.singularity.radius)) d.inflict(e, { chill: UP.singularity.chill }, src(), ch, e.center(new Vector3()));
+        g.fx.ring(c, UP.singularity.radius, UP.singularity.delay, new Color3(1.4, 0.6, 3.2), true);
+        g.fx.burst('zap', c, 24, undefined, 1.5);
+        sfx.play('charge', { pitch: 0.5, volume: 0.9 });
+        d.later(UP.singularity.delay, () => {
+          d.blast(c, UP.singularity.radius, d.weaponBase() * UP.singularity.dmg, 'cryo', src(), ch, { falloff: 0.25 });
+          d.explosionFx(c, UP.singularity.radius, 'cryo');
+        });
+      } })];
+    }
+    case 'l_echo':
+      return [eff({ on: 'hit', chance: UP.echo.chance, cooldown: 0.05, filter: (ev) => fromWeapon(ev) && ev.source.id !== 'echo', run: (ev, api) => {
+        const h = hit(ev);
+        const gen = h.target.gen;
+        const t = h.target;
+        const ch = api.child(ev);
+        d.later(UP.echo.delay, () => {
+          if (!t.alive || t.gen !== gen) return;
+          const p = t.center(new Vector3());
+          g.fx.burst('crit', p, 4, undefined, 0.8);
+          d.deal({ target: t, amount: h.amount * UP.echo.dmg, base: h.base * UP.echo.dmg, element: h.element, source: { kind: 'weapon', id: 'echo' }, chain: ch, point: p, family: h.family });
+        });
+      } })];
     case 'w_fission':
       return [eff({ on: 'hit', cooldown: 0.12, filter: fromWeapon, run: (ev, api) => {
         const h = hit(ev);
@@ -774,3 +929,8 @@ export function effectsFor(d: Director, id: string, n: number): Effect<GameEvent
 }
 
 export { COLOR as ELEMENT_COLOR, upgradeDef, MAX_TOWER_LEVEL };
+
+/** Missile target priority: bosses, then elites/HVTs, then the most dangerous by remaining path. */
+function threat(e: Enemy): number {
+  return (e.def.role === 'boss' ? 1e6 : 0) + (e.elite || e.def.role === 'hvt' ? 1e4 : 0) + e.maxHp * 0.1 - e.remaining;
+}

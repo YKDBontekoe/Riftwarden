@@ -379,6 +379,15 @@ export function modifyComponent(data: SaveData, uid: string, slot: ComponentSlot
 
 // ------------------------------------------------------------------ fabrication
 
+/** Craft cost including HQ facilities (Calibration Array: -10% credits/salvage). */
+export function craftCostFor(data: Pick<SaveData, 'base'>, recipe: Parameters<typeof craftCost>[0], q: Parameters<typeof craftCost>[1], level: number): Cost {
+  const c = craftCost(recipe, q, level);
+  if (!data.base.placeables.some((p) => p.type === 'calibrator')) return c;
+  const out: Cost = { ...c };
+  for (const k of ['credits', 'salvage'] as const) if (out[k]) out[k] = Math.max(1, Math.round(out[k]! * 0.9));
+  return out;
+}
+
 export function fabricationLevel(data: SaveData): number {
   return marketProgress(data).level;
 }
@@ -394,7 +403,7 @@ export function craft(data: SaveData, recipeId: string, qualityId: string | null
     const unlock = unlockedFor(recipe, q, data.threat.unlocked);
     if (!unlock.ok) return unlock;
     const level = fabricationLevel(data);
-    const cost = craftCost(recipe, q, level);
+    const cost = craftCostFor(data, recipe, q, level);
     if (!canAfford(data, cost)) return fail(missingText(data, cost));
     if (recipe.output.kind === 'material') {
       pay(data, cost);

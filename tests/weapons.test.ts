@@ -65,7 +65,7 @@ describe('B: procedural weapon generation', () => {
     let found = 0;
     for (let s = 0; s < 200 && found < 3; s++) {
       const it = generateItem({ uid: 'q', seed: s, level: 1, rarity: 'rare', baseId: 'plasma_repeater', source: 't', now: 1 });
-      if (it.build!.barrel !== 'pb_long') continue;
+      if (it.build!.barrel !== 'pb_long' || it.build!.mechanism === 'mc_scatter') continue;
       found++;
       // Long shroud: +25% range scaled by the length parameter, tighter spread.
       expect(it.weapon!.range).toBeGreaterThan(140);
@@ -80,14 +80,39 @@ describe('B: procedural weapon generation', () => {
     const p = weaponDefFor(gen('plasma_repeater', 'common'))!;
     const r = weaponDefFor(gen('rail_lancer', 'common'))!;
     const b = weaponDefFor(gen('beam_prism', 'common'))!;
-    expect(['auto', 'burst']).toContain(p.mechanism);
+    expect(['auto', 'burst', 'scatter']).toContain(p.mechanism);
     expect(['charge', 'cycle']).toContain(r.mechanism);
-    expect(b.mechanism).toBe('beam');
-    expect(r.damage).toBeGreaterThan(p.damage * 3);
-    expect(b.range).toBeLessThan(p.range);
-    expect(r.heatPerShot).toBeGreaterThan(p.heatPerShot * 2);
+    expect(['beam', 'pulse']).toContain(b.mechanism);
+    if (p.mechanism !== 'scatter') {
+      expect(r.damage).toBeGreaterThan(p.damage * 3);
+      if (b.mechanism === 'beam') expect(b.range).toBeLessThan(p.range);
+      expect(r.heatPerShot).toBeGreaterThan(p.heatPerShot * 2);
+    }
     expect(r.pierce).toBeGreaterThanOrEqual(1);
     expect(b.rampMax).toBeGreaterThan(1.5);
+  });
+
+  it('M7 firing styles: scatter (short-range pellet cone) and pulse (slow detonating pulses) roll and differ', () => {
+    const find = (base: string, mech: string) => {
+      for (let s = 0; s < 400; s++) {
+        const it = generateItem({ uid: 'm', seed: s, level: 5, rarity: 'rare', baseId: base, source: 't', now: 1 });
+        if (it.build!.mechanism === mech) return weaponDefFor(it)!;
+      }
+      return null;
+    };
+    const sc = find('plasma_repeater', 'mc_scatter');
+    const au = find('plasma_repeater', 'mc_auto');
+    const pu = find('beam_prism', 'mc_pulse');
+    const be = find('beam_prism', 'mc_beam');
+    expect(sc && au && pu && be).toBeTruthy();
+    expect(sc!.mechanism).toBe('scatter');
+    expect(sc!.range).toBeLessThan(au!.range * 0.6);
+    expect(sc!.fireRate).toBeLessThan(au!.fireRate * 0.4);
+    expect(pu!.mechanism).toBe('pulse');
+    expect(pu!.damage).toBeGreaterThan(be!.damage * 5);
+    expect(pu!.fireRate).toBeLessThan(be!.fireRate * 0.2);
+    const sumSc = weaponSummary(sc!);
+    expect(sumSc.projectiles).toBe(7);
   });
 
   it('starter weapon keeps the M1/M2 numbers with a default build', () => {

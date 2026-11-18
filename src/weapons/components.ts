@@ -68,6 +68,9 @@ export const COMPONENTS: readonly ComponentDef[] = [
   { id: 'mc_burst', slot: 'mechanism', name: 'Burst Sequencer', blurb: 'Three-round bursts with a short reset; tighter, harder-hitting rounds.', families: ['plasma'], weight: 6, mechanism: 'burst', effects: { damage: 1.12, accuracy: 0.8 } },
   { id: 'mc_charge', slot: 'mechanism', name: 'Charge Capacitor', blurb: 'Hold to charge, release to fire. Partial charges fire weaker slugs.', families: ['rail'], weight: 10, mechanism: 'charge', effects: {} },
   { id: 'mc_cycle', slot: 'mechanism', name: 'Auto-Cycler', blurb: 'Fires full slugs automatically at a fixed cycle, no charging.', families: ['rail'], weight: 6, mechanism: 'cycle', effects: { damage: 0.78 } },
+  // M7 firing styles
+  { id: 'mc_scatter', slot: 'mechanism', name: 'Scatter Choke', blurb: 'Fires a cone of seven plasma pellets per shot: devastating up close, weak at range.', families: ['plasma'], weight: 6, mechanism: 'scatter', effects: { damage: 0.5, fireRate: 0.2, heatPerShot: 2.6, range: 0.4 } },
+  { id: 'mc_pulse', slot: 'mechanism', name: 'Pulse Capacitor', blurb: 'Discharges the emitter as detonating pulses: splash damage around the impact, no ramp.', families: ['beam'], weight: 6, mechanism: 'pulse', effects: { damage: 8.5, fireRate: 0.095, heatPerShot: 6.2, range: 1.15 } },
   { id: 'mc_beam', slot: 'mechanism', name: 'Continuous Emitter', blurb: 'Sustained beam; damage ramps up while held on one target.', families: ['beam'], weight: 10, mechanism: 'beam', effects: {} },
   // ---------------------------------------------------------------- visual attachments
   { id: 'at_sight', slot: 'attachment', name: 'Holo Sight', blurb: 'Holographic sight housing.', families: ALL, weight: 8, effects: { accuracy: 0.94 } },

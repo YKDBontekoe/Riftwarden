@@ -26,7 +26,7 @@ export interface EliteModDef {
   luck: number;
 }
 
-const GROUND: EnemyKind[] = ['walker', 'bulwark', 'enforcer', 'engineer'];
+const GROUND: EnemyKind[] = ['walker', 'bulwark', 'enforcer', 'engineer', 'crawler'];
 
 export const ELITE_MODS: Record<EliteModId, EliteModDef> = {
   overcharged: {

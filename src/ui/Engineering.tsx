@@ -3,7 +3,6 @@ import { fmtNum, formatModifier, STAT_DEFS } from '../combat/stats';
 import type { Flow } from '../core/Flow';
 import { enhanceCost, enhanceLevel, escalation, maxEnhance, rerollCost, ENHANCE_EFFECT, componentSwapCost } from '../economy/config';
 import { affixValueRange, maxLocks, rerollPool, SWAPPABLE_SLOTS, swapComponent, swapOptions, tierRange } from '../economy/engineering';
-import { enhanceItem, modifyComponent, rerollAffix, rerollUnlocked, setAffixLock } from '../economy/transactions';
 import { affixDef } from '../loot/affixes';
 import { compareItems, weaponStatRows } from '../loot/equipment';
 import { rarity } from '../loot/rarity';
@@ -235,7 +234,7 @@ function AffixBench({ save, item, tx }: { save: SaveData; item: ItemInstance; tx
               data-testid={`lock-${k}`}
               onClick={(ev) => {
                 ev.stopPropagation();
-                tx.run('lock', (d) => setAffixLock(d, item.uid, k, !x.locked), () => (x.locked ? 'Affix unlocked' : 'Affix locked: full recalibration keeps it'));
+                tx.run('lock', 'setAffixLock', [item.uid, k, !x.locked], () => (x.locked ? 'Affix unlocked' : 'Affix locked: full recalibration keeps it'));
               }}
             />
             <span>{STAT_DEFS[x.stat].label}</span>
@@ -266,7 +265,7 @@ function AffixBench({ save, item, tx }: { save: SaveData; item: ItemInstance; tx
               Tier {tr[0]}–{tr[1]} at item level {item.level}. The outcome is random.
             </p>
             <button className="primary small" data-testid="reroll-stat" onClick={() => {
-              const r = tx.run('reroll', (d, id) => rerollAffix(d, item.uid, i, 'stat', id), (r) => `${affixText(r.before)} → ${affixText(r.after)} (T${r.after.tier})`);
+              const r = tx.run('reroll', 'rerollAffix', [item.uid, i, 'stat'], (r) => `${affixText(r.before)} → ${affixText(r.after)} (T${r.after.tier})`);
               if (r) setResult({ uid: item.uid, before: [r.before], after: [r.after] });
             }}>
               RECALIBRATE
@@ -287,7 +286,7 @@ function AffixBench({ save, item, tx }: { save: SaveData; item: ItemInstance; tx
               )}
             </p>
             <button className="small" data-testid="reroll-value" onClick={() => {
-              const r = tx.run('reroll', (d, id) => rerollAffix(d, item.uid, i, 'value', id), (r) => `${affixText(r.before)} → ${affixText(r.after)} (T${r.after.tier})`);
+              const r = tx.run('reroll', 'rerollAffix', [item.uid, i, 'value'], (r) => `${affixText(r.before)} → ${affixText(r.after)} (T${r.after.tier})`);
               if (r) setResult({ uid: item.uid, before: [r.before], after: [r.after] });
             }}>
               REFINE
@@ -311,7 +310,7 @@ function AffixBench({ save, item, tx }: { save: SaveData; item: ItemInstance; tx
           confirm="Reroll every unlocked affix?"
           disabled={locks >= item.affixes.length}
           onConfirm={() => {
-            const r = tx.run('reroll', (d, id) => rerollUnlocked(d, item.uid, id), () => 'Recalibrated · locked affixes kept');
+            const r = tx.run('reroll', 'rerollUnlocked', [item.uid], () => 'Recalibrated · locked affixes kept');
             if (r) setResult({ uid: item.uid, before: r.before, after: r.after });
           }}
         />
@@ -374,7 +373,7 @@ function EnhanceBench({ save, item, tx, setPreview }: { save: SaveData; item: It
             onMouseLeave={() => setPreview(null)}
             onFocus={() => setPreview(next)}
             onClick={() => {
-              const r = tx.run('enhance', (d, id) => enhanceItem(d, item.uid, id), (r) => `${item.name} enhanced to +${r.level}`);
+              const r = tx.run('enhance', 'enhanceItem', [item.uid], (r) => `${item.name} enhanced to +${r.level}`);
               if (r) setPreview(null);
             }}
           >
@@ -464,7 +463,7 @@ function ComponentBench({ save, item, tx, setPreview }: { save: SaveData; item: 
             label="REFIT COMPONENT"
             confirm={`Replace ${cur?.name ?? 'component'} with ${sel.name}?`}
             onConfirm={() => {
-              const r = tx.run('component', (d, id) => modifyComponent(d, item.uid, slot, sel.id, id), () => `${sel.name} fitted`);
+              const r = tx.run('component', 'modifyComponent', [item.uid, slot, sel.id], () => `${sel.name} fitted`);
               if (r) {
                 setPick(null);
                 setPreview(null);
