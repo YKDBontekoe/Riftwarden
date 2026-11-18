@@ -2,13 +2,13 @@ import { useMemo, useState } from 'react';
 import type { Flow } from '../core/Flow';
 import { buyPrice, type Cost, dismantleYield, MARKET, sellPrice } from '../economy/config';
 import { type MarketEntry, type MerchantId } from '../economy/market';
-import { craftCost, qualityOdds, QUALITIES, type QualityDef, type Recipe, recipeBases, RECIPES, unlockedFor } from '../economy/recipes';
-import { buyExchange, buyItem, craft, dismantleItems, fabricationLevel, previewDismantle, protectionReason, refreshCost, refreshMarket, sellItems, setItemLock } from '../economy/transactions';
+import { qualityOdds, QUALITIES, type QualityDef, type Recipe, recipeBases, RECIPES, unlockedFor } from '../economy/recipes';
+import { craftCostFor, fabricationLevel, previewDismantle, protectionReason, refreshCost } from '../economy/transactions';
 import { fmtNum } from '../combat/stats';
 import { rarity, RARITIES } from '../loot/rarity';
 import { CATEGORY_LABEL, type Category, type ItemInstance } from '../loot/types';
 import { slotsFor } from '../progression/items';
-import { equipFromStorage, type SaveData } from '../progression/save';
+import { type SaveData } from '../progression/save';
 import { FAMILIES, SOCKET_LABEL } from '../weapons/build';
 import { canInstall, moduleTypeDef } from '../weapons/modules';
 import { useSave } from './App';
@@ -180,7 +180,7 @@ function BuyPane({ save, merchant, tx }: { save: SaveData; merchant: MerchantId;
           }
           confirm={`Replace the remaining stock for ${rc} credits?`}
           disabled={save.resources.credits < rc}
-          onConfirm={() => tx.run('buy', (d, id) => refreshMarket(d, id), (r) => `New manifest #${r.rotation} · −${r.price} credits`)}
+          onConfirm={() => tx.run('buy', 'refreshMarket', [], (r) => `New manifest #${r.rotation} · −${r.price} credits`)}
         />
       </div>
       <div className="inv-detail-col">
@@ -211,7 +211,7 @@ function BuyPane({ save, merchant, tx }: { save: SaveData; merchant: MerchantId;
                   confirm={`Buy ${item.name} for ${price} credits?`}
                   needConfirm={expensive}
                   disabled={price > save.resources.credits || bays < 1}
-                  onConfirm={() => tx.run('buy', (d, id) => buyItem(d, merchant, entry.id, id), (r) => `Purchased ${r.item.name} · −${r.price} credits · now in storage`)}
+                  onConfirm={() => tx.run('buy', 'buyItem', [merchant, entry.id], (r) => `Purchased ${r.item.name} · −${r.price} credits · now in storage`)}
                 />
               )}
             </div>
@@ -277,11 +277,11 @@ function SellPane({ save, modules, tx }: { save: SaveData; modules: boolean; tx:
                   testId="sell"
                   label={`SELL · +◈ ${sellPrice(item).toLocaleString()}`}
                   confirm={`Sell ${item.name} permanently?`}
-                  onConfirm={() => tx.run('sell', (d, id) => sellItems(d, [item.uid], id), (r) => `Sold for ${r.credits} credits${r.modulesReturned ? ` · ${r.modulesReturned} module(s) returned to storage` : ''}`)}
+                  onConfirm={() => tx.run('sell', 'sellItems', [[item.uid]], (r) => `Sold for ${r.credits} credits${r.modulesReturned ? ` · ${r.modulesReturned} module(s) returned to storage` : ''}`)}
                 />
               )}
               {item.locked ? (
-                <button className="mini" onClick={() => tx.run('lock', (d) => setItemLock(d, item.uid, false), () => 'Unlocked')}>
+                <button className="mini" onClick={() => tx.run('lock', 'setItemLock', [item.uid, false], () => 'Unlocked')}>
                   UNLOCK
                 </button>
               ) : null}
@@ -316,7 +316,7 @@ function ExchangePane({ save, tx }: { save: SaveData; tx: Tx }) {
               ))}
               <span>{left} LEFT THIS MANIFEST</span>
             </div>
-            <button className="primary small" data-testid={`ex-${o.id}`} disabled={!left || save.resources.credits < o.price} onClick={() => tx.run('exchange', (d, id) => buyExchange(d, o.id, id), (r) => `Received ${costText(r.give, '+')} · −${r.price} credits`)}>
+            <button className="primary small" data-testid={`ex-${o.id}`} disabled={!left || save.resources.credits < o.price} onClick={() => tx.run('exchange', 'buyExchange', [o.id], (r) => `Received ${costText(r.give, '+')} · −${r.price} credits`)}>
               BUY · ◈ {o.price}
             </button>
           </div>
@@ -414,7 +414,7 @@ export function SalvageTerminal({ flow, close }: { flow: Flow; close: () => void
               confirm={`Destroy ${preview.count} item${preview.count === 1 ? '' : 's'} permanently for ${costText({ salvage: preview.salvage, components: preview.components }, '+')}?`}
               disabled={preview.count === 0}
               onConfirm={() => {
-                const res = tx.run('dismantle', (d, id) => dismantleItems(d, valid, id), (r) => `Dismantled ${r.count} item${r.count === 1 ? '' : 's'} · +${r.salvage} salvage${r.components ? ` · +${r.components} components` : ''}`);
+                const res = tx.run('dismantle', 'dismantleItems', [valid], (r) => `Dismantled ${r.count} item${r.count === 1 ? '' : 's'} · +${r.salvage} salvage${r.components ? ` · +${r.components} components` : ''}`);
                 if (res) setPicked(new Set());
               }}
             />
@@ -427,7 +427,7 @@ export function SalvageTerminal({ flow, close }: { flow: Flow; close: () => void
                   const why = protectionReason(save, focused.uid);
                   return why && !focused.locked ? <div className="prot-note">{why}</div> : null;
                 })()}
-                <button className="mini" data-testid="lock-toggle" onClick={() => tx.run('lock', (d) => setItemLock(d, focused.uid, !focused.locked), () => (focused.locked ? 'Unlocked: can be sold or dismantled' : 'Locked: protected from selling and dismantling'))}>
+                <button className="mini" data-testid="lock-toggle" onClick={() => tx.run('lock', 'setItemLock', [focused.uid, !focused.locked], () => (focused.locked ? 'Unlocked: can be sold or dismantled' : 'Locked: protected from selling and dismantling'))}>
                   {focused.locked ? 'UNLOCK ITEM' : 'LOCK ITEM (PROTECT)'}
                 </button>
               </div>
@@ -460,12 +460,12 @@ export function FabricateTerminal({ flow, close }: { flow: Flow; close: () => vo
   const level = fabricationLevel(save);
   const q = QUALITIES.find((x) => x.id === qid) ?? QUALITIES[0];
   const isItem = recipe.output.kind === 'item';
-  const cost: Cost = craftCost(recipe, isItem ? q : undefined, level);
+  const cost: Cost = craftCostFor(save, recipe, isItem ? q : undefined, level);
   const unlock = unlockedFor(recipe, isItem ? q : undefined, save.threat.unlocked);
   const bays = save.storage.capacity - save.storage.uids.length;
   const lastNow = last ? (save.items.find((i) => i.uid === last.uid) ?? null) : null;
   const doCraft = () => {
-    const res = tx.run('craft', (d, id) => craft(d, recipe.id, isItem ? q.id : null, id), (r) => (r.item ? `Fabricated ${r.item.name} (${rarity(r.item.rarity).label}, LV ${r.item.level})` : `Converted · ${costText(r.give, '+')}`));
+    const res = tx.run('craft', 'craft', [recipe.id, isItem ? q.id : null], (r) => (r.item ? `Fabricated ${r.item.name} (${rarity(r.item.rarity).label}, LV ${r.item.level})` : `Converted · ${costText(r.give, '+')}`));
     if (res?.item) setLast(res.item);
   };
   return (
@@ -541,7 +541,7 @@ export function FabricateTerminal({ flow, close }: { flow: Flow; close: () => vo
             <>
               <ItemDetail item={lastNow} />
               {slotsFor(lastNow.category).length > 0 && save.storage.uids.includes(lastNow.uid) && (
-                <button className="mini wide" onClick={() => tx.run('equip', (d) => (equipFromStorage(d, lastNow.uid) ? { ok: true as const } : { ok: false as const, reason: 'Cannot equip' }), () => `${lastNow.name} equipped`)}>
+                <button className="mini wide" onClick={() => tx.run('equip', 'equipFromStorage', [lastNow.uid], () => `${lastNow.name} equipped`)}>
                   EQUIP NOW
                 </button>
               )}
@@ -575,7 +575,7 @@ function QualityCard({ q, on, save, recipe, level, pick }: { q: QualityDef; on: 
           </div>
         ))}
       </div>
-      <CostLine cost={craftCost(recipe, q, level)} save={save} />
+      <CostLine cost={craftCostFor(save, recipe, q, level)} save={save} />
     </button>
   );
 }

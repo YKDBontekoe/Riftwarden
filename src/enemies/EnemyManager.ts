@@ -41,6 +41,15 @@ export interface EnemyContext {
   escaped(e: Enemy): void;
   /** Hostile time since the run started (animation phase). */
   time: number;
+  /** M7 co-op: called before each enemy thinks (the server points `player` at that enemy's target drone). */
+  focus?(e: Enemy): void;
+}
+
+/** M7: lifecycle observers (co-op replication). */
+export interface EnemyHooks {
+  spawned?(e: Enemy): void;
+  killed?(e: Enemy, detonated: boolean): void;
+  released?(e: Enemy): void;
 }
 
 export interface EnemyHitboxMeta {
@@ -86,6 +95,8 @@ let nextId = 1;
 
 export class Enemy implements Health {
   readonly id = nextId++;
+  /** M7 co-op replicas: the server's id for this enemy (0 = local). */
+  netId = 0;
   hp = 0;
   maxHp = 0;
   shield = 0;
@@ -205,6 +216,8 @@ const BLAST: Partial<Record<EnemyKind, [number, number, number]>> = {
   artillery: [1.4, 14, 0.85],
   engineer: [1.2, 12, 1.1],
   courier: [2.4, 26, 0.6],
+  jammer: [1.0, 10, 1.3],
+  crawler: [1.9, 20, 0.6],
 };
 
 export class EnemyManager {
@@ -226,6 +239,8 @@ export class EnemyManager {
   aiAvg = 0;
   /** Statistics for the run (kept by the manager because escapes/volatiles happen here). */
   elitesKilled = 0;
+  /** M7: lifecycle observers (replication). */
+  hooks: EnemyHooks = {};
 
   constructor(scene: Scene, readonly kit: Kit, readonly P: Palette) {
     this.markMats = {
@@ -389,6 +404,7 @@ export class EnemyManager {
     e.ai = { ...(e.ai.rig ? { rig: e.ai.rig } : {}) };
     e.behavior?.spawn(e, o.ctx ?? null, this);
     this.active.push(e);
+    this.hooks.spawned?.(e);
     return e;
   }
 
@@ -489,6 +505,7 @@ export class EnemyManager {
   /** Remove the enemy from play with destruction effects. */
   kill(e: Enemy, fx: Effects, ctx: EnemyContext, detonated = false): void {
     if (!e.alive && !this.active.includes(e)) return;
+    this.hooks.killed?.(e, detonated);
     e.alive = false;
     if (e.elite) this.elitesKilled++;
     const c = e.center(new Vector3());
@@ -540,6 +557,7 @@ export class EnemyManager {
 
   private release(e: Enemy): void {
     e.alive = false;
+    this.hooks.released?.(e);
     for (const h of e.hitboxes) h.isPickable = !!(h.metadata as EnemyHitboxMeta | null)?.enemy;
     resetStatus(e.status);
     e.mark?.setEnabled(false);
@@ -669,8 +687,6 @@ export class EnemyManager {
       this.aiMs = performance.now() - t0;
       return;
     }
-    const player = ctx.player;
-    const ppos = player.position;
     // Separation (n is small; O(n^2) is cheaper than a spatial structure here). Bosses are immovable.
     const list = this.active;
     for (let i = 0; i < list.length; i++) {
@@ -699,6 +715,7 @@ export class EnemyManager {
       const e = list[i];
       if (!e.alive) continue;
       const def = e.def;
+      ctx.focus?.(e);
       e.flinch = Math.max(0, e.flinch - hdt * 4);
       e.shieldFlash = Math.max(0, e.shieldFlash - hdt * 5);
       e.recentDamage *= Math.exp(-hdt / 2.5);
@@ -719,6 +736,8 @@ export class EnemyManager {
         continue;
       }
 
+      const player = ctx.player;
+      const ppos = player.position;
       // Statuses: chill slows, shock disrupts briefly, freeze stops movement, attacks and animation.
       const sf = speedFactor(e.status);
       const adt = hdt * sf * e.rateMult;
@@ -923,7 +942,10 @@ export class EnemyManager {
       const charge = e.chargeT > 0 ? 1 - e.chargeT / 0.55 : 0;
       const aimPitch = e.state === 'attack' ? 0.10 : Math.max(-0.15, Math.min(0.22, (e.pos.y + 1.9 - ppos.y) / Math.max(2, Math.hypot(dx, dz))));
       const planted = e.motion!.pose(e.pos, e.yaw, hdt * (e.boostT > 0 ? 1.6 : 1), e.state === 'move', charge, e.flinch, aimPitch);
-      if (planted && (dx * dx + dz * dz) < 18 * 18) fx.burst('puff', planted, e.kind === 'bulwark' ? 3 : 1, undefined, 0.6);
+      const d2 = dx * dx + dz * dz;
+      if (planted && d2 < 18 * 18) fx.burst('puff', planted, e.kind === 'bulwark' ? 3 : 1, undefined, 0.6);
+      // M7: heavy mechanical footfalls (nearby only; the sound bank rate-limits and caps voices).
+      if (planted && d2 < 26 * 26) sfx.play('step', { volume: (1 - Math.sqrt(d2) / 26) * (e.kind === 'bulwark' ? 0.9 : 0.5), pitch: e.kind === 'bulwark' ? 0.75 : 1 });
       if (w.shield) {
         const s = e.shieldFlash;
         w.shield.scaling.set(3.6 + s * 0.3, 3.9 + s * 0.3, 3.6 + s * 0.3);

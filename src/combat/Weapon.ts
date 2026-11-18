@@ -50,6 +50,9 @@ function normalize(o: Partial<ShotOutcome> & { point: Vector3 }): ShotOutcome {
 const NO_FX: WeaponFxHooks = { shot: () => {}, beam: () => {} };
 
 /** Vertical FOV the viewmodel layout is tuned for (90° horizontal at 16:9). */
+/** M7: pellets per Scatter Choke shot (+2 per extra projectile from Splitter modules). */
+export const SCATTER_PELLETS = 7;
+
 const REF_FOV = 2 * Math.atan(Math.tan(Math.PI / 4) / (16 / 9));
 /** Viewmodel anchor relative to the camera (metres). */
 const ANCHOR = { x: 0.15, y: -0.138, z: 0.47, scale: 0.8, yaw: -0.12, pitch: 0.0, roll: -0.04 };
@@ -224,7 +227,8 @@ export class Weapon {
   /** Fire one shot (all projectiles). power: rail charge factor / burst etc. */
   private fireShot(stats: CombatStats, shoot: (r: ShotRequest) => ShotOutcome, fx: WeaponFxHooks, power: number, heatScale: number): void {
     const d = this.def;
-    const proj = d.family === 'beam' ? 1 : Math.max(1, Math.floor(stats.projectiles));
+    const scatter = d.mechanism === 'scatter';
+    const proj = d.family === 'beam' ? 1 : scatter ? SCATTER_PELLETS + 2 * Math.max(0, Math.floor(stats.projectiles) - 1) : Math.max(1, Math.floor(stats.projectiles));
     const thermal = 1 + stats.heatDamage * (this.heat / 100);
     const dmg = d.damage * stats.weaponDamageMult * power * thermal;
     const muzzleIndex = this.anim.muzzleIndex;
@@ -232,10 +236,10 @@ export class Weapon {
     const origin = this.player.camera.position.clone();
     for (let i = 0; i < proj; i++) {
       // Split projectiles fan out around the aim point.
-      const extra = proj > 1 ? 0.012 + 0.006 * proj : 0;
+      const extra = scatter ? 0.07 : proj > 1 ? 0.012 + 0.006 * proj : 0;
       const dir = this.aimDir(stats, i === 0 && proj > 1 ? extra * 0.3 : extra);
       const out = normalize(shoot({ origin, dir, range: this.range(stats), damage: dmg, family: d.family, pierce: d.pierce + Math.floor(stats.pierce), width: 0 }));
-      fx.shot(d.family, from, out, power, d.boltSpeed);
+      fx.shot(d.family, from, out, d.mechanism === 'pulse' ? -1 : power, d.boltSpeed);
       if (i === 0) this.lastShot = { from, to: out.point };
     }
     this.shotsFired++;
@@ -257,7 +261,11 @@ export class Weapon {
     this.flashMeshes[2].rotation.z = Math.random() * Math.PI;
     this.light.position.copyFrom(from);
     this.light.intensity = d.family === 'rail' ? 6 * power : 3.2;
-    if (d.family === 'rail') sfx.play('railFire', { pitch: 0.9 + 0.2 * (1 - power), volume: 0.6 + 0.4 * power });
+    if (d.mechanism === 'pulse') sfx.play('railFire', { pitch: 1.5, volume: 0.7 });
+    else if (scatter) {
+      sfx.play('shoot', { pitch: 0.62, volume: 1 });
+      sfx.play('explosion', { pitch: 2.4, volume: 0.25 });
+    } else if (d.family === 'rail') sfx.play('railFire', { pitch: 0.9 + 0.2 * (1 - power), volume: 0.6 + 0.4 * power });
     else sfx.play('shoot', { pitch: (d.mechanism === 'burst' ? 1.12 : 1) * (1 + this.heat / 400) * (proj > 1 ? 0.9 : 1) });
   }
 
@@ -275,6 +283,8 @@ export class Weapon {
     switch (d.mechanism) {
       case 'auto':
       case 'cycle':
+      case 'scatter':
+      case 'pulse':
         if (trigger && ready && this.cooldown <= 0) {
           this.cooldown = Math.max(0, this.cooldown) + 1 / rate;
           this.fireShot(stats, shoot, fx, 1, 1);

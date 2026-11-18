@@ -20,6 +20,17 @@ export const CATEGORY_LABEL: Record<UpgradeCategory, string> = { weapon: 'WEAPON
 
 /** Shared numbers (stack count n >= 1). */
 export const UP = {
+  // ---- M7
+  vent: { radius: 6, dmg: 2.2, burn: 0.6 },
+  exec: { hp: 0.3, bonus: (n: number) => 0.3 * n },
+  momentum: { speed: 14, bonus: (n: number) => 0.12 * n },
+  cluster: { extra: (n: number) => 2 * n },
+  overload: { chance: 0.6, dmg: 0.6 },
+  frostbite: { bonus: (n: number) => 0.4 * n },
+  bounty: { cores: (n: number) => 12 * n, shield: 0.4 },
+  singularity: { every: 18, radius: 7, delay: 1.8, dmg: 6, chill: 70 },
+  echo: { chance: 0.22, delay: 0.3, dmg: 0.5 },
+  rebound: { shield: (n: number) => 0.35 * n },
   static: { chance: (n: number) => 0.2 * n, jumps: 2, dmg: 0.4 },
   stormCrit: { jumps: (n: number) => 2 + n, dmg: (n: number) => 0.35 + 0.1 * n },
   ignite: { chance: (n: number) => 0.3 + 0.1 * n, dps: (n: number) => 0.35 + 0.1 * n },
@@ -98,6 +109,17 @@ export const UPGRADES: readonly UpgradeDef[] = [
   { id: 't_parallel', name: 'Parallel Targeting', rarity: 'rare', category: 'tower', tags: ['tower', 'multi'], icon: '⋮', maxStacks: 2, needs: { towers: true, towerArch: ['ballistic', 'arc'] }, text: (n) => `Ballistic towers fire at +${UP.parallel.extra(n)} extra enemies; Arc towers chain +${UP.parallel.extra(n)} jumps.` },
   { id: 't_infuse', name: 'Thermal Infusion', rarity: 'rare', category: 'tower', tags: ['tower', 'thermal'], icon: '♨', maxStacks: 2, needs: { towers: true, towerArch: ['ballistic', 'arc'] }, text: (n) => `Tower hits ignite: ${pct(UP.infuse.burn(n))} of the hit per second for 4 s.` },
   // ---- economy
+  // ---- M7
+  { id: 'w_vent', name: 'Thermal Vent', rarity: 'rare', category: 'weapon', tags: ['weapon', 'heat', 'thermal'], icon: '♨', maxStacks: 1, text: () => `Overheating vents a thermal blast around your drone: ${UP.vent.radius} m, ${UP.vent.dmg}x weapon damage, ignites. Turns overheating into a weapon.`, hint: 'Pairs with heat-damage modules and Thermal Detonation.' },
+  { id: 'w_exec', name: 'Executioner Protocol', rarity: 'rare', category: 'weapon', tags: ['weapon', 'damage'], icon: '✝', maxStacks: 2, text: (n) => `Weapon hits on machines below ${pct(UP.exec.hp)} health deal +${pct(UP.exec.bonus(n))} damage.` },
+  { id: 'm_momentum', name: 'Kinetic Momentum', rarity: 'common', category: 'mobility', tags: ['mobility', 'damage'], icon: '➶', maxStacks: 3, text: (n) => `While moving faster than ${UP.momentum.speed} m/s (sprinting, dashing, boosting) your weapon deals +${pct(UP.momentum.bonus(n))} damage.` },
+  { id: 't_cluster', name: 'Cluster Warheads', rarity: 'rare', category: 'tower', tags: ['tower', 'multi'], icon: '⁂', maxStacks: 2, needs: { towers: true, towerArch: ['missile'] }, text: (n) => `Missile Batteries launch +${UP.cluster.extra(n)} missiles per salvo.` },
+  { id: 't_overload', name: 'Amplifier Overload', rarity: 'epic', category: 'synergy', tags: ['synergy', 'tower', 'electric'], icon: '⌁', maxStacks: 1, needs: { towers: true, towerArch: ['support'] }, text: () => `Support Amplifier pulses arc through every machine in their field: ${pct(UP.overload.chance)} chance each to shock it for ${UP.overload.dmg}x weapon damage.`, hint: 'Shock disrupts enemy abilities and triggers Overload on burning targets.' },
+  { id: 'e_frostbite', name: 'Frostbite', rarity: 'rare', category: 'elemental', tags: ['elemental', 'cryo'], icon: '❆', maxStacks: 2, needs: { anyTag: ['cryo'] }, text: (n) => `Frozen machines take +${pct(UP.frostbite.bonus(n))} damage from every source.`, hint: 'Freeze with Cryo Coolant or Cryogenic Field Projectors.' },
+  { id: 'x_bounty', name: 'Bounty Contracts', rarity: 'rare', category: 'economy', tags: ['economy', 'kill'], icon: '⌘', maxStacks: 2, text: (n) => `Elite, boss and high-value kills pay +${UP.bounty.cores(n)} cores and restore ${pct(UP.bounty.shield)} of your shield.` },
+  { id: 'd_rebound', name: 'Rebound Capacitor', rarity: 'common', category: 'defense', tags: ['defense', 'shield', 'dash'], icon: '⟲', maxStacks: 2, text: (n) => `Dashing restores ${pct(UP.rebound.shield(n))} of your shield (once every 2 s).` },
+  { id: 'l_singularity', name: 'Singularity Engine', rarity: 'legendary', category: 'weapon', tags: ['weapon', 'cryo', 'kill'], icon: '◉', minWave: 4, maxStacks: 1, text: () => `Every ${UP.singularity.every} weapon kills collapse a singularity at the last kill: it drags machines in ${UP.singularity.radius} m into a freezing well (+${UP.singularity.chill} chill) and detonates after ${UP.singularity.delay} s for ${UP.singularity.dmg}x weapon damage.` },
+  { id: 'l_echo', name: 'Echo Chamber', rarity: 'legendary', category: 'weapon', tags: ['weapon', 'projectiles'], icon: '≈', minWave: 4, maxStacks: 1, text: () => `${pct(UP.echo.chance)} of weapon hits echo ${UP.echo.delay}s later on the same machine for ${pct(UP.echo.dmg)} damage. Echoes can crit and trigger hit effects (not further echoes).` },
   { id: 'x_salvage', name: 'Combat Salvage', rarity: 'common', category: 'economy', tags: ['economy'], icon: '¤', maxStacks: 3, stats: [m('coreIncomeMult', 'pct', 0.2)], text: (n) => `+20% cores from kills per stack (total +${pct(0.2 * n)}).` },
   { id: 'x_prefab', name: 'Prefab Logistics', rarity: 'common', category: 'economy', tags: ['economy', 'tower'], icon: '▤', maxStacks: 3, needs: { towers: true }, stats: [m('buildCostMult', 'pct', -0.1)], text: (n) => `-10% construction, refit and upgrade costs per stack (total -${pct(0.1 * n)}, minimum 50% of base).` },
   { id: 'x_rush', name: 'Rapid Deployment', rarity: 'rare', category: 'economy', tags: ['economy'], icon: '⏩', maxStacks: 2, text: (n) => `Starting a wave early (G) pays ${UP.rush.perSec(n)} cores per skipped preparation second (max ${UP.rush.cap}).` },

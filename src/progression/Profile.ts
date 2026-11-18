@@ -1,5 +1,14 @@
 import { Store } from '../ui/store';
-import { type KeyValueStorage, type LoadStatus, loadSave, resolveInterruptedRun, type SaveData, writeSave } from './save';
+import { type KeyValueStorage, type LoadStatus, loadSave, resolveInterruptedRun, type SaveData, sanitizeSave, writeSave } from './save';
+import { type OpResult, runOp } from './ops';
+import { newUid } from './items';
+
+/** Online (co-op) backend: operations are mirrored locally and executed authoritatively by the server. */
+export interface RemoteProfile {
+  send(name: string, args: unknown[], txId: string): void;
+  /** Server id shown in the UI. */
+  label: string;
+}
 
 function browserStorage(): KeyValueStorage | null {
   try {
@@ -16,6 +25,11 @@ function browserStorage(): KeyValueStorage | null {
  */
 export class Profile {
   private data: SaveData;
+  /** Single-player save kept aside while an online profile is mirrored. */
+  private localData: SaveData | null = null;
+  private localStorageRef: KeyValueStorage | null = null;
+  /** Set while the session mirrors an online (server-owned) profile. */
+  remote: RemoteProfile | null = null;
   readonly loadStatus: LoadStatus;
   readonly loadNotes: string[];
   /** Immutable snapshot for React (replaced on every committed change). */
@@ -76,6 +90,66 @@ export class Profile {
       return { ok: false, reason: 'Save failed: the transaction was rolled back, nothing changed' };
     }
     return res;
+  }
+
+  /**
+   * Run a named operation (progression/ops.ts). Locally: validated, persisted, rolled back on
+   * a failed write. Online: applied to the mirror for instant feedback and sent to the server,
+   * whose authoritative save replaces the mirror when it answers (`adoptRemote`).
+   */
+  op(name: string, args: unknown[] = [], txId: string = newUid('tx')): OpResult {
+    if (!this.remote) return this.transact((d) => runOp(d, name, args, txId));
+    const before = JSON.stringify(this.data);
+    let res: OpResult;
+    try {
+      res = runOp(this.data, name, args, txId);
+    } catch (e) {
+      res = { ok: false, reason: `Operation error: ${(e as Error).message}` };
+    }
+    if (!res.ok) {
+      this.data = JSON.parse(before) as SaveData;
+      return res;
+    }
+    this.remote.send(name, args, txId);
+    this.store.set({ save: snapshot(this.data), savedAt: Date.now(), lastWriteOk: true });
+    return res;
+  }
+
+  /** Switch to mirroring an online profile (the local save is kept aside, untouched). */
+  attachRemote(remote: RemoteProfile, save: unknown): void {
+    if (!this.remote) {
+      this.localData = this.data;
+      this.localStorageRef = this.storage;
+    }
+    this.remote = remote;
+    this.storage = null;
+    this.adoptRemote(save);
+  }
+
+  /** Replace the mirror with the server's authoritative save. */
+  adoptRemote(save: unknown): void {
+    if (!this.remote) return;
+    this.data = sanitizeSave(save).data;
+    this.store.set({ save: snapshot(this.data), savedAt: Date.now(), lastWriteOk: true });
+  }
+
+  /** Back to the single-player profile. */
+  detachRemote(): void {
+    if (!this.remote) return;
+    this.remote = null;
+    this.storage = this.localStorageRef;
+    if (this.localData) this.data = this.localData;
+    this.localData = null;
+    this.store.set({ save: snapshot(this.data), savedAt: Date.now(), lastWriteOk: true });
+  }
+
+  /** The single-player save (even while an online profile is mirrored), for importing. */
+  get localSave(): Readonly<SaveData> {
+    return this.localData ?? this.data;
+  }
+
+  get online(): boolean {
+    return !!this.remote;
   }
 
   rollbacks = 0;

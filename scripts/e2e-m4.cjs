@@ -34,7 +34,7 @@ async function launch() {
 }
 async function boot(p, reload = false) {
   if (reload) await p.reload();
-  else await p.goto('http://localhost:5173/?test');
+  else await p.goto((process.env.RIFT_URL || 'http://localhost:5173/') + '?test');
   await p.waitForFunction(() => window.__rift && window.__rift.state().screen === 'menu', null, { timeout: 180000 });
   await p.evaluate(() => window.__rift.stopLoop());
   await p.evaluate(() => { window.__rift.flow.skipUpgrades = true; });

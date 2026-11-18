@@ -4,9 +4,12 @@
  * eventually move, add or recolour is a Placeable stored in the save and rebuilt
  * from it on every visit. M1 ships a default set; the editor comes later.
  */
-export type PropType = 'planter' | 'crates' | 'serverRack' | 'lightPylon' | 'bench' | 'holoPanel';
+import { PIECES } from './build/catalog';
 
-export const PROP_TYPES: readonly PropType[] = ['planter', 'crates', 'serverRack', 'lightPylon', 'bench', 'holoPanel'];
+/** Any free-placed catalog piece (decor, light, facility). M1 types are all catalog pieces. */
+export type PropType = string;
+
+export const PROP_TYPES: readonly PropType[] = PIECES.filter((p) => p.kind === 'prop' || p.kind === 'light' || p.kind === 'facility').map((p) => p.id);
 
 export type PropValue = string | number | boolean;
 
@@ -22,7 +25,7 @@ export interface Placeable {
 }
 
 /** Interior bounds placeables are clamped to (matches HQ_LAYOUT's outer shell). */
-export const PLACEABLE_BOUNDS = { minX: -20.5, maxX: 22.5, minZ: -10.5, maxZ: 20.5, maxY: 6 };
+export const PLACEABLE_BOUNDS = { minX: -92, maxX: 92, minZ: -50, maxZ: 50, maxY: 6 };
 
 export const ACCENTS = ['cyan', 'teal', 'white', 'amber'] as const;
 export type Accent = (typeof ACCENTS)[number];

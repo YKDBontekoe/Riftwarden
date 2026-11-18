@@ -136,6 +136,21 @@ export class Telegraphs {
     if (l) this.place(l.mesh, from, to, width);
   }
 
+  /** M7: live markers that follow a target ([id, x, y, z]) for replication. */
+  followed(): [number, number, number, number][] {
+    const out: [number, number, number, number][] = [];
+    for (const m of this.markers) if (m.t < m.dur && m.follow) out.push([m.id, m.ring.position.x, m.ring.position.y - 0.07, m.ring.position.z]);
+    return out;
+  }
+
+  /** M7: move a live marker (replicas follow the server's target). */
+  moveMarker(id: number, x: number, y: number, z: number): void {
+    const m = this.markers.find((q) => q.id === id && q.t < q.dur);
+    if (!m) return;
+    m.ring.position.set(x, y + 0.07, z);
+    m.fill.position.set(x, y + 0.06, z);
+  }
+
   cancel(id: number): void {
     for (const m of this.markers) if (m.id === id) m.t = m.dur;
     for (const l of this.lines) if (l.id === id) l.t = l.dur;
@@ -225,11 +240,12 @@ interface Round {
   impact: Omit<Impact, 'pos' | 'kind' | 'direct'>;
   marker: number;
   turn: number;
+  id: number;
 }
 
 export interface OrdnanceCtx {
-  /** Player chest position (null when dead). */
-  player(): Vector3 | null;
+  /** Chest position of the drone this round targets (null when none is alive). `at` = round position. */
+  player(at?: Vector3): Vector3 | null;
   /** Static geometry hit between a and b (null = clear). */
   ray(a: Vector3, b: Vector3): Vector3 | null;
   impact(i: Impact): void;
@@ -249,6 +265,9 @@ export class Ordnance {
   private templates: Record<OrdnanceKind, Mesh>;
   static readonly CAP = 48;
   fired = 0;
+  /** Id of the most recently launched round (replication). */
+  lastId = 0;
+  private nextRound = 1;
 
   constructor(scene: Scene, private tele: Telegraphs) {
     this.mats = {
@@ -286,11 +305,12 @@ export class Ordnance {
     if (!r) {
       if (this.rounds.filter((x) => x.kind === kind).length >= Ordnance.CAP) return null;
       const mesh = this.templates[kind].clone(`ord_${kind}`)!;
-      r = { kind, mesh, active: false, pos: new Vector3(), vel: new Vector3(), from: new Vector3(), to: new Vector3(), t: 0, dur: 1, arc: 0, life: 0, impact: { radius: 0, damage: 0, reactorDamage: 0, disable: 0, owner: 0 }, marker: 0, turn: 0 };
+      r = { kind, mesh, active: false, pos: new Vector3(), vel: new Vector3(), from: new Vector3(), to: new Vector3(), t: 0, dur: 1, arc: 0, life: 0, impact: { radius: 0, damage: 0, reactorDamage: 0, disable: 0, owner: 0 }, marker: 0, turn: 0, id: 0 };
       this.rounds.push(r);
     }
     r.active = true;
     r.mesh.setEnabled(true);
+    r.id = this.lastId = this.nextRound++;
     this.fired++;
     return r;
   }
@@ -345,9 +365,9 @@ export class Ordnance {
 
   update(hdt: number, ctx: OrdnanceCtx, rt: number): void {
     if (hdt <= 0) return;
-    const pl = ctx.player();
     for (const r of this.rounds) {
       if (!r.active) continue;
+      const pl = r.kind === 'missile' || r.kind === 'orb' ? ctx.player(r.pos) : null;
       if (r.kind === 'shell' || r.kind === 'bomb') {
         r.t += hdt;
         const f = Math.min(1, r.t / r.dur);
@@ -392,6 +412,33 @@ export class Ordnance {
         r.mesh.setEnabled(false);
       }
     }
+  }
+
+  /** M7: free-flying rounds ([id, x, y, z]) for replication. */
+  positions(): [number, number, number, number][] {
+    const out: [number, number, number, number][] = [];
+    for (const r of this.rounds) if (r.active && (r.kind === 'orb' || r.kind === 'missile')) out.push([r.id, r.pos.x, r.pos.y, r.pos.z]);
+    return out;
+  }
+
+  /** M7: replicas correct a round's position (or drop it when the server no longer has it). */
+  correct(id: number, x: number, y: number, z: number): void {
+    const r = this.rounds.find((q) => q.active && q.id === id);
+    if (!r) return;
+    r.pos.set(x, y, z);
+    r.mesh.position.copyFrom(r.pos);
+  }
+
+  drop(id: number): void {
+    const r = this.rounds.find((q) => q.active && q.id === id);
+    if (!r) return;
+    r.active = false;
+    r.mesh.setEnabled(false);
+    this.tele.cancel(r.marker);
+  }
+
+  activeIds(): number[] {
+    return this.rounds.filter((r) => r.active && (r.kind === 'orb' || r.kind === 'missile')).map((r) => r.id);
   }
 
   reset(): void {

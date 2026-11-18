@@ -9,7 +9,7 @@ import type { Element } from '../combat/events';
  * Compatibility is explicit (`canInstall`); stats are always recomputed from scratch by
  * `composeTower`, so replacing a part can never leave stale bonuses behind.
  */
-export type Archetype = 'ballistic' | 'arc' | 'cryo';
+export type Archetype = 'ballistic' | 'arc' | 'cryo' | 'missile' | 'support';
 export type TowerSlot = 'base' | 'weapon' | 'core' | 'modifier';
 export const TOWER_SLOTS: readonly TowerSlot[] = ['base', 'weapon', 'core', 'modifier'];
 export const SWAPPABLE_SLOTS: readonly TowerSlot[] = ['weapon', 'core', 'modifier'];
@@ -90,37 +90,41 @@ export interface ModifierDef extends PartCommon {
   look: 'none' | 'array' | 'shells' | 'optics' | 'dish' | 'lens';
 }
 
-const ALL: readonly Archetype[] = ['ballistic', 'arc', 'cryo'];
-const HIT: readonly Archetype[] = ['ballistic', 'arc'];
+const ALL: readonly Archetype[] = ['ballistic', 'arc', 'cryo', 'missile', 'support'];
+const HIT: readonly Archetype[] = ['ballistic', 'arc', 'missile'];
+const DAMAGE: readonly Archetype[] = ['ballistic', 'arc', 'cryo', 'missile'];
 
 export const BASES: Readonly<Record<string, BaseDef>> = {
-  standard: { id: 'standard', name: 'Standard Platform', blurb: 'Balanced pedestal. Mounts every weapon.', cost: 60, radius: 1.1, turnRate: 5, rangeMult: 1, damageMult: 1, weapons: ['autocannon', 'marksman', 'chain_emitter', 'frost_projector'], look: 'standard' },
-  bastion: { id: 'bastion', name: 'Bastion Mount', blurb: 'Heavy footing: +20% damage, slow traverse. Cannot mount field projectors.', cost: 90, radius: 1.35, turnRate: 3.4, rangeMult: 1, damageMult: 1.2, weapons: ['autocannon', 'marksman', 'chain_emitter'], look: 'bastion', tech: { credits: 250, components: 0, wave: 4 } },
-  spire: { id: 'spire', name: 'Spire Pylon', blurb: 'Tall, fast mast: +20% range, quick traverse, -10% damage. Needs a precision or field weapon.', cost: 80, radius: 1.0, turnRate: 6.5, rangeMult: 1.2, damageMult: 0.9, weapons: ['marksman', 'chain_emitter', 'frost_projector'], look: 'spire', tech: { credits: 300, components: 2, wave: 6 } },
+  standard: { id: 'standard', name: 'Standard Platform', blurb: 'Balanced pedestal. Mounts every weapon.', cost: 60, radius: 1.1, turnRate: 5, rangeMult: 1, damageMult: 1, weapons: ['autocannon', 'marksman', 'chain_emitter', 'frost_projector', 'missile_battery', 'support_amp'], look: 'standard' },
+  bastion: { id: 'bastion', name: 'Bastion Mount', blurb: 'Heavy footing: +20% damage, slow traverse. Cannot mount field projectors.', cost: 90, radius: 1.35, turnRate: 3.4, rangeMult: 1, damageMult: 1.2, weapons: ['autocannon', 'marksman', 'chain_emitter', 'missile_battery'], look: 'bastion', tech: { credits: 250, components: 0, wave: 4 } },
+  spire: { id: 'spire', name: 'Spire Pylon', blurb: 'Tall, fast mast: +20% range, quick traverse, -10% damage. Needs a precision or field weapon.', cost: 80, radius: 1.0, turnRate: 6.5, rangeMult: 1.2, damageMult: 0.9, weapons: ['marksman', 'chain_emitter', 'frost_projector', 'support_amp'], look: 'spire', tech: { credits: 300, components: 2, wave: 6 } },
 };
 
 export const WEAPONS: Readonly<Record<string, WeaponModDef>> = {
   autocannon: { id: 'autocannon', name: 'Autocannon', blurb: 'Ballistic Turret: accurate rapid single-target fire.', cost: 40, archetype: 'ballistic', element: 'none', damage: 15, fireRate: 3.2, range: 22, targets: 0, chain: 0, chainFalloff: 1, critChance: 0.05, chill: 0, shock: false },
   marksman: { id: 'marksman', name: 'Marksman Rail', blurb: 'Ballistic Turret: slow, heavy, long-range shots with high crit chance.', cost: 70, archetype: 'ballistic', element: 'none', damage: 54, fireRate: 0.9, range: 31, targets: 0, chain: 0, chainFalloff: 1, critChance: 0.18, chill: 0, shock: false, tech: { credits: 200, components: 0, wave: 2 } },
   chain_emitter: { id: 'chain_emitter', name: 'Chain Emitter', blurb: 'Arc Tower: electrical bolt that jumps between enemies and shocks them.', cost: 70, archetype: 'arc', element: 'electric', damage: 11, fireRate: 1.5, range: 18, targets: 0, chain: 3, chainFalloff: 0.72, critChance: 0.05, chill: 0, shock: true, tech: { credits: 300, components: 0, wave: 3 } },
+  // ---- M7
+  missile_battery: { id: 'missile_battery', name: 'Missile Battery', blurb: 'Siege launcher: slow salvos of four homing missiles with blast damage. Prioritises elites and bosses; huge range.', cost: 90, archetype: 'missile', element: 'none', damage: 20, fireRate: 0.45, range: 38, targets: 0, chain: 0, chainFalloff: 1, critChance: 0.08, chill: 0, shock: false, tech: { credits: 450, components: 3, wave: 8 } },
+  support_amp: { id: 'support_amp', name: 'Support Amplifier', blurb: 'No weapon. Towers in its field gain +25% damage and +20% fire rate; machines in it take +10% damage from every source.', cost: 75, archetype: 'support', element: 'none', damage: 0.25, fireRate: 0.33, range: 11, targets: 0, chain: 0, chainFalloff: 1, critChance: 0, chill: 0, shock: false, tech: { credits: 400, components: 2, wave: 6 } },
   frost_projector: { id: 'frost_projector', name: 'Cryogenic Field Projector', blurb: 'Field emitter: pulses chill into every enemy in range. Slows, freezes, enables reactions.', cost: 80, archetype: 'cryo', element: 'cryo', damage: 3, fireRate: 1.2, range: 14, targets: 0, chain: 0, chainFalloff: 1, critChance: 0, chill: 20, shock: false, tech: { credits: 400, components: 0, wave: 5 } },
 };
 
 export const CORES: Readonly<Record<string, CoreDef>> = {
   standard_core: { id: 'standard_core', name: 'Standard Core', blurb: 'Stable reference core.', cost: 0, archetypes: ALL, damageMult: 1, fireRateMult: 1, rangeMult: 1, elementalMult: 1, burnFrac: 0, chillHit: 0, color: [0.2, 1.4, 1.8] },
   overcharged: { id: 'overcharged', name: 'Overcharged Core', blurb: '+30% fire rate at -10% damage per shot.', cost: 60, archetypes: HIT, damageMult: 0.9, fireRateMult: 1.3, rangeMult: 1, elementalMult: 1, burnFrac: 0, chillHit: 0, color: [2.4, 1.6, 0.3], tech: { credits: 350, components: 3, wave: 7 } },
-  capacitor: { id: 'capacitor', name: 'Capacitor Core', blurb: '+25% damage, -15% fire rate.', cost: 60, archetypes: ALL, damageMult: 1.25, fireRateMult: 0.85, rangeMult: 1, elementalMult: 1, burnFrac: 0, chillHit: 0, color: [0.5, 1.2, 2.6], tech: { credits: 200, components: 0, wave: 4 } },
+  capacitor: { id: 'capacitor', name: 'Capacitor Core', blurb: '+25% damage, -15% fire rate (amplifiers: +25% boost).', cost: 60, archetypes: ALL, damageMult: 1.25, fireRateMult: 0.85, rangeMult: 1, elementalMult: 1, burnFrac: 0, chillHit: 0, color: [0.5, 1.2, 2.6], tech: { credits: 200, components: 0, wave: 4 } },
   thermal_core: { id: 'thermal_core', name: 'Thermal Core', blurb: 'Hits ignite enemies (30% of the hit per second, 4 s).', cost: 70, archetypes: HIT, damageMult: 1, fireRateMult: 1, rangeMult: 1, elementalMult: 1, burnFrac: 0.3, chillHit: 0, color: [2.6, 0.9, 0.15], tech: { credits: 300, components: 2, wave: 5 } },
-  cryo_core: { id: 'cryo_core', name: 'Cryo Core', blurb: 'Hits add chill; cryo fields +40% chill and +10% range.', cost: 70, archetypes: ALL, damageMult: 1, fireRateMult: 1, rangeMult: 1.1, elementalMult: 1.4, burnFrac: 0, chillHit: 9, color: [1.2, 2.0, 2.6], tech: { credits: 300, components: 2, wave: 5 } },
+  cryo_core: { id: 'cryo_core', name: 'Cryo Core', blurb: 'Hits add chill; cryo fields +40% chill and +10% range.', cost: 70, archetypes: DAMAGE, damageMult: 1, fireRateMult: 1, rangeMult: 1.1, elementalMult: 1.4, burnFrac: 0, chillHit: 9, color: [1.2, 2.0, 2.6], tech: { credits: 300, components: 2, wave: 5 } },
 };
 
 export const MODIFIERS: Readonly<Record<string, ModifierDef>> = {
   none: { id: 'none', name: 'No Modifier', blurb: 'Empty modifier bay.', cost: 0, archetypes: ALL, targets: 0, chain: 0, splash: 0, critChance: 0, rangeMult: 1, chillMult: 1, look: 'none' },
-  multi_target: { id: 'multi_target', name: 'Multi-Target Amplifier', blurb: 'Ballistic: fires at +2 targets. Arc: chains +2 jumps.', cost: 80, archetypes: HIT, targets: 2, chain: 2, splash: 0, critChance: 0, rangeMult: 1, chillMult: 1, look: 'array', tech: { credits: 350, components: 3, wave: 6 } },
-  splash_shells: { id: 'splash_shells', name: 'Splash Shells', blurb: 'Ballistic hits detonate: 50% damage in 3.2 m.', cost: 70, archetypes: ['ballistic'], targets: 0, chain: 0, splash: 3.2, critChance: 0, rangeMult: 1, chillMult: 1, look: 'shells', tech: { credits: 250, components: 0, wave: 3 } },
+  multi_target: { id: 'multi_target', name: 'Multi-Target Amplifier', blurb: 'Ballistic: fires at +2 targets. Arc: chains +2 jumps. Missiles: +2 per salvo.', cost: 80, archetypes: HIT, targets: 2, chain: 2, splash: 0, critChance: 0, rangeMult: 1, chillMult: 1, look: 'array', tech: { credits: 350, components: 3, wave: 6 } },
+  splash_shells: { id: 'splash_shells', name: 'Splash Shells', blurb: 'Ballistic hits detonate: 50% damage in 3.2 m. Missiles: +60% blast radius.', cost: 70, archetypes: ['ballistic', 'missile'], targets: 0, chain: 0, splash: 3.2, critChance: 0, rangeMult: 1, chillMult: 1, look: 'shells', tech: { credits: 250, components: 0, wave: 3 } },
   crit_optics: { id: 'crit_optics', name: 'Crit Optics', blurb: '+25% critical chance.', cost: 60, archetypes: HIT, targets: 0, chain: 0, splash: 0, critChance: 0.25, rangeMult: 1, chillMult: 1, look: 'optics', tech: { credits: 200, components: 0, wave: 2 } },
   range_amp: { id: 'range_amp', name: 'Range Amplifier', blurb: '+20% targeting range.', cost: 50, archetypes: ALL, targets: 0, chain: 0, splash: 0, critChance: 0, rangeMult: 1.2, chillMult: 1, look: 'dish', tech: { credits: 150, components: 0, wave: 2 } },
-  field_amp: { id: 'field_amp', name: 'Field Amplifier', blurb: 'Cryo field: +15% radius and +30% chill per pulse.', cost: 70, archetypes: ['cryo'], targets: 0, chain: 0, splash: 0, critChance: 0, rangeMult: 1.15, chillMult: 1.3, look: 'lens', tech: { credits: 250, components: 2, wave: 5 } },
+  field_amp: { id: 'field_amp', name: 'Field Amplifier', blurb: 'Cryo field: +15% radius and +30% chill per pulse. Amplifier: +15% radius and +30% boost.', cost: 70, archetypes: ['cryo', 'support'], targets: 0, chain: 0, splash: 0, critChance: 0, rangeMult: 1.15, chillMult: 1.3, look: 'lens', tech: { credits: 250, components: 2, wave: 5 } },
 };
 
 export const DEFAULT_CONFIG: Readonly<TowerConfig> = { base: 'standard', weapon: 'autocannon', core: 'standard_core', modifier: 'none' };
@@ -246,9 +250,10 @@ export function composeTower(cfg: TowerConfig, level: number, run: TowerRunInput
   const range = w.range * b.rangeMult * c.rangeMult * m.rangeMult * run.rangeMult;
   const arc = w.archetype === 'arc';
   const ballistic = w.archetype === 'ballistic';
+  const missile = w.archetype === 'missile';
   const element: Element = w.element !== 'none' ? w.element : c.burnFrac > 0 && ballistic ? 'thermal' : 'none';
   const chain = arc ? w.chain + m.chain + run.extraChain + (run.empowered ? EMPOWER_CHAIN : 0) : 0;
-  const targets = ballistic ? w.targets + m.targets + run.extraTargets : 0;
+  const targets = ballistic ? w.targets + m.targets + run.extraTargets : missile ? 4 + m.targets + run.extraTargets : 0;
   const chill = w.archetype === 'cryo' ? w.chill * c.elementalMult * m.chillMult : c.chillHit;
   const stats: TowerStats = {
     archetype: w.archetype,
@@ -262,13 +267,18 @@ export function composeTower(cfg: TowerConfig, level: number, run: TowerRunInput
     targets,
     chain,
     chainFalloff: w.chainFalloff,
-    splash: m.splash,
+    splash: missile ? 3.4 * (m.splash > 0 ? 1.6 : 1) : m.splash,
     chill,
     burnFrac: c.burnFrac + run.burnFrac,
     shock: w.shock,
     dps: 0,
   };
-  stats.dps = damage * fireRate * (1 + stats.targets * (ballistic ? 1 : 0));
+  stats.dps = damage * fireRate * (missile ? stats.targets : 1 + stats.targets * (ballistic ? 1 : 0));
+  if (w.archetype === 'support') {
+    // Amplifier: `damage` is the boost fraction (core damage, field amplifier and level raise it).
+    stats.damage = w.damage * c.damageMult * m.chillMult * (1 + 0.1 * (L - 1));
+    stats.dps = 0;
+  }
   return stats;
 }
 
@@ -279,5 +289,5 @@ export function archetypeOf(slot: TowerSlot, id: string): string {
   if (slot === 'weapon') return (p as WeaponModDef).archetype;
   if (slot === 'base') return 'platform';
   const a = (p as CoreDef | ModifierDef).archetypes;
-  return a.length === 3 ? 'all archetypes' : a.join(' / ');
+  return a.length >= 5 ? 'all archetypes' : a.join(' / ');
 }

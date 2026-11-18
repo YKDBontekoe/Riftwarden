@@ -55,7 +55,7 @@ export interface TowerAttackEv extends BusEvent {
 }
 
 export interface SimpleEv extends BusEvent {
-  type: 'fire' | 'dash' | 'waveCleared' | 'earlyStart';
+  type: 'fire' | 'dash' | 'waveCleared' | 'earlyStart' | 'overheat';
   value: number;
 }
 

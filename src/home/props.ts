@@ -519,6 +519,143 @@ export function buildPlaceable(ctx: PropCtx, p: Placeable): TransformNode {
       half = [0.6, 2.3, 0.3];
       break;
     }
+    // ---- M7 construction catalogue
+    case 'table': {
+      kit.part('box', M.graphite, root, { pos: [0, 0.4, 0], scale: [0.5, 0.8, 0.5] });
+      kit.part('box', M.white, root, { pos: [0, 0.82, 0], scale: [2.2, 0.08, 1.2] });
+      kit.part('box', accent, root, { pos: [0, 0.865, 0], scale: [1.8, 0.01, 0.8] });
+      const holo = unlit(scene, `tableHolo_${p.uid}`, [0.1, 0.6, 0.8], { additive: true, twoSided: true });
+      const h = kit.part('cyl', holo, root, { pos: [0, 1.2, 0], scale: [0.7, 0.5, 0.7], shadow: false });
+      ctx.animators.push((_dt, t) => {
+        if (root.isDisposed()) return;
+        h.rotation.y = t * 0.6;
+        h.scaling.y = 0.5 + Math.sin(t * 1.7) * 0.08;
+      });
+      half = [1.1, 0.9, 0.6];
+      break;
+    }
+    case 'sofa': {
+      kit.part('box', M.graphite, root, { pos: [0, 0.22, 0], scale: [2.6, 0.44, 0.9] });
+      kit.part('box', M.white, root, { pos: [0, 0.5, 0.05], scale: [2.5, 0.16, 0.8] });
+      kit.part('box', M.white, root, { pos: [0, 0.85, -0.38], scale: [2.5, 0.6, 0.16] });
+      for (const sd of [-1, 1]) kit.part('box', M.graphite, root, { pos: [sd * 1.25, 0.6, 0], scale: [0.14, 0.5, 0.9] });
+      kit.part('box', accent, root, { pos: [0, 0.12, 0.46], scale: [2.4, 0.03, 0.01] });
+      half = [1.35, 1.2, 0.5];
+      break;
+    }
+    case 'machinery': {
+      kit.part('cyl6', M.graphite, root, { pos: [0, 0.3, 0], scale: [1.8, 0.6, 1.8] });
+      kit.part('cyl6', M.white, root, { pos: [0, 0.65, 0], scale: [1.3, 0.12, 1.3] });
+      const turn = kit.node('armTurn', root, [0, 0.72, 0]);
+      kit.part('box', M.white, turn, { pos: [0, 0.4, 0], scale: [0.5, 0.8, 0.5] });
+      const up = kit.node('armUpper', turn, [0, 0.8, 0]);
+      kit.part('box', M.graphite, up, { pos: [0, 0.6, 0.15], rot: [0.4, 0, 0], scale: [0.28, 1.3, 0.28] });
+      const fore = kit.node('armFore', up, [0, 1.15, 0.45]);
+      kit.part('box', M.white, fore, { pos: [0, 0, 0.45], scale: [0.22, 0.22, 1.0] });
+      kit.part('box', accent, fore, { pos: [0, 0, 0.98], scale: [0.18, 0.06, 0.12] });
+      ctx.animators.push((_dt, t) => {
+        if (root.isDisposed()) return;
+        turn.rotation.y = Math.sin(t * 0.5 + p.position[0]) * 1.1;
+        up.rotation.x = -0.3 + Math.sin(t * 0.9) * 0.25;
+        fore.rotation.x = 0.4 + Math.sin(t * 1.3 + 1) * 0.35;
+      });
+      half = [0.9, 2.4, 0.9];
+      break;
+    }
+    case 'reactorModel': {
+      kit.part('cyl8', M.graphite, root, { pos: [0, 0.3, 0], scale: [1.6, 0.6, 1.6] });
+      for (let i = 0; i < 3; i++) kit.part('box', M.white, root, { pos: [Math.sin((i / 3) * Math.PI * 2) * 0.6, 1.25, Math.cos((i / 3) * Math.PI * 2) * 0.6], rot: [0, (i / 3) * Math.PI * 2, 0], scale: [0.14, 1.3, 0.3] });
+      const core = unlit(scene, `modelCore_${p.uid}`, [0.4, 2.2, 2.8]);
+      const c = kit.part('sphere', core, root, { pos: [0, 1.3, 0], scale: [0.6, 0.9, 0.6], shadow: false });
+      const ring = kit.part('torusThin', accent, root, { pos: [0, 1.3, 0], scale: [1.0, 1.0, 1.0], shadow: false });
+      ctx.animators.push((_dt, t) => {
+        if (root.isDisposed()) return;
+        ring.rotation.x = t * 0.9;
+        ring.rotation.z = t * 0.6;
+        c.scaling.y = 0.9 + Math.sin(t * 3) * 0.06;
+      });
+      half = [0.8, 2.0, 0.8];
+      break;
+    }
+    case 'trophyColossus': {
+      kit.part('box', M.graphite, root, { pos: [0, 0.35, 0], scale: [1.6, 0.7, 1.0] });
+      kit.part('box', M.white, root, { pos: [0, 0.74, 0], scale: [1.7, 0.08, 1.1] });
+      const lance = kit.node('lance', root, [0, 1.6, 0]);
+      lance.rotation.z = 0.35;
+      kit.part('cyl8', M.metal, lance, { scale: [0.3, 2.2, 0.3] });
+      kit.part('cone', M.graphite, lance, { pos: [0, 1.4, 0], scale: [0.4, 0.7, 0.4] });
+      kit.part('box', M.amber, lance, { pos: [0, 0.2, 0.17], scale: [0.08, 1.4, 0.02], shadow: false });
+      half = [0.85, 2.8, 0.55];
+      break;
+    }
+    case 'trophyOverseer': {
+      kit.part('cyl6', M.graphite, root, { pos: [0, 0.4, 0], scale: [1.2, 0.8, 1.2] });
+      const prism = unlit(scene, `prism_${p.uid}`, [1.4, 0.7, 2.8]);
+      const pr = kit.part('ico', prism, root, { pos: [0, 1.6, 0], scale: [0.6, 0.9, 0.6], shadow: false });
+      ctx.animators.push((_dt, t) => {
+        if (root.isDisposed()) return;
+        pr.rotation.y = t * 0.8;
+        pr.position.y = 1.6 + Math.sin(t * 1.4) * 0.08;
+      });
+      half = [0.6, 2.2, 0.6];
+      break;
+    }
+    case 'vaultDisplay': {
+      kit.part('box', M.graphite, root, { pos: [0, 0.45, 0], scale: [1.2, 0.9, 0.8] });
+      kit.part('box', M.white, root, { pos: [0, 1.15, 0], scale: [0.9, 0.5, 0.6] });
+      kit.part('box', M.amber, root, { pos: [0, 1.15, 0.31], scale: [0.6, 0.08, 0.01], shadow: false });
+      half = [0.6, 1.4, 0.4];
+      break;
+    }
+    case 'floorLamp': {
+      kit.part('cyl', M.graphite, root, { pos: [0, 0.05, 0], scale: [0.5, 0.1, 0.5] });
+      kit.part('cyl', M.metal, root, { pos: [0, 0.85, 0], scale: [0.06, 1.6, 0.06] });
+      kit.part('cone', M.white, root, { pos: [0, 1.75, 0], rot: [Math.PI, 0, 0], scale: [0.5, 0.3, 0.5] });
+      half = [0.25, 1.9, 0.25];
+      break;
+    }
+    case 'ceilingLamp': {
+      kit.part('cyl', M.graphite, root, { pos: [0, 0.05, 0], scale: [0.6, 0.1, 0.6] });
+      kit.part('cyl', M.metal, root, { pos: [0, 2.0, 0], scale: [0.04, 3.9, 0.04] });
+      kit.part('cone', M.white, root, { pos: [0, 3.8, 0], rot: [Math.PI, 0, 0], scale: [0.7, 0.35, 0.7] });
+      half = [0.3, 0.2, 0.3];
+      break;
+    }
+    case 'lightStrip': {
+      kit.part('box', M.graphite, root, { pos: [0, 0.02, 0], scale: [2.4, 0.04, 0.22] });
+      half = [1.2, 0.05, 0.12];
+      break;
+    }
+    case 'storageAnnex': {
+      kit.part('box', M.graphite, root, { pos: [0, 1.1, 0], scale: [2.4, 2.2, 1.0] });
+      for (let r = 0; r < 3; r++) for (let c = 0; c < 4; c++) kit.part('box', M.white, root, { pos: [-0.85 + c * 0.57, 0.45 + r * 0.6, 0.51], scale: [0.5, 0.5, 0.02] });
+      kit.part('box', M.cyan, root, { pos: [0, 2.15, 0.51], scale: [2.2, 0.05, 0.02], shadow: false });
+      half = [1.2, 2.2, 0.5];
+      break;
+    }
+    case 'marketUplink': {
+      kit.part('cyl6', M.graphite, root, { pos: [0, 0.4, 0], scale: [1.4, 0.8, 1.4] });
+      kit.part('cyl', M.metal, root, { pos: [0, 1.4, 0], scale: [0.18, 1.4, 0.18] });
+      const dish = kit.node('dish', root, [0, 2.2, 0]);
+      kit.part('cone', M.white, dish, { rot: [-0.9, 0, 0], scale: [1.4, 0.4, 1.4] });
+      kit.part('sphere', accent, dish, { pos: [0, 0.35, 0.3], scale: [0.14, 0.14, 0.14], shadow: false });
+      ctx.animators.push((_dt, t) => {
+        if (!root.isDisposed()) dish.rotation.y = t * 0.3;
+      });
+      half = [0.7, 2.8, 0.7];
+      break;
+    }
+    case 'calibrator': {
+      kit.part('box', M.graphite, root, { pos: [0, 0.3, 0], scale: [1.8, 0.6, 1.4] });
+      const ringN = kit.node('calRing', root, [0, 1.5, 0]);
+      kit.part('torus', M.white, ringN, { scale: [1.4, 1.4, 1.4] });
+      kit.part('torusThin', accent, ringN, { scale: [1.2, 1.2, 1.2], shadow: false });
+      ctx.animators.push((_dt, t) => {
+        if (!root.isDisposed()) ringN.rotation.x = t * 0.7;
+      });
+      half = [0.9, 2.3, 0.7];
+      break;
+    }
   }
   // Collider from the rotated half-extents (AABB of the rotated footprint).
   const c = Math.abs(Math.cos(p.rotationY));

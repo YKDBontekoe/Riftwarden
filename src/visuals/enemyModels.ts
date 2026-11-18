@@ -342,3 +342,90 @@ export function buildCourier(kit: Kit, P: Palette): CourierRig {
   phase.setEnabled(false);
   return { root, body, ring, petals, vault, phase };
 }
+
+// ------------------------------------------------------------------ M7: Jammer Drone
+
+export interface JammerRig {
+  root: TransformNode;
+  body: TransformNode;
+  dish: TransformNode;
+  emitter: AbstractMesh;
+  muzzle: TransformNode;
+  fins: TransformNode[];
+  rotor: AbstractMesh;
+}
+
+/** Electronic-warfare drone: flat armoured disc, gimballed jamming dish with a violet emitter, tail fins. */
+export function buildJammer(kit: Kit, P: Palette): JammerRig {
+  const M = enemyMats(P.white.getScene(), P);
+  const root = kit.node('jammer', null);
+  const body = kit.node('jBody', root, [0, 4.4, 0]);
+  kit.part('cyl8', P.enemyDark, body, { scale: [1.7, 0.3, 1.7] });
+  kit.part('cyl8', P.enemyArmor, body, { pos: [0, 0.2, 0], scale: [1.3, 0.14, 1.3] });
+  kit.part('torusThin', M.violetDim, body, { pos: [0, -0.02, 0], scale: [1.72, 1.72, 1.72], shadow: false });
+  const rotor = kit.part('torus', M.violet, body, { pos: [0, -0.22, 0], scale: [1.1, 1.1, 1.1], shadow: false });
+  kit.part('cone', P.graphite, body, { pos: [0, -0.4, 0], rot: [Math.PI, 0, 0], scale: [0.5, 0.35, 0.5] });
+  const fins: TransformNode[] = [];
+  for (const side of [-1, 1]) {
+    const f = kit.node('jFin', body, [side * 0.7, 0.05, -0.55]);
+    f.rotation.set(0, side * 0.5, side * 0.25);
+    kit.part('box', P.enemyArmor, f, { scale: [0.06, 0.38, 0.6] });
+    kit.part('box', M.violetDim, f, { pos: [0, 0.16, 0], scale: [0.07, 0.04, 0.5], shadow: false });
+    fins.push(f);
+  }
+  // Jamming dish on a gimbal at the front (weakpoint).
+  const dish = kit.node('jDish', body, [0, 0.35, 0.55]);
+  kit.part('cyl', P.metal, dish, { pos: [0, -0.15, 0], scale: [0.1, 0.3, 0.1] });
+  kit.part('cone', P.enemyArmor, dish, { pos: [0, 0.05, 0.12], rot: [-Math.PI / 2, 0, 0], scale: [0.8, 0.22, 0.8] });
+  const emitter = kit.part('sphere', M.violet, dish, { pos: [0, 0.05, 0.42], scale: [0.2, 0.2, 0.2], shadow: false });
+  kit.part('cyl', P.graphite, dish, { pos: [0, 0.05, 0.28], rot: [Math.PI / 2, 0, 0], scale: [0.05, 0.4, 0.05] });
+  const muzzle = kit.node('jMuzzle', dish, [0, 0.05, 0.5]);
+  return { root, body, dish, emitter, muzzle, fins, rotor };
+}
+
+// ------------------------------------------------------------------ M7: Siege Crawler
+
+export interface CrawlerRig {
+  root: TransformNode;
+  body: TransformNode;
+  legs: { hip: TransformNode; knee: TransformNode; side: number; phase: number }[];
+  drill: TransformNode;
+  pods: AbstractMesh[];
+  glow: AbstractMesh;
+}
+
+/** Six-legged siege crawler: low wedge hull with a frontal armour prow, rear carrier pods and a reactor drill. */
+export function buildCrawler(kit: Kit, P: Palette): CrawlerRig {
+  const M = enemyMats(P.white.getScene(), P);
+  const root = kit.node('crawler', null);
+  const body = kit.node('cBody', root, [0, 1.25, 0]);
+  kit.part('box', P.enemyDark, body, { scale: [2.2, 0.7, 3.2] });
+  kit.part('box', P.enemyArmor, body, { pos: [0, 0.42, 0.2], scale: [1.9, 0.18, 2.6] });
+  // Frontal prow (the armour that blunts frontal fire).
+  kit.part('box', M.plate, body, { pos: [0, 0.15, 1.75], rot: [-0.45, 0, 0], scale: [2.3, 0.95, 0.35] });
+  for (const side of [-1, 1]) kit.part('box', M.plate, body, { pos: [side * 1.0, 0.1, 1.55], rot: [-0.3, side * 0.5, 0], scale: [0.6, 0.8, 0.3] });
+  const glow = kit.part('box', P.orangeGlow, body, { pos: [0, 0.32, 1.92], rot: [-0.45, 0, 0], scale: [1.4, 0.06, 0.02], shadow: false });
+  // Rear carrier pods (weakpoint cluster).
+  const pods: AbstractMesh[] = [];
+  for (let i = 0; i < 3; i++) {
+    kit.part('cyl8', P.graphite, body, { pos: [(i - 1) * 0.62, 0.65, -1.15], rot: [Math.PI / 2, 0, 0], scale: [0.5, 0.9, 0.5] });
+    pods.push(kit.part('cyl8', M.amber, body, { pos: [(i - 1) * 0.62, 0.65, -1.62], rot: [Math.PI / 2, 0, 0], scale: [0.36, 0.05, 0.36], shadow: false }));
+  }
+  // Drill under the prow.
+  const drill = kit.node('cDrill', body, [0, -0.25, 1.75]);
+  kit.part('cone', P.metal, drill, { pos: [0, 0, 0.35], rot: [Math.PI / 2, 0, 0], scale: [0.55, 0.9, 0.55] });
+  kit.part('torusThin', P.orangeGlow, drill, { pos: [0, 0, 0.05], rot: [Math.PI / 2, 0, 0], scale: [0.6, 0.6, 0.6], shadow: false });
+  const legs: CrawlerRig['legs'] = [];
+  for (let i = 0; i < 3; i++) {
+    for (const side of [-1, 1]) {
+      const hip = kit.node('cHip', body, [side * 1.05, -0.05, 0.95 - i * 0.95]);
+      hip.rotation.z = side * -0.5;
+      kit.part('box', P.enemyArmor, hip, { pos: [side * 0.45, 0, 0], scale: [0.95, 0.22, 0.26] });
+      const knee = kit.node('cKnee', hip, [side * 0.9, 0, 0]);
+      kit.part('box', P.enemyDark, knee, { pos: [0, -0.55, 0], rot: [0, 0, side * 0.25], scale: [0.18, 1.2, 0.2] });
+      kit.part('cone', P.metal, knee, { pos: [side * 0.15, -1.15, 0], rot: [Math.PI, 0, 0], scale: [0.18, 0.3, 0.18] });
+      legs.push({ hip, knee, side, phase: i * 2.1 + (side > 0 ? Math.PI : 0) });
+    }
+  }
+  return { root, body, legs, drill, pods, glow };
+}

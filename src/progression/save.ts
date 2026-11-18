@@ -1,3 +1,6 @@
+import { coreCell, connectedFloors, edgeCells, cellKey, emptyStructure, inBounds, isMovableStation, parseCell, type StationPose, type Structure } from '../home/build/model';
+import { pieceDef } from '../home/build/catalog';
+import { rollSignature, signatureDef } from '../loot/signatures';
 import { TECH_LIST, techKey } from '../towers/components';
 import { ACCENTS, DEFAULT_PLACEABLES, type Placeable, PLACEABLE_BOUNDS, PROP_TYPES, type PropType, type PropValue } from '../home/placeables';
 import { isStatKey, type StatOp } from '../combat/stats';
@@ -25,12 +28,14 @@ import { generateMarket, type MarketEntry, type MarketState, progressLevel } fro
  *   under CORRUPT_KEY and the last good backup (BACKUP_KEY) or a fresh save is used.
  * - Older versions are upgraded by MIGRATIONS; newer versions are never downgraded.
  */
-export const SAVE_VERSION = 6;
+export const SAVE_VERSION = 7;
 export const SAVE_KEY = 'riftwarden.save';
 export const BACKUP_KEY = 'riftwarden.save.bak';
 export const CORRUPT_KEY = 'riftwarden.save.corrupt';
 export const HISTORY_LIMIT = 12;
 export const STORAGE_CAPACITY = 50;
+/** M7: bays added by each Storage Annex facility. */
+export const ANNEX_BAYS = 10;
 export const PRESET_COUNT = 3;
 
 export interface TierRecord {
@@ -149,7 +154,21 @@ export interface SaveData {
   milestones: string[];
   history: RunHistoryEntry[];
   activeRun: ActiveRun | null;
-  base: { layoutVersion: number; placeables: Placeable[]; facilities: string[] };
+  base: {
+    layoutVersion: number;
+    placeables: Placeable[];
+    facilities: string[];
+    /** M7: snapped expansion modules (floors, walls, ceilings, pillars) on the 5 m grid. */
+    structure: Structure;
+    /** M7: relocated stations (absent = original position). */
+    stations: Record<string, StationPose>;
+    /** M7: blueprints bought from the architect (progression unlocks are derived from records/milestones). */
+    blueprints: string[];
+    /** M7: owned special pieces not bought with resources (crafted machinery) that are not placed. */
+    owned: Record<string, number>;
+  };
+  /** M7: onboarding steps completed (or skipped). */
+  tutorial: { done: string[]; skipped: boolean };
   /** M4: merchant stock (persisted: reopening a terminal never rerolls it). */
   market: MarketState;
   /** M4: transaction guard, deterministic crafting counter and economy statistics. */
@@ -215,7 +234,8 @@ export function createDefaultSave(now = Date.now()): SaveData {
     milestones: [],
     history: [],
     activeRun: null,
-    base: { layoutVersion: 1, placeables: DEFAULT_PLACEABLES.map((p) => structuredCloneSafe(p)), facilities: [...DEFAULT_FACILITIES] },
+    base: { layoutVersion: 2, placeables: DEFAULT_PLACEABLES.map((p) => structuredCloneSafe(p)), facilities: [...DEFAULT_FACILITIES], structure: emptyStructure(), stations: {}, blueprints: [], owned: {} },
+    tutorial: { done: [], skipped: false },
     market: generateMarket(profileId, 0, { level: 1, tier: 1 }, now),
     economy: emptyEconomy(),
     towers: { unlocked: [] },
@@ -223,8 +243,13 @@ export function createDefaultSave(now = Date.now()): SaveData {
 }
 
 /** Progress inputs for merchant stock and fabrication (best loot level reached, unlocked tier). */
-export function marketProgress(data: Pick<SaveData, 'records' | 'threat'>): { level: number; tier: number } {
-  return { level: progressLevel(data.records, data.threat.unlocked), tier: data.threat.unlocked };
+export function marketProgress(data: Pick<SaveData, 'records' | 'threat'> & { base?: SaveData['base'] }): { level: number; tier: number; extra: number } {
+  return { level: progressLevel(data.records, data.threat.unlocked), tier: data.threat.unlocked, extra: facilityCount(data, 'marketUplink') * 2 };
+}
+
+/** M7: number of a functional facility placed in the HQ. */
+export function facilityCount(data: { base?: SaveData['base'] }, type: string): number {
+  return data.base?.placeables.filter((p) => p.type === type).length ?? 0;
 }
 
 /** Replace the stock with the next rotation (free after a completed run; paid refreshes count separately). */
@@ -374,7 +399,7 @@ export function sanitizeItem(v: unknown, repairs: string[] = [], nested = false,
     // Only weapons have sockets (M3); the count is bounded by the build's socket list below.
     sockets: category === 'weapon' ? int(r.sockets, rarity(r.rarity).sockets, 0, 8) : 0,
     socketed: [],
-    signature: typeof r.signature === 'string' ? r.signature.slice(0, 64) : null,
+    signature: typeof r.signature === 'string' && signatureDef(r.signature) ? r.signature : null,
     seed: int(r.seed, 0, 0, 0xffffffff),
     gen: int(r.gen, 1, 0, 1000),
   };
@@ -446,6 +471,8 @@ export function sanitizeItem(v: unknown, repairs: string[] = [], nested = false,
     void compat;
     item.module = { type: str(m.type, base?.module?.type ?? 'unknown', 32), compatible: ['weapon'], socketCost: 1 };
   }
+  // M7: legendary/exotic weapons from before signatures receive theirs (deterministic from uid + seed).
+  if (!item.signature) item.signature = rollSignature(item);
   return item;
 }
 
@@ -556,7 +583,8 @@ export function sanitizeSave(raw: unknown, now = Date.now()): { data: SaveData; 
     milestones: arr(r.milestones).filter((x): x is string => typeof x === 'string').slice(0, 64),
     history: [],
     activeRun: null,
-    base: { layoutVersion: 1, placeables: [], facilities: [] },
+    base: { layoutVersion: 2, placeables: [], facilities: [], structure: emptyStructure(), stations: {}, blueprints: [], owned: {} },
+    tutorial: { done: [], skipped: false },
     market: def.market,
     economy: emptyEconomy(),
     towers: { unlocked: sanitizeTowerTech(obj(r.towers).unlocked) },
@@ -699,7 +727,15 @@ export function sanitizeSave(raw: unknown, now = Date.now()): { data: SaveData; 
       data.base.placeables.push(pl);
     }
   } else data.base.placeables = def.base.placeables;
-  data.base.layoutVersion = int(base.layoutVersion, 1, 1);
+  data.base.layoutVersion = 2;
+  data.storage.capacity = STORAGE_CAPACITY + data.storage.expansions * STORAGE_EXPANSION + facilityCount(data, 'storageAnnex') * ANNEX_BAYS;
+  data.base.structure = sanitizeStructure(base.structure);
+  data.base.stations = sanitizeStations(base.stations);
+  data.base.blueprints = [...new Set(arr(base.blueprints).filter((b): b is string => typeof b === 'string' && pieceDef(b)?.unlock.by === 'merchant'))];
+  data.base.owned = {};
+  for (const [k, v] of Object.entries(obj(base.owned))) if (pieceDef(k)?.owned) data.base.owned[k] = int(v, 0, 0, 99);
+  const tut = obj(r.tutorial);
+  data.tutorial = { done: [...new Set(arr(tut.done).filter((x): x is string => typeof x === 'string').map((x) => x.slice(0, 24)))].slice(0, 40), skipped: tut.skipped === true };
   const fac = arr(base.facilities).filter((f): f is string => typeof f === 'string');
   data.base.facilities = fac.length ? [...new Set([...DEFAULT_FACILITIES, ...fac])] : [...DEFAULT_FACILITIES];
 
@@ -782,7 +818,46 @@ export const MIGRATIONS: Record<number, (data: Obj) => Obj> = {
    * defaults via sanitize, e.g. highestWave = bestWave); milestones start empty. Nothing is removed.
    */
   5: (d) => ({ ...d, milestones: [] }),
+  /**
+   * v6 (M6) -> v7 (M7): headquarters construction (empty expansion structure, stations at their
+   * original places, no purchased blueprints) and onboarding. Existing players already know the
+   * game: their tutorial is marked complete. Decorations keep their positions.
+   */
+  6: (d) => ({ ...d, base: { ...obj(d.base), layoutVersion: 2, structure: emptyStructure(), stations: {}, blueprints: [], owned: {} }, tutorial: { done: ['complete'], skipped: false } }),
 };
+
+/** Structure: known piece ids on valid, in-bounds, non-core keys only (anything else is dropped). */
+function sanitizeStructure(v: unknown): Structure {
+  const r = obj(v);
+  const out = emptyStructure();
+  const cellOk = (k: string) => /^-?\d+,-?\d+$/.test(k) && (() => {
+    const [i, j] = parseCell(k);
+    return inBounds(i, j) && !coreCell(i, j);
+  })();
+  for (const [k, t] of Object.entries(obj(r.floors))) if (cellOk(k) && pieceDef(t as string)?.kind === 'floor') out.floors[k] = t as string;
+  for (const [k, t] of Object.entries(obj(r.ceilings))) if (out.floors[k] && pieceDef(t as string)?.kind === 'ceiling') out.ceilings[k] = t as string;
+  for (const [k, t] of Object.entries(obj(r.edges))) {
+    if (!/^-?\d+,-?\d+,[ne]$/.test(k) || pieceDef(t as string)?.kind !== 'edge') continue;
+    const [a, b] = edgeCells(k);
+    if (out.floors[cellKey(...a)] || out.floors[cellKey(...b)]) out.edges[k] = t as string;
+  }
+  for (const [k, t] of Object.entries(obj(r.pillars))) if (/^-?\d+,-?\d+$/.test(k) && pieceDef(t as string)?.kind === 'pillar') out.pillars[k] = t as string;
+  // Floating modules (not connected to a gateway) cannot exist: drop them.
+  const conn = connectedFloors(out);
+  for (const k of Object.keys(out.floors)) if (!conn.has(k)) delete out.floors[k];
+  return out;
+}
+
+function sanitizeStations(v: unknown): Record<string, StationPose> {
+  const out: Record<string, StationPose> = {};
+  for (const [k, p] of Object.entries(obj(v))) {
+    if (!isMovableStation(k)) continue;
+    const o = obj(p);
+    if (typeof o.x !== 'number' || typeof o.z !== 'number' || !Number.isFinite(o.x) || !Number.isFinite(o.z)) continue;
+    out[k] = { x: num(o.x, 0, -92, 92), z: num(o.z, 0, -50, 50), yaw: num(o.yaw, 0, -Math.PI * 4, Math.PI * 4) };
+  }
+  return out;
+}
 
 export function migrate(data: unknown, fromVersion: number): { data: unknown; ok: boolean } {
   if (!Number.isInteger(fromVersion) || fromVersion < 1 || fromVersion > SAVE_VERSION) return { data, ok: false };
