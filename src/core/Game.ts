@@ -8,12 +8,10 @@ import {
   Matrix,
   type PhysicsEngineV2,
   PhysicsRaycastResult,
-  CascadedShadowGenerator,
   PointLight,
   Ray,
   Scene,
   SceneInstrumentation,
-  ShadowGenerator,
   Vector3,
 } from '@babylonjs/core';
 import { type Emitter, sfx } from '../audio/Sfx';
@@ -28,6 +26,7 @@ import type { WeaponFamily } from '../data/defs';
 import { WeaponFx } from '../fx/WeaponFx';
 import { ECONOMY } from '../data/defs';
 import { DevTools } from '../arena/DevTools';
+import { createSunShadows } from '../arena/shadows';
 import { CORE_BEHAVIORS } from '../enemies/coreBehaviors';
 import { pickInteractable } from '../home/interaction';
 import { DROP_SOURCES, type DropSourceId, rollDrops } from '../loot/drops';
@@ -294,32 +293,8 @@ export class Game {
       this.post.kick(k * 0.8);
     };
     // Shadows (high quality only); enemies & turrets register as casters via the kit.
-    {
-      // Cascaded shadows: crisp contact shadows near the player, coverage across the arena.
-      const shadows = settings.shadows ?? (high ? 'high' : 'low');
-      const sg = shadows === 'off' ? null : shadows === 'high' && high ? new CascadedShadowGenerator(2048, moon) : new ShadowGenerator(shadows === 'high' ? 2048 : 1024, moon);
-      if (sg) {
-      if (sg instanceof CascadedShadowGenerator) {
-        sg.numCascades = 4;
-        sg.lambda = 0.82;
-        sg.stabilizeCascades = true;
-        sg.shadowMaxZ = 140;
-        sg.cascadeBlendPercentage = 0.08;
-        sg.autoCalcDepthBounds = false;
-      } else {
-        moon.shadowMinZ = 1;
-        moon.shadowMaxZ = 260;
-      }
-      sg.usePercentageCloserFiltering = true;
-      sg.filteringQuality = high ? ShadowGenerator.QUALITY_HIGH : ShadowGenerator.QUALITY_LOW;
-      sg.bias = 0.004;
-      sg.normalBias = 0.025;
-      sg.darkness = 0;
-      for (const m of arena.shadowCasters) sg.addShadowCaster(m);
-      for (const m of this.reactor.root.getChildMeshes()) sg.addShadowCaster(m);
-      this.kit.shadowSink = (m) => sg.addShadowCaster(m);
-      }
-    }
+    const sg = createSunShadows(moon, settings.shadows ?? (high ? 'high' : 'low'), high, [...arena.shadowCasters, ...this.reactor.root.getChildMeshes()]);
+    if (sg) this.kit.shadowSink = (m) => sg.addShadowCaster(m);
     this.enemies = new EnemyManager(scene, this.kit, this.pal);
     for (const [kind, b] of Object.entries({ ...CORE_BEHAVIORS, ...M6_BEHAVIORS, ...JAMMER_CRAWLER_BEHAVIORS, ...BOSS_BEHAVIORS })) if (b) this.enemies.register(kind as EnemyKind, b as Behavior);
     this.tele = new Telegraphs(scene);

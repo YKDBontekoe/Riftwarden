@@ -22,7 +22,9 @@ server/sim.ts              M7: CoopSim: 60 Hz fixed loop around ServerGame, snap
 server/profiles.ts         M7: file-backed online profiles (sha256(secret) ids, atomic writes), ProfileStore.op
 server/headless.ts         M7: browser stubs (canvas 2D, document, localStorage) so Game runs in Node
 src/net/protocol.ts        M7: message types, PROTOCOL_VERSION, structural validation, RateLimiter         [pure]
-src/net/ServerGame.ts      M7: authoritative Game subclass: Avatars per player, Recorder (fx/sfx/ui -> events), shot validation, acts, TeamLedger, votes
+src/net/ServerGame.ts      M7: authoritative Game subclass: Avatars per player, shot validation, acts, TeamLedger, votes
+src/net/recorder.ts        M7: Recorder + capturePresentation (fx/sfx/ui/telegraph/ordnance -> event tuples), withRecorder scoping
+src/net/replicated.ts      M7: the replicated presentation call names (FX_CALLS, ...) shared by server capture and client replay
 src/net/ClientGame.ts      M7: replica Game subclass: puppet enemies (interpolated 100 ms), shot claims, actions with replies, remote wardens
 src/net/NetClient.ts       M7: browser WebSocket session: identity, reconnect/backoff, act() with timeout, RTT
 src/progression/ops.ts     M7: named profile operations shared by client (Profile.op) and server (ProfileStore.op) [pure]
@@ -31,6 +33,9 @@ src/core/TutorialDirector.ts M7: shows one tutorial card at a time (F10 skips)
 src/home/build/            M7: catalog.ts (pieces, limits), model.ts (grid, validation, reachability) [pure], ops.ts (BUILD_OPS) [pure],
                            ExpansionLayer.ts (incremental meshes/colliders/lights), BuildMode.ts (construction camera + tools)
 src/enemies/jammerCrawlerBehaviors.ts M7: Jammer Drone, Siege Crawler behaviours
+src/enemies/coreBehaviors.ts Walker / Bulwark / Rush Drone as Behavior plug-ins (CORE_BEHAVIORS); EnemyManager has one dispatch path
+src/arena/DevTools.ts      dev lab actions behind `game.dev` (narrow DevHost interface, no Game dependency)
+src/arena/shadows.ts       createSunShadows(): cascaded / single sun shadow generator
 src/loot/signatures.ts     M7: legendary/exotic signature effects                                          [pure]
 src/visuals/droneModel.ts  M7: warden drone rig for teammates (slot colours)
 src/ui/Coop.tsx, TeamHud.tsx, Construction.tsx, SettingsPanel.tsx, TutorialCard.tsx   M7 UI
@@ -44,7 +49,8 @@ src/home/props.ts          station rigs (launch ring, holo-table, drone cradle, 
 src/home/layout.ts         HQ rooms/portals/stations data + wallSegments()            [pure]
 src/home/interaction.ts    pickInteractable: view cone + range + occlusion callback   [pure]
 src/home/placeables.ts     persistent customisable HQ objects + defaults               [pure]
-src/progression/save.ts    versioned/checksummed SaveData, sanitize, migrations, game-rule mutations [pure]
+src/progression/save/      versioned/checksummed SaveData [pure]: types, defaults, coerce, sanitize, migrations, codec, ownership (leaf lookups),
+                           rules (game-rule mutations), engineering (M3 modules); index.ts re-exports (import from '.../progression/save')
 src/progression/run.ts     RunLedger: unsecured/secured/lost rewards, idempotent finalize [pure]
 src/progression/items.ts   equipment slots (7, structured) + slot/category compatibility [pure]
 src/loot/types.ts          Category, ItemInstance (persisted, fully rolled), RolledStat/Affix [pure]
@@ -132,6 +138,7 @@ src/ui/                    React App (menus, pause, checkpoint, defeat, summary,
                            Terminals (deploy/loadout/storage/workshop/command), items.tsx (shared inventory view,
                            item detail, comparison), LootHud (prompt, feed, world labels, arena cargo), store + uiEvents
 tests/                     Vitest suites for the [pure] modules
+scripts/lib/harness.cjs    shared e2e helpers: launch/boot/check/stats/waitFor/shot/collectErrors (all browser suites import it)
 scripts/e2e-m1.cjs         M1 browser acceptance suite (70 checks: scenarios A-G, tiers, leaks, persistence)
 scripts/e2e-m2.cjs         M2 browser acceptance suite (loot scenarios A-I, migration, leaks)
 scripts/e2e-m4.cjs         M4 browser acceptance suite (A-K through the terminal UIs, reloads, exploits, rollback, leaks)
@@ -139,6 +146,23 @@ scripts/e2e-m3.cjs         M3 browser acceptance suite (families, generation, en
 scripts/e2e-m5.cjs         M5 browser acceptance suite
 scripts/e2e-m6.cjs         M6 browser acceptance suite (A-L: plans, enemies, elites, evolution, events, bosses, tiers, high waves, banking/records, perf, dev isolation)
 ```
+
+## Conventions (architecture rules)
+
+- **`noImplicitOverride` is on**: a method that overrides `Game` (ServerGame/ClientGame) must say `override`, so renaming a base method breaks loudly.
+- **Lint is a ratchet** (`npm run lint`, also in CI): errors for real bugs (`any`, awaiting non-promises, hook rules); warnings for floating promises and size (`max-lines` 800, `max-lines-per-function` 250). Do not add to the warning list; new files stay below the limits.
+- **Extract by narrow interface, not by passing `Game`**: new arena systems take a small host interface (see `DevTools`/`DevHost`) so they are testable and do not grow the god object. `Game.ts` is still the biggest hotspot (see "Refactoring backlog").
+- **Behaviours**: every enemy archetype is a `Behavior` registered by `Game` (`CORE_BEHAVIORS`, `M6_BEHAVIORS`, ...). `EnemyManager` is pool + routing + damage resolution only, and must not import a behaviour module (cycle).
+- **Replicated presentation**: add a call to the lists in `net/replicated.ts` (compile-checked against the real classes) instead of new string literals on either side.
+- **No milestone names in APIs**: name by intent (`nextTowerCost`, `shaderWarmup`, `towerHud`). The HUD snapshot keys `m5`/`m6` are legacy store shape.
+- **e2e scripts import `scripts/lib/harness.cjs`**; do not copy launch/boot helpers again. Restart `vite` if you delete/rename files while it runs (it caches module resolution and the page then never boots).
+
+## Refactoring backlog (not done yet)
+
+- `Game.ts` (~2100 lines): loot (rollItems..collectPickup), towers (modifyTower, tryPlace, updateInspect), upgrade flow, hostile hooks (hurtPlayer, hostileBlast, ventTick, summon), HUD publishing (`publishHud`/`snapshot`, reads ~40 members, many `protected`) and the constructor's scene setup are still inside. ServerGame/ClientGame override many of these, so extract them as systems that the net subclasses replace (`ServerLootSystem`, ...) rather than overriding Game methods.
+- Presentation is still captured by wrapping `fx/wfx/tele/ordnance/enemies` at runtime (`capturePresentation`); the target is a `PresentationSink` port that Game systems call explicitly, plus a typed discriminated union for event tuples (`ClientGame.applyEvent` still switches on string tags).
+- UI: `Hud.tsx` (815 lines), `Terminals.tsx`, `items.tsx` should be split per panel; the run-phase booleans on Game (`checkpointOpen`, `upgradeDue`, `screen`) want a small state machine.
+- Browser co-op section X of `e2e-construction-coop.cjs` times out on `click('text=CO-OP')` in this environment, on the original M7 commit too; the client replay path is covered only by typecheck + `e2e-coop-protocol.mjs`.
 
 ## Key design decisions
 
