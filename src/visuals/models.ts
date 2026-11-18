@@ -2,6 +2,7 @@ import {
   type AbstractMesh,
   type Material,
   Color3,
+  Mesh,
   MeshBuilder,
   PBRMaterial,
   Quaternion,
@@ -10,7 +11,6 @@ import {
 } from '@babylonjs/core';
 import type { Kit } from './kit';
 import { type Palette, unlit } from './materials';
-import { createBeveledBox } from './bevel';
 import { canvas, fbm, flareSprite, toTexture } from './textures';
 import { segmentedRing } from './rings';
 import { loftData, type LoftAxis, type Section, smoothLatheData } from './sculpt';
@@ -301,9 +301,15 @@ export function buildReactor(scene: Scene, P: Palette): ReactorRig {
     m.metadata = pickable ? { surface: 'reactor' } : null;
     return m;
   };
-  mk(MeshBuilder.CreateCylinder('rBase', { diameter: 9.5, height: 0.6, tessellation: 8 }, scene), P.graphite).position.y = 0.3;
-  mk(MeshBuilder.CreateCylinder('rBase2', { diameter: 7.6, height: 0.5, tessellation: 8 }, scene), P.white).position.y = 0.85;
-  mk(MeshBuilder.CreateTorus('rBaseGlow', { diameter: 8.6, thickness: 0.1, tessellation: 8 }, scene), P.cyanGlow, false).position.y = 0.62;
+  const sculpted = (name: string, vd: ReturnType<typeof loftData>) => {
+    const m = new Mesh(name, scene);
+    vd.applyToMesh(m);
+    return m;
+  };
+  // Stepped plinth with a soft machined profile.
+  mk(sculpted('rBase', smoothLatheData([[4.9, 0], [4.9, 0.14], [4.78, 0.3], [4.66, 0.52], [4.3, 0.6], [3.95, 0.66], [3.88, 0.98], [3.62, 1.1], [1.7, 1.12], [1.4, 1.18]], 48)), P.graphite);
+  mk(sculpted('rBase2', smoothLatheData([[3.8, 0], [3.8, 0.08], [3.7, 0.3], [3.3, 0.4], [3.25, 0.44]], 48)), P.white).position.y = 0.66;
+  mk(MeshBuilder.CreateTorus('rBaseGlow', { diameter: 9.0, thickness: 0.1, tessellation: 64 }, scene), P.cyanGlow, false).position.y = 0.62;
 
   const plasmaSrc = plasmaCanvas();
   const plasma = toTexture('reactorPlasma', plasmaSrc, scene, { aniso: 2 });
@@ -330,10 +336,10 @@ export function buildReactor(scene: Scene, P: Palette): ReactorRig {
   const pool = mk(MeshBuilder.CreateDisc('rPool', { radius: 13, tessellation: 48 }, scene), poolMat, false);
   pool.rotation.x = Math.PI / 2;
   pool.position.y = 0.04;
-  const sleeve = mk(MeshBuilder.CreateCylinder('rSleeve', { diameter: 2.5, height: 1.0, tessellation: 24 }, scene), P.graphite);
-  sleeve.position.y = 1.6;
-  const cap = mk(MeshBuilder.CreateCylinder('rCap', { diameterBottom: 2.6, diameterTop: 1.4, height: 0.8, tessellation: 24 }, scene), P.white);
-  cap.position.y = 7.6;
+  const sleeve = mk(sculpted('rSleeve', smoothLatheData([[1.32, 0], [1.42, 0.1], [1.42, 0.55], [1.5, 0.62], [1.5, 0.82], [1.36, 0.95]], 40)), P.graphite);
+  sleeve.position.y = 1.1;
+  const cap = mk(sculpted('rCap', smoothLatheData([[1.4, 0], [1.42, 0.12], [1.3, 0.3], [1.02, 0.52], [0.72, 0.7], [0.48, 0.8], [0.34, 0.84]], 40)), P.white);
+  cap.position.y = 7.15;
 
   // Four arched pylons
   for (let i = 0; i < 4; i++) {
@@ -341,17 +347,21 @@ export function buildReactor(scene: Scene, P: Palette): ReactorRig {
     const pyl = new TransformNode('pylon', scene);
     pyl.parent = root;
     pyl.rotation.y = a;
-    const p1 = mk(createBeveledBox('py1', 0.6, 5.5, 0.9, 0.06, scene), P.white);
+    // Curved buttress: thick at the plinth, leaning in and thinning toward the crown.
+    const p1 = mk(sculpted('py1', loftData([
+      { t: 0.6, w: 0.42, h: 0.62, v: 3.55, n: 5 },
+      { t: 2.0, w: 0.36, h: 0.5, v: 3.38, n: 5 },
+      { t: 4.0, w: 0.3, h: 0.42, v: 3.02, n: 5 },
+      { t: 5.6, w: 0.28, h: 0.38, v: 2.5, n: 5 },
+      { t: 6.45, w: 0.3, h: 0.36, v: 1.95, n: 4 },
+    ], 'y', 28)), P.white);
     p1.parent = pyl;
-    p1.position.set(0, 3.4, 3.1);
-    p1.rotation.x = -0.18;
-    const p2 = mk(createBeveledBox('py2', 0.5, 0.5, 2.4, 0.05, scene), P.graphite);
+    const p2 = mk(sculpted('py2', loftData([{ t: 2.5, w: 0.24, h: 0.22, v: 6.3 }, { t: 2.3, w: 0.28, h: 0.26, v: 6.3, n: 5 }, { t: 1.3, w: 0.24, h: 0.22, v: 6.25, n: 5 }, { t: 1.15, w: 0.18, h: 0.16, v: 6.25 }], 'z', 20)), P.graphite);
     p2.parent = pyl;
-    p2.position.set(0, 6.3, 2.0);
-    const strip = mk(MeshBuilder.CreateBox('pyS', { width: 0.12, height: 4.5, depth: 0.05 }, scene), P.cyanGlow, false);
+    const strip = mk(MeshBuilder.CreateBox('pyS', { width: 0.1, height: 3.8, depth: 0.04 }, scene), P.cyanGlow, false);
     strip.parent = pyl;
-    strip.position.set(0, 3.3, 2.62);
-    strip.rotation.x = -0.18;
+    strip.position.set(0, 3.2, 2.84);
+    strip.rotation.x = -0.15;
   }
 
   const coilLight = unlit(scene, 'reactorCoilLight', [0.28, 2.0, 2.5], { twoSided: true });
