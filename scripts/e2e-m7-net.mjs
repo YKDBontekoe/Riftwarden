@@ -18,7 +18,7 @@ const check = (n, ok, info = '') => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${n}
 
 let server = null;
 function startServer() {
-  server = spawn('npx', ['tsx', 'server/main.ts'], { env: { ...process.env, RIFT_PORT: String(PORT), RIFT_DATA: DATA, RIFT_TEST: '1' }, stdio: ['ignore', 'pipe', 'pipe'] });
+  server = spawn(process.execPath, ['--import', 'tsx', 'server/main.ts'], { env: { ...process.env, RIFT_PORT: String(PORT), RIFT_DATA: DATA, RIFT_TEST: '1' }, stdio: ['ignore', 'pipe', 'pipe'] });
   server.log = '';
   server.stdout.on('data', (d) => (server.log += d));
   server.stderr.on('data', (d) => (server.log += d));
@@ -285,6 +285,22 @@ const profileFile = (id) => {
       A.close(); B2.close();
       await sleep(1500);
       check('E6 server survives the whole team disconnecting', !server.killed && server.exitCode === null);
+    }
+
+    // ------------------------------------------------------------ R: team defeat
+    if (want('R')) {
+      const bots = await team(2, 1, ['Romeo', 'Sierra']);
+      const stop = heartbeat(bots, false);
+      await bots[0].act({ a: 'startWave' });
+      await sleep(1500);
+      const unsec = bots[0].snap.me.run.su;
+      await bots[0].act({ a: 'test', op: 'reactor', n: 5000 });
+      const ends = await Promise.all(bots.map((b) => b.waitNew((m) => m.t === 'runEnd', 15000)));
+      stop();
+      check('R1 reactor destroyed ends the run for the whole team (defeat)', ends.every((e) => e.result.outcome === 'defeat'), ends.map((e) => e.result.outcome).join(','));
+      check('R2 unsecured rewards are lost on defeat', ends[0].result.salvageLost >= unsec && ends[0].result.salvageSecured === 0, `lost ${ends[0].result.salvageLost}`);
+      for (const b of bots) b.close();
+      await sleep(400);
     }
 
     // ------------------------------------------------------------ S: failure cases (spec 35)

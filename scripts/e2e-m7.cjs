@@ -236,6 +236,122 @@ const cell = (i, j) => [2 + 5 * i + 2.5, -2.5 + 5 * j + 2.5];
     check('J5 unlock, built module and placed machinery persist after reload', persisted[0] === 'floor_lab' && persisted[1] && persisted[2], JSON.stringify(persisted));
   }
 
+  // ------------------------------------------------------------------ X: co-op with real clients (needs RIFT_TEST=1 server)
+  if (want('X')) {
+    const { Bot, sleep } = await import('./bot.mjs');
+    const wsUrl = process.env.RIFT_WS || 'ws://localhost:8787/ws';
+    const A = (await open(b)).p;
+    const B = (await open(b)).p;
+    for (const [pg, name] of [[A, 'Alpha'], [B, 'Bravo']]) {
+      await ev(pg, (n) => window.__rift.flow.coopConnect(n), name);
+      await waitFor(pg, () => window.__rift.flow.net.state.status === 'online');
+      await ev(pg, () => window.__rift.flow.coopProfileInit('fresh'));
+      await waitFor(pg, () => window.__rift.flow.profile.online);
+    }
+    // Lobby through the real UI: A creates from the menu's co-op tab, B types the code.
+    await ev(A, () => window.__rift.flow.net.send({ t: 'create', tier: 1 }));
+    await waitFor(A, () => window.__rift.flow.net.state.lobby);
+    const code = await ev(A, () => window.__rift.flow.net.state.lobby.code);
+    await B.click('text=CO-OP');
+    await B.fill('[data-testid="coop-code"]', code);
+    await B.click('[data-testid="coop-join"]');
+    await waitFor(B, () => window.__rift.flow.net.state.lobby?.players.length === 2, null, 20000);
+    check('X1 a second client joins through the lobby UI with the code', true, code);
+    const bots = [];
+    for (const n of ['Charlie', 'Delta']) {
+      const bt = new Bot(n, wsUrl);
+      await bt.connect();
+      bt.send({ t: 'profileInit', mode: 'fresh' });
+      await bt.wait((m) => m.t === 'profile');
+      bt.send({ t: 'join', code });
+      await bt.waitNew((m) => m.t === 'lobby' && m.lobby);
+      bt.send({ t: 'ready', ready: true });
+      bots.push(bt);
+    }
+    await B.click('[data-testid="lobby-ready"]');
+    await waitFor(A, () => window.__rift.flow.net.state.lobby?.players.length === 4 && window.__rift.flow.net.state.lobby.players.every((p) => p.host || p.ready), null, 20000);
+    await A.click('text=CO-OP');
+    await A.click('[data-testid="lobby-start"]');
+    for (const pg of [A, B]) await waitFor(pg, () => window.__rift.state().location === 'arena' && !window.__rift.state().busy);
+    for (const bt of bots) await bt.wait((m) => m.t === 'runStart', 30000);
+    for (const pg of [A, B]) await ev(pg, () => { window.__rift.stopLoop(); window.__rift.flow.input.forceCapture = true; window.__rift.game.setScreen('playing'); });
+    let botsAlive = true;
+    (async () => { while (botsAlive) { for (const bt of bots) { const m = bt.me(); if (m) bt.input([m[1], m[2], m[3]]); } await sleep(70); } })();
+    const tick = async (sec = 0.5) => { for (const pg of [A, B]) await ev(pg, (s) => window.__rift.advance(s), sec); await sleep(120); };
+    for (let i = 0; i < 6; i++) await tick();
+    const seen = await ev(A, () => ({ remotes: window.__rift.game.team.length, names: window.__rift.game.team.map((t) => t.name) }));
+    check('X2 four wardens in one operation; each client sees the teammates', seen.remotes === 4, JSON.stringify(seen.names));
+    // Tower placement through the replica's real build mode.
+    await ev(A, () => { const R = window.__rift; R.teleport(-4, -18, 1); R.look(0, 0.75); R.advance(0.2); R.game.setBuildMode(true); });
+    for (let i = 0; i < 3; i++) await tick(0.2);
+    const valid = await ev(A, () => window.__rift.game.construction.valid);
+    await ev(A, () => { const i = window.__rift.flow.input; i.simulateMouse(0, true); window.__rift.advance(1 / 60); i.simulateMouse(0, false); window.__rift.advance(1 / 60); });
+    for (let i = 0; i < 6; i++) await tick(0.3);
+    const towers = await Promise.all([A, B].map((pg) => ev(pg, () => window.__rift.game.turrets.turrets.length)));
+    check('X3 a tower built by one player appears for every player', valid && towers[0] === 1 && towers[1] === 1, JSON.stringify({ valid, towers }));
+    // Combat: B aims at the nearest enemy and fires its real weapon.
+    await ev(A, () => window.__rift.game.startWave());
+    for (let i = 0; i < 16; i++) await tick(0.5);
+    const fired = await ev(B, async () => {
+      const R = window.__rift;
+      const g = R.game;
+      let shots = 0;
+      for (let k = 0; k < 40; k++) {
+        const e = g.enemies.active.filter((x) => x.alive).sort((a, b) => a.remaining - b.remaining)[0];
+        if (!e) { R.advance(0.25); continue; }
+        const eye = g.player.eye;
+        const c = e.center();
+        R.look(Math.atan2(c.x - eye.x, c.z - eye.z), -Math.atan2(c.y - eye.y, Math.hypot(c.x - eye.x, c.z - eye.z)));
+        g.input.simulateMouse(0, true);
+        R.advance(0.25);
+        shots = g.weapon.shotsFired;
+        await new Promise((r) => setTimeout(r, 60));
+      }
+      g.input.simulateMouse(0, false);
+      return { shots, kills: g.cfg.run.kills, rejected: g.netStats.rejected };
+    });
+    for (let i = 0; i < 4; i++) await tick();
+    const kills = await ev(A, () => window.__rift.game.cfg.run.kills);
+    check('X4 a client\'s real weapon fire is validated and kills authoritative enemies', fired.shots > 5 && kills > 0, JSON.stringify({ ...fired, teamKills: kills }));
+    await shot(A, 'X-coop');
+    // Reach the first checkpoint quickly (test server) and vote home through the UI.
+    for (let w = 0; w < 6; w++) {
+      const snap = bots[0].snap;
+      if (snap.of) {
+        const chooser = snap.of[1];
+        const bt = bots.find((x) => x.welcome.playerId === chooser);
+        if (bt) await bt.act({ a: 'upgrade', id: snap.of[0][0] });
+        else for (const pg of [A, B]) await ev(pg, () => { const g = window.__rift.game; if (g.offer && g.offerChooser === g.you) g.chooseUpgrade(g.offer[0].id); });
+      }
+      if (snap.cp[2]) break;
+      if (snap.w[1] === 'prep') await bots[0].act({ a: 'startWave' });
+      await bots[0].act({ a: 'test', op: 'clear' });
+      for (let i = 0; i < 4; i++) await tick(0.3);
+    }
+    for (let i = 0; i < 40 && !bots[0].snap.cp[2]; i++) {
+      const snap = bots[0].snap;
+      if (snap.of) {
+        const bt = bots.find((x) => x.welcome.playerId === snap.of[1]);
+        if (bt) await bt.act({ a: 'upgrade', id: snap.of[0][0] });
+        else for (const pg of [A, B]) await ev(pg, () => { const g = window.__rift.game; if (g.offer && g.offerChooser === g.you) g.chooseUpgrade(g.offer[0].id); });
+      }
+      await tick(0.3);
+    }
+    const banks = await Promise.all([A, B].map((pg) => ev(pg, () => window.__rift.game.cfg.run.secured.salvage)));
+    check('X5 the wave-5 checkpoint banks for each client', banks.every((v) => v > 0), JSON.stringify(banks));
+    for (const pg of [A, B]) await ev(pg, () => window.__rift.game.openCheckpoint());
+    await A.click('[data-testid="cp-home"]');
+    await B.click('[data-testid="cp-home"]');
+    for (const bt of bots) await bt.act({ a: 'vote', home: true });
+    for (const pg of [A, B]) await waitFor(pg, () => window.__rift.state().location === 'home' && !window.__rift.state().busy, null, 60000);
+    const after = await Promise.all([A, B].map((pg) => ev(pg, () => ({ items: window.__rift.profile.save.items.length, salvage: window.__rift.profile.save.resources.salvage, run: window.__rift.profile.save.activeRun, screen: window.__rift.state().screen }))));
+    check('X6 unanimous UI vote returns both clients home with banked rewards in their online profiles', after.every((x) => x.salvage > 0 && !x.run && x.screen === 'summary'), JSON.stringify(after));
+    botsAlive = false;
+    for (const bt of bots) bt.close();
+    console.log([...A.errs, ...B.errs].filter((e) => e.startsWith('PAGEERR')).slice(0, 5).join('\n'));
+    check('X7 no page errors on co-op clients', ![...A.errs, ...B.errs].some((e) => e.startsWith('PAGEERR')));
+  }
+
   console.log(p.errs.slice(0, 6).join('\n'));
   check('Z no page errors', !p.errs.some((e) => e.startsWith('PAGEERR')), p.errs.find((e) => e.startsWith('PAGEERR')) ?? '');
   await b.close();

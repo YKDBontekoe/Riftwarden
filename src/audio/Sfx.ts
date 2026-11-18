@@ -44,7 +44,8 @@ export type SfxName =
   | 'bossRoar'
   | 'grind'
   | 'beep'
-  | 'mortar';
+  | 'mortar'
+  | 'step';
 
 interface PlayOpts {
   volume?: number;
@@ -198,6 +199,141 @@ export class Sfx {
     return this.ctx ? this.ambBus : null;
   }
 
+  // ---------------------------------------------------------------- M7 spatial ambience
+
+  private emitters = new Set<Emitter>();
+  /** Listener pose (camera position + yaw), updated by the active world every frame. */
+  listen(x: number, y: number, z: number, yaw: number): void {
+    if (!this.ctx) return;
+    const L = this.ctx.listener;
+    const t = this.ctx.currentTime;
+    if (L.positionX) {
+      L.positionX.setTargetAtTime(x, t, 0.02);
+      L.positionY.setTargetAtTime(y, t, 0.02);
+      L.positionZ.setTargetAtTime(z, t, 0.02);
+      // Babylon is left-handed (+z forward); WebAudio is right-handed: mirror z.
+      L.forwardX.setTargetAtTime(Math.sin(yaw), t, 0.02);
+      L.forwardY.setTargetAtTime(0, t, 0.02);
+      L.forwardZ.setTargetAtTime(-Math.cos(yaw), t, 0.02);
+      L.upX.setTargetAtTime(0, t, 0.02);
+      L.upY.setTargetAtTime(1, t, 0.02);
+      L.upZ.setTargetAtTime(0, t, 0.02);
+    }
+  }
+
+  /**
+   * Positional ambience loop (machinery hum, reactor, vents, ventilation): filtered noise and/or a tone
+   * through an HRTF panner with inverse distance attenuation, on the ambience bus. Returns a handle the
+   * world disposes with its scene.
+   */
+  emitter(kind: 'hum' | 'reactor' | 'vent' | 'air' | 'machine', x: number, y: number, z: number, gain = 1, ref = 4): Emitter | null {
+    if (!this.ctx || this.emitters.size > 24) return null;
+    const ctx = this.ctx;
+    const panner = ctx.createPanner();
+    panner.panningModel = 'HRTF';
+    panner.distanceModel = 'inverse';
+    panner.refDistance = ref;
+    panner.maxDistance = 120;
+    panner.rolloffFactor = 1.2;
+    panner.positionX.value = x;
+    panner.positionY.value = y;
+    panner.positionZ.value = -z;
+    const g = ctx.createGain();
+    g.gain.value = 0;
+    g.gain.setTargetAtTime(gain, ctx.currentTime, 0.6);
+    g.connect(panner).connect(this.ambBus);
+    const nodes: AudioScheduledSourceNode[] = [];
+    const noise = (rate: number, type: BiquadFilterType, f: number, q: number, v: number) => {
+      const src = ctx.createBufferSource();
+      src.buffer = this.noise;
+      src.loop = true;
+      src.playbackRate.value = rate;
+      const flt = ctx.createBiquadFilter();
+      flt.type = type;
+      flt.frequency.value = f;
+      flt.Q.value = q;
+      const vg = ctx.createGain();
+      vg.gain.value = v;
+      src.connect(flt).connect(vg).connect(g);
+      src.start();
+      nodes.push(src);
+    };
+    const tone = (type: OscillatorType, f: number, v: number, lfo = 0) => {
+      const o = ctx.createOscillator();
+      o.type = type;
+      o.frequency.value = f;
+      const vg = ctx.createGain();
+      vg.gain.value = v;
+      o.connect(vg).connect(g);
+      if (lfo) {
+        const l = ctx.createOscillator();
+        l.frequency.value = lfo;
+        const la = ctx.createGain();
+        la.gain.value = v * 0.6;
+        l.connect(la).connect(vg.gain);
+        l.start();
+        nodes.push(l);
+      }
+      o.start();
+      nodes.push(o);
+    };
+    switch (kind) {
+      case 'reactor':
+        tone('sine', 55, 0.22, 0.25);
+        tone('triangle', 110, 0.05, 0.4);
+        noise(0.5, 'bandpass', 180, 2, 0.12);
+        break;
+      case 'hum':
+        tone('sine', 60, 0.08);
+        tone('sine', 120, 0.04, 0.3);
+        break;
+      case 'machine':
+        tone('sawtooth', 48, 0.025, 0.7);
+        noise(0.8, 'bandpass', 900, 3, 0.05);
+        break;
+      case 'vent':
+        noise(1, 'highpass', 2400, 0.7, 0.07);
+        break;
+      case 'air':
+        noise(0.7, 'lowpass', 600, 0.5, 0.09);
+        break;
+    }
+    const em: Emitter = {
+      move: (nx, ny, nz) => {
+        panner.positionX.value = nx;
+        panner.positionY.value = ny;
+        panner.positionZ.value = -nz;
+      },
+      level: (v) => g.gain.setTargetAtTime(v * gain, ctx.currentTime, 0.2),
+      dispose: () => {
+        if (!this.emitters.delete(em)) return;
+        g.gain.setTargetAtTime(0, ctx.currentTime, 0.15);
+        setTimeout(() => {
+          for (const n of nodes) {
+            try {
+              n.stop();
+            } catch {
+              /* already stopped */
+            }
+          }
+          g.disconnect();
+          panner.disconnect();
+        }, 600);
+      },
+    };
+    this.emitters.add(em);
+    return em;
+  }
+
+  /** Audio is unlocked (a user gesture started the context). */
+  get ready(): boolean {
+    return !!this.ctx && this.ctx.state === 'running';
+  }
+
+  get emitterCount(): number {
+    return this.emitters.size;
+  }
+
   setTactical(active: boolean): void {
     if (!this.ctx) return;
     this.filter.frequency.setTargetAtTime(active ? 1400 : 20000, this.ctx.currentTime, 0.08);
@@ -296,8 +432,20 @@ export class Sfx {
   /** M7: >0 while presentation the co-op server already authored is being reproduced locally (no duplicates). */
   suppress = 0;
 
+  /** M7 voice management: concurrent one-shots are capped so dense fights stay clear (and cheap). */
+  private voices = 0;
+  static readonly MAX_VOICES = 40;
+  /** Voices dropped by the cap (diagnostics). */
+  dropped = 0;
+
   play(name: SfxName, o: PlayOpts = {}): void {
     if (this.suppress > 0 || !this.ctx || this.ctx.state !== 'running') return;
+    if (this.voices >= Sfx.MAX_VOICES && !UI_SOUNDS.has(name)) {
+      this.dropped++;
+      return;
+    }
+    this.voices++;
+    setTimeout(() => this.voices--, 450);
     // Rate-limit identical sounds so dense combat does not turn into noise.
     const now = this.ctx.currentTime;
     const minGap = name === 'shoot' ? 0.03 : name === 'hit' || name === 'turretShot' ? 0.035 : 0.02;
@@ -516,6 +664,12 @@ export class Sfx {
         for (let i = 0; i < 5; i++) this.osc('square', 600 + i * 180, 600 + i * 180, 0.04, 0.035 * v, out, i * 0.045);
         this.osc('sine', 1400, 1400, 0.25, 0.06 * v, out, 0.25);
         break;
+      case 'step':
+        // Heavy mechanical footfall: low thump + servo whine + metal clank.
+        this.osc('sine', 90 * p, 42, 0.16, 0.32 * v, out);
+        this.noiseBurst(0.07, 0.12 * v, 900, 300, out, 'lowpass', 1);
+        this.osc('square', 520 * p * j, 380 * p, 0.05, 0.025 * v, out, 0.03);
+        break;
       case 'bank':
         this.osc('triangle', 392, 392, 0.2, 0.1 * v, out);
         this.osc('triangle', 523, 523, 0.2, 0.1 * v, out, 0.1);
@@ -527,3 +681,10 @@ export class Sfx {
 }
 
 export const sfx = new Sfx();
+
+/** Positional ambience loop handle. */
+export interface Emitter {
+  move(x: number, y: number, z: number): void;
+  level(v: number): void;
+  dispose(): void;
+}

@@ -24,7 +24,7 @@ export type V3 = [number, number, number];
 export type ActMsg =
   | { a: 'place'; cfg: { base: string; weapon: string; core: string; modifier: string }; p: V3; yaw: number }
   | { a: 'recycle'; tower: number }
-  | { a: 'modify'; tower: number; what: 'level' | 'weapon' | 'core' | 'modifier'; id?: string }
+  | { a: 'modify'; tower: number; what: 'level' | 'weapon' | 'core' | 'modifier'; part?: string }
   | { a: 'tactical' }
   | { a: 'startWave' }
   | { a: 'collect'; pickup: number }
@@ -159,7 +159,7 @@ function validAct(o: Record<string, unknown>): boolean {
     case 'recycle':
       return isInt(o.tower);
     case 'modify':
-      return isInt(o.tower) && (o.what === 'level' || o.what === 'weapon' || o.what === 'core' || o.what === 'modifier') && (o.id === undefined || isStr(o.id, 32));
+      return isInt(o.tower) && (o.what === 'level' || o.what === 'weapon' || o.what === 'core' || o.what === 'modifier') && (o.part === undefined || isStr(o.part, 32));
     case 'tactical':
     case 'startWave':
       return true;

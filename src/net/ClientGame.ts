@@ -270,7 +270,7 @@ export class ClientGame extends Game {
     if (what === 'base') return { ok: false, reason: 'The base is fixed once built' };
     const sid = this.serverTowerId(t);
     if (sid === null) return { ok: false, reason: 'Tower no longer exists' };
-    void this.request({ a: 'modify', tower: sid, what, id }).then((ok) => {
+    void this.request({ a: 'modify', tower: sid, what, part: id }).then((ok) => {
       if (ok) {
         sfx.play('equip', { pitch: 1.1 });
         this.towerNote = { text: `${t.name} refit requested`, t: 2 };

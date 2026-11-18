@@ -14,7 +14,7 @@ import {
   ShadowGenerator,
   Vector3,
 } from '@babylonjs/core';
-import { sfx } from '../audio/Sfx';
+import { type Emitter, sfx } from '../audio/Sfx';
 import type { Input } from '../core/Input';
 import type { Settings } from '../core/settings';
 import { HQ_MOVE, Player } from '../player/Player';
@@ -107,6 +107,7 @@ export class HomeBase {
   /** Visiting someone else's HQ: no construction, no persistent services. */
   readOnly = false;
   private tut: TutorialDirector | null = null;
+  private emitters: Emitter[] = [];
   private tutDist = 0;
   private tutPos: [number, number] = [0, 0];
   private openedTerminals = new Set<string>();
@@ -161,8 +162,8 @@ export class HomeBase {
       return m;
     };
     const floor = pal.floor;
-    const wall = composite('hqWall', [0.95, 0.96, 0.97], 0.62, 0.15);
-    const ceiling = composite('hqCeiling', [0.8, 0.82, 0.84], 0.85, 0);
+    const wall = composite('hqWall', [0.8, 0.83, 0.86], 0.58, 0.18);
+    const ceiling = composite('hqCeiling', [0.6, 0.63, 0.66], 0.85, 0);
     ceiling.albedoTexture = null; // plain acoustic panels: keeps the vents for walls/floor
     ceiling.bumpTexture = null;
     const glass = new PBRMaterial('hqGlass', scene);
@@ -232,7 +233,7 @@ export class HomeBase {
 
     // ---- lighting: cool fill, moonlight through the window, cyan/teal accents, warm workshop
     const hemi = new HemisphericLight('hqFill', new Vector3(0, 1, 0), scene);
-    hemi.intensity = 0.65;
+    hemi.intensity = 0.5;
     hemi.diffuse = new Color3(0.86, 0.93, 1);
     hemi.groundColor = new Color3(0.5, 0.53, 0.56);
     hemi.specular = Color3.Black();
@@ -283,7 +284,8 @@ export class HomeBase {
     this.post.pipeline.bloomWeight = 0.22;
     this.post.pipeline.bloomKernel = high ? 64 : 48;
     this.post.baseGrain = 0.7;
-    this.post.baseExposure = 0.92;
+    this.post.baseExposure = 0.86;
+    this.post.pipeline.imageProcessing.contrast = 1.2;
 
     this.input.onLockChange = (locked) => {
       if (!locked && this.screen === 'home') this.setScreen('paused');
@@ -634,6 +636,11 @@ export class HomeBase {
       if (input.pressed('Escape') || input.pressed('KeyB')) void this.exitConstruction();
     }
     this.layer.update(dt);
+    if (!this.emitters.length && sfx.ready) this.startAmbience();
+    {
+      const c = this.scene.activeCamera?.globalPosition ?? this.player.camera.position;
+      sfx.listen(c.x, c.y, c.z, this.screen === 'construct' ? -this.build.camera.alpha - Math.PI / 2 : this.player.yaw);
+    }
     if (this.tut) {
       const p = this.player.position;
       this.tutDist += Math.min(2, Math.hypot(p.x - this.tutPos[0], p.z - this.tutPos[1]));
@@ -720,6 +727,21 @@ export class HomeBase {
     });
   }
 
+  /** M7 spatial ambience: launch ring, machinery, ventilation (started once audio is unlocked). */
+  private startAmbience(): void {
+    for (const [k, x, y, z, g, r] of [
+      ['hum', 0, 4, 19.6, 1, 6],
+      ['air', 0, 6.5, -2, 0.7, 8],
+      ['machine', 21.5, 1.2, -5.2, 0.7, 3],
+      ['machine', -27, 1.2, -3.6, 0.8, 3],
+      ['hum', 30, 3, 0, 0.6, 5],
+      ['air', -16, 4.5, 0, 0.5, 5],
+    ] as const) {
+      const e = sfx.emitter(k, x, y, z, g, r);
+      if (e) this.emitters.push(e);
+    }
+  }
+
   /** M7: enter construction mode (from the architect console). Owner only. */
   enterConstruction(): void {
     if (this.readOnly) return;
@@ -757,6 +779,8 @@ export class HomeBase {
     this.build?.dispose();
     this.layer?.dispose();
     this.tut?.dispose();
+    for (const e of this.emitters) e.dispose();
+    this.emitters = [];
     this.disposed = true;
     this.unsubProfile();
     this.unsubEcon();

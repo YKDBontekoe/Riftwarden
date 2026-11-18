@@ -739,7 +739,7 @@ export class ServerGame extends Game {
       case 'modify': {
         const t = this.turrets.byId(m.tower);
         if (!t) return 'Tower no longer exists';
-        const r = this.modifyTower(t, m.what, m.id);
+        const r = this.modifyTower(t, m.what, m.part);
         if (!r.ok) return r.reason;
         this.rec.push(['Tc', t.id, t.config, t.level]);
         return null;
@@ -922,6 +922,12 @@ export class ServerGame extends Game {
     this.turrets.update(dt, this.turretCtx);
     this.director.update(dt, hdt);
     this.updateProjectiles(hdt);
+  }
+
+  /** Headless: no pointer lock, the simulation is always 'playing' (defeat, refits and offers depend on it). */
+  start(): void {
+    this.newRun();
+    this.setScreen('playing');
   }
 
   openCheckpoint(): void {

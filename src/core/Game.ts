@@ -16,7 +16,7 @@ import {
   ShadowGenerator,
   Vector3,
 } from '@babylonjs/core';
-import { sfx } from '../audio/Sfx';
+import { type Emitter, sfx } from '../audio/Sfx';
 import { mulberry32, rollDamage } from '../combat/damage';
 import { Director } from '../combat/Director';
 import { isChilled, speedFactor } from '../combat/status';
@@ -223,6 +223,8 @@ export class Game {
   protected disposed = false;
   /** M7 onboarding. */
   protected tut: TutorialDirector | null = null;
+  /** M7 positional ambience loops (disposed with the scene). */
+  protected emitters: Emitter[] = [];
   private tutTrack = { dist: 0, x: 0, z: 0, air: false, dash: false, tactical: false };
 
   constructor(
@@ -486,6 +488,16 @@ export class Game {
     };
     this.applySettings(settings);
     this.refreshEquipment();
+    // M7 spatial ambience: reactor core hum and machinery at the rift gates.
+    const em = (k: Parameters<typeof sfx.emitter>[0], x: number, y: number, z: number, g: number, ref?: number) => {
+      const e = sfx.emitter(k, x, y, z, g, ref);
+      if (e) this.emitters.push(e);
+    };
+    em('reactor', ARENA.reactor.x, 3, ARENA.reactor.z, 1, 6);
+    for (const gate of ['north', 'east', 'west'] as const) {
+      const p = ARENA.routes[gate].points[0];
+      em('machine', p.x, 2, p.z, 0.8, 5);
+    }
     if (cfg.tutorial) this.tut = new TutorialDirector('arena', cfg.tutorial, { available: (id) => this.tutAvailable(id), complete: (id, t) => this.tutComplete(id, t) });
   }
 
@@ -1050,6 +1062,8 @@ export class Game {
   dispose(): void {
     if (this.disposed) return;
     this.tut?.dispose();
+    for (const e of this.emitters) e.dispose();
+    this.emitters = [];
     this.disposed = true;
     this.input.onLockChange = () => {};
     this.director.bus.reset();
@@ -1104,6 +1118,8 @@ export class Game {
     const t0 = performance.now();
     if (this.screen === 'playing' || this.screen === 'defeat') this.update(dt);
     else this.idleAnimate(dt);
+    const cam = this.player.camera.position;
+    sfx.listen(cam.x, cam.y, cam.z, this.player.yaw);
     if (this.tut) {
       const p = this.player.position;
       this.tutTrack.dist += Math.min(2, Math.hypot(p.x - this.tutTrack.x, p.z - this.tutTrack.z));
