@@ -257,6 +257,10 @@ export interface ExplosionOpts {
  * All transient visuals. Gameplay never depends on these; they can be capped or
  * thinned without changing outcomes (logical events != rendered particles).
  */
+/** Plasma burn marks last this long and shrink away over the final HOLE_FADE seconds. */
+const HOLE_LIFE = 22;
+const HOLE_FADE = 5;
+
 export class Effects {
   private bursts = new Map<BurstKind, BurstPool>();
   private tracers: { pool: Tracer[]; next: number }[] = [];
@@ -270,6 +274,9 @@ export class Effects {
   private scorchNext = 0;
   private holes: AbstractMesh[] = [];
   private holeNext = 0;
+  /** Seconds left per burn mark and its full size (marks shrink away over their last seconds). */
+  private holeLife = new Float32Array(64);
+  private holeSize = new Float32Array(64);
   private trail: ParticleSystem;
   private plasmaTrail: ParticleSystem;
   private liveDebris: Debris[] = [];
@@ -478,13 +485,17 @@ export class Effects {
     if (light) return;
     if (this.high && surface === 'alloy') this.burst('flash', contact, 1, normal, 0.13);
     if (surface === 'alloy') this.hotSparks.emit(pos, normal, 7, 6.8, 0.5);
-    const h = this.holes[this.holeNext];
+    const hi = this.holeNext;
+    const h = this.holes[hi];
     this.holeNext = (this.holeNext + 1) % this.holes.length;
     h.setEnabled(true);
     h.position.copyFrom(pos).addInPlace(TMP2.copyFrom(normal).scaleInPlace(0.015));
     h.lookAt(TMP.copyFrom(h.position).addInPlace(normal));
     h.rotation.z = Math.random() * Math.PI * 2;
-    h.scaling.setAll(0.16 + Math.random() * 0.1);
+    const size = 0.16 + Math.random() * 0.1;
+    h.scaling.setAll(size);
+    this.holeLife[hi] = HOLE_LIFE;
+    this.holeSize[hi] = size;
   }
 
   shieldRipple(pos: Vector3, normal: Vector3): void {
@@ -644,6 +655,13 @@ export class Effects {
       const a = (1 - t) * (1 - t);
       r.mat.emissiveColor.set(r.color.r * a, r.color.g * a, r.color.b * a);
     }
+    for (let i = 0; i < this.holes.length; i++) {
+      if (this.holeLife[i] <= 0) continue;
+      this.holeLife[i] -= dt;
+      const h = this.holes[i];
+      if (this.holeLife[i] <= 0) h.setEnabled(false);
+      else if (this.holeLife[i] < HOLE_FADE) h.scaling.setAll(this.holeSize[i] * (this.holeLife[i] / HOLE_FADE));
+    }
     for (const d of this.scorches) {
       if (d.life <= 0) continue;
       d.life -= dt;
@@ -673,6 +691,7 @@ export class Effects {
       d.mesh.setEnabled(false);
     }
     for (const h of this.holes) h.setEnabled(false);
+    this.holeLife.fill(0);
     for (const f of this.flashes) {
       f.life = 0;
       f.light.intensity = 0;

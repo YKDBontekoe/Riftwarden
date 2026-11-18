@@ -1,7 +1,9 @@
 import { beveledBoxData } from './bevel';
-import { type AbstractMesh, type Material, Matrix, Mesh, MeshBuilder, type Scene, TransformNode, Vector3 } from '@babylonjs/core';
+import { enableHitFlash, initFlash, registerFlashBuffer } from './hitFlashPlugin';
+import { loftData, smoothLatheData } from './sculpt';
+import { type AbstractMesh, type Material, Matrix, Mesh, MeshBuilder, PBRMaterial, type Scene, TransformNode, Vector3, type VertexData } from '@babylonjs/core';
 
-export type Shape = 'box' | 'cyl' | 'cyl6' | 'cyl8' | 'sphere' | 'ico' | 'cone' | 'torus' | 'torusThin' | 'arc' | 'cone4';
+export type Shape = 'box' | 'cyl' | 'cyl6' | 'cyl8' | 'sphere' | 'ico' | 'cone' | 'torus' | 'torusThin' | 'arc' | 'cone4' | `s:${string}`;
 
 export interface PartOpts {
   pos?: [number, number, number];
@@ -19,15 +21,81 @@ export interface PartOpts {
  */
 export class Kit {
   private templates = new Map<string, Mesh>();
+  /** Sculpted shapes (`s:name`): generated once per kit, then instanced like the primitives. */
+  private sculpted = new Map<string, () => VertexData>();
   private root: TransformNode;
   shadowSink: ((m: AbstractMesh) => void) | null = null;
+  /**
+   * While true, new parts are flashable: their templates (kept apart by a `|f` key suffix) register the
+   * per-instance hit-flash buffer and their material gets the flash plugin. Enemy rigs are built in this mode.
+   */
+  flashMode = false;
+
+  /** While true, boxes become softened hard-surface blocks and spheres smooth (enemy rigs). */
+  softMode = false;
+
+  /** Run `fn` with softened primitives. */
+  soft<T>(fn: () => T): T {
+    const prev = this.softMode;
+    this.softMode = true;
+    try {
+      return fn();
+    } finally {
+      this.softMode = prev;
+    }
+  }
+
+  /** Primitive substitution in soft mode (registered lazily as sculpted shapes). */
+  private softShape(shape: Shape): Shape {
+    if (!this.softMode) return shape;
+    if (shape === 'box') {
+      return this.sculpt('softBox', () => loftData([
+        { t: -0.5, w: 0.43, h: 0.43, n: 4 },
+        { t: -0.455, w: 0.5, h: 0.5, n: 5 },
+        { t: 0.455, w: 0.5, h: 0.5, n: 5 },
+        { t: 0.5, w: 0.43, h: 0.43, n: 4 },
+      ], 'y', 28));
+    }
+    if (shape === 'sphere') return this.sculpt('softSphere', () => smoothLatheData(Array.from({ length: 13 }, (_, i) => {
+      const a = -Math.PI / 2 + (i / 12) * Math.PI;
+      return [Math.max(0.0005, Math.cos(a) * 0.5), Math.sin(a) * 0.5] as [number, number];
+    }), 28));
+    return shape;
+  }
+
+  /** Run `fn` with flashable parts (enemy rigs, elite hardware, threat marks). */
+  flashable<T>(fn: () => T): T {
+    const prev = this.flashMode;
+    this.flashMode = true;
+    try {
+      return fn();
+    } finally {
+      this.flashMode = prev;
+    }
+  }
 
   constructor(private scene: Scene) {
     this.root = new TransformNode('kitTemplates', scene);
   }
 
+  /**
+   * Register a sculpted shape under `s:name` (first registration wins, so rig builders can call this
+   * every time they build). Returns the shape id to pass to part().
+   */
+  sculpt(name: string, gen: () => VertexData): Shape {
+    const id = `s:${name}` as const;
+    if (!this.sculpted.has(id)) this.sculpted.set(id, gen);
+    return id;
+  }
+
   private makeShape(shape: Shape): Mesh {
     const s = this.scene;
+    const gen = this.sculpted.get(shape);
+    if (gen) {
+      const m = new Mesh(`k_${shape}`, s);
+      gen().applyToMesh(m);
+      return m;
+    }
     switch (shape) {
       case 'box': {
         const m = new Mesh('k_box', s);
@@ -60,11 +128,18 @@ export class Kit {
         m.bakeTransformIntoVertices(Matrix.RotationY(-Math.atan2(c.x, c.z)));
         return m;
       }
+      default:
+        throw new Error(`Unknown kit shape ${shape}`);
     }
   }
 
+  /** Only PBR materials carry the flash plugin. */
+  private flashes(mat: Material): boolean {
+    return this.flashMode && mat instanceof PBRMaterial;
+  }
+
   template(shape: Shape, mat: Material): Mesh {
-    const key = `${shape}|${mat.uniqueId}`;
+    const key = `${shape}|${mat.uniqueId}${this.flashes(mat) ? '|f' : ''}`;
     let t = this.templates.get(key);
     if (!t) {
       t = this.makeShape(shape);
@@ -75,6 +150,10 @@ export class Kit {
       t.position.y = -500;
       t.alwaysSelectAsActiveMesh = false;
       t.receiveShadows = true;
+      if (this.flashes(mat)) {
+        enableHitFlash(mat);
+        registerFlashBuffer(t);
+      }
       this.templates.set(key, t);
     }
     return t;
@@ -89,6 +168,7 @@ export class Kit {
 
   /** Create a part. If `unique` material is given, makes a standalone clone with that material. */
   part(shape: Shape, mat: Material, parent: TransformNode, o: PartOpts = {}, unique?: Material): AbstractMesh {
+    shape = this.softShape(shape);
     const t = this.template(shape, mat);
     let m: AbstractMesh;
     if (unique) {
@@ -98,6 +178,7 @@ export class Kit {
       m = c;
     } else {
       m = t.createInstance(o.name ?? 'part');
+      if (this.flashes(mat)) initFlash(m);
     }
     m.parent = parent;
     m.isPickable = false;

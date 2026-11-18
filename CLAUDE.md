@@ -36,6 +36,15 @@ src/home/build/            M7: catalog.ts (pieces, limits), model.ts (grid, vali
                            ExpansionLayer.ts (incremental meshes/colliders/lights), BuildMode.ts (construction camera + tools)
 src/enemies/jammerCrawlerBehaviors.ts M7: Jammer Drone, Siege Crawler behaviours
 src/enemies/coreBehaviors.ts Walker / Bulwark / Rush Drone as Behavior plug-ins (CORE_BEHAVIORS); EnemyManager has one dispatch path
+src/visuals/anim.ts        Spring, damp, smoothstep, impulse (shared by weapons, enemies, HQ)                                             [pure]
+src/visuals/hitFlashPlugin.ts per-instance additive hit flash: PBR material plugin + `instanceFlash` instanced buffer (Kit flash mode)
+src/visuals/mood.ts        moodFor(): fog/exposure/sun tint/tension from tier, boss, event, reactor (blendMood smoothing)                  [pure]
+src/visuals/moodDirector.ts applies the mood to scene fog, sun colour and PostFx offsets
+src/enemies/deathAnims.ts  DEATH_TIME per kind + deathPose(): collapse animation of destroyed regular enemies                              [pure]
+src/home/ambientNav.ts     waypoint graph (rooms, doorways, stations) + Dijkstra for ambient drones                                       [pure]
+src/home/AmbientDrones.ts  3 cosmetic service drones patrolling between stations (hum emitters follow them)
+src/home/hqVista.ts        3D middle ground outside the observation window (landing deck, dropship, lit towers, blinking beacons), merged, unlit glows only
+src/home/StationFocus.ts   HQ station floor ring under the targeted station + camera push-in while a terminal is open
 src/arena/DevTools.ts      dev lab actions behind `game.dev` (narrow DevHost interface, no Game dependency)
 src/arena/shadows.ts       createSunShadows(): cascaded / single sun shadow generator
 src/loot/roll.ts           rollLoot(): one pure roll+generate for run, team and per-player streams (Game.rollFrom, ServerGame.rollFor)   [pure]
@@ -108,6 +117,7 @@ src/core/settings.ts       versioned/validated localStorage settings     [pure]
 src/world/layout.ts        ARENA data: boxes, ramps, lane routes, reactor, spawn [pure, single source of truth]
 src/world/geometry.ts      distance helpers                              [pure]
 src/world/physicsGroups.ts Havok filter masks (ENV vs PLAYER)
+src/visuals/arenaDressing.ts arena set dressing (wall services, partition detail, tunnel ribs, drains, industrial skyline): visual only, no collision, merged per material
 src/visuals/arena.ts       builds arena meshes (merged per material, box-projected world UVs) + one static compound Havok body
 src/visuals/kit.ts         unit-primitive model kit; one hidden source mesh per (shape, material), GPU instances everywhere
 src/visuals/models.ts      walker/bulwark, rush drone, Sentinel turret, reactor rigs (animated plasma core, glass shell, beam)
@@ -152,6 +162,7 @@ scripts/e2e-m2.cjs         M2 browser acceptance suite (loot scenarios A-I, migr
 scripts/e2e-m4.cjs         M4 browser acceptance suite (A-K through the terminal UIs, reloads, exploits, rollback, leaks)
 scripts/e2e-m3.cjs         M3 browser acceptance suite (families, generation, engineering UI, variation, loot, v2 migration, leaks)
 scripts/e2e-m5.cjs         M5 browser acceptance suite
+scripts/e2e-polish.cjs     Polish suite: A hit flash, B wreck deaths, C mood, D terminal push-in, E ambient drones, V screenshots
 scripts/e2e-m6.cjs         M6 browser acceptance suite (A-L: plans, enemies, elites, evolution, events, bosses, tiers, high waves, banking/records, perf, dev isolation)
 ```
 
@@ -176,6 +187,15 @@ scripts/e2e-m6.cjs         M6 browser acceptance suite (A-L: plans, enemies, eli
 - Browser co-op section X of `e2e-construction-coop.cjs` needs a test server (`RIFT_TEST=1 RIFT_PORT=8787 npx tsx server/main.ts`) and runs both clients with the render loop stopped: two live software-GL render loops starve Playwright's actionability checks and clicks time out. It passes (13/13, including "no replicated event rejected") and is the real test of the client replay path, along with `e2e-coop-protocol.mjs`.
 
 ## Key design decisions
+
+### Polish pass (after M7 content)
+
+- **Hit flash.** `Kit.flashable(fn)` builds parts in flash mode: their templates (key suffix `|f`) register an `instanceFlash` vec4 instanced buffer and PBR materials get `HitFlashPlugin` (adds `rgb * a` to `finalColor` only for meshes that have the buffer). `EnemyManager.flash(e, tint)` / `setFlash` write the vectors of every part under `e.root` (cached in `e.flashVecs`, rebuilt when elite hardware or a threat mark is added); it decays at 9/s. Rigs, elite hardware and threat marks are built through `kit.flashable`. Instances share the template's default vector **by reference**, so `initFlash` gives each instance its own. Co-op replicas flash from the `ed` event.
+- **Wreck deaths.** `kill()` no longer bursts immediately for kinds in `DEATH_TIME`: the enemy leaves `active` (untargetable, rewards already granted by `hooks.killed`), collapses via `deathPose` for 0.6-1.0 s (tilt, sink, flicker, sparks through `ctx.effects.burst`) and then bursts through the **same `fx` the kill used** (so replicas, whose `ek` handler passes the real fx, play it too). Behaviours that return a duration (bosses) or `true` (crawler, courier) are untouched.
+- **Mood.** `MoodDirector.update(dt, Game.moodInput())` runs next to `post.update` in `Game` and `ClientGame`. It owns the scene fog colour. The replica does not mirror `survival.event`, so event moods only show on the host/single player; tier, boss presence and reactor health work everywhere.
+- **Effects.** Burn marks last 22 s and shrink over the last 5 s; atmosphere particle rates follow the `particles` setting.
+- **HQ.** `StationFocus` (ring + push-in; skipped with reduced motion), `AmbientDrones` on `ambientNav` (core rooms only, hover 2.5 m, keep 2.4 m from the player).
+- **Not done yet:** hit-react knock/stagger, emissive breathing, boss secondary motion, living station screens, music bed, placed-machine emitters, HQ fog/window shaft, lamp shaft revival, medium-quality SSAO.
 
 ### M7: co-op, HQ construction, content, presentation
 
@@ -341,7 +361,6 @@ scripts/e2e-m6.cjs         M6 browser acceptance suite (A-L: plans, enemies, eli
 - Graphics quality applies immediately in the HQ (rebuild), on the next scene in the arena.
 - Run suspension/resume is out of scope: closing the tab mid-run records it as `interrupted` (secured salvage kept, unsecured lost).
 - High preset cost (SSR + SSAO + MSAA + 8 lights on PBR) is unmeasured on real GPUs; `Performance` preset drops SSR/SSAO/shadows/MSAA. Profile with F3.
-- No per-enemy hit flash yet (instanced PBR parts would need an instanced colour buffer).
 - Enemies do not attack turrets; walkers only target the reactor and shoot the player.
 - Gate frame pillars near the openings are visual only (no collider).
 - No run upgrades, bosses, music, or multiplayer yet (by design).

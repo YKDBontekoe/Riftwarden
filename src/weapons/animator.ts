@@ -1,6 +1,7 @@
 import type { WeaponFamily } from '../data/defs';
 import { heatColor } from './materials';
 import type { WeaponRig } from './model';
+import { Spring } from '../visuals/anim';
 
 /**
  * Viewmodel animation (presentation only; never affects hit resolution).
@@ -45,25 +46,6 @@ const RECOIL: Record<WeaponFamily, { back: number; pitch: number; roll: number; 
   rail: { back: 0.075, pitch: 0.2, roll: 0.06, slide: 0.034, stiff: 170, damp: 17 },
   beam: { back: 0.006, pitch: 0.006, roll: 0.004, slide: 0.004, stiff: 260, damp: 26 },
 };
-
-class Spring {
-  x = 0;
-  v = 0;
-  constructor(public k: number, public c: number) {}
-  step(dt: number, target = 0): number {
-    // Semi-implicit Euler in sub-steps: stable for large dt (automation advances).
-    const n = Math.max(1, Math.ceil(dt / (1 / 240)));
-    const h = dt / n;
-    for (let i = 0; i < n; i++) {
-      this.v += (-(this.x - target) * this.k - this.v * this.c) * h;
-      this.x += this.v * h;
-    }
-    return this.x;
-  }
-  kick(v: number): void {
-    this.v += v;
-  }
-}
 
 export class WeaponAnimator {
   readonly pose: Pose = { x: 0, y: 0, z: 0, pitch: 0, yaw: 0, roll: 0 };

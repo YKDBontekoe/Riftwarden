@@ -27,6 +27,10 @@ export class PostFx {
   /** Per-location grade baselines (the HQ uses a calmer, brighter look). */
   baseExposure = 0.94;
   baseGrain = 1.2;
+  baseContrast = 1.12;
+  baseVignette = 0.92;
+  /** Situation mood offsets (see MoodDirector); zero in calm play and in the HQ. */
+  mood = { exposure: 0, contrast: 0, vignette: 0 };
 
   constructor(scene: Scene, engine: Engine, camera: Camera, high: boolean) {
     const supportsGBuffer = engine.getCaps().drawBuffersExtension && engine.webGLVersion >= 2;
@@ -87,8 +91,9 @@ export class PostFx {
     p.bloomWeight = high ? 0.26 : 0.23;
     p.bloomKernel = high ? 72 : 48;
     p.bloomScale = 0.5;
-    p.sharpenEnabled = high;
-    p.sharpen.edgeAmount = 0.1;
+    // FXAA softens the image; sharpen on every preset (stronger where there is no MSAA) to keep it crisp.
+    p.sharpenEnabled = true;
+    p.sharpen.edgeAmount = high ? 0.12 : 0.2;
     p.chromaticAberrationEnabled = true;
     p.chromaticAberration.aberrationAmount = 0;
     p.chromaticAberration.radialIntensity = 1.2;
@@ -100,9 +105,9 @@ export class PostFx {
     ip.toneMappingEnabled = true;
     ip.toneMappingType = ImageProcessingConfiguration.TONEMAPPING_ACES;
     ip.exposure = this.baseExposure;
-    ip.contrast = 1.12;
+    ip.contrast = this.baseContrast;
     ip.vignetteEnabled = true;
-    ip.vignetteWeight = 0.92;
+    ip.vignetteWeight = this.baseVignette;
     ip.vignetteStretch = 0.4;
     ip.vignetteColor = new Color4(0.0, 0.01, 0.02, 1);
     ip.vignetteCameraFov = 0.8;
@@ -147,7 +152,10 @@ export class PostFx {
     cc.globalHue = 220;
     cc.globalDensity = 18 * tactical;
     p.chromaticAberration.aberrationAmount = 25 * this.aberration + 6 * tactical + 14 * hurt;
-    p.imageProcessing.exposure = this.baseExposure + lightning * 0.05;
+    const ip = p.imageProcessing;
+    ip.exposure = this.baseExposure + lightning * 0.05 + this.mood.exposure;
+    ip.contrast = this.baseContrast + this.mood.contrast;
+    ip.vignetteWeight = this.baseVignette + this.mood.vignette;
     p.grain.intensity = this.baseGrain + tactical * 6;
   }
 

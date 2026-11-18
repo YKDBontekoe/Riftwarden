@@ -7,6 +7,8 @@ import type { Effects } from '../fx/Effects';
 import type { Ordnance, Telegraphs } from '../fx/Hostile';
 import type { Player } from '../player/Player';
 import type { Kit } from '../visuals/kit';
+import { FLASH_BUFFER } from '../visuals/hitFlashPlugin';
+import { DEATH_TIME, deathPose, FLYERS, type DeathPose } from './deathAnims';
 import type { Palette } from '../visuals/materials';
 import { hasAnyStatus, isBurning, isChilled, isFrozen, isShocked, newStatus, resetStatus, speedFactor, type StatusState } from '../combat/status';
 import { unlit } from '../visuals/materials';
@@ -95,6 +97,13 @@ export interface Behavior {
 
 let nextId = 1;
 
+const DEATH_POSE: DeathPose = { pitch: 0, roll: 0, sink: 0, flash: 0 };
+
+/** Hit-flash tints (additive HDR). */
+const HIT_FLASH: [number, number, number] = [1, 0.92, 0.8];
+const HOT_FLASH: [number, number, number] = [1, 0.5, 0.15];
+const SHIELD_FLASH: [number, number, number] = [0.25, 0.7, 1];
+
 export class Enemy implements Health {
   readonly id = nextId++;
   /** M7 co-op replicas: the server's id for this enemy (0 = local). */
@@ -121,6 +130,11 @@ export class Enemy implements Health {
   /** Remaining path length to the reactor: lower = more dangerous (turret priority). */
   remaining = 0;
   shieldFlash = 0;
+  /** Additive hit flash 0..1 (decays quickly) and its tint; written to the per-instance flash buffer. */
+  hitFlash = 0;
+  flashRgb: [number, number, number] = [1, 1, 1];
+  /** Cached per-part flash vectors (rebuilt when elite hardware / marks are added). */
+  flashVecs: { set(x: number, y: number, z: number, w: number): unknown }[] | null = null;
   shieldRegenT = 0;
   /** performance.now() of the last damage taken (drives the HUD health bar). */
   lastHit = 0;
@@ -233,7 +247,7 @@ export class EnemyManager {
   /** Pool pre-warm queue: rigs are built ahead of need, one per frame, so spawns never hitch. */
   private warmQueue: EnemyKind[] = [];
   /** Wrecks playing a destruction sequence (bosses). */
-  private wrecks: { e: Enemy; t: number; dur: number }[] = [];
+  private wrecks: { e: Enemy; t: number; dur: number; finish?: () => void; spark: number }[] = [];
   private blastTemplate: Mesh;
   private aiAcc = 0;
   /** Diagnostics: last frame's AI update time (ms) and a smoothed average. */
@@ -288,8 +302,9 @@ export class EnemyManager {
       if (!this.pool.has(kind)) this.pool.set(kind, []);
       this.pool.get(kind)!.push(e);
       if (kind === 'walker') {
-        for (const mod of ['overcharged', 'armored', 'accelerated', 'volatile'] as EliteModId[]) e.eliteParts.set(mod, buildEliteParts(this.kit, this.P, e.root, e.def, mod));
-        e.threat = buildThreatMark(this.kit, this.P, e.root, e.def);
+        for (const mod of ['overcharged', 'armored', 'accelerated', 'volatile'] as EliteModId[]) e.eliteParts.set(mod, this.kit.flashable(() => this.kit.soft(() => buildEliteParts(this.kit, this.P, e.root, e.def, mod))));
+        e.threat = this.kit.flashable(() => this.kit.soft(() => buildThreatMark(this.kit, this.P, e.root, e.def)));
+        e.flashVecs = null;
       }
     }
   }
@@ -329,7 +344,7 @@ export class EnemyManager {
     const def = ENEMIES[kind];
     const b = this.behaviors[kind];
     if (!b) throw new Error(`No behaviour registered for enemy kind '${kind}'`);
-    const r = b.rig?.(this) ?? { root: this.kit.node(kind, null) };
+    const r = this.kit.flashable(() => this.kit.soft(() => b.rig?.(this) ?? { root: this.kit.node(kind, null) }));
     const e = new Enemy(def, r.root, r.walker ?? null, r.drone ?? null, b);
     b.create?.(e, this);
     if (!e.hitboxes.length) {
@@ -368,6 +383,7 @@ export class EnemyManager {
     e.stuckT = 0;
     e.bestDist = Infinity;
     e.shieldFlash = 0;
+    this.setFlash(e, 0);
     e.lastHit = 0;
     e.recentDamage = 0;
     e.tag = o.tag;
@@ -412,8 +428,9 @@ export class EnemyManager {
     for (const id of e.mods) {
       let parts = e.eliteParts.get(id);
       if (!parts) {
-        parts = buildEliteParts(this.kit, this.P, e.root, e.def, id);
+        parts = this.kit.flashable(() => this.kit.soft(() => buildEliteParts(this.kit, this.P, e.root, e.def, id)));
         e.eliteParts.set(id, parts);
+        e.flashVecs = null;
       }
       parts.node.setEnabled(true);
       for (const p of parts.plates) p.setEnabled(true);
@@ -421,7 +438,10 @@ export class EnemyManager {
     e.armor = e.has('armored') ? e.maxHp * ELITE.armorBreak : 0;
     const support = e.def.role === 'support' && e.kind !== 'pylon';
     const marked = e.mods.length > 0 || support;
-    if (marked && !e.threat) e.threat = buildThreatMark(this.kit, this.P, e.root, e.def);
+    if (marked && !e.threat) {
+      e.threat = this.kit.flashable(() => this.kit.soft(() => buildThreatMark(this.kit, this.P, e.root, e.def)));
+      e.flashVecs = null;
+    }
     if (e.threat) {
       e.threat.node.setEnabled(marked);
       e.threat.diamond.setEnabled(e.mods.length > 0);
@@ -457,6 +477,7 @@ export class EnemyManager {
     e.shieldRegenT = 4;
     e.lastHit = performance.now();
     e.recentDamage += res.toHp + res.toShield;
+    if (e.def.role !== 'boss' || res.toHp > 0) this.flash(e, res.toShield > 0 && res.toHp <= 0 ? SHIELD_FLASH : type === 'explosive' ? HOT_FLASH : HIT_FLASH);
     if (res.toShield > 0) {
       e.shieldFlash = 1;
       fx.burst('shield', hitPoint, 6);
@@ -512,15 +533,31 @@ export class EnemyManager {
       const i = this.active.indexOf(e);
       if (i >= 0) this.active.splice(i, 1);
       for (const h of e.hitboxes) h.isPickable = false;
-      this.wrecks.push({ e, t: 0, dur: handled });
+      this.wrecks.push({ e, t: 0, dur: handled, spark: 0 });
       return;
     }
-    if (!handled) {
+    const burst = () => {
       const [big, debris, pitch] = BLAST[e.kind] ?? [1, 12, 1];
       fx.explode(c, { scale: detonated ? big * 1.25 : big, debris });
       const a = ctx.panFor(c);
       sfx.play('explosion', { volume: a.volume * (detonated ? 1 : 0.8), pan: a.pan, pitch });
+    };
+    const dur = DEATH_TIME[e.kind];
+    if (!handled && dur && e.def.role !== 'boss') {
+      // Collapse first, burst at the end (through the same fx the kill used, so replicas show it too).
+      e.alive = false;
+      const i = this.active.indexOf(e);
+      if (i >= 0) this.active.splice(i, 1);
+      for (const h of e.hitboxes) h.isPickable = false;
+      // Statuses end with the enemy (nothing ticks on a wreck).
+      resetStatus(e.status);
+      e.mark?.setEnabled(false);
+      e.markKind = '';
+      this.flash(e, [1, 0.55, 0.2]);
+      this.wrecks.push({ e, t: 0, dur, finish: () => burst(), spark: 0 });
+      return;
     }
+    if (!handled) burst();
     this.release(e);
   }
 
@@ -550,6 +587,43 @@ export class EnemyManager {
     this.release(e);
   }
 
+  /** Default collapse animation for a destroyed enemy: buckle/spiral, flicker, sparks. Presentation only. */
+  private collapse(w: { e: Enemy; t: number; dur: number; spark: number }, dt: number, ctx: EnemyContext): void {
+    const e = w.e;
+    const k = w.t / w.dur;
+    const pose = deathPose(FLYERS.has(e.kind), k, e.netId || e.gen, DEATH_POSE);
+    e.root.position.set(e.pos.x, e.pos.y - pose.sink, e.pos.z);
+    e.root.rotation.set(pose.pitch, e.yaw, pose.roll);
+    this.setFlash(e, pose.flash * 0.8);
+    w.spark -= dt;
+    if (w.spark <= 0) {
+      w.spark = 0.09;
+      ctx.effects.burst(FLYERS.has(e.kind) ? 'puff' : 'sparks', e.center(TMP), 2, undefined, 0.5);
+    }
+  }
+
+  /** Start a hit flash with a tint (also used by replicas for remote damage). */
+  flash(e: Enemy, rgb: [number, number, number]): void {
+    e.flashRgb = rgb;
+    this.setFlash(e, 1);
+  }
+
+  /** Write the flash strength to every flashable part of this enemy (no-op when nothing changes). */
+  private setFlash(e: Enemy, k: number): void {
+    if (e.hitFlash === 0 && k === 0) return;
+    e.hitFlash = k;
+    if (!e.flashVecs) {
+      e.flashVecs = [];
+      for (const m of e.root.getChildMeshes(false)) {
+        const v = m.instancedBuffers?.[FLASH_BUFFER] as { set(x: number, y: number, z: number, w: number): unknown } | undefined;
+        if (v) e.flashVecs.push(v);
+      }
+    }
+    const [r, g, b] = e.flashRgb;
+    const a = k * k * 0.55;
+    for (const v of e.flashVecs) v.set(r, g, b, a);
+  }
+
   private release(e: Enemy): void {
     e.alive = false;
     this.hooks.released?.(e);
@@ -557,6 +631,9 @@ export class EnemyManager {
     resetStatus(e.status);
     e.mark?.setEnabled(false);
     e.markKind = '';
+    this.setFlash(e, 0);
+    e.root.rotation.x = 0;
+    e.root.rotation.z = 0;
     e.behavior?.release?.(e, this);
     e.root.setEnabled(false);
     const i = this.active.indexOf(e);
@@ -672,9 +749,11 @@ export class EnemyManager {
     for (let i = this.wrecks.length - 1; i >= 0; i--) {
       const w = this.wrecks[i];
       w.t += dt;
-      w.e.behavior?.dying?.(w.e, dt, w.t, ctx, this);
+      if (w.finish) this.collapse(w, dt, ctx);
+      else w.e.behavior?.dying?.(w.e, dt, w.t, ctx, this);
       if (w.t >= w.dur) {
         this.wrecks.splice(i, 1);
+        w.finish?.();
         this.release(w.e);
       }
     }
@@ -712,6 +791,7 @@ export class EnemyManager {
       ctx.focus?.(e);
       e.flinch = Math.max(0, e.flinch - hdt * 4);
       e.shieldFlash = Math.max(0, e.shieldFlash - hdt * 5);
+      if (e.hitFlash > 0) this.setFlash(e, Math.max(0, e.hitFlash - dt * 9));
       e.recentDamage *= Math.exp(-hdt / 2.5);
       if (e.buffT > 0) e.buffT = Math.max(0, e.buffT - hdt);
       if (e.maxShield > 0) {

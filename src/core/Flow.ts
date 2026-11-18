@@ -130,12 +130,15 @@ export class Flow {
   }
 
   resize(): void {
-    const cinematic = this.renderQuality === 'high';
+    const q = this.renderQuality;
     const { clientWidth, clientHeight } = this.canvas;
     const pixels = Math.max(1, clientWidth * clientHeight);
-    // Keep HiDPI output sharp while bounding the cost of the full-resolution G-buffer and HDR passes.
-    const pixelBudget = cinematic ? 2560 * 1440 : 1920 * 1080;
-    const scale = Math.min(cinematic ? Math.min(window.devicePixelRatio || 1, 2) : 1, Math.sqrt(pixelBudget / pixels)) * (this.settings.renderScale ?? 1);
+    // Render at the display's native resolution (device pixel ratio) so ultrawide and HiDPI screens stay sharp,
+    // bounding the cost of the HDR passes per preset. The render-scale setting still applies on top.
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const ratio = q === 'low' ? 1 : dpr;
+    const pixelBudget = q === 'high' ? 3840 * 2160 : q === 'medium' ? 3440 * 1440 : 1920 * 1080;
+    const scale = Math.min(ratio, Math.sqrt(pixelBudget / pixels)) * (this.settings.renderScale ?? 1);
     this.engine.setHardwareScalingLevel(1 / scale);
   }
 

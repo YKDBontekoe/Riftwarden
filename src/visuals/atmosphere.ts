@@ -555,10 +555,26 @@ export class Atmosphere {
     for (const m of this.portalMats) m.setFloat('time', this.time);
   }
 
+  private qualityHigh = true;
+  private density = 1;
+
   setQuality(high: boolean): void {
-    this.dust.emitRate = high ? 45 : 18;
-    this.embers.emitRate = high ? 8 : 3;
-    for (const particles of this.gateEmbers) particles.emitRate = high ? 30 : 14;
+    this.qualityHigh = high;
+    this.applyRates();
+  }
+
+  /** Scale ambient particle rates by the particle-density setting (0.2..1, on top of the quality rates). */
+  setDensity(mult: number): void {
+    this.density = Math.max(0.2, Math.min(1, mult));
+    this.applyRates();
+  }
+
+  private applyRates(): void {
+    const high = this.qualityHigh;
+    const m = this.density;
+    this.dust.emitRate = (high ? 45 : 18) * m;
+    this.embers.emitRate = (high ? 8 : 3) * m;
+    for (const particles of this.gateEmbers) particles.emitRate = (high ? 30 : 14) * m;
   }
 
   /** M6: gate index 3 (south) is sealed until the secondary access route opens. */

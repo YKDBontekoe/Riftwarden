@@ -502,6 +502,7 @@ export class ClientGame extends Game {
     const k = this.tactical.active ? 1 : 0;
     const flash = this.updateSky(dt);
     this.hurtFx = Math.max(this.player.hurtFlash, this.player.alive ? 0 : 0.8);
+    this.mood.update(dt, this.moodInput());
     this.post.update(dt, k, this.hurtFx, flash);
     this.updateArenaVisuals(dt, hdt);
     if (this.screen === 'defeat') this.defeatT += dt;
@@ -848,6 +849,7 @@ export class ClientGame extends Game {
         if (!e) return;
         e.flinch = Math.min(1, e.flinch + 0.35);
         if (ev[2]) e.shieldFlash = 1;
+        this.enemies.flash(e, ev[2] ? [0.25, 0.7, 1] : [1, 0.92, 0.8]);
         e.lastHit = performance.now();
         return;
       }

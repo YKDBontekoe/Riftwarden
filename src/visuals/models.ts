@@ -2,6 +2,7 @@ import {
   type AbstractMesh,
   type Material,
   Color3,
+  Mesh,
   MeshBuilder,
   PBRMaterial,
   Quaternion,
@@ -10,9 +11,9 @@ import {
 } from '@babylonjs/core';
 import type { Kit } from './kit';
 import { type Palette, unlit } from './materials';
-import { createBeveledBox } from './bevel';
 import { canvas, fbm, flareSprite, toTexture } from './textures';
 import { segmentedRing } from './rings';
+import { loftData, type LoftAxis, type Section, smoothLatheData } from './sculpt';
 
 export interface WalkerRig {
   root: TransformNode;
@@ -34,59 +35,105 @@ export interface WalkerRig {
 export const WALKER_THIGH = 0.69;
 export const WALKER_SHIN = 0.65;
 
+/** Sculpted walker parts (registered once per kit, instanced on every rig). */
+function walkerShapes(kit: Kit) {
+  const L = (name: string, secs: Section[], axis: LoftAxis = 'z', segs = 28) => kit.sculpt(name, () => loftData(secs, axis, segs));
+  const lathe = (name: string, prof: [number, number][], tess = 24) => kit.sculpt(name, () => smoothLatheData(prof, tess));
+  return {
+    pelvis: L('wPelvis', [{ t: -0.46, w: 0.15, h: 0.11 }, { t: -0.38, w: 0.27, h: 0.17, n: 5 }, { t: 0.38, w: 0.27, h: 0.17, n: 5 }, { t: 0.46, w: 0.15, h: 0.11 }], 'x'),
+    axle: lathe('wAxle', [[0.1, -0.5], [0.15, -0.47], [0.15, 0.47], [0.1, 0.5]], 16),
+    chest: L('wChest', [
+      { t: -0.42, w: 0.38, h: 0.3, v: 0.02 },
+      { t: -0.3, w: 0.58, h: 0.4, v: 0.04, n: 5 },
+      { t: 0.05, w: 0.66, h: 0.43, v: 0.03, n: 5 },
+      { t: 0.32, w: 0.58, h: 0.38, v: -0.02, n: 4.5 },
+      { t: 0.47, w: 0.42, h: 0.28, v: -0.05 },
+      { t: 0.52, w: 0.3, h: 0.19, v: -0.06, n: 3 },
+    ], 'z', 32),
+    chestPlate: L('wChestPlate', [{ t: -0.3, w: 0.36, h: 0.06, v: 0.0 }, { t: 0.0, w: 0.42, h: 0.08 }, { t: 0.28, w: 0.3, h: 0.05, v: -0.02 }], 'y', 24),
+    abdomen: L('wAbdomen', [{ t: -0.45, w: 0.3, h: 0.24 }, { t: -0.2, w: 0.36, h: 0.28, n: 5 }, { t: 0, w: 0.42, h: 0.3, n: 5 }], 'y'),
+    pack: L('wPack', [{ t: -0.8, w: 0.28, h: 0.24, v: 0.05 }, { t: -0.72, w: 0.4, h: 0.32, v: 0.05, n: 5 }, { t: -0.46, w: 0.42, h: 0.34, v: 0.05, n: 5 }, { t: -0.38, w: 0.34, h: 0.28, v: 0.04 }]),
+    head: L('wHead', [
+      { t: -0.32, w: 0.2, h: 0.13, v: 0.03 },
+      { t: -0.22, w: 0.28, h: 0.19, v: 0.03, n: 5 },
+      { t: 0.12, w: 0.29, h: 0.18, n: 5 },
+      { t: 0.28, w: 0.23, h: 0.12, v: -0.02 },
+      { t: 0.34, w: 0.16, h: 0.07, v: -0.03, n: 3 },
+    ]),
+    brow: L('wBrow', [{ t: -0.26, w: 0.24, h: 0.03, v: 0.2 }, { t: 0.05, w: 0.27, h: 0.04, v: 0.21 }, { t: 0.26, w: 0.2, h: 0.03, v: 0.16 }], 'z', 20),
+    pod: L('wPod', [{ t: -0.32, w: 0.18, h: 0.18, n: 3 }, { t: -0.18, w: 0.27, h: 0.27, n: 3 }, { t: 0.2, w: 0.27, h: 0.26, n: 3.5 }, { t: 0.34, w: 0.2, h: 0.2, n: 3 }]),
+    barrel: lathe('wBarrel', [[0.16, 0.18], [0.19, 0.22], [0.19, 0.42], [0.15, 0.46], [0.12, 0.5], [0.12, 0.93], [0.15, 0.97], [0.17, 1.04], [0.14, 1.08]], 24),
+    blade: L('wBlade', [{ t: 0.05, w: 0.07, h: 0.2, v: 0.05 }, { t: -0.35, w: 0.085, h: 0.32, v: 0.15, n: 6 }, { t: -0.78, w: 0.05, h: 0.2, v: 0.27 }, { t: -0.9, w: 0.02, h: 0.07, v: 0.3 }], 'y', 20),
+    pauldron: L('wPauldron', [{ t: -0.3, w: 0.24, h: 0.05, v: 0.2 }, { t: 0, w: 0.31, h: 0.09, v: 0.25 }, { t: 0.3, w: 0.24, h: 0.05, v: 0.2 }], 'z', 20),
+    thigh: L('wThigh', [{ t: 0.06, w: 0.15, h: 0.16 }, { t: -0.12, w: 0.19, h: 0.22, v: 0.03, n: 5 }, { t: -0.5, w: 0.16, h: 0.19, v: 0.04, n: 5 }, { t: -0.73, w: 0.1, h: 0.13 }], 'y'),
+    hub: lathe('wHub', [[0.09, -0.22], [0.18, -0.19], [0.2, -0.12], [0.2, 0.12], [0.18, 0.19], [0.09, 0.22]], 20),
+    shin: L('wShin', [{ t: 0.02, w: 0.12, h: 0.14, v: -0.07 }, { t: -0.25, w: 0.14, h: 0.18, v: -0.14, n: 5 }, { t: -0.55, w: 0.11, h: 0.13, v: -0.11 }, { t: -0.68, w: 0.08, h: 0.1, v: -0.05 }], 'y'),
+    foot: L('wFoot', [{ t: -0.3, w: 0.13, h: 0.05 }, { t: -0.2, w: 0.19, h: 0.07, n: 5 }, { t: 0.25, w: 0.2, h: 0.065, v: -0.005, n: 5 }, { t: 0.46, w: 0.13, h: 0.035, v: -0.02 }]),
+    footPlate: L('wFootPlate', [{ t: -0.16, w: 0.15, h: 0.03, v: 0.07 }, { t: 0.1, w: 0.17, h: 0.035, v: 0.075 }, { t: 0.36, w: 0.13, h: 0.02, v: 0.05 }], 'z', 20),
+    exhaust: lathe('wExhaust', [[0.07, 0], [0.09, 0.05], [0.08, 0.55], [0.1, 0.58], [0.09, 0.62]], 14),
+    sensor: lathe('wSensor', [[0.06, -0.17], [0.11, -0.12], [0.11, 0.1], [0.08, 0.15]], 14),
+    heavyPlate: L('wHeavyPlate', [{ t: -0.4, w: 0.28, h: 0.06 }, { t: 0, w: 0.33, h: 0.1, n: 5 }, { t: 0.4, w: 0.26, h: 0.05 }], 'z', 20),
+  };
+}
+
 /** Strider walker (and the heavier Bulwark variant). Root sits on the ground, faces +Z. */
 export function buildWalker(kit: Kit, P: Palette, heavy: boolean): WalkerRig {
+  const S = walkerShapes(kit);
   const root = kit.node('walker', null);
   const scaleRoot = kit.node('wScale', root);
   const s = heavy ? 1.32 : 1;
   scaleRoot.scaling.setAll(s);
+  const HALF_PI = Math.PI / 2;
 
   const hips = kit.node('hips', scaleRoot, [0, 1.35, 0]);
-  kit.part('box', P.enemyDark, hips, { scale: [0.9, 0.34, 0.62] });
-  kit.part('cyl8', P.metal, hips, { rot: [0, 0, Math.PI / 2], scale: [0.3, 1.0, 0.3] });
+  kit.part(S.pelvis, P.enemyDark, hips);
+  kit.part(S.axle, P.metal, hips, { rot: [0, 0, HALF_PI] });
 
   const torso = kit.node('torso', hips, [0, 0.58, 0]);
-  kit.part('box', P.enemyArmor, torso, { scale: [1.25, 0.82, 0.88], rot: [0.08, 0, 0] });
-  kit.part('box', P.enemyArmor, torso, { pos: [0, 0.08, 0.46], scale: [0.86, 0.56, 0.16], rot: [-0.18, 0, 0] });
-  kit.part('box', P.enemyDark, torso, { pos: [0, -0.2, 0.5], scale: [0.56, 0.17, 0.11] });
+  kit.part(S.abdomen, P.enemyDark, torso, { pos: [0, 0.02, -0.05] });
+  kit.part(S.chest, P.enemyArmor, torso, { rot: [0.08, 0, 0] });
+  kit.part(S.chestPlate, P.enemyArmor, torso, { pos: [0, 0.05, 0.47], rot: [-HALF_PI + 0.2, 0, 0] });
+  kit.part(S.pack, P.enemyDark, torso);
+  for (let i = 0; i < 3; i++) kit.part('box', P.graphite, torso, { pos: [0, 0.2 - i * 0.09, 0.535], scale: [0.42, 0.03, 0.03], rot: [-0.2, 0, 0] });
   for (const side of [-1, 1]) {
-    kit.part('box', P.graphite, torso, { pos: [side * 0.46, 0.07, 0.43], scale: [0.13, 0.48, 0.25], rot: [-0.18, 0, side * 0.12] });
-    kit.part('box', P.orangeDim, torso, { pos: [side * 0.41, -0.1, 0.565], scale: [0.084, 0.042, 0.018], shadow: false });
+    kit.part('box', P.orangeDim, torso, { pos: [side * 0.3, -0.12, 0.5], scale: [0.09, 0.04, 0.02], shadow: false });
+    kit.part('box', P.orangeGlow, torso, { pos: [side * 0.2, 0.1, -0.805], scale: [0.09, 0.34, 0.02], shadow: false });
+    kit.part(S.exhaust, P.metal, torso, { pos: [side * 0.27, 0.32, -0.62], rot: [-0.25, 0, 0] });
+    kit.part('cyl8', P.orangeDim, torso, { pos: [side * 0.27, 0.93, -0.78], rot: [-0.25, 0, 0], scale: [0.13, 0.03, 0.13], shadow: false });
+    kit.part('cyl8', P.enemyDark, torso, { pos: [side * 0.32, -0.32, -0.5], rot: [0.5, 0, 0], scale: [0.07, 0.5, 0.07] });
   }
-  kit.part('box', P.enemyDark, torso, { pos: [0, 0.05, -0.56], scale: [0.85, 0.66, 0.36] });
-  kit.part('box', P.orangeGlow, torso, { pos: [-0.2, 0.08, -0.75], scale: [0.1, 0.4, 0.04] });
-  kit.part('box', P.orangeGlow, torso, { pos: [0.2, 0.08, -0.75], scale: [0.1, 0.4, 0.04] });
-  kit.part('box', P.enemyDark, torso, { pos: [0, 0.5, -0.3], scale: [0.08, 0.5, 0.5], rot: [-0.5, 0, 0] });
 
   const head = kit.node('head', torso, [0, 0.62, 0.12]);
-  kit.part('box', P.enemyDark, head, { scale: [0.56, 0.36, 0.62] });
-  kit.part('box', P.enemyArmor, head, { pos: [0, 0.2, -0.05], scale: [0.5, 0.08, 0.56] });
-  kit.part('box', P.graphite, head, { pos: [0, 0, 0.31], scale: [0.54, 0.22, 0.075] });
-  kit.part('box', P.orangeGlow, head, { pos: [0, 0.01, 0.353], scale: [0.39, 0.075, 0.02], shadow: false });
-  kit.part('cyl8', P.metal, head, { pos: [0.22, 0.32, -0.15], scale: [0.04, 0.35, 0.04] });
+  kit.part(S.head, P.enemyDark, head);
+  kit.part(S.brow, P.enemyArmor, head);
+  kit.part('box', P.graphite, head, { pos: [0, 0.0, 0.3], scale: [0.4, 0.13, 0.06] });
+  kit.part('box', P.orangeGlow, head, { pos: [0, 0.005, 0.335], scale: [0.32, 0.05, 0.02], shadow: false });
+  kit.part('cyl8', P.metal, head, { pos: [0.2, 0.3, -0.18], scale: [0.035, 0.38, 0.035] });
+  kit.part('cyl8', P.metal, head, { pos: [-0.16, 0.26, -0.22], scale: [0.03, 0.24, 0.03] });
+  kit.part('sphere', P.orangeGlow, head, { pos: [0.2, 0.5, -0.18], scale: [0.06, 0.06, 0.06], shadow: false });
+  for (const side of [-1, 1]) kit.part(S.sensor, P.graphite, head, { pos: [side * 0.29, -0.02, 0.1], rot: [HALF_PI, 0, 0] });
 
-  // Right arm: plasma cannon
+  // Right arm: plasma cannon on a sculpted shoulder pod.
   const cannon = kit.node('cannon', torso, [0.82, 0.05, 0.1]);
-  kit.part('sphere', P.enemyArmor, cannon, { scale: [0.5, 0.5, 0.5] });
+  kit.part(S.pod, P.enemyArmor, cannon);
   const barrel = kit.node('barrelSlide', cannon);
-  kit.part('cyl', P.metal, cannon, { pos: [0.05, -0.05, 0.27], rot: [Math.PI / 2, 0, 0], scale: [0.34, 0.30, 0.34] });
-  kit.part('cyl', P.enemyArmor, barrel, { pos: [0.05, -0.05, 0.82], rot: [Math.PI / 2, 0, 0], scale: [0.32, 0.14, 0.32] });
-  kit.part('box', P.orangeDim, barrel, { pos: [0.05, 0.145, 0.35], scale: [0.07, 0.025, 0.42], shadow: false });
-  kit.part('cyl', P.enemyDark, barrel, { pos: [0.05, -0.05, 0.5], rot: [Math.PI / 2, 0, 0], scale: [0.26, 1.0, 0.26] });
-  kit.part('box', P.enemyArmor, barrel, { pos: [0.08, 0.08, 0.3], scale: [0.18, 0.12, 0.7] });
-  if (heavy) kit.part('cyl', P.enemyDark, cannon, { pos: [-0.12, -0.18, 0.45], rot: [Math.PI / 2, 0, 0], scale: [0.2, 0.9, 0.2] });
-  const muzzleGlow = kit.part('torus', P.orangeGlow, barrel, { pos: [0.05, -0.05, 1.0], rot: [Math.PI / 2, 0, 0], scale: [0.3, 0.3, 0.3] });
+  kit.part(S.barrel, P.enemyDark, barrel, { pos: [0.05, -0.05, 0], rot: [HALF_PI, 0, 0] });
+  kit.part('box', P.orangeDim, barrel, { pos: [0.05, 0.1, 0.62], scale: [0.05, 0.02, 0.5], shadow: false });
+  for (let i = 0; i < 4; i++) kit.part('cyl', P.graphite, barrel, { pos: [0.05, -0.05, 0.3 + i * 0.05], rot: [HALF_PI, 0, 0], scale: [0.44, 0.018, 0.44] });
+  if (heavy) kit.part(S.barrel, P.metal, cannon, { pos: [-0.14, -0.2, 0.05], rot: [HALF_PI, 0, 0], scale: [0.7, 0.85, 0.7] });
+  const muzzleGlow = kit.part('torus', P.orangeGlow, barrel, { pos: [0.05, -0.05, 1.07], rot: [HALF_PI, 0, 0], scale: [0.28, 0.28, 0.28] });
 
-  // Left arm: armored blade plate
+  // Left arm: shoulder pod, pauldron and a forward blade.
   const arm = kit.node('armL', torso, [-0.82, 0.05, 0.05]);
-  kit.part('sphere', P.enemyArmor, arm, { scale: [0.46, 0.46, 0.46] });
-  kit.part('box', P.enemyArmor, arm, { pos: [-0.1, -0.35, 0.25], scale: [0.14, 0.75, 0.6], rot: [0.3, 0, 0.1] });
-  kit.part('box', P.orangeDim, arm, { pos: [-0.18, -0.35, 0.25], scale: [0.02, 0.6, 0.06], rot: [0.3, 0, 0.1] });
+  kit.part(S.pod, P.enemyArmor, arm, { scale: [0.92, 0.92, 0.92] });
+  kit.part(S.pauldron, P.enemyArmor, arm, { pos: [-0.04, 0.02, 0], rot: [0, 0, 0.35] });
+  kit.part(S.blade, P.enemyArmor, arm, { pos: [-0.1, -0.08, 0.02], rot: [0.3, 0, 0.1] });
+  kit.part('box', P.orangeDim, arm, { pos: [-0.17, -0.42, 0.3], scale: [0.02, 0.55, 0.04], rot: [0.3, 0, 0.1], shadow: false });
 
   if (heavy) {
     for (const side of [-1, 1]) {
-      kit.part('box', P.enemyArmor, torso, { pos: [side * 0.82, 0.42, 0.0], scale: [0.6, 0.18, 0.8], rot: [0, 0, side * -0.35] });
-      kit.part('box', P.orangeGlow, torso, { pos: [side * 0.9, 0.52, 0.42], scale: [0.4, 0.05, 0.04], rot: [0, 0, side * -0.35] });
+      kit.part(S.heavyPlate, P.enemyArmor, torso, { pos: [side * 0.8, 0.42, 0], rot: [0, 0, side * -0.35] });
+      kit.part('box', P.orangeGlow, torso, { pos: [side * 0.88, 0.5, 0.4], scale: [0.36, 0.04, 0.03], rot: [0, 0, side * -0.35], shadow: false });
     }
   }
 
@@ -95,15 +142,18 @@ export function buildWalker(kit: Kit, P: Palette, heavy: boolean): WalkerRig {
   const ankles: TransformNode[] = [];
   for (const side of [-1, 1]) {
     const thigh = kit.node('thigh', hips, [side * 0.42, -0.05, 0]);
-    kit.part('box', P.enemyArmor, thigh, { pos: [0, -0.36, 0.05], scale: [0.3, 0.78, 0.36], rot: [-0.15, 0, 0] });
-    kit.part('sphere', P.enemyDark, thigh, { scale: [0.34, 0.34, 0.34] });
+    kit.part(S.thigh, P.enemyArmor, thigh, { rot: [-0.15, 0, 0] });
+    kit.part(S.hub, P.enemyDark, thigh, { rot: [0, 0, HALF_PI] });
+    kit.part('cyl8', P.metal, thigh, { pos: [side * 0.13, -0.36, 0.24], rot: [-0.15, 0, 0], scale: [0.06, 0.56, 0.06] });
+    kit.part('cyl8', P.graphite, thigh, { pos: [side * 0.13, -0.2, 0.26], rot: [-0.15, 0, 0], scale: [0.1, 0.24, 0.1] });
     const knee = kit.node('knee', thigh, [0, -WALKER_THIGH, 0]);
-    kit.part('sphere', P.metal, knee, { scale: [0.24, 0.24, 0.24] });
-    kit.part('box', P.enemyDark, knee, { pos: [0, -0.32, -0.12], scale: [0.22, 0.7, 0.24], rot: [0.35, 0, 0] });
-    kit.part('cyl', P.metal, knee, { pos: [side * 0.105, -0.26, -0.13], scale: [0.08, 0.42, 0.08] });
+    kit.part(S.hub, P.metal, knee, { rot: [0, 0, HALF_PI], scale: [0.72, 0.8, 0.72] });
+    kit.part(S.shin, P.enemyDark, knee);
+    kit.part('cyl', P.metal, knee, { pos: [side * 0.12, -0.28, -0.16], scale: [0.07, 0.4, 0.07] });
     const ankle = kit.node('ankle', knee, [0, -WALKER_SHIN, 0]);
-    kit.part('box', P.enemyDark, ankle, { pos: [0, -0.026, 0.09], scale: [0.39, 0.09, 0.69] });
-    kit.part('box', P.enemyArmor, ankle, { pos: [0, 0.045, 0.1], scale: [0.36, 0.10, 0.61] });
+    kit.part(S.foot, P.enemyDark, ankle, { pos: [0, -0.02, 0.02] });
+    kit.part(S.footPlate, P.enemyArmor, ankle, { pos: [0, -0.02, 0.02] });
+    for (const t of [-1, 0, 1]) kit.part('box', P.metal, ankle, { pos: [t * 0.11, -0.04, 0.5], rot: [0.25, t * 0.25, 0], scale: [0.06, 0.06, 0.16] });
     thigh.rotationQuaternion = Quaternion.Identity();
     knee.rotationQuaternion = Quaternion.Identity();
     ankle.rotationQuaternion = Quaternion.Identity();
@@ -128,23 +178,38 @@ export interface DroneRig {
 
 /** Rush drone: fast hovering kamikaze machine. Body center at local y=0. */
 export function buildRusher(kit: Kit, P: Palette): DroneRig {
+  const L = (name: string, secs: Section[], axis: LoftAxis = 'z', segs = 28) => kit.sculpt(name, () => loftData(secs, axis, segs));
+  const hull = L('rHull', [
+    { t: -0.62, w: 0.26, h: 0.2, n: 3 },
+    { t: -0.45, w: 0.46, h: 0.32, v: 0.02, n: 4 },
+    { t: 0.0, w: 0.52, h: 0.36, v: 0.03, n: 4 },
+    { t: 0.38, w: 0.4, h: 0.26, v: -0.01, n: 3.5 },
+    { t: 0.6, w: 0.2, h: 0.13, v: -0.03, n: 2.5 },
+  ], 'z', 32);
+  const carapace = L('rCarapace', [{ t: -0.5, w: 0.3, h: 0.05, v: 0.3 }, { t: -0.05, w: 0.42, h: 0.09, v: 0.36, n: 5 }, { t: 0.4, w: 0.26, h: 0.05, v: 0.24 }], 'z', 24);
+  const mandible = L('rMandible', [{ t: 0.0, w: 0.05, h: 0.1 }, { t: 0.35, w: 0.045, h: 0.09, v: -0.02, n: 5 }, { t: 0.72, w: 0.012, h: 0.03, v: -0.06 }], 'z', 16);
+  const fin = L('rFin', [{ t: 0, w: 0.22, h: 0.02, u: 0 }, { t: 0.22, w: 0.2, h: 0.03, u: 0.08, n: 5 }, { t: 0.5, w: 0.1, h: 0.015, u: 0.2 }], 'x', 16);
+  const nozzle = kit.sculpt('rNozzle', () => smoothLatheData([[0.08, -0.22], [0.12, -0.18], [0.12, 0.08], [0.16, 0.16], [0.14, 0.2]], 16));
+  const eye = kit.sculpt('rEye', () => smoothLatheData([[0.0, -0.06], [0.16, -0.04], [0.18, 0.02], [0.12, 0.07]], 20));
+
   const root = kit.node('rusher', null);
   const body = kit.node('rBody', root, [0, 1.3, 0]);
-  kit.part('ico', P.enemyDark, body, { scale: [1.0, 0.82, 1.15] });
-  kit.part('box', P.enemyArmor, body, { pos: [0, 0.32, 0.05], scale: [0.7, 0.14, 0.9], rot: [0.12, 0, 0] });
-  kit.part('box', P.enemyArmor, body, { pos: [0, -0.3, 0.1], scale: [0.55, 0.1, 0.7], rot: [-0.12, 0, 0] });
-  kit.part('sphere', P.orangeGlow, body, { pos: [0, 0, 0.5], scale: [0.36, 0.36, 0.2] });
-  kit.part('torusThin', P.enemyArmor, body, { pos: [0, 0, 0.53], rot: [Math.PI / 2, 0, 0], scale: [0.5, 0.5, 0.5] });
+  kit.part(hull, P.enemyDark, body);
+  kit.part(carapace, P.enemyArmor, body);
+  kit.part(carapace, P.enemyArmor, body, { rot: [0, 0, Math.PI], scale: [0.8, 0.8, 0.8] });
+  // Sensor eye in a ringed socket at the nose.
+  kit.part(eye, P.orangeGlow, body, { pos: [0, -0.01, 0.6], rot: [Math.PI / 2, 0, 0], shadow: false });
+  kit.part('torusThin', P.metal, body, { pos: [0, -0.01, 0.6], rot: [Math.PI / 2, 0, 0], scale: [0.42, 0.42, 0.42] });
   for (const side of [-1, 1]) {
-    // forward mandible blades
-    kit.part('box', P.enemyArmor, body, { pos: [side * 0.38, -0.05, 0.55], scale: [0.08, 0.16, 0.7], rot: [0, -side * 0.35, 0] });
-    kit.part('box', P.orangeDim, body, { pos: [side * 0.42, -0.05, 0.62], scale: [0.02, 0.05, 0.6], rot: [0, -side * 0.35, 0] });
-    // side fins
-    kit.part('box', P.enemyDark, body, { pos: [side * 0.55, 0.05, -0.25], scale: [0.5, 0.05, 0.4], rot: [0, 0, side * 0.3] });
+    kit.part(mandible, P.enemyArmor, body, { pos: [side * 0.34, -0.06, 0.2], rot: [0, -side * 0.3, 0] });
+    kit.part('box', P.orangeDim, body, { pos: [side * 0.42, -0.04, 0.5], scale: [0.015, 0.035, 0.42], rot: [0, -side * 0.3, 0], shadow: false });
+    kit.part(fin, P.enemyDark, body, { pos: [side * 0.42, 0.04, -0.2], rot: [0, 0, side * 0.3], scale: [side, 1, 1] });
+    kit.part(nozzle, P.graphite, body, { pos: [side * 0.34, -0.1, -0.56], rot: [Math.PI / 2, 0, 0] });
+    kit.part('cyl8', P.orangeGlow, body, { pos: [side * 0.34, -0.1, -0.77], rot: [Math.PI / 2, 0, 0], scale: [0.2, 0.02, 0.2], shadow: false });
   }
-  kit.part('box', P.enemyDark, body, { pos: [0, 0.45, -0.3], scale: [0.05, 0.35, 0.45], rot: [-0.3, 0, 0] });
-  const ring = kit.part('torus', P.orangeGlow, body, { pos: [0, 0, -0.5], rot: [Math.PI / 2, 0, 0], scale: [0.62, 0.62, 0.62] });
-  kit.part('cyl', P.metal, body, { pos: [0, 0, -0.45], rot: [Math.PI / 2, 0, 0], scale: [0.4, 0.2, 0.4] });
+  kit.part('cyl8', P.metal, body, { pos: [0, 0.5, -0.1], rot: [-0.3, 0, 0], scale: [0.025, 0.32, 0.025] });
+  for (let i = 0; i < 3; i++) kit.part('box', P.graphite, body, { pos: [0, -0.34, -0.12 + i * 0.13], scale: [0.36, 0.025, 0.045] });
+  const ring = kit.part('torus', P.orangeGlow, body, { pos: [0, 0, -0.62], rot: [Math.PI / 2, 0, 0], scale: [0.5, 0.5, 0.5], shadow: false });
   return { root, body, ring };
 }
 
@@ -236,9 +301,15 @@ export function buildReactor(scene: Scene, P: Palette): ReactorRig {
     m.metadata = pickable ? { surface: 'reactor' } : null;
     return m;
   };
-  mk(MeshBuilder.CreateCylinder('rBase', { diameter: 9.5, height: 0.6, tessellation: 8 }, scene), P.graphite).position.y = 0.3;
-  mk(MeshBuilder.CreateCylinder('rBase2', { diameter: 7.6, height: 0.5, tessellation: 8 }, scene), P.white).position.y = 0.85;
-  mk(MeshBuilder.CreateTorus('rBaseGlow', { diameter: 8.6, thickness: 0.1, tessellation: 8 }, scene), P.cyanGlow, false).position.y = 0.62;
+  const sculpted = (name: string, vd: ReturnType<typeof loftData>) => {
+    const m = new Mesh(name, scene);
+    vd.applyToMesh(m);
+    return m;
+  };
+  // Stepped plinth with a soft machined profile.
+  mk(sculpted('rBase', smoothLatheData([[4.9, 0], [4.9, 0.14], [4.78, 0.3], [4.66, 0.52], [4.3, 0.6], [3.95, 0.66], [3.88, 0.98], [3.62, 1.1], [1.7, 1.12], [1.4, 1.18]], 48)), P.graphite);
+  mk(sculpted('rBase2', smoothLatheData([[3.8, 0], [3.8, 0.08], [3.7, 0.3], [3.3, 0.4], [3.25, 0.44]], 48)), P.white).position.y = 0.66;
+  mk(MeshBuilder.CreateTorus('rBaseGlow', { diameter: 9.0, thickness: 0.1, tessellation: 64 }, scene), P.cyanGlow, false).position.y = 0.62;
 
   const plasmaSrc = plasmaCanvas();
   const plasma = toTexture('reactorPlasma', plasmaSrc, scene, { aniso: 2 });
@@ -265,10 +336,10 @@ export function buildReactor(scene: Scene, P: Palette): ReactorRig {
   const pool = mk(MeshBuilder.CreateDisc('rPool', { radius: 13, tessellation: 48 }, scene), poolMat, false);
   pool.rotation.x = Math.PI / 2;
   pool.position.y = 0.04;
-  const sleeve = mk(MeshBuilder.CreateCylinder('rSleeve', { diameter: 2.5, height: 1.0, tessellation: 24 }, scene), P.graphite);
-  sleeve.position.y = 1.6;
-  const cap = mk(MeshBuilder.CreateCylinder('rCap', { diameterBottom: 2.6, diameterTop: 1.4, height: 0.8, tessellation: 24 }, scene), P.white);
-  cap.position.y = 7.6;
+  const sleeve = mk(sculpted('rSleeve', smoothLatheData([[1.32, 0], [1.42, 0.1], [1.42, 0.55], [1.5, 0.62], [1.5, 0.82], [1.36, 0.95]], 40)), P.graphite);
+  sleeve.position.y = 1.1;
+  const cap = mk(sculpted('rCap', smoothLatheData([[1.4, 0], [1.42, 0.12], [1.3, 0.3], [1.02, 0.52], [0.72, 0.7], [0.48, 0.8], [0.34, 0.84]], 40)), P.white);
+  cap.position.y = 7.15;
 
   // Four arched pylons
   for (let i = 0; i < 4; i++) {
@@ -276,17 +347,21 @@ export function buildReactor(scene: Scene, P: Palette): ReactorRig {
     const pyl = new TransformNode('pylon', scene);
     pyl.parent = root;
     pyl.rotation.y = a;
-    const p1 = mk(createBeveledBox('py1', 0.6, 5.5, 0.9, 0.06, scene), P.white);
+    // Curved buttress: thick at the plinth, leaning in and thinning toward the crown.
+    const p1 = mk(sculpted('py1', loftData([
+      { t: 0.6, w: 0.42, h: 0.62, v: 3.55, n: 5 },
+      { t: 2.0, w: 0.36, h: 0.5, v: 3.38, n: 5 },
+      { t: 4.0, w: 0.3, h: 0.42, v: 3.02, n: 5 },
+      { t: 5.6, w: 0.28, h: 0.38, v: 2.5, n: 5 },
+      { t: 6.45, w: 0.3, h: 0.36, v: 1.95, n: 4 },
+    ], 'y', 28)), P.white);
     p1.parent = pyl;
-    p1.position.set(0, 3.4, 3.1);
-    p1.rotation.x = -0.18;
-    const p2 = mk(createBeveledBox('py2', 0.5, 0.5, 2.4, 0.05, scene), P.graphite);
+    const p2 = mk(sculpted('py2', loftData([{ t: 2.5, w: 0.24, h: 0.22, v: 6.3 }, { t: 2.3, w: 0.28, h: 0.26, v: 6.3, n: 5 }, { t: 1.3, w: 0.24, h: 0.22, v: 6.25, n: 5 }, { t: 1.15, w: 0.18, h: 0.16, v: 6.25 }], 'z', 20)), P.graphite);
     p2.parent = pyl;
-    p2.position.set(0, 6.3, 2.0);
-    const strip = mk(MeshBuilder.CreateBox('pyS', { width: 0.12, height: 4.5, depth: 0.05 }, scene), P.cyanGlow, false);
+    const strip = mk(MeshBuilder.CreateBox('pyS', { width: 0.1, height: 3.8, depth: 0.04 }, scene), P.cyanGlow, false);
     strip.parent = pyl;
-    strip.position.set(0, 3.3, 2.62);
-    strip.rotation.x = -0.18;
+    strip.position.set(0, 3.2, 2.84);
+    strip.rotation.x = -0.15;
   }
 
   const coilLight = unlit(scene, 'reactorCoilLight', [0.28, 2.0, 2.5], { twoSided: true });

@@ -132,9 +132,12 @@ export function createPalette(scene: Scene, high: boolean, indoor = false): Pale
   shield.emissiveColor = new Color3(2.2, 0.55, 0.08);
   shield.alpha = 0.5;
   shield.disableLighting = true;
-  shield.backFaceCulling = false;
+  // Front faces only: back faces read as grazing angles to the fresnel and filled the whole sphere.
+  shield.backFaceCulling = true;
   shield.opacityFresnelParameters = new FresnelParameters({ bias: 0.08, power: 2.4, leftColor: Color3.White(), rightColor: Color3.Black() });
-  shield.emissiveFresnelParameters = new FresnelParameters({ bias: 0.25, power: 1.6, leftColor: new Color3(2.6, 0.9, 0.2), rightColor: new Color3(0.6, 0.08, 0.0) });
+  shield.emissiveFresnelParameters = new FresnelParameters({ bias: 0.05, power: 2.2, leftColor: new Color3(2.6, 0.9, 0.2), rightColor: new Color3(0.08, 0.015, 0.0) });
+  // Additive: a bright rim with a nearly clear centre, so the machine inside stays readable.
+  shield.alphaMode = Constants.ALPHA_ADD;
 
   const ghost = (name: string, c: [number, number, number]) => {
     const m = new StandardMaterial(name, scene);

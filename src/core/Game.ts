@@ -54,6 +54,7 @@ import { isCheckpointWave, type ThreatTier } from '../progression/tiers';
 import { ArenaBuilder } from '../visuals/arena';
 import { Atmosphere } from '../visuals/atmosphere';
 import { PostFx } from '../visuals/postfx';
+import { MoodDirector } from '../visuals/moodDirector';
 import { Kit } from '../visuals/kit';
 import { createPalette, type Palette } from '../visuals/materials';
 import { buildReactor, type ReactorRig } from '../visuals/models';
@@ -138,6 +139,7 @@ export class Game {
   protected reactorHitT = 0;
   protected reactorSfxT = 0;
   protected post: PostFx;
+  protected mood: MoodDirector;
   protected atmosphere: Atmosphere;
   protected moon: DirectionalLight;
   protected hurtFx = 0;
@@ -285,6 +287,7 @@ export class Game {
     this.weapon = new Weapon(scene, weaponDef, this.player, cfg.loadout.weapon);
     scene.setRenderingAutoClearDepthStencil(1, true, true, true);
     this.post = new PostFx(scene, engine, this.player.camera, high);
+    this.mood = new MoodDirector(scene, this.moon, this.post);
 
     this.fx = new Effects(scene, this.kit, this.pal, ARENA, high);
     this.wfx = new WeaponFx(scene);
@@ -577,6 +580,7 @@ export class Game {
     this.player.shakeScale = s.shake;
     this.weapon.anim.reduceMotion = s.reduceMotion;
     this.fx.setDensity(s.particles);
+    this.atmosphere.setDensity(s.particles === 'low' ? 0.45 : s.particles === 'medium' ? 0.75 : 1);
     this.post.setOptions({ bloom: s.bloom, reduceMotion: s.reduceMotion });
     sfx.setVolume(s.volume);
     sfx.setMix(s.sfxVolume, s.uiVolume, s.ambienceVolume);
@@ -1209,6 +1213,7 @@ export class Game {
     const k = (1 - this.tactical.hostileScale) / (1 - TacticalEnergy.HOSTILE_SCALE);
     const flash = this.updateSky(dt);
     this.hurtFx = Math.max(this.player.hurtFlash, this.player.alive ? 0 : 0.8);
+    this.mood.update(dt, this.moodInput());
     this.post.update(dt, k, this.hurtFx, flash);
 
     this.updateArenaVisuals(dt, hdt);
@@ -1233,6 +1238,16 @@ export class Game {
 
   gateActivity(gate: GateId): number {
     return this.arenaVisuals.gateActivity(gate);
+  }
+
+  /** Situation inputs for the mood director (shared by the replica, which mirrors the same state). */
+  protected moodInput(): { tier: number; boss: boolean; event: 'swarm' | 'eliteAssault' | 'instability' | 'hvt' | null; reactorFrac: number } {
+    return {
+      tier: this.cfg.tier.id,
+      boss: this.enemies.active.some((e) => e.alive && e.def.role === 'boss'),
+      event: this.survival.event,
+      reactorFrac: this.reactorHp / ECONOMY.reactorMaxHp,
+    };
   }
 
   /** Storm: sky lightning brightens the moonlight and rolls thunder. */

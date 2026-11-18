@@ -21,6 +21,7 @@ import { createBeveledBox } from './bevel';
 import { createPathLight } from './pathLighting';
 import { segmentedRing } from './rings';
 import { ArenaDecals } from './arenaDecals';
+import { ArenaDressing } from './arenaDressing';
 
 interface GateVisual {
   lane: ReturnType<typeof createPathLight>;
@@ -122,6 +123,7 @@ export class ArenaBuilder {
     }
     decals.finish();
     this.buildSkyline();
+    new ArenaDressing({ scene: this.scene, box: (...a) => this.box(...a), add: (m, mat, s) => this.add(m, mat, s) }, this.pal, this.layout).build();
 
     this.merge();
 
