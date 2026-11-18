@@ -240,6 +240,9 @@ const cell = (i, j) => [2 + 5 * i + 2.5, -2.5 + 5 * j + 2.5];
     const wsUrl = process.env.RIFT_WS || 'ws://localhost:8787/ws';
     const A = (await open(b)).p;
     const B = (await open(b)).p;
+    // Two live software-GL render loops starve Playwright's actionability checks (clicks time out): the lobby UI is
+    // React-driven and the arena transition renders by itself, so the clients run with the loop stopped.
+    for (const pg of [A, B]) await ev(pg, () => window.__rift.stopLoop());
     for (const [pg, name] of [[A, 'Alpha'], [B, 'Bravo']]) {
       await ev(pg, (n) => window.__rift.flow.coopConnect(n), name);
       await waitFor(pg, () => window.__rift.flow.net.state.status === 'online');

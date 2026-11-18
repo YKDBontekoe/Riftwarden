@@ -155,6 +155,7 @@ scripts/e2e-m6.cjs         M6 browser acceptance suite (A-L: plans, enemies, eli
 - **Behaviours**: every enemy archetype is a `Behavior` registered by `Game` (`CORE_BEHAVIORS`, `M6_BEHAVIORS`, ...). `EnemyManager` is pool + routing + damage resolution only, and must not import a behaviour module (cycle).
 - **Replicated presentation**: add a call to the lists in `net/replicated.ts` (compile-checked against the real classes) instead of new string literals on either side.
 - **No milestone names in APIs**: name by intent (`nextTowerCost`, `shaderWarmup`, `towerHud`). The HUD snapshot keys `m5`/`m6` are legacy store shape.
+- **Architecture tests** (`tests/architecture.test.ts`) enforce the boundaries above (acyclic `progression/save`, no behaviour imports in `EnemyManager`, no `Game` value import in `src/arena`, pure modules free of Babylon values); `tests/save-surface.test.ts` pins the save barrel's exports. Extend them when adding a boundary.
 - **e2e scripts import `scripts/lib/harness.cjs`**; do not copy launch/boot helpers again. Restart `vite` if you delete/rename files while it runs (it caches module resolution and the page then never boots).
 
 ## Refactoring backlog (not done yet)
@@ -162,7 +163,7 @@ scripts/e2e-m6.cjs         M6 browser acceptance suite (A-L: plans, enemies, eli
 - `Game.ts` (~2100 lines): loot (rollItems..collectPickup), towers (modifyTower, tryPlace, updateInspect), upgrade flow, hostile hooks (hurtPlayer, hostileBlast, ventTick, summon), HUD publishing (`publishHud`/`snapshot`, reads ~40 members, many `protected`) and the constructor's scene setup are still inside. ServerGame/ClientGame override many of these, so extract them as systems that the net subclasses replace (`ServerLootSystem`, ...) rather than overriding Game methods.
 - Presentation is still captured by wrapping `fx/wfx/tele/ordnance/enemies` at runtime (`capturePresentation`); the target is a `PresentationSink` port that Game systems call explicitly, plus a typed discriminated union for event tuples (`ClientGame.applyEvent` still switches on string tags).
 - UI: `Hud.tsx` (815 lines), `Terminals.tsx`, `items.tsx` should be split per panel; the run-phase booleans on Game (`checkpointOpen`, `upgradeDue`, `screen`) want a small state machine.
-- Browser co-op section X of `e2e-construction-coop.cjs` times out on `click('text=CO-OP')` in this environment, on the original M7 commit too; the client replay path is covered only by typecheck + `e2e-coop-protocol.mjs`.
+- Browser co-op section X of `e2e-construction-coop.cjs` needs a test server (`RIFT_TEST=1 RIFT_PORT=8787 npx tsx server/main.ts`) and runs both clients with the render loop stopped: two live software-GL render loops starve Playwright's actionability checks and clicks time out. It passes (12/12) and is the real test of the client replay path, along with `e2e-coop-protocol.mjs`.
 
 ## Key design decisions
 
