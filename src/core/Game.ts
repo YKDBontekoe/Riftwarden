@@ -26,6 +26,7 @@ import type { WeaponFamily } from '../data/defs';
 import { WeaponFx } from '../fx/WeaponFx';
 import { ECONOMY } from '../data/defs';
 import { DevTools } from '../arena/DevTools';
+import { hintFor, lootTargetInfo, runHud } from '../ui/hudModel';
 import { planBuildConfig, planRefit } from '../towers/refit';
 import { rollLoot } from '../loot/roll';
 import { createSunShadows } from '../arena/shadows';
@@ -34,7 +35,7 @@ import { pickInteractable } from '../home/interaction';
 import { DROP_SOURCES, type DropSourceId } from '../loot/drops';
 import { equipmentModifiers, weaponDefFor } from '../loot/equipment';
 import { flatScale, hashSeed } from '../loot/generate';
-import { convertsToSalvage, expiresAfterWave, LootField, type Pickup, PICKUP_RANGE } from '../loot/LootField';
+import { convertsToSalvage, LootField, type Pickup, PICKUP_RANGE } from '../loot/LootField';
 import { rarity } from '../loot/rarity';
 import { scrapValue } from '../loot/economy';
 import { RUN_INCOME } from '../economy/config';
@@ -48,7 +49,7 @@ import { Effects } from '../fx/Effects';
 import { MOVE, Player } from '../player/Player';
 import { type HitKind, hudStore, type LootTargetInfo, type Screen, uiEvents } from '../ui/store';
 import type { Rewards, RunLedger } from '../progression/run';
-import { isCheckpointWave, nextCheckpoint, type ThreatTier } from '../progression/tiers';
+import { isCheckpointWave, type ThreatTier } from '../progression/tiers';
 import { ArenaBuilder } from '../visuals/arena';
 import { Atmosphere } from '../visuals/atmosphere';
 import { PostFx } from '../visuals/postfx';
@@ -1975,33 +1976,29 @@ export class Game {
     const w = this.waves;
     const c = this.construction;
     const t = this.inspected;
-    let hint = '';
-    if (this.screen === 'playing') {
-      if (w.phase === 'prep' && w.number === 1) hint = 'Build Sentinel turrets beside the orange enemy lanes (2 / B). Press G to start the wave.';
-      else if (w.phase === 'prep') hint = 'Preparation: build and reposition. Press G to start early.';
-      else if (w.number === 1 && w.phase === 'combat' && this.kills < 3) hint = 'Aim for the glowing visors: weakpoints always crit.';
-      else if (w.number === 2 && w.phase === 'combat' && this.tactical.energy >= 99 && !this.tactical.active) hint = 'Q: tactical slow-time lets you place several turrets mid-fight.';
-      if (this.canReturnHome) hint = 'Checkpoint secured. Press H to return to HQ, or start the next wave with G.';
-    }
-    if (!this.player.alive || c.active || this.tut?.showing) hint = '';
+    const hint = hintFor({
+      playing: this.screen === 'playing',
+      phase: w.phase,
+      wave: w.number,
+      kills: this.kills,
+      tacticalEnergy: this.tactical.energy,
+      tacticalActive: this.tactical.active,
+      canReturnHome: this.canReturnHome,
+      playerAlive: this.player.alive,
+      suppress: c.active || !!this.tut?.showing,
+    });
     const run = this.cfg.run;
     const lt = this.lootTarget;
     let lootTarget: LootTargetInfo | null = null;
     if (lt && this.screen === 'playing') {
       const cur = this.inventory.equipped(this.inventory.targetSlot(lt.item) ?? 'weapon');
-      lootTarget = {
-        uid: lt.item.uid,
-        name: lt.item.name,
-        rarity: lt.item.rarity,
-        level: lt.item.level,
-        category: lt.item.category,
-        expiresAfterWave: expiresAfterWave(lt.droppedWave),
+      lootTarget = lootTargetInfo({
+        item: lt.item,
+        droppedWave: lt.droppedWave,
         expiring: lt.expiring,
         cargoFull: this.inventory.cargoFull,
-        equippedName: lt.item.category === 'module' ? null : (cur?.name ?? null),
-        equippedLevel: cur?.level ?? 0,
-        equippedRarity: cur?.rarity ?? null,
-      };
+        equipped: cur ? { name: cur.name, level: cur.level, rarity: cur.rarity } : null,
+      });
     }
     hudStore.set({
       lootTarget,
@@ -2012,20 +2009,7 @@ export class Game {
       playerShield: this.player.shield,
       playerShieldMax: this.player.maxShield,
       location: 'arena',
-      run: {
-        tier: this.cfg.tier.id,
-        salvageUnsecured: run.unsecured.salvage,
-        salvageSecured: run.secured.salvage,
-        creditsUnsecured: run.unsecured.credits,
-        creditsSecured: run.secured.credits,
-        componentsUnsecured: run.unsecured.components,
-        componentsSecured: run.secured.components,
-        nextCheckpoint: nextCheckpoint(run.wavesCleared + 1),
-        checkpointOpen: this.canReturnHome,
-        lastBankedWave: run.lastBankedWave,
-        kills: run.kills,
-        duration: run.duration,
-      },
+      run: runHud(this.cfg.tier.id, run, this.canReturnHome),
       wave: w.number,
       phase: w.phase,
       phaseTimer: Math.max(0, w.timer),
