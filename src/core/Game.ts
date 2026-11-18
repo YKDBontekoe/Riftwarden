@@ -28,6 +28,7 @@ import type { WeaponFamily } from '../data/defs';
 import { WeaponFx } from '../fx/WeaponFx';
 import { ECONOMY } from '../data/defs';
 import { DevTools } from '../arena/DevTools';
+import { CORE_BEHAVIORS } from '../enemies/coreBehaviors';
 import { pickInteractable } from '../home/interaction';
 import { DROP_SOURCES, type DropSourceId, rollDrops } from '../loot/drops';
 import { equipmentModifiers, weaponDefFor } from '../loot/equipment';
@@ -320,7 +321,7 @@ export class Game {
       }
     }
     this.enemies = new EnemyManager(scene, this.kit, this.pal);
-    for (const [kind, b] of Object.entries({ ...M6_BEHAVIORS, ...JAMMER_CRAWLER_BEHAVIORS, ...BOSS_BEHAVIORS })) if (b) this.enemies.register(kind as EnemyKind, b as Behavior);
+    for (const [kind, b] of Object.entries({ ...CORE_BEHAVIORS, ...M6_BEHAVIORS, ...JAMMER_CRAWLER_BEHAVIORS, ...BOSS_BEHAVIORS })) if (b) this.enemies.register(kind as EnemyKind, b as Behavior);
     this.tele = new Telegraphs(scene);
     this.ordnance = new Ordnance(scene, this.tele);
     this.dynamics = new ArenaDynamics(scene, this.pal, ARENA, {

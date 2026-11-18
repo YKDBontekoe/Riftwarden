@@ -10,7 +10,7 @@ import type { Kit } from '../visuals/kit';
 import type { Palette } from '../visuals/materials';
 import { hasAnyStatus, isBurning, isChilled, isFrozen, isShocked, newStatus, resetStatus, speedFactor, type StatusState } from '../combat/status';
 import { unlit } from '../visuals/materials';
-import { buildRusher, buildWalker, type DroneRig, type WalkerRig } from '../visuals/models';
+import type { DroneRig, WalkerRig } from '../visuals/models';
 import { buildEliteParts, buildThreatMark, type EliteParts, type ThreatMark } from '../visuals/eliteParts';
 import { ELITE, type EliteModId, eliteName, validMods } from '../survival/elites';
 import type { ArenaLayout, GateId, Vec2 } from '../world/layout';
@@ -68,10 +68,12 @@ export interface HitInfo {
   dot: boolean;
 }
 
-/** Plug-in AI for archetypes beyond the M0 trio (and bosses). Per-enemy state lives in `e.ai`. */
+/** Plug-in AI for every archetype (core walker/rusher in coreBehaviors.ts, the rest in behaviors.ts / bosses/). Per-enemy state lives in `e.ai`. */
 export interface Behavior {
-  /** Build the rig (called once per pooled enemy object). */
-  create(e: Enemy, m: EnemyManager): void;
+  /** Rig for archetypes that use the shared walker/drone rigs (default: the kit template named after the kind). */
+  rig?(m: EnemyManager): { root: TransformNode; walker?: WalkerRig | null; drone?: DroneRig | null };
+  /** Build extra rig parts / hitboxes (called once per pooled enemy object). */
+  create?(e: Enemy, m: EnemyManager): void;
   /** Reset per-spawn state. */
   spawn(e: Enemy, ctx: EnemyContext | null, m: EnemyManager): void;
   /** Movement, decisions, attacks and animation (hostile time, already status-scaled where relevant). */
@@ -164,7 +166,7 @@ export class Enemy implements Health {
     readonly root: TransformNode,
     readonly walker: WalkerRig | null,
     readonly drone: DroneRig | null,
-    readonly behavior: Behavior | null,
+    readonly behavior: Behavior,
   ) {
     this.motion = walker ? new WalkerMotion(walker, def.scale) : null;
   }
@@ -325,18 +327,11 @@ export class EnemyManager {
 
   private create(kind: EnemyKind): Enemy {
     const def = ENEMIES[kind];
-    let e: Enemy;
-    const b = this.behaviors[kind] ?? null;
-    if (b) {
-      e = new Enemy(def, this.kit.node(kind, null), null, null, b);
-      b.create(e, this);
-    } else if (kind === 'rusher') {
-      const rig = buildRusher(this.kit, this.P);
-      e = new Enemy(def, rig.root, null, rig, null);
-    } else {
-      const rig = buildWalker(this.kit, this.P, kind === 'bulwark');
-      e = new Enemy(def, rig.root, rig, null, null);
-    }
+    const b = this.behaviors[kind];
+    if (!b) throw new Error(`No behaviour registered for enemy kind '${kind}'`);
+    const r = b.rig?.(this) ?? { root: this.kit.node(kind, null) };
+    const e = new Enemy(def, r.root, r.walker ?? null, r.drone ?? null, b);
+    b.create?.(e, this);
     if (!e.hitboxes.length) {
       this.addHitbox(e, e.root, def.bodyY, 0, def.bodyR, false);
       this.addHitbox(e, e.root, def.weakY, def.weakForward, def.weakR, true);
@@ -714,7 +709,6 @@ export class EnemyManager {
     for (let i = list.length - 1; i >= 0; i--) {
       const e = list[i];
       if (!e.alive) continue;
-      const def = e.def;
       ctx.focus?.(e);
       e.flinch = Math.max(0, e.flinch - hdt * 4);
       e.shieldFlash = Math.max(0, e.shieldFlash - hdt * 5);
@@ -731,85 +725,7 @@ export class EnemyManager {
       if (e.threat) this.animateThreat(e, ctx.time);
       if (!e.alive) continue;
 
-      if (e.behavior) {
-        e.behavior.update(e, hdt, ctx, this);
-        continue;
-      }
-
-      const player = ctx.player;
-      const ppos = player.position;
-      // Statuses: chill slows, shock disrupts briefly, freeze stops movement, attacks and animation.
-      const sf = speedFactor(e.status);
-      const adt = hdt * sf * e.rateMult;
-      const slow = (1 - e.flinch * 0.5) * sf;
-      if (e.state === 'move') {
-        const reached = this.follow(e, def.speed * e.moveMult * slow, hdt, e.kind === 'rusher' ? 10 : 5);
-        if (reached) {
-          if (e.kind === 'rusher') {
-            ctx.damageReactor(e.dmg(def.reactorDamage), e.center(TMP2));
-            this.kill(e, ctx.effects, ctx, true);
-            continue;
-          }
-          e.state = 'attack';
-        }
-        // Rush drones detonate on the player.
-        if (e.kind === 'rusher' && player.alive) {
-          const c = e.center(TMP);
-          if (Vector3.DistanceSquared(c, ppos) < 2.3 * 2.3) {
-            ctx.hurtPlayer(e.dmg(def.playerDamage), e.pos);
-            TMP2.copyFrom(ppos).subtractInPlace(c).normalize();
-            player.knockback(TMP2, 9);
-            this.kill(e, ctx.effects, ctx, true);
-            continue;
-          }
-        }
-      } else {
-        // Attack the reactor
-        const desiredYaw = Math.atan2(ctx.layout.reactor.x - e.pos.x, ctx.layout.reactor.z - e.pos.z);
-        e.yaw = turnTowards(e.yaw, desiredYaw, hdt * 4);
-        e.attackT -= adt;
-        if (e.attackT <= 0) {
-          e.attackT = def.attackInterval;
-          const muzzle = this.muzzlePos(e, TMP);
-          e.motion?.fire();
-          ctx.effects.burst('flash', muzzle, 1, undefined, 0.22);
-          const target = TMP2.set(ctx.layout.reactor.x, 3, ctx.layout.reactor.z);
-          target.subtractInPlace(muzzle).normalize().scaleInPlace(2.2).addInPlace(muzzle);
-          ctx.effects.tracer(muzzle, target.set(ctx.layout.reactor.x, 3 + Math.random(), ctx.layout.reactor.z), 2, 0.12, 0.12);
-          ctx.effects.burst('enemySpark', target, 8);
-          ctx.damageReactor(e.dmg(def.reactorDamage), target);
-          const a = ctx.panFor(muzzle);
-          sfx.play('enemyShot', { volume: a.volume * 0.6, pan: a.pan });
-        }
-      }
-
-      // Walkers fire telegraphed plasma bolts at the player when they have line of sight.
-      if (e.walker && player.alive && def.playerShotInterval > 0) {
-        if (e.chargeT > 0) {
-          e.chargeT -= adt;
-          if (e.chargeT <= 0) {
-            const muzzle = this.muzzlePos(e, TMP);
-            const aim = TMP2.copyFrom(player.eye);
-            aim.y -= 0.35;
-            aim.subtractInPlace(muzzle).normalize().scaleInPlace(e.kind === 'bulwark' ? 24 : 21);
-            ctx.effects.spawnProjectile(muzzle, aim, e.dmg(def.playerDamage));
-            e.motion?.fire();
-            ctx.effects.burst('flash', muzzle, 1, undefined, e.kind === 'bulwark' ? 0.3 : 0.23);
-            const a = ctx.panFor(muzzle);
-            sfx.play('enemyShot', { volume: a.volume, pan: a.pan });
-          }
-        } else {
-          e.shotT -= adt;
-          if (e.shotT <= 0) {
-            e.shotT = def.playerShotInterval * (0.8 + Math.random() * 0.4);
-            const c = e.center(TMP);
-            const d2 = Vector3.DistanceSquared(c, ppos);
-            if (d2 < def.playerShotRange * def.playerShotRange && ctx.los(c, player.eye)) e.chargeT = 0.55;
-          }
-        }
-      }
-
-      this.animate(e, adt, ppos, ctx.effects);
+      e.behavior.update(e, hdt, ctx, this);
     }
     const ms = performance.now() - t0;
     this.aiMs = ms;
@@ -927,38 +843,6 @@ export class EnemyManager {
       return out.copyFrom(e.walker.muzzleGlow.getAbsolutePosition());
     }
     return e.center(out);
-  }
-
-  private animate(e: Enemy, hdt: number, ppos: Vector3, fx: Effects): void {
-    e.root.position.copyFrom(e.pos);
-    e.root.rotation.y = e.yaw;
-    e.phase += hdt;
-    if (e.walker) {
-      const w = e.walker;
-      const dx = ppos.x - e.pos.x;
-      const dz = ppos.z - e.pos.z;
-      const look = Math.atan2(dx, dz) - e.yaw;
-      w.head.rotation.y = clampAngle(look, 0.7);
-      const charge = e.chargeT > 0 ? 1 - e.chargeT / 0.55 : 0;
-      const aimPitch = e.state === 'attack' ? 0.10 : Math.max(-0.15, Math.min(0.22, (e.pos.y + 1.9 - ppos.y) / Math.max(2, Math.hypot(dx, dz))));
-      const planted = e.motion!.pose(e.pos, e.yaw, hdt * (e.boostT > 0 ? 1.6 : 1), e.state === 'move', charge, e.flinch, aimPitch);
-      const d2 = dx * dx + dz * dz;
-      if (planted && d2 < 18 * 18) fx.burst('puff', planted, e.kind === 'bulwark' ? 3 : 1, undefined, 0.6);
-      // M7: heavy mechanical footfalls (nearby only; the sound bank rate-limits and caps voices).
-      if (planted && d2 < 26 * 26) sfx.play('step', { volume: (1 - Math.sqrt(d2) / 26) * (e.kind === 'bulwark' ? 0.9 : 0.5), pitch: e.kind === 'bulwark' ? 0.75 : 1 });
-      if (w.shield) {
-        const s = e.shieldFlash;
-        w.shield.scaling.set(3.6 + s * 0.3, 3.9 + s * 0.3, 3.6 + s * 0.3);
-        w.shield.visibility = 0.55 + s * 0.45;
-      }
-    } else if (e.drone) {
-      const d = e.drone;
-      d.body.position.y = 1.3 + Math.sin(e.phase * 7) * 0.12;
-      d.body.position.x = Math.sin(e.phase * 3.1) * 0.35;
-      d.body.rotation.z = Math.cos(e.phase * 3.1) * -0.35 + e.flinch * 0.6;
-      d.body.rotation.x = 0.18 + e.flinch * -0.5 + (e.boostT > 0 ? 0.3 : 0);
-      d.ring.rotation.y = e.phase * 12;
-    }
   }
 
   /** For HUD/debug: counts by kind. */
