@@ -251,7 +251,7 @@ export class Director {
     const burnStacks = st.burnStacks;
     const chilled = isChilled(st, 1);
 
-    const res = this.g.enemies.damage(e, amount, DMG_TYPE[r.element], r.point, this.g.fx, { weak: r.weak, from: r.from ?? null, dot: r.dot });
+    const res = this.g.enemies.damage(e, amount, DMG_TYPE[r.element], r.point, this.g.enemyFx, { weak: r.weak, from: r.from ?? null, dot: r.dot });
     if (!res) return none;
     const dealt = res.toHp + res.toShield;
     this.damageBy[r.source.kind] += dealt;

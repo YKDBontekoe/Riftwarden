@@ -115,7 +115,19 @@ export interface LootTargetInfo {
   equippedRarity: string | null;
 }
 
+/** M7 co-op HUD state (teammates, votes, offers, link quality). */
+export interface CoopHud {
+  team: import('../net/ClientGame').TeamMember[];
+  voteOpen: boolean;
+  voteLeft: number;
+  /** Name of the teammate choosing the upgrade (null = you choose / none). */
+  offerChooser: string | null;
+  offerLeft: number;
+  rtt: number;
+}
+
 export interface HudState {
+  coop?: CoopHud | null;
   screen: Screen;
   location: Location;
   terminal: TerminalId | null;

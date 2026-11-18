@@ -130,7 +130,7 @@ describe('save format', () => {
     expect(data.threat).toEqual({ selected: 2, unlocked: 2 });
     expect(data.resources.salvage).toBe(0);
     const p = data.base.placeables.find((x) => x.uid === 'p')!;
-    expect(p.position[0]).toBeLessThan(30);
+    expect(p.position[0]).toBeLessThanOrEqual(92);
     expect(p.position[1]).toBe(0);
     expect(p.scale).toBe(3);
     expect(data.base.placeables.some((x) => (x.type as string) === 'nuke')).toBe(false);

@@ -109,8 +109,8 @@ export interface ArenaConfig {
  */
 export class Game {
   readonly scene: Scene;
-  private pal: Palette;
-  private kit: Kit;
+  protected pal: Palette;
+  protected kit: Kit;
   readonly player: Player;
   readonly weapon: Weapon;
   readonly fx: Effects;
@@ -123,17 +123,17 @@ export class Game {
   readonly waves: WaveManager;
   readonly tactical = new TacticalEnergy();
   readonly wallet = new Wallet(ECONOMY.startingCores);
-  private reactor: ReactorRig;
-  private reactorLight: PointLight;
+  protected reactor: ReactorRig;
+  protected reactorLight: PointLight;
   reactorHp: number = ECONOMY.reactorMaxHp;
-  private reactorHitT = 0;
-  private reactorSfxT = 0;
-  private post: PostFx;
-  private atmosphere: Atmosphere;
-  private moon: DirectionalLight;
-  private hurtFx = 0;
-  private lastFlash = 0;
-  private arenaVisuals: ArenaBuilder;
+  protected reactorHitT = 0;
+  protected reactorSfxT = 0;
+  protected post: PostFx;
+  protected atmosphere: Atmosphere;
+  protected moon: DirectionalLight;
+  protected hurtFx = 0;
+  protected lastFlash = 0;
+  protected arenaVisuals: ArenaBuilder;
 
   /** Extra modifiers (debug); equipment, run upgrades and temporary buffs are composed in rebuildStats. */
   modifiers: StatModifier[] = [];
@@ -144,7 +144,7 @@ export class Game {
   statsVersion = 0;
   /** Upgrade choice currently on screen (mandatory selection after a wave). */
   offer: UpgradeDef[] | null = null;
-  private upgradeDue = false;
+  protected upgradeDue = false;
   /** Automation only: legacy milestone suites fight many waves without choosing upgrades. */
   skipUpgrades = false;
   /** M6: development panel (F4) available. Set by Flow from the URL (?dev / ?test). */
@@ -164,8 +164,8 @@ export class Game {
   /** Run inventory + loadout (ownership rules live in RunInventory/RunLedger). */
   readonly inventory: RunInventory;
   readonly loot: LootField;
-  private lootRand: () => number;
-  private lootCounter = 0;
+  protected lootRand: () => number;
+  protected lootCounter = 0;
   lootTarget: Pickup | null = null;
   /** Bumped on every inventory/loadout change so UI can refresh without polling. */
   inventoryVersion = 0;
@@ -178,23 +178,23 @@ export class Game {
   dropsSpawned = 0;
   dropsConverted = 0;
   dropsExpired = 0;
-  private screenBeforeInventory: Screen = 'playing';
+  protected screenBeforeInventory: Screen = 'playing';
 
   screen: Screen = 'loading';
-  private runTime = 0;
-  private kills = 0;
-  private turretsBuilt = 0;
-  private defeatT = 0;
-  private hudT = 0;
-  private inspected: Turret | null = null;
-  private recycleT = 0;
-  private perfOn = false;
-  private instrumentation: SceneInstrumentation | null = null;
-  private fpsSmooth = 60;
+  protected runTime = 0;
+  protected kills = 0;
+  protected turretsBuilt = 0;
+  protected defeatT = 0;
+  protected hudT = 0;
+  protected inspected: Turret | null = null;
+  protected recycleT = 0;
+  protected perfOn = false;
+  protected instrumentation: SceneInstrumentation | null = null;
+  protected fpsSmooth = 60;
 
-  private shotRay = new Ray(Vector3.Zero(), Vector3.Forward(), 1);
-  private physResult = new PhysicsRaycastResult();
-  private enemyCtx: EnemyContext;
+  protected shotRay = new Ray(Vector3.Zero(), Vector3.Forward(), 1);
+  protected physResult = new PhysicsRaycastResult();
+  protected enemyCtx: EnemyContext;
   turretCtx: TurretContext;
 
   /** Return-home window: open from checkpoint prep until the next wave starts. */
@@ -210,11 +210,11 @@ export class Game {
   readonly survival: SurvivalRuntime;
   readonly layout: ArenaLayout = ARENA;
   /** Hostile time since the run started (enemy animation phase). */
-  private hostileT = 0;
-  private playerWasAlive = true;
+  protected hostileT = 0;
+  protected playerWasAlive = true;
   /** Boss entrance announced (enemy id). */
-  private bossSeen = 0;
-  private disposed = false;
+  protected bossSeen = 0;
+  protected disposed = false;
 
   constructor(
     private engine: Engine,
@@ -568,7 +568,7 @@ export class Game {
 
   // ---------------------------------------------------------------- loot
 
-  private lootContext(wave: number) {
+  protected lootContext(wave: number) {
     return { wave, tierLevelBonus: this.cfg.tier.lootLevelBonus, tierLuck: this.cfg.tier.lootLuck };
   }
 
@@ -608,7 +608,7 @@ export class Game {
   }
 
   /** A walkable landing point near `at` (Havok ray down; never on top of tall geometry). */
-  private groundPoint(at: Vector3): Vector3 {
+  protected groundPoint(at: Vector3): Vector3 {
     const physics = this.scene.getPhysicsEngine() as PhysicsEngineV2 | null;
     for (let attempt = 0; attempt < 6; attempt++) {
       const a = Math.random() * Math.PI * 2;
@@ -626,7 +626,7 @@ export class Game {
     return new Vector3(at.x, 0, at.z);
   }
 
-  private onLootLanded(p: Pickup): void {
+  protected onLootLanded(p: Pickup): void {
     const r = rarity(p.item.rarity);
     const c = LootField.color(p.item.rarity);
     this.fx.ring(p.ground.add(new Vector3(0, 0.08, 0)), 1.2 + r.index * 0.5, 0.45 + r.index * 0.08, c.scale(0.8), true);
@@ -660,7 +660,7 @@ export class Game {
     return true;
   }
 
-  private updateLootTarget(controls: boolean): void {
+  protected updateLootTarget(controls: boolean): void {
     this.lootTarget = null;
     if (!this.player.alive || this.construction.active || this.loot.count === 0) return;
     const eye = this.player.eye;
@@ -740,7 +740,7 @@ export class Game {
     return true;
   }
 
-  private async afterUpgrade(): Promise<void> {
+  protected async afterUpgrade(): Promise<void> {
     if (this.checkpointOpen && this.cfg.run.atCheckpoint) {
       this.openCheckpoint();
       return;
@@ -813,7 +813,7 @@ export class Game {
     return null;
   }
 
-  private towerFail(text: string): { ok: false; reason: string } {
+  protected towerFail(text: string): { ok: false; reason: string } {
     this.towerNote = { text, t: 3 };
     sfx.play('buildDeny');
     return { ok: false, reason: text };
@@ -881,7 +881,7 @@ export class Game {
   }
 
   /** Cycle helper for hotkeys: next owned+compatible component of a slot. */
-  private nextPart(cfg: TowerConfig, slot: TowerSlot): string | null {
+  protected nextPart(cfg: TowerConfig, slot: TowerSlot): string | null {
     const list = availableParts(cfg, slot, this.towerTech);
     if (list.length < 2) return null;
     const i = list.findIndex((p) => p.id === cfg[slot]);
@@ -889,7 +889,7 @@ export class Game {
   }
 
   /** In-world tower hotkeys: while aiming at a tower (refit) or in build mode (template). R level, C weapon, V core, N modifier, M base. */
-  private towerKeys(input: Input): void {
+  protected towerKeys(input: Input): void {
     const t = this.inspected;
     const slots: [string, TowerSlot][] = [['KeyC', 'weapon'], ['KeyV', 'core'], ['KeyN', 'modifier'], ['KeyM', 'base']];
     if (this.construction.active) {
@@ -978,7 +978,7 @@ export class Game {
     this.scene.dispose();
   }
 
-  private newRun(): void {
+  protected newRun(): void {
     this.enemies.clear();
     this.turrets.clear();
     this.fx.reset();
@@ -1029,7 +1029,7 @@ export class Game {
   /** Smoothed simulation cost per frame (ms, diagnostics). */
   frameMs = 0;
 
-  private idleAnimate(dt: number): void {
+  protected idleAnimate(dt: number): void {
     this.dynamics.update(dt, 0);
     const flash = this.updateSky(dt);
     this.post.update(dt, 0, 0, flash);
@@ -1037,7 +1037,7 @@ export class Game {
     this.updateArenaVisuals(dt, dt);
   }
 
-  private update(dt: number): void {
+  protected update(dt: number): void {
     const input = this.input;
     const playing = this.screen === 'playing';
     const controls = playing && input.captured;
@@ -1143,7 +1143,7 @@ export class Game {
     }
   }
 
-  private updateArenaVisuals(dt: number, hostileDt: number): void {
+  protected updateArenaVisuals(dt: number, hostileDt: number): void {
     const phase = this.waves.phase;
     const warning = this.screen === 'defeat' || phase === 'cleared' ? 0 : phase === 'combat' ? 1 : 0.5;
     this.arenaVisuals.update(dt, hostileDt, warning);
@@ -1154,7 +1154,7 @@ export class Game {
   }
 
   /** Storm: sky lightning brightens the moonlight and rolls thunder. */
-  private updateSky(dt: number): number {
+  protected updateSky(dt: number): number {
     const flash = this.atmosphere.update(dt, this.player.camera.position);
     if (flash > 0.9 && this.lastFlash < 0.5) sfx.thunder(0.4 + Math.random() * 1.2);
     this.lastFlash = flash;
@@ -1171,8 +1171,8 @@ export class Game {
     return Math.round(this.instrumentation?.drawCallsCounter.current ?? 0);
   }
 
-  private wasTactical = false;
-  private toggleTactical(): void {
+  protected wasTactical = false;
+  protected toggleTactical(): void {
     if (this.tactical.toggle()) {
       if (this.tactical.active) {
         this.wasTactical = true;
@@ -1183,14 +1183,14 @@ export class Game {
     } else sfx.play('buildDeny');
   }
 
-  private setBuildMode(on: boolean): void {
+  protected setBuildMode(on: boolean): void {
     if (on === this.construction.active) return;
     this.construction.setActive(on);
     this.weapon.setHolstered(on);
     sfx.play('ui');
   }
 
-  private tryPlace(): void {
+  protected tryPlace(): void {
     const c = this.construction;
     const cost = configCost(this.buildConfig, this.stats.buildCostMult);
     if (!c.valid || !this.wallet.spend(cost)) {
@@ -1204,7 +1204,7 @@ export class Game {
     if (!this.tactical.active) this.setBuildMode(false);
   }
 
-  private updateInspect(dt: number, controls: boolean): void {
+  protected updateInspect(dt: number, controls: boolean): void {
     let t: Turret | null = null;
     if (controls && !this.construction.active) {
       const cam = this.player.camera;
@@ -1242,7 +1242,7 @@ export class Game {
    * surface stops them; beams get an aim-assist radius (`width`) around their axis.
    * Damage is applied here, immediately; `weaponFx` only visualises the outcome.
    */
-  private shoot = (r: ShotRequest): ShotOutcome => {
+  protected shoot = (r: ShotRequest): ShotOutcome => {
     this.director.bus.emit({ type: 'fire', chain: this.director.bus.newChain(), source: { kind: 'weapon', id: r.family }, value: 1 });
     // Hitboxes must reflect this frame's enemy poses, not last frame's render.
     for (const e of this.enemies.active) {
@@ -1316,8 +1316,8 @@ export class Game {
   };
 
   /** World-space shot visuals and impacts per family (presentation only). */
-  private beamFxT = 0;
-  private weaponFx: WeaponFxHooks = {
+  protected beamFxT = 0;
+  protected weaponFx: WeaponFxHooks = {
     shot: (family, from, out, power, speed) => {
       const impact = () => this.impactFx(family, out, power);
       if (family === 'plasma') {
@@ -1338,7 +1338,7 @@ export class Game {
     beam: (on, from, to, intensity, contact) => this.wfx.beam(on, from, to, intensity, contact),
   };
 
-  private impactFx(family: WeaponFamily, out: ShotOutcome, power: number): void {
+  protected impactFx(family: WeaponFamily, out: ShotOutcome, power: number): void {
     const p = out.point;
     if (out.target === 'surface' && out.normal) {
       const pos = p.add(out.normal.scale(0.03));
@@ -1386,7 +1386,7 @@ export class Game {
   }
 
   /** Arc to the nearest other living enemy within ARC_RANGE of the struck one. */
-  private arcFrom(src: Enemy, point: Vector3, amount: number): void {
+  protected arcFrom(src: Enemy, point: Vector3, amount: number): void {
     if (amount <= 0) return;
     let best: Enemy | null = null;
     let bestD = ARC_RANGE * ARC_RANGE;
@@ -1431,15 +1431,40 @@ export class Game {
     if (boss) at.y = Math.min(at.y, 6);
     if (e.kind in DROP_SOURCES && e.def.role !== 'hvt' && e.tag !== 'summon') this.dropLoot(e.kind as DropSourceId, at);
     if (e.elite) this.dropFrom(this.survival.eliteSource(e), at);
-    this.enemies.kill(e, this.fx, this.enemyCtx);
+    this.enemies.kill(e, this.enemyFx, this.enemyCtx);
   }
 
   // ---------------------------------------------------------------- M6: hostile mechanics
 
   /** Every hostile hit on the drone goes through here. */
-  hurtPlayer(amount: number, from: Vector3): void {
-    if (!this.player.alive || !(amount > 0) || !Number.isFinite(amount)) return;
-    this.player.damage(amount, from);
+  hurtPlayer(amount: number, from: Vector3, target: Player = this.player): void {
+    if (!target.alive || !(amount > 0) || !Number.isFinite(amount)) return;
+    target.damage(amount, from);
+  }
+
+  /** Drones hostile area effects and projectiles can hit (co-op: every deployed drone). */
+  targets(): readonly Player[] {
+    return [this.player];
+  }
+
+  /** Living drone nearest to `p` (co-op ordnance and direct hits). */
+  nearestTarget(p: Vector3): Player | null {
+    let best: Player | null = null;
+    let bd = Infinity;
+    for (const t of this.targets()) {
+      if (!t.alive) continue;
+      const d = Vector3.DistanceSquared(t.position, p);
+      if (d < bd) {
+        bd = d;
+        best = t;
+      }
+    }
+    return best;
+  }
+
+  /** Effects sink for enemy-internal presentation (deaths, shield hits). The co-op server silences it. */
+  get enemyFx(): Effects {
+    return this.fx;
   }
 
   /**
@@ -1448,15 +1473,15 @@ export class Game {
    * `enemies` > 0 also damages machines (volatile chains, grid strikes) through the shared pipeline.
    */
   hostileBlast(center: Vector3, radius: number, o: { player: number; reactor?: number; disable?: number; enemies?: number; owner?: Enemy | null; color?: 'orange' | 'blue' | 'red' | 'violet'; shock?: boolean }): void {
-    const pl = this.player;
-    if (pl.alive && o.player > 0) {
+    for (const pl of this.targets()) {
+      if (!pl.alive || !(o.player > 0)) continue;
       const pp = pl.position;
       const d = Math.hypot(pp.x - center.x, pp.z - center.z);
       const dy = pp.y - center.y;
       if (d < radius && dy < 3.2) {
         const lift = TMP.copyFrom(center);
         lift.y += 0.6;
-        if (this.los(lift, pl.eye)) this.hurtPlayer(o.player * (1 - 0.45 * (d / radius)), center);
+        if (this.los(lift, pl.eye)) this.hurtPlayer(o.player * (1 - 0.45 * (d / radius)), center, pl);
       }
     }
     const R = ARENA.reactor;
@@ -1470,7 +1495,7 @@ export class Game {
   }
 
   /** A plasma-vent eruption tick: burns the drone and every machine standing in it. */
-  private ventTick(at: Vector3, r: number): void {
+  protected ventTick(at: Vector3, r: number): void {
     const w = this.waves.wave;
     this.hostileBlast(at, r, { player: 9 * w.damageMult, enemies: 0, color: 'orange' });
     const chain = this.director.bus.newChain();
@@ -1485,7 +1510,7 @@ export class Game {
    * kit renders them), telegraphs, ordnance and the hidden arena machinery. Avoids hitches and late pop-in the first
    * time a boss, elite or event appears.
    */
-  private warmShaders(): Promise<unknown> {
+  protected warmShaders(): Promise<unknown> {
     // One of every rig (and all elite hardware) so every (shape, material) template exists, then compile them all.
     this.enemies.prebuild(['walker', 'rusher', 'bulwark', 'enforcer', 'artillery', 'engineer', 'courier', 'colossus', 'overseer', 'pylon']);
     const jobs: Promise<unknown>[] = [this.tele.warm(), this.ordnance.warm(), this.kit.warmAll()];
@@ -1531,8 +1556,11 @@ export class Game {
     return e;
   }
 
-  private ordnanceCtx = {
-    player: () => (this.player.alive ? this.player.eye : null),
+  protected ordnanceCtx = {
+    player: (at?: Vector3) => {
+      const t = at ? this.nearestTarget(at) : this.player.alive ? this.player : null;
+      return t ? t.eye : null;
+    },
     ray: (a: Vector3, b: Vector3) => {
       const physics = this.scene.getPhysicsEngine() as PhysicsEngineV2 | null;
       if (!physics) return null;
@@ -1547,10 +1575,11 @@ export class Game {
     },
   };
 
-  private ordnanceImpact(i: Impact): void {
+  protected ordnanceImpact(i: Impact): void {
     const p = i.pos;
     if (i.direct) {
-      this.hurtPlayer(i.damage, p);
+      const t = this.nearestTarget(p);
+      if (t) this.hurtPlayer(i.damage, p, t);
       this.fx.burst(i.kind === 'orb' ? 'zap' : 'enemySpark', p, 12);
       return;
     }
@@ -1600,8 +1629,8 @@ export class Game {
   }
 
   /** First sighting of each M6 archetype / elite modifier this run: one line of counterplay intel. */
-  private seenKinds = new Set<string>();
-  private static readonly INTEL: Record<string, string> = {
+  protected seenKinds = new Set<string>();
+  protected static readonly INTEL: Record<string, string> = {
     enforcer: 'NEW THREAT · SHIELDED ENFORCER · frontal shield: flank it, hit the rear generator, or shock it',
     artillery: 'NEW THREAT · ARTILLERY DRONE · interrupt its charge with burst damage before the shell lands',
     engineer: 'NEW THREAT · SUPPORT ENGINEER · repairs and empowers allies: eliminate it first',
@@ -1611,7 +1640,7 @@ export class Game {
     volatile: 'ELITE · VOLATILE · detonates 1.4 s after death: keep your distance',
   };
 
-  private watchIntel(): void {
+  protected watchIntel(): void {
     for (const e of this.enemies.active) {
       const keys = [e.kind as string, ...e.mods];
       for (const k of keys) {
@@ -1623,7 +1652,7 @@ export class Game {
   }
 
   /** Boss entrance: camera shake, roar, banner (once per boss). */
-  private watchBoss(): void {
+  protected watchBoss(): void {
     if (this.hudT <= 0) this.watchIntel();
     for (const e of this.enemies.active) {
       if (e.def.role !== 'boss' || !e.alive || e.id === this.bossSeen) continue;
@@ -1637,7 +1666,7 @@ export class Game {
   // ---------------------------------------------------------------- M6: development tools (taint the run)
 
   /** Development tools mark the run: no records, no banking of permanent rewards. */
-  private devMark(): void {
+  protected devMark(): void {
     if (!this.cfg.run.survival.dev) {
       this.cfg.run.survival.dev = true;
       uiEvents.emit('alert', { text: 'DEVELOPMENT SESSION · RECORDS AND BANKING DISABLED', tone: 'white' });
@@ -1709,7 +1738,7 @@ export class Game {
     this.damageReactor(amount, new Vector3(0, 2, 0));
   }
 
-  private damageReactor(amount: number, at: Vector3): void {
+  protected damageReactor(amount: number, at: Vector3): void {
     if (this.reactorHp <= 0 || !(amount > 0)) return;
     this.cfg.run.survival.reactorDamage += Math.min(this.reactorHp, amount);
     this.reactorHp = Math.max(0, this.reactorHp - amount);
@@ -1722,7 +1751,7 @@ export class Game {
     if (this.reactorHp <= 0) this.onDefeat();
   }
 
-  private onDefeat(): void {
+  protected onDefeat(): void {
     if (this.screen !== 'playing') return;
     this.setScreen('defeat');
     this.defeatT = 0;
@@ -1742,21 +1771,24 @@ export class Game {
     return { kills: this.kills, time: this.runTime, wave: this.waves.number, coresEarned: this.wallet.earned, turretsBuilt: this.turretsBuilt };
   }
 
-  private updateProjectiles(hdt: number): void {
+  protected updateProjectiles(hdt: number): void {
     if (hdt <= 0) return;
-    const player = this.player;
-    const pc = TMP2.copyFrom(player.eye);
-    pc.y -= 0.3;
     const physics = this.scene.getPhysicsEngine() as PhysicsEngineV2 | null;
-    for (const p of this.fx.projectiles) {
+    const targets = this.targets();
+    outer: for (const p of this.fx.projectiles) {
       if (!p.active) continue;
       const next = TMP.copyFrom(p.vel).scaleInPlace(hdt).addInPlace(p.pos);
-      // Player (segment vs sphere)
-      if (player.alive && segmentSphere(p.pos, next, pc, 0.8)) {
-        this.hurtPlayer(p.damage, p.pos.subtract(p.vel));
-        this.fx.burst('enemySpark', next, 10);
-        this.fx.killProjectile(p);
-        continue;
+      // Drones (segment vs sphere)
+      for (const player of targets) {
+        if (!player.alive || p.damage <= 0) continue;
+        const pc = TMP2.copyFrom(player.eye);
+        pc.y -= 0.3;
+        if (segmentSphere(p.pos, next, pc, 0.8)) {
+          this.hurtPlayer(p.damage, p.pos.subtract(p.vel), player);
+          this.fx.burst('enemySpark', next, 10);
+          this.fx.killProjectile(p);
+          continue outer;
+        }
       }
       if (physics) {
         physics.raycastToRef(p.pos, next, this.physResult, ENV_QUERY);
@@ -1773,7 +1805,7 @@ export class Game {
     }
   }
 
-  private updateReactor(dt: number, live: boolean): void {
+  protected updateReactor(dt: number, live: boolean): void {
     this.reactorHitT = Math.max(0, this.reactorHitT - dt * 2.5);
     this.reactorSfxT -= dt;
     const f = live ? this.reactorHp / ECONOMY.reactorMaxHp : 1;
@@ -1824,7 +1856,7 @@ export class Game {
     return { x: p.x * scale, y: p.y * scale };
   }
 
-  private perfHud() {
+  protected perfHud() {
     const d = this.director.diag();
     let projectiles = this.wfx.liveBolts;
     for (const p of this.fx.projectiles) if (p.active) projectiles++;
@@ -1839,7 +1871,7 @@ export class Game {
     };
   }
 
-  private m5Hud() {
+  protected m5Hud() {
     const dir = this.director;
     const ts = this.turrets.turrets;
     return {
@@ -1857,7 +1889,7 @@ export class Game {
 
   // ---------------------------------------------------------------- HUD
 
-  private publishHud(force = false): void {
+  protected publishHud(force = false): void {
     const w = this.waves;
     const c = this.construction;
     const t = this.inspected;

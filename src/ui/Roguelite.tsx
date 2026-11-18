@@ -31,8 +31,10 @@ export function UpgradePanel({ game }: { game: Game }) {
     return () => window.removeEventListener('keydown', onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [offer.map((o) => o.id).join()]);
+  const coop = useHud((s) => s.coop);
+  const waiting = coop ? coop.offerChooser : null;
   const choose = (u: UpgradeDef) => {
-    if (picked) return;
+    if (picked || waiting) return;
     setPicked(u.id);
     // Short selection flash before the choice is applied.
     setTimeout(() => game.chooseUpgrade(u.id), 220);
@@ -41,7 +43,15 @@ export function UpgradePanel({ game }: { game: Game }) {
     <div className="screen dim upgrade-screen" data-testid="upgrade-panel">
       <div className="upgrade-wrap">
         <div className="cp-kicker">WAVE {game.waves.number - 1} CLEARED · RIFT UPGRADE</div>
-        <div className="cp-title">CHOOSE ONE UPGRADE</div>
+        <div className="cp-title">{waiting ? `${waiting.toUpperCase()} IS CHOOSING` : coop ? 'CHOOSE THE TEAM UPGRADE' : 'CHOOSE ONE UPGRADE'}</div>
+        {coop && (
+          <div className="cp-sub">
+            {waiting ? 'Team upgrades are picked in turn; this one applies to every warden.' : 'Your turn: this upgrade applies to the whole team.'} · {coop.offerLeft} s
+            <button className="mini" style={{ marginLeft: 12 }} onClick={() => void game.closePanel?.()}>
+              BACK TO THE ARENA
+            </button>
+          </div>
+        )}
         <div className="cp-sub">Temporary: lasts for this run only and is never saved to your profile or banked at checkpoints. The next wave countdown is paused.</div>
         <div className="upgrade-cards">
           {offer.map((u, i) => {

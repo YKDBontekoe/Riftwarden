@@ -1,3 +1,4 @@
+import { TeamHud } from './TeamHud';
 import { RunBadges } from './Roguelite';
 import { useEffect, useRef, useState } from 'react';
 import type { Game } from '../core/Game';
@@ -33,6 +34,7 @@ export function Hud({ game }: { game: Game }) {
       <Respawn />
       <RunBadges />
       <Perf />
+      <TeamHud />
     </div>
   );
 }

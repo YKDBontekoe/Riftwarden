@@ -263,8 +263,11 @@ export class Sfx {
     this.beam.filter.frequency.setTargetAtTime(1200 + ramp * 900 + heat * 1500, t, 0.08);
   }
 
+  /** M7: >0 while presentation the co-op server already authored is being reproduced locally (no duplicates). */
+  suppress = 0;
+
   play(name: SfxName, o: PlayOpts = {}): void {
-    if (!this.ctx || this.ctx.state !== 'running') return;
+    if (this.suppress > 0 || !this.ctx || this.ctx.state !== 'running') return;
     // Rate-limit identical sounds so dense combat does not turn into noise.
     const now = this.ctx.currentTime;
     const minGap = name === 'shoot' ? 0.03 : name === 'hit' || name === 'turretShot' ? 0.035 : 0.02;

@@ -122,6 +122,36 @@ export class Construction {
     this.ring.scaling.set(range, 1, range);
   }
 
+  /**
+   * M7 (co-op server): validate a placement request at a claimed point with the same rules as the
+   * local preview: a downward pick finds the real surface under the point, the footprint is sampled.
+   */
+  validateAt(x: number, z: number, cfg: TowerConfig, from: Vector3, cores: number, turrets: readonly Turret[], stats: CombatStats): { reason: PlacementReason; point: Vector3 } {
+    this.downRay.origin.set(x, 18, z);
+    const hit = this.scene.pickWithRay(this.downRay, isSurface);
+    if (!hit?.hit || !hit.pickedPoint) return { reason: 'no-surface', point: new Vector3(x, 0, z) };
+    const p = hit.pickedPoint.clone();
+    const n = hit.getNormal(true, true) ?? Vector3.Up();
+    const r = BASES[cfg.base]?.radius ?? 1.1;
+    const heights = FOOTPRINT_SAMPLES.map(([ox, oz]) => this.surfaceHeight(p.x + ox * r, p.z + oz * r, p.y + 8));
+    const reason = validatePlacement(this.layout, {
+      x: p.x,
+      y: p.y,
+      z: p.z,
+      surface: hit.pickedMesh?.metadata?.surface as string,
+      normalY: n.y,
+      footprintHeights: heights,
+      radius: r,
+      playerX: from.x,
+      playerZ: from.z,
+      maxRange: BUILD_REACH + 4,
+      cores,
+      cost: configCost(cfg, stats.buildCostMult),
+      towers: turrets.map((t) => ({ x: t.pos.x, z: t.pos.z, radius: t.radius })),
+    });
+    return { reason, point: p };
+  }
+
   showInspect(t: Turret | null): void {
     if (!t) {
       this.inspectRing.setEnabled(false);

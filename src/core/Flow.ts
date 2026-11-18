@@ -18,6 +18,10 @@ import { hudStore, type Location, uiEvents } from '../ui/store';
 import { Game } from './Game';
 import { SurvivalPlanner } from '../survival/plan';
 import { Input } from './Input';
+import { ClientGame } from '../net/ClientGame';
+import { NetClient } from '../net/NetClient';
+import type { RunStart } from '../net/protocol';
+import type { RunResult } from '../progression/run';
 import { type Settings, saveSettings } from './settings';
 
 /** A loaded location. Exactly one exists at a time. */
@@ -75,6 +79,11 @@ export class Flow {
   /** M6: development tools available (URL ?dev or ?test). Never shown in the ordinary player experience. */
   devTools = false;
   private renderQuality: Settings['quality'];
+  /** M7 co-op session (null = single player). */
+  net: NetClient | null = null;
+  /** Co-op run in progress (server run id). */
+  coopRun: RunStart | null = null;
+  private netQueue: { snaps: Record<string, unknown>[]; events: unknown[][] } = { snaps: [], events: [] };
 
   constructor(
     readonly engine: Engine,
@@ -152,7 +161,7 @@ export class Flow {
   }
 
   selectTier(tier: number): boolean {
-    return this.profile.mutate((d) => selectTier(d, tier));
+    return this.profile.op('selectTier', [tier]).ok;
   }
 
   // ------------------------------------------------------------------ runs
@@ -160,6 +169,8 @@ export class Flow {
   /** Start a fresh run on the selected tier. Callable from HQ or after a defeat. */
   async deploy(tierId = this.profile.save.threat.selected): Promise<boolean> {
     if (this.busy || (this.run && !this.run.ended)) return false;
+    // Online profiles deploy through the co-op lobby only (the server owns their progression).
+    if (this.profile.online) return false;
     const save = this.profile.save;
     if (tierId < 1 || (tierId > save.threat.unlocked && !this.devNext) || tierId > THREAT_TIERS.length) return false;
     if (deployBlocker(save)) return false;
@@ -245,6 +256,11 @@ export class Flow {
 
   /** Pause-menu forfeit: unsecured rewards are lost, secured ones stay banked. */
   async abandonRun(): Promise<boolean> {
+    if (this.coopRun && this.net) {
+      // Leaving a co-op operation: the server records it (secured rewards stay) and the team continues.
+      this.net.send({ t: 'leave' });
+      return true;
+    }
     if (this.busy || !this.arena || !this.run || this.run.ended) return false;
     this.endRun('abandoned');
     await this.toHome('summary');
@@ -253,6 +269,7 @@ export class Flow {
 
   /** From the defeat screen. */
   async leaveArena(): Promise<boolean> {
+    if (this.coopRun) return false;
     if (this.busy || !this.arena || !this.run?.ended) return false;
     sfx.play('ui');
     void this.input.requestLock();
@@ -275,6 +292,136 @@ export class Flow {
     this.run = null;
     if (then === 'summary') this.home!.setScreen('summary');
     else await this.home!.takeControl(false);
+  }
+
+  // ------------------------------------------------------------------ M7 co-op
+
+  /** Connect to the co-op server (identity is a local secret; the server stores only its hash). */
+  async coopConnect(name?: string, url?: string): Promise<boolean> {
+    if (!this.net) {
+      this.net = new NetClient(url);
+      this.wireNet(this.net);
+    } else if (url) this.net.url = url;
+    if (name) this.net.setName(name);
+    sfx.init();
+    return this.net.connect();
+  }
+
+  private wireNet(net: NetClient): void {
+    net.handlers = {
+      welcome: (m) => {
+        if (m.hasProfile && m.profile) this.adoptOnline(m.profile);
+      },
+      profile: (save) => this.adoptOnline(save),
+      opResult: (m) => {
+        if (!m.ok) uiEvents.emit('banner', { title: 'SERVER REFUSED', sub: m.reason ?? 'Operation rejected', tone: 'red' });
+      },
+      runStart: (run) => void this.coopRunStart(run),
+      snap: (s) => {
+        if (this.arena instanceof ClientGame && !this.busy) this.arena.onSnapshot(s);
+        else if (this.coopRun) this.netQueue.snaps = [s];
+      },
+      events: (e) => {
+        if (this.arena instanceof ClientGame && !this.busy) this.arena.onEvents(e);
+        else if (this.coopRun) this.netQueue.events.push(...e);
+      },
+      runEnd: (result, save) => void this.coopRunEnd(result as RunResult, save),
+      lost: () => {
+        if (this.coopRun) uiEvents.emit('banner', { title: 'CONNECTION LOST', sub: 'Reconnecting… your run slot is held for two minutes', tone: 'orange' });
+      },
+      error: (code, msg) => {
+        if (code !== 'malformed') uiEvents.emit('alert', { text: msg.toUpperCase(), tone: 'orange' });
+      },
+    };
+  }
+
+  /** Mirror the server-owned profile (the single-player save is kept aside, untouched). */
+  private adoptOnline(save: unknown): void {
+    const first = !this.profile.online;
+    if (first) this.profile.attachRemote({ send: (name, args, tx) => this.net?.send({ t: 'op', name, args, tx }), label: this.net?.url ?? '' }, save);
+    else this.profile.adoptRemote(save);
+    if (first && this.home && !this.busy && this.location === 'home') this.rebuildHomeKeepScreen();
+  }
+
+  /** Create the online profile: import a copy of the local save, or start fresh. */
+  coopProfileInit(mode: 'import' | 'fresh'): void {
+    this.net?.send({ t: 'profileInit', mode, save: mode === 'import' ? JSON.parse(JSON.stringify(this.profile.localSave)) : undefined });
+  }
+
+  /** Disconnect and return to the single-player profile. */
+  coopDisconnect(): void {
+    if (this.coopRun) return;
+    this.net?.close();
+    if (this.profile.online) {
+      this.profile.detachRemote();
+      if (this.home && !this.busy) this.rebuildHomeKeepScreen();
+    }
+  }
+
+  private rebuildHomeKeepScreen(): void {
+    const screen = this.home!.screen;
+    this.buildHome();
+    this.home!.setScreen(screen);
+  }
+
+  private async coopRunStart(run: RunStart): Promise<void> {
+    // Rejoining the operation this client is still showing: keep the scene, resync from events.
+    if (run.rejoin && this.coopRun?.runId === run.runId && this.arena instanceof ClientGame) {
+      uiEvents.emit('banner', { title: 'RECONNECTED', sub: 'Back in the operation', tone: 'cyan' });
+      return;
+    }
+    this.coopRun = run;
+    this.netQueue = { snaps: [], events: [] };
+    const tier = getTier(run.tier);
+    void this.input.requestLock();
+    const me = run.players.find((p) => p.id === run.you);
+    const net = this.net!;
+    await this.transition(`CO-OP DEPLOYMENT · THREAT TIER ${tier.roman}`, `${run.players.length} wardens · Sector 07 reactor`, () => {
+      const ledger = new RunLedger(run.runId, run.tier, Date.now());
+      this.run = ledger;
+      this.renderQuality = this.settings.quality;
+      this.resize();
+      const g = new ClientGame(
+        this.engine,
+        this.canvas,
+        this.havok,
+        this.settings,
+        this.input,
+        {
+          tier,
+          loadout: run.loadout as never,
+          run: ledger,
+          seed: run.seed,
+          towerTech: run.towerTech,
+          milestones: run.milestones,
+          hooks: { bank: () => true, checkpoint: () => {}, defeat: () => {} },
+          you: run.you,
+          slot: me?.slot ?? 0,
+          players: run.players,
+        },
+        { send: (m) => net.send(m), act: (a) => net.act(a), get rtt() { return net.rtt; } },
+      );
+      g.myName = me?.name ?? 'You';
+      Object.defineProperty(g, 'devTools', { value: false });
+      this.arena = g;
+      this.location = 'arena';
+      return g.scene;
+    });
+    const g = this.arena as ClientGame;
+    g.start();
+    g.onEvents(this.netQueue.events);
+    for (const s of this.netQueue.snaps) g.onSnapshot(s);
+    this.netQueue = { snaps: [], events: [] };
+  }
+
+  private async coopRunEnd(result: RunResult, save: unknown): Promise<void> {
+    if (save) this.profile.adoptRemote(save);
+    hudStore.set({ lastRun: { ...result } });
+    this.coopRun = null;
+    if (this.run && !this.run.ended) this.run.finalize(result.outcome);
+    // Let the defeat moment play before leaving.
+    if (this.arena instanceof ClientGame && this.arena.defeatedByServer) await new Promise((r) => setTimeout(r, 2500));
+    await this.toHome('summary');
   }
 
   // ------------------------------------------------------------------ scenes

@@ -1,3 +1,5 @@
+import { CoopPanel, urlJoinCode } from './Coop';
+import { ClientGame } from '../net/ClientGame';
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import type { Flow } from '../core/Flow';
 import type { Game } from '../core/Game';
@@ -189,7 +191,7 @@ function Controls() {
 }
 
 function MainMenu({ flow }: { flow: Flow }) {
-  const [tab, setTab] = useState<'briefing' | 'settings' | 'controls'>('briefing');
+  const [tab, setTab] = useState<'briefing' | 'co-op' | 'settings' | 'controls'>(urlJoinCode() ? 'co-op' : 'briefing');
   const save = useSave(flow);
   const tier = getTier(save.threat.selected);
   return (
@@ -202,7 +204,7 @@ function MainMenu({ flow }: { flow: Flow }) {
           <i>▶</i>
         </button>
         <div className="tabs">
-          {(['briefing', 'settings', 'controls'] as const).map((t) => (
+          {(['briefing', 'co-op', 'settings', 'controls'] as const).map((t) => (
             <button key={t} className={tab === t ? 'on' : ''} onClick={() => setTab(t)}>
               {t.toUpperCase()}
             </button>
@@ -236,6 +238,7 @@ function MainMenu({ flow }: { flow: Flow }) {
               </ul>
             </div>
           )}
+          {tab === 'co-op' && <CoopPanel flow={flow} compact />}
           {tab === 'settings' && <SettingsPanel flow={flow} />}
           {tab === 'controls' && <Controls />}
         </div>
@@ -258,7 +261,7 @@ function MainMenu({ flow }: { flow: Flow }) {
           THREAT TIER {tier.roman} · {tier.name}
         </div>
       </div>
-      <div className="menu-foot">BUILD 0.4 · M2 · BABYLON.JS · HAVOK</div>
+      <div className="menu-foot">BUILD 0.7 · M7 · BABYLON.JS · HAVOK</div>
     </div>
   );
 }
@@ -324,7 +327,26 @@ function PauseMenu({ flow }: { flow: Flow }) {
   );
 }
 
+function CoopVote({ game }: { game: ClientGame }) {
+  const c = useHud((s) => s.coop);
+  if (!c) return null;
+  return (
+    <div className="coop-vote" data-testid="coop-vote">
+      <div className="cp-label">TEAM VOTE · {c.voteOpen ? `${c.voteLeft} s left` : 'closed'}</div>
+      {c.team.map((m) => (
+        <div key={m.id} className="cv-row">
+          <i className="swatch" style={{ background: m.color }} />
+          <span>{m.self ? `${m.name} (you)` : m.name}</span>
+          <b className={m.vote === 1 ? 'home' : m.vote === 0 ? 'stay' : ''}>{!m.connected ? 'OFFLINE' : m.vote === 1 ? 'RETURN' : m.vote === 0 ? 'CONTINUE' : '…'}</b>
+        </div>
+      ))}
+      {game.myVote !== null && <div className="sub">Your vote: {game.myVote ? 'return to HQ' : 'continue'}</div>}
+    </div>
+  );
+}
+
 function CheckpointPanel({ flow, game }: { flow: Flow; game: Game }) {
+  const coop = game instanceof ClientGame ? game : null;
   const run = useHud((s) => s.run);
   const save = useSave(flow);
   const [busy, setBusy] = useState(false);
@@ -375,23 +397,31 @@ function CheckpointPanel({ flow, game }: { flow: Flow; game: Game }) {
           </div>
           <b>WAVE {nextCheckpoint(wave + 1)}</b>
         </div>
+        {coop && <CoopVote game={coop} />}
         <div className="row2">
-          <button className="primary" disabled={busy} onClick={() => void game.continueRun()}>
-            CONTINUE SURVIVAL
+          <button className="primary" disabled={busy || (coop ? coop.myVote === false : false)} data-testid="cp-continue" onClick={() => (coop ? coop.vote(false) : void game.continueRun())}>
+            {coop ? 'VOTE: CONTINUE' : 'CONTINUE SURVIVAL'}
           </button>
           <button
             className="home-btn"
             disabled={busy}
+            data-testid="cp-home"
             onClick={() => {
+              if (coop) return coop.vote(true);
               setBusy(true);
               void flow.returnHome().finally(() => setBusy(false));
             }}
           >
-            RETURN TO HQ
+            {coop ? 'VOTE: RETURN TO HQ' : 'RETURN TO HQ'}
           </button>
         </div>
+        {coop && (
+          <button className="mini" onClick={() => void game.continueRun()}>
+            BACK TO THE ARENA (VOTE LATER WITH H)
+          </button>
+        )}
         <div className="sub">
-          Returning ends the run. You can still return during this preparation phase with <kbd>H</kbd>.
+          {coop ? 'The team returns only if every connected warden votes to return. One vote to continue keeps the operation going.' : <>Returning ends the run. You can still return during this preparation phase with <kbd>H</kbd>.</>}
         </div>
       </div>
     </div>
