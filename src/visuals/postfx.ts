@@ -91,8 +91,9 @@ export class PostFx {
     p.bloomWeight = high ? 0.26 : 0.23;
     p.bloomKernel = high ? 72 : 48;
     p.bloomScale = 0.5;
-    p.sharpenEnabled = high;
-    p.sharpen.edgeAmount = 0.1;
+    // FXAA softens the image; sharpen on every preset (stronger where there is no MSAA) to keep it crisp.
+    p.sharpenEnabled = true;
+    p.sharpen.edgeAmount = high ? 0.12 : 0.2;
     p.chromaticAberrationEnabled = true;
     p.chromaticAberration.aberrationAmount = 0;
     p.chromaticAberration.radialIntensity = 1.2;
