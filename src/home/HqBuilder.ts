@@ -59,7 +59,8 @@ export class HqBuilder {
 
   // ------------------------------------------------------------- primitives
 
-  private add(mesh: Mesh, mat: Material, surface: string | null): void {
+  /** Queue a mesh for the per-material merge (also used for HQ scrap heaps). */
+  add(mesh: Mesh, mat: Material, surface: string | null): void {
     const key = `${mat.uniqueId}|${surface ?? '-'}`;
     let g = this.parts.get(key);
     if (!g) {

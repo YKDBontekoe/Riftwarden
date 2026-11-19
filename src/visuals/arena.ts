@@ -22,6 +22,8 @@ import { createPathLight } from './pathLighting';
 import { segmentedRing } from './rings';
 import { ArenaDecals } from './arenaDecals';
 import { ArenaDressing } from './arenaDressing';
+import { RubbleBuilder } from './rubble';
+import { planRubble } from '../world/rubblePlan';
 import { smoothLatheData } from './sculpt';
 
 interface GateVisual {
@@ -131,6 +133,8 @@ export class ArenaBuilder {
     decals.finish();
     this.buildSkyline();
     new ArenaDressing({ scene: this.scene, box: (...a) => this.box(...a), add: (m, mat, s) => this.add(m, mat, s) }, this.pal, this.layout).build();
+    // Weathering: rubble piles, scattered debris and wreckage (visual only, planned off every lane).
+    new RubbleBuilder({ scene: this.scene, add: (m, mat, s) => this.add(m, mat, s) }, { concrete: P.debris, rust: P.rust, graphite: P.graphite, enamel: P.enamel }, true).build(planRubble(L));
 
     this.merge();
 

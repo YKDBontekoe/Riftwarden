@@ -1,5 +1,5 @@
 import { type BaseTexture, Color3, Constants, FresnelParameters, type Material, NullEngine, PBRMaterial, type Scene, StandardMaterial, Texture } from '@babylonjs/core';
-import { floorSet, type PbrSet, wallSet, wearSet, yardDeckSet } from './textures';
+import { floorSet, type PbrSet, rustSet, wallSet, wearSet, yardDeckSet } from './textures';
 
 /**
  * Material palette. Surfaces are metallic/roughness PBR lit by the captured
@@ -23,6 +23,10 @@ export interface Palette {
   whiteGlow: PBRMaterial;
   enemyArmor: PBRMaterial;
   enemyDark: PBRMaterial;
+  /** Corroded steel (wreckage, scrap, rebar). */
+  rust: PBRMaterial;
+  /** Broken, dusty concrete (rubble chunks, fallen slabs). */
+  debris: PBRMaterial;
   shield: StandardMaterial;
   ghostOk: StandardMaterial;
   ghostBad: StandardMaterial;
@@ -113,7 +117,8 @@ function glow(scene: Scene, name: string, e: [number, number, number]): PBRMater
 export function createPalette(scene: Scene, high: boolean, indoor = false): Palette {
   const floorTex = indoor ? floorSet(scene, high) : yardDeckSet(scene, high);
   const wallTex = wallSet(scene, high, indoor);
-  const wear = wearSet(scene, high);
+  // Outdoors (arena) the paint fails in patches; the HQ is maintained, so only light rust.
+  const wear = wearSet(scene, high, indoor ? 0.3 : 1);
 
   const floor = pbr(scene, indoor ? 'hqFloor' : 'floor', {
     albedo: indoor ? [0.59, 0.60, 0.54] : [0.80, 0.81, 0.82],
@@ -167,7 +172,9 @@ export function createPalette(scene: Scene, high: boolean, indoor = false): Pale
   wallTex.normal.level = indoor ? 0.19 : 0.36;
   wear.normal.level = 0.21;
 
-  const lit = [white, panel, graphite, metal, enamel, floor, enemyArmor, enemyDark];
+  const rust = pbr(scene, 'rustMetal', { albedo: [1, 1, 1], metallic: 1, roughness: 1, set: rustSet(scene, high) });
+  const debris = pbr(scene, 'rubbleConcrete', { albedo: [0.25, 0.24, 0.22], metallic: 0, roughness: 1, set: wear, noAlbedo: true });
+  const lit = [white, panel, graphite, metal, enamel, floor, enemyArmor, enemyDark, rust, debris];
   if (!indoor) {
     lit.push(concrete, glazing);
     if (!(scene.getEngine() instanceof NullEngine)) {
@@ -202,6 +209,8 @@ export function createPalette(scene: Scene, high: boolean, indoor = false): Pale
     redGlow: glow(scene, 'redGlow', [2.6, 0.28, 0.12]),
     whiteGlow: glow(scene, 'whiteGlow', [2.4, 2.6, 2.9]),
     enemyArmor,
+    rust,
+    debris,
     enemyDark,
     shield,
     ghostOk: ghost('ghostOk', [0.2, 1.4, 1.6]),

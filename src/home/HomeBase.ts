@@ -35,6 +35,7 @@ import { captureEnvironment } from '../visuals/envCapture';
 import { Kit } from '../visuals/kit';
 import { createPalette, unlit } from '../visuals/materials';
 import { roomStyle, STYLED_ROOMS } from './roomStyle';
+import { RubbleBuilder } from '../visuals/rubble';
 import { hqCeilingSet, hqDeckSet, type HqSet, hqWallSet } from '../visuals/hqTextures';
 import { StationFocus } from './StationFocus';
 import { AmbientDrones } from './AmbientDrones';
@@ -248,6 +249,11 @@ export class HomeBase {
     // ---- static shell + props
     const builder = new HqBuilder(scene, M);
     builder.buildShell();
+    // Reclamation is the one worn corner of the HQ: heaps of scrap waiting for the press.
+    const scrap = new RubbleBuilder({ scene, add: (m, mat, s) => builder.add(m, mat, s) }, { concrete: pal.graphite, rust: pal.rust, graphite: pal.graphite, enamel: pal.enamel });
+    scrap.scrapPile(-23.1, 5.4, 0.95, 11);
+    scrap.scrapPile(-28.2, 5.7, 0.85, 23); // feeding the conveyor
+    scrap.scrapPile(-31.9, -3.4, 0.7, 37); // beside the press
     const ctx: EconCtx = {
       scene,
       kit: this.kit,
