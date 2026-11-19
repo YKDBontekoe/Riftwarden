@@ -5,7 +5,7 @@ import type { Game } from '../core/Game';
 import { LootFeed, LootLabels, LootPrompt } from './LootHud';
 import { SurvivalHud } from './SurvivalHud';
 import { Banner, CenterPanel, Cores, Hint, Overlays, Perf, PlayerPanel, Respawn, RunPanel, TopCenter, WeaponPanel } from './hud/Panels';
-import { Crosshair, DamageDirection, DamageNumbers, HealthBars, Hitmarker } from './hud/Feedback';
+import { Crosshair, DamageDirection, DamageNumbers, HealthBars, Hitmarker, KillChain } from './hud/Feedback';
 import { Radar } from './hud/Radar';
 export { Banner, Perf } from './hud/Panels';
 
@@ -20,6 +20,7 @@ export function Hud({ game }: { game: Game }) {
       <TeamTags />
       <Crosshair />
       <Hitmarker />
+      <KillChain />
       <LootPrompt />
       <aside className="hud-rail hud-port">
         <Radar game={game} />

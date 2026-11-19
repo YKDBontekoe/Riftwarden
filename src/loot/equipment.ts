@@ -1,4 +1,5 @@
 import { BASE_STATS, type CombatStats, computeStats, formatModifier, formatStat, fmtNum, type StatKey, STAT_DEFS, type StatModifier, STAT_KEYS, type StatOp } from '../combat/stats';
+import { HEAT_PACE } from '../combat/heat';
 import type { WeaponDef } from '../data/defs';
 import { buildMechanism, FAMILIES } from '../weapons/build';
 import { installedModules } from '../weapons/modules';
@@ -121,7 +122,7 @@ export function chargeFactor(c: number): number {
  * the trigger is held on target (beam: average over the ramp; rail charge: full charges).
  */
 export function weaponSummary(w: WeaponDef, stats: CombatStats = BASE_STATS) {
-  const heat = w.heatPerShot / stats.heatEfficiency;
+  const heat = (w.heatPerShot * HEAT_PACE.gain) / stats.heatEfficiency;
   const rate = w.fireRate * stats.fireRateMult;
   const proj = w.family === 'beam' ? 1 : w.mechanism === 'scatter' ? 7 + 2 * Math.max(0, Math.floor(stats.projectiles) - 1) : Math.floor(stats.projectiles);
   const dmg = w.damage * stats.weaponDamageMult;
@@ -141,7 +142,7 @@ export function weaponSummary(w: WeaponDef, stats: CombatStats = BASE_STATS) {
     dps,
     heat,
     shotsToOverheat: Math.ceil(100 / Math.max(0.01, heat)),
-    cool: w.coolRate * stats.coolRateMult,
+    cool: w.coolRate * stats.coolRateMult * HEAT_PACE.cool,
     range: w.range * stats.rangeMult,
     chargeTime,
     rampTime,

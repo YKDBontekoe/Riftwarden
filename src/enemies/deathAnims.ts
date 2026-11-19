@@ -1,16 +1,26 @@
 import { smoothstep } from '../visuals/anim';
 import type { EnemyKind } from '../data/defs';
 
-/** Seconds a destroyed enemy stays as a collapsing wreck before it bursts (kinds absent here burst at once). */
+/**
+ * Seconds a destroyed enemy stays as a collapsing wreck before it bursts (kinds absent here burst at once).
+ * Short on purpose: the kill pops immediately (sparks, debris, knock-back) and the wreck clears out of a fast fight.
+ */
 export const DEATH_TIME: Partial<Record<EnemyKind, number>> = {
-  walker: 0.8,
-  bulwark: 1.0,
-  rusher: 0.6,
-  enforcer: 0.9,
-  artillery: 0.9,
-  engineer: 0.8,
-  jammer: 0.6,
+  walker: 0.55,
+  bulwark: 0.7,
+  rusher: 0.4,
+  enforcer: 0.65,
+  artillery: 0.65,
+  engineer: 0.55,
+  jammer: 0.4,
 };
+
+/** Initial knock-back speed (m/s) of a wreck away from the killing shot; it bleeds off at `WRECK_DRAG` per second. */
+export function wreckKnock(kind: EnemyKind, scale: number, flying: boolean): number {
+  if (kind === 'bulwark' || kind === 'enforcer') return 3.2;
+  return (flying ? 8.5 : 6) / Math.max(0.6, scale);
+}
+export const WRECK_DRAG = 5;
 
 export interface DeathPose {
   /** Forward pitch (rad), sideways roll (rad), sink (m) and flash strength 0..1. */

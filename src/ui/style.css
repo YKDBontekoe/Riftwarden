@@ -249,6 +249,15 @@ b.v { color: var(--violet); }
 @keyframes hm { from { transform: scale(1.5); } to { transform: scale(1); } }
 @keyframes hmk { from { transform: scale(1.9) rotate(12deg); } to { transform: scale(1); } }
 @keyframes killring { from { transform: scale(0.4); opacity: 1; } to { transform: scale(1.8); opacity: 0; } }
+.kill-chain { position: fixed; left: calc(50% + 46px); top: calc(50% + 18px); display: flex; align-items: baseline; gap: 6px; pointer-events: none; animation: chainfade 2.4s linear forwards; }
+.kill-chain b { font-family: var(--display); font-weight: 700; font-size: 26px; color: #fff; text-shadow: 0 0 10px rgba(156, 207, 194, 0.7), 0 1px 0 #000; animation: chainpop 0.22s ease-out; display: inline-block; }
+.kill-chain span { font-family: var(--mono); font-size: 10px; letter-spacing: 0.2em; color: var(--cyan); text-shadow: 0 1px 0 #000; }
+.kill-chain.hot b { color: var(--amber); text-shadow: 0 0 12px rgba(255, 170, 0, 0.8), 0 1px 0 #000; }
+.kill-chain.hot span { color: var(--amber); }
+.kill-chain.max b { color: var(--red); font-size: 30px; text-shadow: 0 0 14px rgba(255, 60, 30, 0.9), 0 1px 0 #000; }
+.kill-chain.max span { color: var(--red); }
+@keyframes chainpop { from { transform: scale(1.7) translateY(-4px); } to { transform: scale(1); } }
+@keyframes chainfade { 0%, 75% { opacity: 1; } 100% { opacity: 0; } }
 
 .dmg-dir { position: fixed; left: 50%; top: 50%; width: 0; height: 0; }
 .dmg-dir .arc { position: absolute; left: -130px; top: -130px; width: 260px; height: 260px; }

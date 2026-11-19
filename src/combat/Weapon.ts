@@ -9,6 +9,7 @@ import { defaultBuild, type WeaponBuild } from '../weapons/build';
 import { buildWeaponModel, type WeaponRig } from '../weapons/model';
 import { unlit } from '../visuals/materials';
 import { starSprite } from '../visuals/textures';
+import { HEAT_PACE } from './heat';
 import type { CombatStats } from './stats';
 
 export interface ShotRequest {
@@ -53,6 +54,7 @@ const NO_FX: WeaponFxHooks = { shot: () => {}, beam: () => {} };
 /** M7: pellets per Scatter Choke shot (+2 per extra projectile from Splitter modules). */
 export const SCATTER_PELLETS = 7;
 
+const FORWARD = Vector3.Forward();
 const REF_FOV = 2 * Math.atan(Math.tan(Math.PI / 4) / (16 / 9));
 /** Viewmodel anchor relative to the camera (metres). */
 const ANCHOR = { x: 0.162, y: -0.145, z: 0.48, scale: 0.72, yaw: -0.115, pitch: 0.0, roll: -0.04 };
@@ -106,6 +108,7 @@ export class Weapon {
   private readonly modelKey: DirectionalLight;
   private readonly tmpDir = new Vector3();
   private readonly tmpPos = new Vector3();
+  private readonly tmpTo = new Vector3();
   private readonly right = new Vector3();
   private readonly up = new Vector3();
 
@@ -252,7 +255,7 @@ export class Weapon {
     }
     this.shotsFired++;
     this.sinceShot = 0;
-    this.heat += (d.heatPerShot * heatScale) / stats.heatEfficiency;
+    this.heat += (d.heatPerShot * heatScale * HEAT_PACE.gain) / stats.heatEfficiency;
     if (this.heat >= 100) {
       this.heat = 100;
       this.overheated = true;
@@ -361,7 +364,7 @@ export class Weapon {
             this.beamDist = Vector3.Distance(this.player.camera.position, out.point);
             this.beamContact = out.target !== 'none';
             fx.shot('beam', this.muzzleWorld(this.tmpPos), out, this.ramp, 0);
-            this.heat += d.heatPerShot / stats.heatEfficiency;
+            this.heat += (d.heatPerShot * HEAT_PACE.gain) / stats.heatEfficiency;
             this.shotsFired++;
             this.sinceShot = 0;
             fired = true;
@@ -387,9 +390,11 @@ export class Weapon {
           this.beaming = false;
         }
         // Visual endpoint follows the current aim at the last resolved distance.
+        // Reused vectors: this runs every frame for beam weapons (allocation-free).
         const from = this.muzzleWorld(this.tmpPos);
         const cam = this.player.camera;
-        const to = cam.position.add(cam.getDirection(Vector3.Forward()).scaleInPlace(Math.max(1, this.beamDist || this.range(stats))));
+        cam.getDirectionToRef(FORWARD, this.tmpTo);
+        const to = this.tmpTo.scaleInPlace(Math.max(1, this.beamDist || this.range(stats))).addInPlace(cam.position);
         fx.beam(this.beaming, from, to, this.ramp, this.beamContact);
         if (this.beaming) sfx.beamLevel(this.ramp, this.heat / 100);
         break;
@@ -399,9 +404,9 @@ export class Weapon {
 
     if (!fired && !this.beaming) {
       this.spread = Math.max(d.spreadMin, this.spread - d.spreadRecover * dt);
-      if (this.sinceShot > d.coolDelay || this.overheated) {
-        const cool = d.coolRate * stats.coolRateMult;
-        const r = this.overheated ? cool * 0.75 : cool;
+      if (this.sinceShot > d.coolDelay * HEAT_PACE.delay || this.overheated) {
+        const cool = d.coolRate * stats.coolRateMult * HEAT_PACE.cool;
+        const r = this.overheated ? cool * HEAT_PACE.lockout : cool;
         this.heat = Math.max(0, this.heat - r * dt);
         if (this.overheated && this.heat <= d.overheatRecover) {
           this.overheated = false;

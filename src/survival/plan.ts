@@ -2,6 +2,7 @@ import { mulberry32 } from '../combat/damage';
 import type { EnemyKind } from '../data/defs';
 import { getTier, type ThreatTier } from '../progression/tiers';
 import { damageMultiplier, expand, type Group, HAND_WAVES, hpMultiplier, type SpawnEntry, type WaveDef } from '../waves/waves';
+import { PACE, prepTime } from '../waves/pace';
 import type { GateId } from '../world/layout';
 import { type BossId, bossScaling } from './bosses';
 import { ELITE_MODS, type EliteModId, eliteHpMult, rollMods } from './elites';
@@ -287,7 +288,7 @@ export class SurvivalPlanner {
     const t = this.tier;
     const hp = hpMultiplier(n) * t.hpMult;
     const dmg = damageMultiplier(n) * t.damageMult;
-    const base = { number: n, hpMult: hp, damageMult: dmg, speedMult: t.speedMult, prepTime: n === 1 ? 30 : 18, clearReward: 60 + Math.min(n, 2000) * 15, plan };
+    const base = { number: n, hpMult: hp, damageMult: dmg, speedMult: t.speedMult, prepTime: prepTime(n), clearReward: 60 + Math.min(n, 2000) * 15, plan };
     if (n <= HAND_WAVES.length && !plan.event && !plan.boss) return { ...base, spawns: expand(HAND_WAVES[n - 1], t.countMult) };
     const r = mulberry32(h32(this.seed >>> 0, n, 0xc0de));
     return { ...base, spawns: composeSpawns(n, plan, t, r) };
@@ -404,7 +405,7 @@ export function composeSpawns(n: number, plan: WavePlan, t: ThreatTier, r: () =>
     const count = g.tag === 'boss' || g.tag === 'hvt' || g.tag === 'squad' ? g.count : Math.max(1, Math.round(g.count * t.countMult));
     const interval = count > g.count && g.count > 0 ? (g.interval * g.count) / count : g.interval;
     for (let i = 0; i < count; i++) {
-      const e: SpawnEntry = { time: g.start + i * interval, kind: g.kind, gate: g.gate };
+      const e: SpawnEntry = { time: (g.start + i * interval) * PACE.spawnTempo, kind: g.kind, gate: g.gate };
       if (g.mods?.length) e.mods = [...g.mods];
       if (g.tag) e.tag = g.tag;
       if (g.hpMult !== undefined && g.hpMult !== 1) e.hpMult = g.hpMult;

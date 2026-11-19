@@ -76,7 +76,7 @@ export function withRecorder<T>(rec: Recorder, fn: () => T): T {
   }
 }
 
-const PERSONAL_UI = new Set(['hit', 'damageNumber', 'hurt', 'loot']);
+const PERSONAL_UI = new Set(['hit', 'damageNumber', 'hurt', 'loot', 'chain']);
 let patched = false;
 export function patchGlobals(): void {
   if (patched) return;

@@ -118,9 +118,12 @@ async function clearThrough(p, wave) {
     input.simulateKey('KeyD', true);
     tap('Space');
     input.simulateKey('KeyD', false);
+    // Displacement in the drone's own frame (the spawn faces yaw 0.30, not +z).
+    const bx = player.position.x - x;
+    const bz = player.position.z - z;
     const boost = {
-      side: player.position.x - x,
-      forward: player.position.z - z,
+      side: bx * Math.cos(player.yaw) - bz * Math.sin(player.yaw),
+      forward: bx * Math.sin(player.yaw) + bz * Math.cos(player.yaw),
       vertical: player.verticalSpeed,
       dashing: player.dashing,
       charges: player.dashCharges,

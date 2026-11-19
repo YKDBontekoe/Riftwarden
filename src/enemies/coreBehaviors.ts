@@ -9,6 +9,9 @@ import { type Behavior, clampAngle, type Enemy, type EnemyContext, type EnemyMan
 
 const TMP = new Vector3();
 const TMP2 = new Vector3();
+/** Walker / Bulwark plasma shot: wind-up telegraph (s) and bolt speed (m/s). Fast, but a dash still clears it. */
+const SHOT_CHARGE = 0.48;
+const BOLT_SPEED = { walker: 28, bulwark: 31 };
 
 function updateCore(e: Enemy, hdt: number, ctx: EnemyContext, m: EnemyManager): void {
   const def = e.def;
@@ -67,7 +70,7 @@ function updateCore(e: Enemy, hdt: number, ctx: EnemyContext, m: EnemyManager): 
         const muzzle = m.muzzlePos(e, TMP);
         const aim = TMP2.copyFrom(player.eye);
         aim.y -= 0.35;
-        aim.subtractInPlace(muzzle).normalize().scaleInPlace(e.kind === 'bulwark' ? 24 : 21);
+        aim.subtractInPlace(muzzle).normalize().scaleInPlace(e.kind === 'bulwark' ? BOLT_SPEED.bulwark : BOLT_SPEED.walker);
         ctx.effects.spawnProjectile(muzzle, aim, e.dmg(def.playerDamage));
         e.motion?.fire();
         ctx.effects.burst('flash', muzzle, 1, undefined, e.kind === 'bulwark' ? 0.3 : 0.23);
@@ -80,7 +83,7 @@ function updateCore(e: Enemy, hdt: number, ctx: EnemyContext, m: EnemyManager): 
         e.shotT = def.playerShotInterval * (0.8 + Math.random() * 0.4);
         const c = e.center(TMP);
         const d2 = Vector3.DistanceSquared(c, ppos);
-        if (d2 < def.playerShotRange * def.playerShotRange && ctx.los(c, player.eye)) e.chargeT = 0.55;
+        if (d2 < def.playerShotRange * def.playerShotRange && ctx.los(c, player.eye)) e.chargeT = SHOT_CHARGE;
       }
     }
   }
@@ -98,7 +101,7 @@ function animateCore(e: Enemy, hdt: number, ppos: Vector3, fx: Effects): void {
     const dz = ppos.z - e.pos.z;
     const look = Math.atan2(dx, dz) - e.yaw;
     w.head.rotation.y = clampAngle(look, 0.7);
-    const charge = e.chargeT > 0 ? 1 - e.chargeT / 0.55 : 0;
+    const charge = e.chargeT > 0 ? 1 - e.chargeT / SHOT_CHARGE : 0;
     const aimPitch = e.state === 'attack' ? 0.10 : Math.max(-0.15, Math.min(0.22, (e.pos.y + 1.9 - ppos.y) / Math.max(2, Math.hypot(dx, dz))));
     const planted = e.motion!.pose(e.pos, e.yaw, hdt * (e.boostT > 0 ? 1.6 : 1), e.state === 'move', charge, e.flinch, aimPitch);
     const d2 = dx * dx + dz * dz;

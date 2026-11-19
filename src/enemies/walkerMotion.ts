@@ -62,8 +62,11 @@ export class WalkerMotion {
     this.yaw = yaw;
     this.previous.copyFrom(position);
 
-    const swingSeconds = moving ? 0.17 + (this.scale - 1) * 0.15 : 0.19;
-    const lead = moving ? Math.max(0.34, Math.min(0.64, advance / Math.max(dt, 0.001) * 0.126 / this.scale)) : 0.08;
+    // Faster striders take quicker, longer steps (the swing shortens with ground speed) so feet never skate.
+    const groundSpeed = advance / Math.max(dt, 0.001);
+    const cadence = Math.max(0.6, Math.min(1, 4.2 / Math.max(0.1, groundSpeed / this.scale)));
+    const swingSeconds = moving ? (0.17 + (this.scale - 1) * 0.15) * cadence : 0.19;
+    const lead = moving ? Math.max(0.34, Math.min(0.82, groundSpeed * 0.126 / this.scale)) : 0.08;
     let planted: Vector3 | null = null;
     let swinging = false;
     let candidate: Foot | null = null;
