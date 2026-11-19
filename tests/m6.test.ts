@@ -182,7 +182,7 @@ describe('M6 arena evolution layout', () => {
   });
 });
 
-import { createDefaultSave, recordRun, beginRun, migrate, sanitizeSave } from '../src/progression/save';
+import { createDefaultSave, recordRun, beginRun, migrate, sanitizeSave, SAVE_VERSION } from '../src/progression/save';
 import { RunLedger } from '../src/progression/run';
 import { newMilestones } from '../src/survival/records';
 
@@ -235,7 +235,7 @@ describe('M6 survival records', () => {
     const m = migrate(d5, 5);
     expect(m.ok).toBe(true);
     const { data } = sanitizeSave(m.data);
-    expect(data.version).toBe(7);
+    expect(data.version).toBe(SAVE_VERSION);
     expect(data.records['1']).toMatchObject({ bestWave: 9, highestWave: 9, bossesDefeated: 0 });
     expect(data.milestones).toEqual([]);
     expect(data.totals.bossesDefeated).toBe(0);

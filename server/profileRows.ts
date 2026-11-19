@@ -1,5 +1,5 @@
 import type { ItemInstance, RolledAffix, RolledStat } from '../src/loot/types';
-import { emptyLoadout, type SaveData, type TierRecord } from '../src/progression/save';
+import { emptyLoadout, treeSeedFor, type SaveData, type TierRecord } from '../src/progression/save';
 import type { SlotId } from '../src/progression/items';
 
 const tables = [
@@ -53,6 +53,7 @@ export function profileHeader(d: SaveData) {
     marketRefreshes: d.market.refreshes, crafts: d.economy.crafts,
     milestones: d.milestones, facilities: d.base.facilities, blueprints: d.base.blueprints,
     tutorialSteps: d.tutorial.done, towerUnlocks: d.towers.unlocked, transactionIds: d.economy.tx,
+    xp: d.progress.xp, treeSeed: d.progress.tree.seed, treeAllocated: d.progress.tree.allocated, respecs: d.progress.respecs,
   };
 }
 
@@ -220,6 +221,7 @@ export function readProfile(headerColumns: Row, rows: Relations): { data: SaveDa
       },
       economy: { tx: h.transactionIds, crafts: h.crafts, stats: columns<SaveData['economy']['stats']>(rows.profile_economy_stats[0]) },
       towers: { unlocked: h.towerUnlocks },
+      progress: { xp: h.xp, tree: { seed: h.treeSeed || treeSeedFor(h.saveId), allocated: h.treeAllocated }, respecs: h.respecs },
     },
   };
 }

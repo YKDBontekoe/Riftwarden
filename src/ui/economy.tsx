@@ -3,12 +3,13 @@ import { sfx } from '../audio/Sfx';
 import type { Flow } from '../core/Flow';
 import { type Cost, RESOURCE_KEYS, RESOURCE_LABEL, type ResourceKey } from '../economy/config';
 import { newUid } from '../progression/items';
+import { CURRENCIES, amountText, currencyTooltip } from '../economy/currencies';
 import type { SaveData } from '../progression/save';
 import { uiEvents } from './store';
 
 /** Resource glyphs (consistent everywhere: HUD, terminals, costs). */
-export const RES_ICON: Record<ResourceKey, string> = { credits: '◈', salvage: '⬢', components: '✦' };
-export const RES_CLASS: Record<ResourceKey, string> = { credits: 'res-cr', salvage: 'res-sv', components: 'res-co' };
+export const RES_ICON: Record<ResourceKey, string> = { credits: CURRENCIES.credits.icon, salvage: CURRENCIES.salvage.icon, components: CURRENCIES.components.icon };
+export const RES_CLASS: Record<ResourceKey, string> = { credits: CURRENCIES.credits.cls, salvage: CURRENCIES.salvage.cls, components: CURRENCIES.components.cls };
 
 /** Balances strip; with `cost`, each balance shows what it would be after paying. */
 export function ResourceBar({ save, cost, compact }: { save: SaveData; cost?: Cost; compact?: boolean }) {
@@ -18,7 +19,7 @@ export function ResourceBar({ save, cost, compact }: { save: SaveData; cost?: Co
         const have = save.resources[k];
         const need = cost?.[k] ?? 0;
         return (
-          <div key={k} className={`res-chip ${RES_CLASS[k]} ${need > have ? 'short' : ''}`} title={RESOURCE_LABEL[k]}>
+          <div key={k} className={`res-chip ${RES_CLASS[k]} ${need > have ? 'short' : ''}`} title={currencyTooltip(k)} tabIndex={0} data-testid={`res-${k}`}>
             <i>{RES_ICON[k]}</i>
             <b>{have.toLocaleString()}</b>
             <span>{RESOURCE_LABEL[k].toUpperCase()}</span>
@@ -37,12 +38,16 @@ export function CostLine({ cost, save, label }: { cost: Cost; save?: SaveData; l
     <span className="cost-line">
       {label && <span className="cl-label">{label}</span>}
       {parts.length === 0 && <span className="cl-free">FREE</span>}
-      {parts.map((k) => (
-        <span key={k} className={`cl ${RES_CLASS[k]} ${save && save.resources[k] < (cost[k] ?? 0) ? 'short' : ''}`}>
-          <i>{RES_ICON[k]}</i>
-          {(cost[k] ?? 0).toLocaleString()}
-        </span>
-      ))}
+      {parts.map((k) => {
+        const need = cost[k] ?? 0;
+        const short = !!save && save.resources[k] < need;
+        return (
+          <span key={k} className={`cl ${RES_CLASS[k]} ${short ? 'short' : ''}`} title={short ? `${CURRENCIES[k].name}: have ${save!.resources[k].toLocaleString()}, need ${need.toLocaleString()}` : CURRENCIES[k].name}>
+            <i>{RES_ICON[k]}</i>
+            {short ? `${save!.resources[k].toLocaleString()}/${need.toLocaleString()}` : need.toLocaleString()}
+          </span>
+        );
+      })}
     </span>
   );
 }
@@ -122,7 +127,5 @@ export function ConfirmButton({ label, confirm, onConfirm, disabled, className =
 
 /** Format a cost or delta as text (messages). */
 export function costText(c: Partial<Record<ResourceKey, number>>, sign = ''): string {
-  return RESOURCE_KEYS.filter((k) => c[k])
-    .map((k) => `${sign}${Math.abs(c[k] ?? 0)} ${k === 'components' ? 'comp' : k === 'credits' ? 'cr' : 'salvage'}`)
-    .join(' · ');
+  return amountText(c, sign);
 }

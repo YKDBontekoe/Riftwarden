@@ -1,6 +1,6 @@
 # Riftwarden: project notes for future sessions
 
-Browser FPS + tower-defense roguelite. Current milestone: **M7** (co-op, HQ construction, content, presentation) (see "Milestones"). Read this before changing code.
+Browser FPS + tower-defense roguelite. Current milestone: **M8** (Warden progression: levels, procedural skill tree, clearer terminals & currencies) (see "Milestones"). Read this before changing code.
 
 ## Stack
 
@@ -23,6 +23,15 @@ server/profiles.ts         Online profile cache, derived guest IDs, committed pr
 server/profileDatabase.ts  Transactional PostgreSQL persistence, with table definitions in server/migrations
 server/profileRows.ts      Maps SaveData to typed relational rows and back
 server/headless.ts         M7: browser stubs (canvas 2D, document, localStorage) so Game runs in Node
+src/progression/level.ts   M8: Warden XP formula (xpFor from run statistics), level curve, points/rings per level     [pure]
+src/progression/skilltree.ts M8: procedural radial skill tree (seeded per profile, ring per 5 levels), allocation rules, soft-capped modifiers, keystone rules [pure]
+src/progression/treeOps.ts M8: treeAllocate / treeRespec profile operations                                       [pure]
+src/economy/currencies.ts  M8: one table for every currency (name, icon, earned/spent/banking) for tooltips and cost text [pure]
+src/home/stationInfo.ts    M8: purpose + currencies per HQ station (terminal headers, HQ prompt, Command Console directory) [pure]
+src/home/stationScreens.ts M8: live station screen drawing (moved out of HomeBase)
+src/ui/SkillTree.tsx       M8: Neural Lattice terminal (SVG radial tree, pan/zoom, allocate, respec);  src/ui/Directory.tsx: level/XP widgets + station directory
+server/migrations/002_progress.sql M8: xp/tree columns, veteran XP, version 7 -> 8
+src/net/teamLedger.ts      TeamLedger (shared co-op ledger mirrored into each player's ledger)
 src/net/protocol.ts        M7: message types, PROTOCOL_VERSION, structural validation, RateLimiter         [pure]
 src/net/ServerGame.ts      M7: authoritative Game subclass: Avatars per player, shot validation, acts, TeamLedger, votes
 src/net/recorder.ts        M7: Recorder + capturePresentation (fx/sfx/ui/telegraph/ordnance -> event tuples), withRecorder scoping
@@ -188,6 +197,16 @@ scripts/e2e-m6.cjs         M6 browser acceptance suite (A-L: plans, enemies, eli
 
 ## Key design decisions
 
+### M8: Warden progression
+
+- **XP is derived, not collected.** `xpFor(ledger)` (waves cleared with a slow per-wave growth, kills, elites, bosses, events, HVTs, milestones) x tier factor (+25%/tier) x `ledger.xpMult` (keystones). `RunLedger.accrueXp()` moves the delta since the last call into `unsecured.xp`; `bank()` and `finalize()` accrue first, so XP follows the salvage rules: banked at checkpoints (`bankRewards` adds `rewards.xp` to `save.progress.xp`), on defeat/abandon `XP.keepOnLoss` (25%) of the unsecured XP is kept (`result.xpKept`, applied by `recordRun`), extraction keeps all. Dev sessions earn 0. Co-op: `ServerGame.bankAll` calls `syncStats()` + `a.run.accrueXp()` before cloning each player's ledger; replicas mirror `xs/xu` from `ledgerView` and set `xpReplica` (never derive locally).
+- **Level is derived from XP** (`levelInfo`, `xpToNext(L) = 400 + 220(L-1) + 6(L-1)^2`, endless). 1 skill point per level, a new tree ring every 5 levels (`ringsAt`).
+- **Procedural skill tree** (`skilltree.ts`): seed = FNV of the profile id (`treeSeedFor`, stored in `save.progress.tree.seed`). Each ring is generated from its own stream, so revealing rings never changes earlier ones (test). 4 branches (Bulwark/hull, Arsenal/weapon, Engineer/tower, Vector/tactical) as 90 deg sectors; nodes per branch grow with the ring (2..5); parents = nearest 1-2 nodes of the same branch one ring in (ring 1 hangs off the core). Nodes roll from per-branch templates on real `CombatStats` keys (minor; notable = 2 stats x1.6; keystone every 3rd ring = trade-off from a rotating list, some with rules `xpMult`/`startCores`). Values scale +15%/ring; summed bonuses per stat are soft-capped (`cap * (1 - e^(-sum/cap))`, cap = 12x the ring-1 template value; penalties are never softened). Node ids `r<ring><h|w|e|v><k>`.
+- **Rules**: allocation needs a revealed ring, a free point and an allocated parent (or the core); `pruneAllocation` re-validates in order on load. Ops `treeAllocate` / `treeRespec` (HQ only; respec refunds all for `respecCost(respecs)` credits, escalating, tx guarded). Arena: `ArenaConfig.tree` snapshot at deploy -> `Game.applyTree` (modifiers in `rebuildStats`, `xpMult`, start cores). Server: `ServerPlayerInit.tree` -> `Avatar.treeMods` (personal stats; tower keys shared 1/n like tower gear).
+- **Save v8**: `progress {xp, tree {seed, allocated}, respecs}`; `MIGRATIONS[7]` credits veterans (`veteranXp`: checkpoints x300 + kills x2 + bosses x250 + elites x15 + milestones x300). PostgreSQL: `002_progress.sql` (same formula, bumps rows to version 8); `ProfileDatabase.migrate` now runs every numbered migration once.
+- **Clarity**: `economy/currencies.ts` is the single source for currency names/icons/short units and "earned / spent on / banking" text (resource chip tooltips, `costText`, cost lines show have/need when short). `home/stationInfo.ts` drives the terminal purpose strip (`Shell` reads the open terminal id), the HQ interaction prompt and the Command Console **station directory** (click = `HomeBase.pingStation`, lights the station's floor ring for 10 s). New station **Neural Lattice** (drone bay, `lattice`). HUD: Warden level chip (HQ), XP at risk / banked (arena run panel), XP gain + level-ups on checkpoint, defeat and summary screens. Tutorial step `hq_level` (shown when a point is free).
+- **Not done yet**: remote wardens' levels on the team HUD; Terminals.tsx split per panel; deeper keystone rules (extra upgrade choice etc.).
+
 ### Polish pass (after M7 content)
 
 - **Hit flash.** `Kit.flashable(fn)` builds parts in flash mode: their templates (key suffix `|f`) register an `instanceFlash` vec4 instanced buffer and PBR materials get `HitFlashPlugin` (adds `rgb * a` to `finalColor` only for meshes that have the buffer). `EnemyManager.flash(e, tint)` / `setFlash` write the vectors of every part under `e.root` (cached in `e.flashVecs`, rebuilt when elite hardware or a threat mark is added); it decays at 9/s. Rigs, elite hardware and threat marks are built through `kit.flashable`. Instances share the template's default vector **by reference**, so `initFlash` gives each instance its own. Co-op replicas flash from the `ed` event.
@@ -210,7 +229,7 @@ scripts/e2e-m6.cjs         M6 browser acceptance suite (A-L: plans, enemies, eli
 - **Save v7**: `base.structure/stations/blueprints/owned`, `tutorial`; `MIGRATIONS[6]` marks the tutorial complete for existing players. Signatures are validated and backfilled (`rollSignature`).
 - **Content**: Scatter Choke (7-pellet cone) and Pulse Capacitor (beam family pulse with 3 m splash) firing styles; Missile Battery (salvos, splash) and Support Amplifier (boosts nearby towers, no attack) towers; Jammer Drone (locks and jams towers, interruptible) and Siege Crawler (front plating x0.5, releases drones, drills the reactor) enemies; 10 run upgrades (w_vent, x_bounty, d_rebound, l_singularity, l_echo, t_overload, t_cluster, ...); 6 signatures (overdrive, chain_reaction, stormcaller, siphon; phase and rift_echo exotic only).
 - **Presentation**: settings v2 (audio buses sfx/ui/ambience, UI scale, shake, reduced motion, colour-vision rarity palettes, particle density, shadows, bloom, render scale, key rebinding via `Input.remap`), onboarding tutorial (persisted, skippable, resettable), audio voice cap 40, HRTF spatial emitters (reactor, vents, machines, HQ hum) started lazily once audio is unlocked.
-- **Limitations / not done**: no client-side prediction of shared hostiles beyond interpolation (high RTT feels laggy for hits); no NAT traversal/matchmaking (direct server URL + codes); server profiles are files (no database, single process); boss visuals are still transform-animated kit geometry.
+- **Limitations / not done**: no client-side prediction of shared hostiles beyond interpolation (high RTT feels laggy for hits); no NAT traversal/matchmaking (direct server URL + codes); server profiles are in PostgreSQL (single process); boss visuals are still transform-animated kit geometry.
 
 ### M6: advanced endless survival
 
@@ -319,6 +338,7 @@ scripts/e2e-m6.cjs         M6 browser acceptance suite (A-L: plans, enemies, eli
 
 ## Testing
 
+- `npm test` (325): adds `tests/warden-progress.test.ts` (XP determinism/monotonicity, level curve, ledger banking/loss/keystone multiplier, v7->v8 migration, allocation pruning, tree determinism/ring stability/reachability/ring 200 finiteness/soft caps/keystones, ops). `node scripts/e2e-progression.cjs [A-E]` (13 checks: checkpoint XP banking + panel, abandon keeps 25%, lattice UI allocate -> arena stat pipeline, reload persistence + respec, currency tooltips, terminal purpose, station directory ping, HQ level chip). Co-op: `e2e-coop-protocol.mjs` D6b checks per-player XP in PostgreSQL. M8 regression: e2e-m4 39/39, construction G-J 30/30, coop protocol 47/47.
 - `npm test` (195): adds `tests/m6.test.ts` (planner determinism/variety/boss+event rules/evolution windows/compositions/tier effects/high-wave finiteness incl. 1e5, elite compatibility, unlock rules, endless WaveManager, layout reservations, records + dev isolation + v5->v6 migration, milestones).
 - `node scripts/e2e-m6.cjs [A,B,...]` (56 checks, ~25 min in SwiftShader; sections isolated by fresh dev deployments): A seeded plans in-game, B enemy AI (enforcer slam/shield/shock/generator, artillery range/shell/interrupt, engineer heal/shield/buff/hold-back, courier phase/orbs/escape, rewards), C elites (each modifier + combo + rejection + drops), E evolution (door collider, south navigation, bulkhead player safety, vents, conduit), F events (each, notifications, rewards, cleanup), D bosses (attacks/telegraphs/tower suppression/phases/core/beam interrupt/death+loot; emitters/exposure/statuses/relocation/lances/sweep/discharge cover/death; boss wave lifecycle), G tiers, H waves 25-1000, I/K banking with a boss+event run, loss on defeat, records/milestones + reload, L dev sessions never bank, J stress measurement.
 - **Final M6 regression (all on the M6 code):** `npm test` 195/195; e2e-m1 ALL PASSED, m2 54/54 (A6 is intermittent: drops scatter randomly, so a second pickup can sit behind the drone when it turns; passed on re-run; m1 G6 is likewise intermittent: it teleports behind a random first enemy, passed on 2 re-runs), m3 37/37 (card lookup now uses the full item name), m4 39/39, m5 24/24, m6 56/56. `npm run build` succeeds.
@@ -375,5 +395,6 @@ scripts/e2e-m6.cjs         M6 browser acceptance suite (A-L: plans, enemies, eli
 - **M5 (done):** see the M5 section.
 - **M7:** 2-4 player co-op with an authoritative server, HQ construction with blueprints, new firing styles/towers/enemies/upgrades/signatures, onboarding, settings v2, spatial audio.
 - **M6 (done):** survival director (budgets, themes, seeded plans), Shielded Enforcer / Artillery Drone / Support Engineer / Vault Courier, four elite modifiers with combinations, four dynamic events, two arena evolutions, Siege Colossus and Overseer Core bosses with dynamic scheduling, tiers IV-V with unlock rules, boss/elite/event/HVT loot (target farming), survival records + milestones (save v6), run summaries, F4 dev lab, shader/pool pre-warming.
-- **Next:** legendary signature effects (`signature` is still reserved; rerolls already preserve it).
+- **M8 (done):** Warden levels (XP banked like loot), per-profile procedural skill tree at the Neural Lattice, currency table + tooltips, station purposes and directory, save v8.
+- **Next:** deeper keystone rules, team HUD levels, Terminals.tsx split, rift depth (post-Tier V endgame directives).
 - Later: combat depth (second tower, turret upgrades, enemy variety, hit flash, audio pass, deep-import bundle split), run upgrades, M4 modular towers, M5 advanced endless (bosses/events), M6 content, M7 co-op evaluation.

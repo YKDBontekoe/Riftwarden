@@ -3,7 +3,7 @@ import pg, { type PoolClient } from 'pg';
 import type { SaveData } from '../src/progression/save';
 import { encodeRows, profileHeader, profileRelations, profileTables, readProfile, snakeCase, type Relations, type Row } from './profileRows';
 
-const migration = new URL('./migrations/001_profiles.sql', import.meta.url);
+const migrations = ['001_profiles.sql', '002_progress.sql'].map((file) => new URL(`./migrations/${file}`, import.meta.url));
 const loadQuery = `
   SELECT to_jsonb(p) AS header, json_build_object(
     ${profileTables.map((table) => `'${table}', COALESCE((SELECT json_agg(t) FROM ${table} t WHERE t.player_id = p.player_id), '[]'::json)`).join(',\n')}
@@ -32,14 +32,17 @@ export class ProfileDatabase {
   }
 
   async migrate(): Promise<void> {
-    const sql = await readFile(migration, 'utf8');
+    const sqls = await Promise.all(migrations.map((url) => readFile(url, 'utf8')));
     await this.transaction(async (db) => {
       await db.query('SELECT pg_advisory_xact_lock(41314, 1)');
       await db.query('CREATE TABLE IF NOT EXISTS riftwarden_schema_migrations (version integer PRIMARY KEY)');
-      const { rowCount } = await db.query('SELECT 1 FROM riftwarden_schema_migrations WHERE version = 1');
-      if (rowCount) return;
-      await db.query(sql);
-      await db.query('INSERT INTO riftwarden_schema_migrations (version) VALUES (1)');
+      for (const [i, sql] of sqls.entries()) {
+        const version = i + 1;
+        const { rowCount } = await db.query('SELECT 1 FROM riftwarden_schema_migrations WHERE version = $1', [version]);
+        if (rowCount) continue;
+        await db.query(sql);
+        await db.query('INSERT INTO riftwarden_schema_migrations (version) VALUES ($1)', [version]);
+      }
     });
   }
 

@@ -234,6 +234,7 @@ export class Flow {
         seed: this.nextUpgradeSeed ?? undefined,
         towerTech: [...save.towers.unlocked],
         milestones: [...save.milestones],
+        tree: { seed: save.progress.tree.seed, allocated: [...save.progress.tree.allocated] },
         tutorial: this.tutorialHost(),
         hooks: {
           // Reported as secured only once the write succeeded.
@@ -470,6 +471,7 @@ export class Flow {
           seed: run.seed,
           towerTech: run.towerTech,
           milestones: run.milestones,
+          tree: { seed: this.profile.save.progress.tree.seed, allocated: [...this.profile.save.progress.tree.allocated] },
           hooks: { bank: () => true, checkpoint: () => {}, defeat: () => {} },
           you: run.you,
           slot: me?.slot ?? 0,

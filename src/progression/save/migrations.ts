@@ -75,9 +75,26 @@ export const MIGRATIONS: Record<number, (data: Obj) => Obj> = {
    * original places, no purchased blueprints) and onboarding. Existing players already know the
    * game: their tutorial is marked complete. Decorations keep their positions.
    */
+  /**
+   * v7 (M7) -> v8: Warden levels. Veterans start with XP credited from their service record
+   * (secured checkpoints, kills, bosses, elites, milestones) so they do not restart at level 1.
+   * The skill tree starts unallocated (seed and validation via sanitize).
+   */
+  7: (d) => ({ ...d, progress: { xp: veteranXp(d), tree: { allocated: [] }, respecs: 0 } }),
   6: (d) => ({ ...d, base: { ...obj(d.base), layoutVersion: 2, structure: emptyStructure(), stations: {}, blueprints: [], owned: {} }, tutorial: { done: ['complete'], skipped: false } }),
 };
 
+
+/** XP credited to a v7 profile from its persisted statistics (bounded). */
+export function veteranXp(d: Obj): number {
+  const t = obj(d.totals);
+  const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : 0);
+  let checkpoints = 0;
+  for (const r of Object.values(obj(d.records))) checkpoints += n(obj(r).checkpoints);
+  const ms = arr(d.milestones).length;
+  const xp = checkpoints * 300 + n(t.kills) * 2 + n(t.bossesDefeated) * 250 + n(t.elitesDefeated) * 15 + ms * 300;
+  return Math.floor(Math.min(5_000_000, xp));
+}
 
 export function migrate(data: unknown, fromVersion: number): { data: unknown; ok: boolean } {
   if (!Number.isInteger(fromVersion) || fromVersion < 1 || fromVersion > SAVE_VERSION) return { data, ok: false };

@@ -1,3 +1,5 @@
+import { treeModifiers, treeRules } from '../progression/skilltree';
+import { TeamLedger } from './teamLedger';
 import { SCATTER_PELLETS } from '../combat/Weapon';
 import { type Engine, Vector3 } from '@babylonjs/core';
 import { sfx } from '../audio/Sfx';
@@ -36,6 +38,8 @@ export interface ServerPlayerInit {
   slot: number;
   loadout: Partial<Record<SlotId, ItemInstance | null>>;
   ledger: RunLedger;
+  /** The player's skill tree (personal stats; tower stats are shared 1/n like tower gear). */
+  tree?: { seed: number; allocated: readonly string[] };
 }
 
 interface ServerPickup {
@@ -71,6 +75,8 @@ export class Avatar {
   kills = 0;
   damage = 0;
   deaths = 0;
+  /** Permanent skill tree modifiers of this player. */
+  treeMods: StatModifier[] = [];
   /** Beam ramp tracking (server-side, the client cannot claim a ramp). */
   beamTarget = 0;
   beamT = 0;
@@ -107,31 +113,6 @@ export function spawnFor(slot: number): { x: number; z: number; yaw: number } {
   return { x: s.x + Math.cos(s.yaw) * off, z: s.z - Math.sin(s.yaw) * off, yaw: s.yaw };
 }
 
-/** Run ledger shared by the team: every collected resource is mirrored to each player's own ledger. */
-class TeamLedger extends RunLedger {
-  members: () => RunLedger[] = () => [];
-  override collect(r: Partial<Rewards>): boolean {
-    const res = super.collect({ salvage: r.salvage, credits: r.credits, components: r.components });
-    for (const m of this.members()) m.collect({ salvage: r.salvage, credits: r.credits, components: r.components });
-    return res;
-  }
-  override tick(dt: number): void {
-    super.tick(dt);
-    for (const m of this.members()) m.tick(dt);
-  }
-  override addKill(): void {
-    super.addKill();
-    for (const m of this.members()) m.addKill();
-  }
-  override waveReached(n: number): void {
-    super.waveReached(n);
-    for (const m of this.members()) m.waveReached(n);
-  }
-  override waveCleared(n: number): void {
-    super.waveCleared(n);
-    for (const m of this.members()) m.waveCleared(n);
-  }
-}
 
 export interface ServerHooks {
   /** Persist a player's banked rewards. Returns true once written. */
@@ -227,6 +208,10 @@ export class ServerGame extends Game {
 
   addAvatar(p: ServerPlayerInit): Avatar {
     const a = new Avatar(p.id, p.name, p.slot, this, p.loadout, p.ledger);
+    if (p.tree) {
+      a.treeMods = treeModifiers(p.tree.seed, p.tree.allocated);
+      p.ledger.xpMult = treeRules(p.tree.seed, p.tree.allocated).xpMult;
+    }
     a.player.vitalsLocal = true;
     a.player.onHurt = (amount, from) => {
       const h = a.player.lastHit;
@@ -336,14 +321,14 @@ export class ServerGame extends Game {
     // Towers are shared: each player's tower gear contributes 1/n (a full team of tower builds = one full build).
     const towerGear: StatModifier[] = [];
     for (const a of live) {
-      for (const m of equipmentModifiers(a.inventory.equippedItems())) {
+      for (const m of [...equipmentModifiers(a.inventory.equippedItems()), ...a.treeMods]) {
         if (!TOWER_KEYS.has(m.stat)) continue;
         towerGear.push({ ...m, value: m.op === 'mul' ? Math.pow(1 + m.value, 1 / n) - 1 : m.value / n });
       }
     }
     Object.assign(this.stats, computeStats([...towerGear, ...shared]));
     for (const a of this.avatars) {
-      a.stats = computeStats([...equipmentModifiers(a.inventory.equippedItems()), ...shared]);
+      a.stats = computeStats([...equipmentModifiers(a.inventory.equippedItems()), ...a.treeMods, ...shared]);
       a.player.applyStats(a.stats, this.attackerScale);
       a.weaponDef = weaponDefFor(a.inventory.equipped('weapon')) ?? a.weaponDef;
     }
@@ -802,7 +787,9 @@ export class ServerGame extends Game {
   /** Checkpoint: bank every player's own ledger into their own profile. */
   bankAll(wave: number): void {
     const dev = this.cfg.run.survival.dev;
+    this.syncStats();
     this.banking = Promise.all(this.avatars.filter((a) => !a.left).map(async (a) => {
+      a.run.accrueXp();
       const moved = structuredClone(a.run.unsecured);
       const ok = !dev && await this.sh.bank(a.id, wave, moved, this.team.survival.bossesKilled);
       if (ok || dev) a.run.bank(wave);
@@ -951,6 +938,8 @@ export function ledgerView(r: RunLedger) {
     cs: r.secured.credits,
     ku: r.unsecured.components,
     ks: r.secured.components,
+    xs: r.secured.xp,
+    xu: Math.max(0, r.xpEarned - r.secured.xp),
     iu: r.unsecured.items.length,
     is: r.secured.items.length,
     wc: r.wavesCleared,

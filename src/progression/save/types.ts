@@ -4,7 +4,7 @@ import { type ItemInstance, type SlotId } from '../items';
 import type { RunOutcome } from '../run';
 import { type MarketState } from '../../economy/market';
 
-export const SAVE_VERSION = 7;
+export const SAVE_VERSION = 8;
 export const SAVE_KEY = 'riftwarden.save';
 export const BACKUP_KEY = 'riftwarden.save.bak';
 export const CORRUPT_KEY = 'riftwarden.save.corrupt';
@@ -13,6 +13,8 @@ export const STORAGE_CAPACITY = 50;
 /** M7: bays added by each Storage Annex facility. */
 export const ANNEX_BAYS = 10;
 export const PRESET_COUNT = 3;
+/** Numeric safety bound for stored XP. */
+export const MAX_XP = 1e12;
 
 export interface TierRecord {
   /** Highest wave cleared. */
@@ -151,7 +153,27 @@ export interface SaveData {
   economy: EconomyState;
   /** M5: researched tower blueprints (`slot:id`; starter parts are implicit). Deployed towers and run upgrades are never saved. */
   towers: { unlocked: string[] };
+  /** Warden levels and the procedural skill tree (level and points are derived from xp). */
+  progress: ProgressState;
 }
+
+export interface ProgressState {
+  /** Total secured XP (never decreases). */
+  xp: number;
+  /** Skill tree: seed (derived from the profile id once) and allocated node ids. */
+  tree: { seed: number; allocated: string[] };
+  /** Paid respecs so far (respec cost escalates). */
+  respecs: number;
+}
+
+/** Stable 32-bit seed for a profile's skill tree. */
+export function treeSeedFor(profileId: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < profileId.length; i++) h = Math.imul(h ^ profileId.charCodeAt(i), 0x01000193);
+  return h >>> 0;
+}
+
+export const emptyProgress = (profileId: string, xp = 0): ProgressState => ({ xp: Math.max(0, Math.floor(xp)), tree: { seed: treeSeedFor(profileId), allocated: [] }, respecs: 0 });
 
 export interface EconomyStats {
   creditsEarned: number;

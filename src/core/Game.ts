@@ -14,6 +14,7 @@ import {
   SceneInstrumentation,
   Vector3,
 } from '@babylonjs/core';
+import { treeModifiers, treeRules } from '../progression/skilltree';
 import { type Emitter, sfx } from '../audio/Sfx';
 import { mulberry32, rollDamage } from '../combat/damage';
 import { Director } from '../combat/Director';
@@ -111,6 +112,8 @@ export interface ArenaConfig {
   milestones?: readonly string[];
   /** M7: onboarding host (solo runs of profiles that have not finished the tutorial). */
   tutorial?: TutorialHost;
+  /** Warden skill tree (seed + allocated nodes), snapshotted at deployment. */
+  tree?: { seed: number; allocated: readonly string[] };
 }
 
 /**
@@ -164,6 +167,8 @@ export class Game {
   buildConfig: TowerConfig = { ...DEFAULT_CONFIG };
   /** Researched blueprints for this run. */
   readonly towerTech: ReadonlySet<string>;
+  /** Permanent skill tree modifiers (snapshotted at deployment). */
+  protected treeMods: StatModifier[] = [];
   /** Last tower-edit result message (HUD). */
   towerNote = { text: '', t: 0 };
   towerPanelFocus: number | null = null;
@@ -342,6 +347,7 @@ export class Game {
     this.inventory = new RunInventory(cfg.loadout, cfg.run);
     this.lootRand = mulberry32(hashSeed(cfg.run.id));
     this.towerTech = new Set([...STARTER_TECH, ...(cfg.towerTech ?? [])]);
+    this.applyTree(cfg.tree);
     this.director = new Director(this, cfg.seed ?? hashRunSeed(cfg.run.id));
 
     // Reflections/ambient: capture the finished static scene once into a prefiltered cube map.
@@ -610,12 +616,21 @@ export class Game {
     this.inventoryVersion++;
   }
 
+  /** Permanent skill tree: stat modifiers, XP multiplier and starting cores (keystone rules). */
+  private applyTree(tree: ArenaConfig['tree']): void {
+    if (!tree) return;
+    this.treeMods = treeModifiers(tree.seed, tree.allocated);
+    const rules = treeRules(tree.seed, tree.allocated);
+    this.cfg.run.xpMult = rules.xpMult;
+    this.wallet.cores += rules.startCores;
+  }
+
   /**
    * Recompute derived stats from scratch: equipment + debug modifiers + run upgrades + temporary buffs.
    * Event-driven (equipment change, upgrade picked, buff gained/expired), never per frame.
    */
   rebuildStats(): void {
-    const mods = [...equipmentModifiers(this.inventory.equippedItems()), ...this.modifiers, ...this.director.build.modifiers(), ...this.director.buffModifiers()];
+    const mods = [...equipmentModifiers(this.inventory.equippedItems()), ...this.treeMods, ...this.modifiers, ...this.director.build.modifiers(), ...this.director.buffModifiers()];
     Object.assign(this.stats, computeStats(mods));
     this.player.applyStats(this.stats, this.attackerScale);
     this.tactical.rechargeMult = this.stats.tacticalRechargeMult;

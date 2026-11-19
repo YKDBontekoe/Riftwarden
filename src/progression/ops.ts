@@ -16,6 +16,7 @@ import { TOWER_SLOTS } from '../towers/components';
 const COMPONENT_SLOTS = ['barrel', 'core', 'cooling', 'mechanism', 'attachment'] as const;
 import { BUILD_OPS } from '../home/build/ops';
 import { TUTORIAL_OPS } from './tutorial';
+import { allocateNode, respecTree } from './treeOps';
 
 /**
  * Named, serialisable profile operations (M7).
@@ -76,6 +77,9 @@ const DEFS: Record<string, OpDef> = {
   uninstallModule: { args: ['str', 'int'], run: (d, a, tx) => TX.withTx(d, tx, () => uninstallModule(d, a[0] as string, a[1] as number)) },
   transferModule: { args: ['str', 'int', 'str', 'int'], run: (d, a, tx) => TX.withTx(d, tx, () => transferModule(d, a[0] as string, a[1] as number, a[2] as string, a[3] as number)) },
   selectTier: { args: ['int'], run: (d, a) => bool(selectTier(d, a[0] as number), 'Tier locked') },
+  // ---- Warden skill tree
+  treeAllocate: { args: ['str'], run: (d, a) => allocateNode(d, a[0] as string) },
+  treeRespec: { args: [], run: (d, _a, tx) => TX.withTx(d, tx, () => respecTree(d) as never) },
   ...BUILD_OPS,
   ...TUTORIAL_OPS,
 };

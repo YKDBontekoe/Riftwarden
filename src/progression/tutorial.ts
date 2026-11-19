@@ -28,6 +28,7 @@ export const TUTORIAL: readonly TutorialStep[] = [
   { id: 'upgrade', where: 'arena', title: 'RUN UPGRADES', text: 'After each wave pick one upgrade. Upgrades stack into powerful builds but last only for this operation.' },
   { id: 'tactical', where: 'arena', title: 'TACTICAL TIME', text: 'Activate tactical time to slow enemies and place towers. Your tactical energy recharges between uses.', keys: ['tactical'] },
   { id: 'bank', where: 'arena', title: 'CHECKPOINT', text: 'Every five waves everything you collected is banked to HQ. You can continue for more, or return home with it safe.', keys: ['checkpoint'] },
+  { id: 'hq_level', where: 'hq', title: 'WARDEN LEVEL UP', text: 'Operations earn Warden XP (banked at checkpoints like loot). Each level gives a skill point: spend it at the Neural Lattice in the Drone Bay. Hover any currency to see where it comes from and what it buys.', keys: ['use'] },
   { id: 'hq_return', where: 'hq', title: 'BACK HOME', text: 'Secured loot is in the Storage terminal; equip it at Drone Configuration, upgrade it in the Workshop, and build out your base at the Architect Console.' },
 ];
 

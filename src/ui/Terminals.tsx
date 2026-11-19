@@ -23,6 +23,7 @@ import { CHECKPOINT_INTERVAL, THREAT_TIERS, type ThreatTier, unlockText } from '
 import { MILESTONES } from '../survival/records';
 import { fmtTime, useSave } from './App';
 import { Shell } from './shell';
+import { StationDirectory, WardenProgress } from './Directory';
 import { CoopPanel } from './Coop';
 import { ResourceBar, useTx, TxMessage, CostLine } from './economy';
 import { dismantleYield } from '../economy/config';
@@ -553,6 +554,7 @@ export function CommandTerminal({ flow, close }: { flow: Flow; close: () => void
             <Stat k="BOSSES · ELITES DESTROYED" v={`${t.bossesDefeated} · ${t.elitesDefeated}`} />
             <Stat k="HIGHEST THREAT TIER UNLOCKED" v={THREAT_TIERS[save.threat.unlocked - 1]?.roman ?? 'I'} />
           </div>
+          <WardenProgress flow={flow} />
           <div className="col-label">MILESTONES · {save.milestones.length}/{MILESTONES.length}</div>
           <div className="milestones" data-testid="milestones">
             {MILESTONES.map((m) => (
@@ -596,6 +598,7 @@ export function CommandTerminal({ flow, close }: { flow: Flow; close: () => void
           </table>
         </div>
         <div>
+          <StationDirectory flow={flow} close={close} />
           <div className="col-label">RECENT OPERATIONS</div>
           {save.history.length === 0 ? (
             <div className="empty-state small">

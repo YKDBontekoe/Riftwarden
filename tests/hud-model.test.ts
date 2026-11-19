@@ -79,6 +79,7 @@ describe('runHud', () => {
       tier: 3,
       salvageUnsecured: 5, creditsUnsecured: 6, componentsUnsecured: 7,
       salvageSecured: 1, creditsSecured: 2, componentsSecured: 3,
+      xpSecured: 0, xpUnsecured: 0,
       nextCheckpoint: nextCheckpoint(5),
       checkpointOpen: true,
       lastBankedWave: 0,

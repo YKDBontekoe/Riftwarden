@@ -83,7 +83,7 @@ export class CoopSim {
       const ms = new Set<string>(p.data.milestones);
       milestones = milestones ? new Set<string>([...milestones].filter((x: string) => ms.has(x))) : ms;
       const loadout = Object.fromEntries(SLOT_IDS.map((s) => [s, structuredClone(equippedItem(p.data, s))]));
-      players.push({ id, name, slot: slot++, loadout, ledger: new RunLedger(this.runId, tier.id, Date.now()) });
+      players.push({ id, name, slot: slot++, loadout, ledger: new RunLedger(this.runId, tier.id, Date.now()), tree: structuredClone(p.data.progress.tree) });
     }
     this.game = new ServerGame(
       this.engine,

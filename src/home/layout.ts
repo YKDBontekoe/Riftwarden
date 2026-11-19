@@ -93,6 +93,8 @@ export const HQ_STATIONS: readonly Station[] = [
   { id: 'merchant', title: 'EQUIPMENT EXCHANGE', action: 'Buy and sell equipment', area: 'MARKET CONCOURSE', pos: [30, 5.6], yaw: Math.PI, focus: [30, 1.3, 5.15], range: INTERACT_RANGE },
   { id: 'modules', title: 'MODULE BROKER', action: 'Upgrade modules and material exchange', area: 'MARKET CONCOURSE', pos: [30, -5.6], yaw: 0, focus: [30, 1.3, -5.15], range: INTERACT_RANGE },
   { id: 'salvage', title: 'RECLAMATION PRESS', action: 'Dismantle equipment into materials', area: 'RECLAMATION', pos: [-26.6, -3.6], yaw: Math.PI / 2, focus: [-26.15, 1.3, -3.6], range: INTERACT_RANGE },
+  // Warden progression
+  { id: 'lattice', title: 'NEURAL LATTICE', action: 'Spend skill points on your Warden skill tree', area: 'DRONE BAY', pos: [-16, -4.6], yaw: 0, focus: [-16, 1.3, -4.15], range: INTERACT_RANGE },
   // M7: construction
   { id: 'architect', title: 'ARCHITECT CONSOLE', action: 'Build and customise the headquarters', area: 'COMMAND DECK', pos: [-7.6, -8.7], yaw: 0, focus: [-7.6, 1.3, -8.25], range: INTERACT_RANGE },
 ];
