@@ -320,7 +320,8 @@ export function wallSet(scene: Scene, high: boolean, indoor: boolean): PbrSet {
       const width = PW / scale;
       const depth = PH / scale;
       const edge = Math.min(px, py, width - px, depth - py);
-      const streak = vnoise(u * 64, v * 3, 64, 9, 3);
+      // Broad runoff streaks (~20 cm): narrow ones read as wood grain under warm light.
+      const streak = vnoise(u * 20, v * 3, 20, 9, 3);
       const runoff = (indoor ? 0.12 : 1) * Math.max(0, streak - 0.43) * Math.max(0, 1 - py / (depth * 0.86));
       const grime = fbm(u, v, 8, 3, 2);
       const grain = vnoise(u * 192, v * 192, 192, 25) - 0.5;
@@ -423,7 +424,8 @@ export function wearSet(scene: Scene, high: boolean, rust = 1): PbrSet {
       const g = fbm(u, v, 6, 5, 31);
       const speck = vnoise(u * 96, v * 96, 96, 4);
       const brushing = vnoise(u * 7, v * 192, 7, 41, 192) - 0.5;
-      const alb = 0.93 + (g - 0.5) * 0.15 + brushing * 0.06 - Math.max(0, speck - 0.73) * 0.35;
+      // Light speckle only: dense dark pits read as cork/plywood once warm light hits them.
+      const alb = 0.93 + (g - 0.5) * 0.15 + brushing * 0.02 - Math.max(0, speck - 0.8) * 0.18;
       // Rust: blotches where the paint has failed (fbm threshold), pitted inside, with a soft halo.
       // Rust runs: vertically stretched noise, so failures read as streaks and drips, not spots.
       const patch = vnoise(u * 28, v * 5, 28, 77, 5) * 0.6 + fbm(u, v, 9, 3, 78) * 0.4;
@@ -437,8 +439,8 @@ export function wearSet(scene: Scene, high: boolean, rust = 1): PbrSet {
       img.data[i + 1] = Math.min(1, alb * (1 - k) + rAlb * 0.52 * k) * 255;
       img.data[i + 2] = Math.min(1, alb * (1 - k) + rAlb * 0.3 * k) * 255;
       img.data[i + 3] = 255;
-      ormPixel(oimg.data, i, 1 - rm * 0.15, Math.min(1, 0.77 + (g - 0.5) * 0.32 + brushing * 0.16 + rm * 0.25), 1 - rm * 0.75);
-      height[y * S + x] = g * 0.12 + brushing * 0.09 - rm * (0.05 + pit * 0.08);
+      ormPixel(oimg.data, i, 1 - rm * 0.15, Math.min(1, 0.77 + (g - 0.5) * 0.32 + brushing * 0.06 + rm * 0.25), 1 - rm * 0.75);
+      height[y * S + x] = g * 0.12 + brushing * 0.03 - rm * (0.05 + pit * 0.08);
     }
   }
   a.putImageData(img, 0, 0);

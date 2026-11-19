@@ -36,6 +36,7 @@ import { Kit } from '../visuals/kit';
 import { createPalette, unlit } from '../visuals/materials';
 import { roomStyle, STYLED_ROOMS } from './roomStyle';
 import { RubbleBuilder } from '../visuals/rubble';
+import { buildHqAtmosphere } from './hqAtmosphere';
 import { hqCeilingSet, hqDeckSet, type HqSet, hqWallSet } from '../visuals/hqTextures';
 import { StationFocus } from './StationFocus';
 import { AmbientDrones } from './AmbientDrones';
@@ -288,6 +289,7 @@ export class HomeBase {
     moon.intensity = 1.08;
     moon.diffuse = new Color3(1.0, 0.83, 0.64);
     moon.specular = new Color3(1.0, 0.90, 0.74);
+    buildHqAtmosphere(scene, moon.direction, high, { low: 0.5, medium: 0.8, high: 1 }[settings.particles] ?? 1);
     const point = (name: string, pos: [number, number, number], color: [number, number, number], intensity: number, range: number, pulse = false) => {
       const l = new PointLight(name, new Vector3(...pos), scene);
       l.diffuse = new Color3(...color);

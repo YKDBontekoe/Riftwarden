@@ -206,7 +206,7 @@ export class ArenaDressing {
           quad(x - side * 0.28, 0, z - 0.25, x, 8.2, z + 0.25, P.metal, 'wall');
           quad(x - side * 0.34, 2.0, z - 0.3, x, 2.2, z + 0.3, P.orangeDim, null);
         }
-        quad(-g, 8.2, z - 0.22, g, 8.6, z + 0.22, P.graphite, null);
+        quad(-g, 8.2, z - 0.22, g, 8.6, z + 0.22, P.steel, null);
       }
     }
   }

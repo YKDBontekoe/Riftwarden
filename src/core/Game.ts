@@ -1847,6 +1847,7 @@ export class Game {
   /** Open a sealed gate (arena evolution): lane lights, rift light and embers. */
   openGate(gate: GateId): void {
     this.arenaVisuals.setSealed(gate, false);
+    this.atmosphere.mist.setSealed(gate, false);
     if (gate === 'south') this.atmosphere.setGateOpen(3, true);
   }
 

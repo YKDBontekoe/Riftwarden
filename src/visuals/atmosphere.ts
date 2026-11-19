@@ -22,6 +22,7 @@ import { canvas, flareSprite, sparkSprite, toTexture } from './textures';
 import { placeScan } from './scannedProps';
 import { captureEnvironment } from './envCapture';
 import { BASE_FOG } from './mood';
+import { RiftMist } from './riftMist';
 
 // ---------------------------------------------------------------- shaders
 
@@ -238,6 +239,8 @@ export class Atmosphere {
   private gateEmbers: ParticleSystem[] = [];
   private portalMats: ShaderMaterial[] = [];
   private time = 0;
+  /** Vapour rolling out of the gate tunnels (seal state follows the arena gates). */
+  readonly mist: RiftMist;
   private flash = 0;
   private nextFlash = 6;
   readonly skyMesh: Mesh;
@@ -291,6 +294,7 @@ export class Atmosphere {
     this.beamMat.backFaceCulling = false;
     this.beamMat.setColor3('color', new Color3(0.12, 0.16, 0.21));
 
+    this.mist = new RiftMist(scene, layout);
     this.buildSkyline();
     this.buildLamps();
     this.buildSconces();
@@ -563,6 +567,7 @@ export class Atmosphere {
     this.flash = Math.max(0, this.flash - dt * 3.2);
     const flick = f > 0.5 ? f : f * (0.5 + 0.5 * Math.sin(this.time * 60));
     this.sky.setFloat('time', this.time);
+    this.mist.update(this.time, camPos);
     this.sky.setFloat('flash', flick);
     this.riftMatsTime();
     this.beamMat.setFloat('time', this.time);
@@ -571,7 +576,8 @@ export class Atmosphere {
     (this.rain.emitter as Vector3).copyFrom(camPos);
     for (let i = 0; i < this.gateLights.length; i++) {
       const l = this.gateLights[i];
-      l.intensity = 3.5 + 0.4 * Math.sin(this.time * 7.3 + i * 2) * Math.sin(this.time * 3.1 + i) + flick * 0.6;
+      // Rift-lit, not floodlit: the tunnel steel keeps its dark value; the mist carries the glow into the yard.
+      l.intensity = 2.1 + 0.35 * Math.sin(this.time * 7.3 + i * 2) * Math.sin(this.time * 3.1 + i) + flick * 0.6;
     }
     return flick;
   }
