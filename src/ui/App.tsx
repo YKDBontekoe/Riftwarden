@@ -1,3 +1,4 @@
+import { BoundKey } from './hud/widgets';
 import { CoopPanel, urlJoinCode } from './Coop';
 import { SettingsPanel } from './SettingsPanel';
 import { ConstructionPanel } from './Construction';
@@ -96,51 +97,43 @@ function Transit() {
   );
 }
 
-export function Logo({ small }: { small?: boolean }) {
+function Insignia() {
   return (
-    <div className={`logo ${small ? 'small' : ''}`}>
-      <div className="logo-mark">
-        <svg viewBox="0 0 48 48" width={small ? 34 : 54} height={small ? 34 : 54}>
-          <path d="M24 3 L43 14 V34 L24 45 L5 34 V14 Z" className="hex" />
-          <path d="M24 12 L33 17 V31 L24 36 L15 31 V17 Z" className="hex-in" />
-          <path d="M24 17 V31 M18 24 H30" className="cross" />
-        </svg>
-      </div>
-      <div className="logo-text">
-        <div className="logo-word" data-text="RIFTWARDEN">
-          RIFT<span>WARDEN</span>
-        </div>
-        {!small && <div className="logo-sub">REACTOR DEFENSE INITIATIVE · SECTOR 07</div>}
-      </div>
-    </div>
+    <svg className="insignia" viewBox="0 0 48 40" aria-hidden="true">
+      <path fill="currentColor" d="M0 36 15 4h9L9 36zm15 0L30 4h16l-4 8H35L24 36zm16 0 5-11 10 11z" />
+    </svg>
   );
 }
 
-const CONTROLS: [string, string][] = [
-  ['WASD', 'Move'],
-  ['MOUSE', 'Aim · LMB fire'],
-  ['SPACE', 'Jump · again for a directional air boost'],
-  ['SHIFT', 'Dash · hold to sprint'],
-  ['E', 'Use terminal (HQ) · pick up loot'],
-  ['I / TAB', 'Drone cargo / inventory'],
-  ['2 / B', 'Build tower (C/V/N/M cycle parts)'],
-  ['T', 'Tower engineering (preparation)'],
-  ['AIM + R/C/V/N', 'Refit tower: level / weapon / core / modifier'],
-  ['U', 'Run build overview'],
-  ['Q', 'Tactical slow-time'],
-  ['HOLD X', 'Recycle turret'],
-  ['G', 'Start wave early'],
-  ['H', 'Return to HQ (checkpoint)'],
-  ['ESC', 'Pause / close terminal'],
-  ['F3', 'Performance stats'],
-];
+export function Logo({ small }: { small?: boolean }) {
+  return <div className={`logo ${small ? 'small' : ''}`}><Insignia /><span className="logo-word">Riftwarden</span></div>;
+}
+
+const CONTROLS = [
+  [<BoundKey action="move" />, 'Move'],
+  [<kbd>MOUSE</kbd>, 'Aim · LMB fire'],
+  [<BoundKey action="jump" />, 'Jump · press again for a directional boost'],
+  [<BoundKey action="dash" />, 'Dash · hold to sprint'],
+  [<BoundKey action="use" />, 'Use terminal or pick up loot'],
+  [<><BoundKey action="inventory" /><kbd>TAB</kbd></>, 'Drone cargo'],
+  [<><BoundKey action="build" /><kbd>2</kbd></>, 'Build tower · C/V/N/M cycle parts'],
+  [<kbd>T</kbd>, 'Tower engineering during preparation'],
+  [<kbd>R/C/V/N</kbd>, 'Aim at a tower to level or refit it'],
+  [<kbd>U</kbd>, 'Run build overview'],
+  [<BoundKey action="tactical" />, 'Tactical slow-time'],
+  [<BoundKey action="recycle" />, 'Hold to recycle a turret'],
+  [<BoundKey action="wave" />, 'Start wave early'],
+  [<BoundKey action="checkpoint" />, 'Return to HQ at a checkpoint'],
+  [<kbd>ESC</kbd>, 'Pause or close terminal'],
+  [<kbd>F3</kbd>, 'Performance stats'],
+] as const;
 
 function Controls() {
   return (
     <div className="controls">
       {CONTROLS.map(([k, v]) => (
-        <div key={k}>
-          <kbd>{k}</kbd>
+        <div key={v}>
+          <span className="control-keys">{k}</span>
           <span>{v}</span>
         </div>
       ))}
@@ -148,79 +141,64 @@ function Controls() {
   );
 }
 
+const MENU_SECTIONS = {
+  briefing: 'Briefing',
+  'co-op': 'Co-op',
+  settings: 'Settings',
+  controls: 'Controls',
+} as const;
+
 function MainMenu({ flow }: { flow: Flow }) {
-  const [tab, setTab] = useState<'briefing' | 'co-op' | 'settings' | 'controls'>(urlJoinCode() ? 'co-op' : 'briefing');
+  const [tab, setTab] = useState<keyof typeof MENU_SECTIONS | null>(urlJoinCode() ? 'co-op' : null);
   const save = useSave(flow);
   const tier = getTier(save.threat.selected);
+  useEffect(() => {
+    const dismiss = (event: KeyboardEvent) => { if (event.key === 'Escape') setTab(null); };
+    document.addEventListener('keydown', dismiss);
+    return () => document.removeEventListener('keydown', dismiss);
+  }, []);
   return (
-    <div className="screen menu">
-      <div className="menu-col">
-        <Logo />
-        <div className="tagline">Defend the reactor. Secure the salvage. Come home.</div>
-        <button className="primary deploy" onClick={() => void flow.enterHq()}>
-          <span>ENTER HEADQUARTERS</span>
-          <i>▶</i>
+    <main className="screen menu">
+      <header className="menu-header">
+        <button className="menu-identity" aria-label="Riftwarden main menu" onClick={() => setTab(null)}>
+          <Insignia /><span>Sector 07</span>
         </button>
-        <div className="tabs">
-          {(['briefing', 'co-op', 'settings', 'controls'] as const).map((t) => (
-            <button key={t} className={tab === t ? 'on' : ''} onClick={() => setTab(t)}>
-              {t.toUpperCase()}
+        <nav className="menu-nav" aria-label="Main menu">
+          {(Object.keys(MENU_SECTIONS) as (keyof typeof MENU_SECTIONS)[]).map((section) => (
+            <button key={section} aria-pressed={tab === section} onClick={() => setTab(tab === section ? null : section)}>
+              {MENU_SECTIONS[section].toUpperCase()}
             </button>
           ))}
-        </div>
-        <div className="tab-body">
-          {tab === 'briefing' && (
-            <div className="briefing">
-              <p>
-                A rift has torn open above the city. From headquarters you deploy your drone to hold the <b className="c">reactor</b> against endless machine waves.
-              </p>
-              <ul>
-                <li>
-                  <i className="c" />
-                  <span>
-                    Walk the HQ and use the <b className="c">deployment terminal</b> <kbd>E</kbd> to pick a threat tier.
-                  </span>
-                </li>
-                <li>
-                  <i className="o" />
-                  <span>
-                    Machines drop <b className="o">equipment</b> and salvage. Pick loot up with <kbd>E</kbd>; it is only <b>secured</b> at checkpoints every 5 waves.
-                  </span>
-                </li>
-                <li>
-                  <i className="v" />
-                  <span>
-                    At a checkpoint, <b>continue</b> or <b className="v">return home</b>. Lose the reactor and unsecured salvage is gone.
-                  </span>
-                </li>
-              </ul>
-            </div>
-          )}
+        </nav>
+      </header>
+      {tab === null ? (
+        <section className="menu-hero">
+          <h1>Riftwarden</h1>
+          <p>Pilot a defense drone. Hold the reactor against waves of machines. Bring the salvage home.</p>
+          <button className="primary deploy" onClick={() => void flow.enterHq()}>
+            <span>ENTER HEADQUARTERS</span><span aria-hidden="true">↗</span>
+          </button>
+        </section>
+      ) : (
+        <section className="menu-sheet" aria-label={MENU_SECTIONS[tab]}>
+          <div className="menu-sheet-head"><h2>{MENU_SECTIONS[tab]}</h2><button aria-label="Back to main menu" onClick={() => setTab(null)}>×</button></div>
+          {tab === 'briefing' && <ol className="mission-steps">
+            <li><b>Deploy from headquarters</b><p>Use the deployment terminal with <BoundKey action="use" /> to select a threat tier.</p></li>
+            <li><b>Hold the reactor</b><p>Build turrets between waves. Collect equipment and salvage from fallen machines with <BoundKey action="use" />.</p></li>
+            <li><b>Bank your salvage</b><p>Every five waves, a checkpoint secures your haul. Return home or stay for another wave. Losing the reactor costs your unsecured cargo.</p></li>
+          </ol>}
           {tab === 'co-op' && <CoopPanel flow={flow} compact />}
           {tab === 'settings' && <SettingsPanel flow={flow} />}
           {tab === 'controls' && <Controls />}
-        </div>
-      </div>
-      <div className="menu-status">
-        <div className="chip amber">
-          <i />
-          SALVAGE · {save.resources.salvage}
-        </div>
-        <div className="chip cyan">
-          <i />
-          CREDITS · {save.resources.credits}
-        </div>
-        <div className="chip cyan">
-          <i />
-          OPERATIONS · {save.totals.runs}
-        </div>
-        <div className="chip red">
-          <i />
-          THREAT TIER {tier.roman} · {tier.name}
-        </div>
-      </div>
-      <div className="menu-foot">BUILD 0.7 · M7 · BABYLON.JS · HAVOK</div>
-    </div>
+        </section>
+      )}
+      <footer className="menu-ledger">
+        <div><span>Threat tier</span><strong>{tier.roman} <i>/</i> {tier.name}</strong></div>
+        <div><span>Operations</span><strong>{save.totals.runs.toLocaleString()}</strong></div>
+        <div><span>Salvage</span><strong>{save.resources.salvage.toLocaleString()}</strong></div>
+        <div><span>Credits</span><strong>{save.resources.credits.toLocaleString()}</strong></div>
+      </footer>
+    </main>
   );
 }
 
@@ -314,16 +292,16 @@ function CheckpointPanel({ flow, game }: { flow: Flow; game: Game }) {
   return (
     <div className="screen dim checkpoint">
       <div className="modal wide panel-frame">
-        <div className="cp-kicker">CHECKPOINT · THREAT TIER {tier.roman}</div>
-        <div className="cp-title">WAVE {wave} SECURED</div>
+        <div className="cache-heading"><span aria-hidden="true" className="uc-art art-cache" /><div><div className="cp-kicker">Checkpoint · Tier {tier.roman}</div>
+        <h2 className="cp-title">Wave {wave} secured</h2></div></div>
         <div className="cp-sub">{game.lastBankSaved ? 'All collected salvage and equipment has been banked to headquarters.' : 'Warning: the save could not be written. Rewards are held in memory and will be written with the next successful save.'}</div>
         <div className="stat-cards cyan">
           {(
             [
-              ['WAVES CLEARED', String(wave)],
+              ['EQUIPMENT BANKED', String(game.cfg.run.secured.items.length)],
               ['SALVAGE SECURED', String(run.salvageSecured)],
-              ['CREDITS · COMPONENTS', `${run.creditsSecured} · ${run.componentsSecured}`],
-              ['HQ RESERVE', String(save.resources.salvage)],
+              ['CREDITS BANKED', String(run.creditsSecured)],
+              ['COMPONENTS BANKED', String(run.componentsSecured)],
               ['HOSTILES', String(run.kills)],
               ['TIME', fmtTime(run.duration)],
             ] as const
@@ -347,13 +325,8 @@ function CheckpointPanel({ flow, game }: { flow: Flow; game: Game }) {
           </>
         )}
         <div className="cp-progress">
-          <span>NEXT CHECKPOINT</span>
-          <div className="cp-track">
-            {Array.from({ length: 5 }, (_, i) => (
-              <i key={i} className={i === 0 ? 'now' : ''} />
-            ))}
-          </div>
-          <b>WAVE {nextCheckpoint(wave + 1)}</b>
+          <span>HQ reserve <b>{save.resources.salvage.toLocaleString()} salvage</b></span>
+          <span>Next checkpoint <b>Wave {nextCheckpoint(wave + 1)}</b></span>
         </div>
         {coop && <CoopVote game={coop} />}
         <div className="row2">
@@ -379,7 +352,7 @@ function CheckpointPanel({ flow, game }: { flow: Flow; game: Game }) {
           </button>
         )}
         <div className="sub">
-          {coop ? 'The team returns only if every connected warden votes to return. One vote to continue keeps the operation going.' : <>Returning ends the run. You can still return during this preparation phase with <kbd>H</kbd>.</>}
+          {coop ? 'The team returns only if every connected warden votes to return. One vote to continue keeps the operation going.' : <>Returning ends the run. You can still return during this preparation phase with <BoundKey action="checkpoint" />.</>}
         </div>
       </div>
     </div>
@@ -398,41 +371,37 @@ export function fmtNum(n: number): string {
 
 export function RunSummary({ result, extra }: { result: RunResult; extra?: { turretsBuilt: number; coresEarned: number } | null }) {
   const tier = getTier(result.tier);
-  const cards: [string, string, string?][] = [
-    ['FINAL WAVE', String(result.finalWave)],
-    ['WAVES CLEARED', String(result.wavesCleared)],
-    [`TIER · ${tier.name}`, tier.roman],
-    ['HOSTILES DESTROYED', String(result.kills)],
-    ['RUN DURATION', fmtTime(result.duration)],
-    ['SALVAGE SECURED', String(result.salvageSecured), 'good'],
-    ['CREDITS · COMPONENTS SECURED', `${result.creditsSecured ?? 0} · ${result.componentsSecured ?? 0}`, (result.creditsSecured ?? 0) > 0 ? 'good' : ''],
-    ['UNSECURED LOST', `${result.salvageLost} salv · ${result.creditsLost ?? 0} cr · ${result.componentsLost ?? 0} comp`, result.salvageLost + (result.creditsLost ?? 0) + (result.componentsLost ?? 0) > 0 ? 'bad' : ''],
-  ];
-  cards.push(['ITEMS SECURED / LOST', `${result.itemsSecured} / ${result.itemsLost}`, result.itemsLost > 0 ? 'bad' : result.itemsSecured > 0 ? 'good' : '']);
-  if (extra) cards.push(['TURRETS DEPLOYED', String(extra.turretsBuilt)]);
   const sv = result.survival;
-  if (sv) {
-    cards.push(['BOSSES DESTROYED', String(sv.bossesKilled), sv.bossesKilled ? 'good' : '']);
-    cards.push(['ELITES DESTROYED', String(sv.elitesKilled)]);
-    cards.push(['DRONE LOSSES', String(sv.deaths), sv.deaths ? 'bad' : '']);
-    cards.push(['REACTOR DAMAGE TAKEN', fmtNum(sv.reactorDamage), sv.reactorDamage > 0 ? 'bad' : 'good']);
-    cards.push(['DRONE DAMAGE DEALT', fmtNum(sv.playerDamage)]);
-    cards.push(['TOWER DAMAGE DEALT', fmtNum(sv.towerDamage)]);
-    cards.push(['EQUIPMENT COLLECTED', String(result.itemsCollected ?? 0)]);
-  }
+  const resources = [
+    ['Salvage', result.salvageSecured, result.salvageLost],
+    ['Credits', result.creditsSecured ?? 0, result.creditsLost ?? 0],
+    ['Components', result.componentsSecured ?? 0, result.componentsLost ?? 0],
+    ['Equipment', result.itemsSecured, result.itemsLost],
+  ] as const;
+  const details: [string, string | number][] = [['Final wave', result.finalWave], ['Threat tier', `${tier.roman} · ${tier.name}`]];
+  if (extra) details.push(['Turrets deployed', extra.turretsBuilt], ['Cores earned', extra.coresEarned]);
+  if (sv) details.push(['Bosses destroyed', sv.bossesKilled], ['Elites destroyed', sv.elitesKilled], ['Drone losses', sv.deaths],
+    ['Reactor damage taken', fmtNum(sv.reactorDamage)], ['Drone damage dealt', fmtNum(sv.playerDamage)],
+    ['Tower damage dealt', fmtNum(sv.towerDamage)], ['Equipment collected', result.itemsCollected ?? 0]);
   return (
     <div className="summary">
       {sv?.dev && <div className="record-badge dev">DEVELOPMENT SESSION · NOT RECORD ELIGIBLE · NOTHING BANKED</div>}
-      {!sv?.dev && (result.records?.length ?? 0) > 0 && <div className="record-badge">NEW PERSONAL RECORD{result.records!.length > 1 ? 'S' : ''} · TIER {tier.roman} · {result.records!.join(' · ').toUpperCase()}</div>}
-      {!sv?.dev && !result.records && result.newRecord && <div className="record-badge">NEW PERSONAL RECORD · TIER {tier.roman}</div>}
-      <div className="summary-grid">
-        {cards.map(([k, v, tone], i) => (
-          <div key={k} className={`card ${tone ?? ''}`} style={{ animationDelay: `${0.05 * i}s` }}>
-            <b>{v}</b>
-            <span>{k}</span>
-          </div>
-        ))}
+      {!sv?.dev && (result.records?.length ?? 0) > 0 && <div className="record-badge"><strong>Tier {tier.roman} personal record{result.records!.length > 1 ? 's' : ''}</strong> {result.records!.join(' · ')}</div>}
+      {!sv?.dev && !result.records && result.newRecord && <div className="record-badge">New personal record · Tier {tier.roman}</div>}
+      <div className="result-headline">
+        <div><b>{result.wavesCleared}</b><span>Waves cleared</span></div>
+        <div><b>{result.kills.toLocaleString()}</b><span>Hostiles destroyed</span></div>
+        <div><b>{fmtTime(result.duration)}</b><span>Time deployed</span></div>
       </div>
+      <table className="result-ledger">
+        <thead><tr><th scope="col">Cargo</th><th scope="col">Secured</th><th scope="col">Lost</th></tr></thead>
+        <tbody>{resources.map(([label, secured, lost]) => <tr key={label}><th scope="row">{label}</th>
+          <td className={secured > 0 ? 'gained' : ''}>{secured.toLocaleString()}</td>
+          <td className={lost > 0 ? 'lost' : ''}>{lost.toLocaleString()}</td></tr>)}</tbody>
+      </table>
+      <details className="field-notes combat-report"><summary>Combat breakdown</summary>
+        <dl className="tier-modifiers">{details.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
+      </details>
       {sv && (sv.bosses.length > 0 || sv.events.length > 0 || sv.milestones.length > 0) && (
         <div className="run-notes" data-testid="run-notes">
           {sv.bosses.length > 0 && (
@@ -484,11 +453,11 @@ function DefeatScreen({ flow }: { flow: Flow }) {
   return (
     <div className="screen dim defeat">
       <div className="modal wide panel-frame red">
-        <div className="defeat-title" data-text="REACTOR LOST">
-          REACTOR LOST
+        <div className="defeat-title">
+          Reactor lost
         </div>
         <div className="defeat-sub">
-          Containment failed. {result.salvageLost > 0 || result.itemsLost > 0 ? `${result.salvageLost} unsecured salvage and ${result.itemsLost} unsecured item${result.itemsLost === 1 ? '' : 's'} were lost.` : 'Nothing unsecured was lost.'} Secured loot and the gear you deployed with are safe.
+          Containment failed on wave {result.finalWave}. Your banked cargo and starting equipment are safe.
         </div>
         <RunSummary result={result} extra={stats} />
         <div className="row2">
@@ -511,9 +480,9 @@ function SummaryScreen({ flow }: { flow: Flow }) {
     <div className="screen dim summary-screen">
       <div className="modal wide panel-frame">
         <div className="cp-kicker">{extracted ? 'OPERATION COMPLETE' : 'OPERATION ABANDONED'}</div>
-        <div className="cp-title">{extracted ? 'DRONE RECOVERED' : 'RUN FORFEITED'}</div>
+        <div className="cp-title">{extracted ? 'Drone recovered' : 'Run forfeited'}</div>
         <div className="cp-sub">
-          {extracted ? 'Checkpoint extraction successful.' : 'The run was abandoned; unsecured salvage did not make it back.'} HQ reserve: <b className="o">{save.resources.salvage} salvage</b> · <b className="c">{save.resources.credits} credits</b> · <b className="v">{save.resources.components} components</b>. Merchants have restocked.
+          {extracted ? 'Checkpoint extraction successful.' : 'Unsecured cargo was lost when you left the arena.'} HQ reserve: <b className="o">{save.resources.salvage} salvage</b> · <b className="c">{save.resources.credits} credit{save.resources.credits === 1 ? '' : 's'}</b> · <b className="v">{save.resources.components} component{save.resources.components === 1 ? '' : 's'}</b>. Merchants have restocked.
         </div>
         <RunSummary result={result} />
         <button className="primary" onClick={() => void flow.home?.takeControl()}>

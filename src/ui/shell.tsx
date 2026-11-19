@@ -1,19 +1,22 @@
+import { keyLabel } from '../core/settings';
+import { useHud } from './store';
 import { type ReactNode, useEffect } from 'react';
 
 /** Terminal window frame shared by every HQ station. E / Esc close it (not while typing). */
 export function Shell({ code, title, sub, close, children, accent = 'cyan', wide }: { code: string; title: string; sub: string; close: () => void; children: ReactNode; accent?: 'cyan' | 'amber' | 'violet'; wide?: boolean }) {
+  const useCode = useHud(s => s.bindings.use);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.repeat) return;
       const typing = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
-      if (e.code === 'Escape' || (e.code === 'KeyE' && !typing)) {
+      if (e.code === 'Escape' || (e.code === useCode && !typing)) {
         e.preventDefault();
         close();
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [close]);
+  }, [close, useCode]);
   return (
     <div className="screen terminal-screen">
       <div className={`terminal panel-frame ${accent} ${wide ? 'wide' : ''}`}>
@@ -24,7 +27,7 @@ export function Shell({ code, title, sub, close, children, accent = 'cyan', wide
             <div className="term-sub">{sub}</div>
           </div>
           <button className="term-close" onClick={close}>
-            <kbd>E</kbd>/<kbd>ESC</kbd> CLOSE
+            <kbd>{keyLabel(useCode)}</kbd>/<kbd>ESC</kbd> CLOSE
           </button>
         </div>
         <div className="term-body">{children}</div>

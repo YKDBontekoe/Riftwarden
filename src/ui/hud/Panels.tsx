@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { getTier } from '../../progression/tiers';
 import { type BannerEvent, uiEvents, useHud } from '../store';
-import { Key, SegBar, fmtClock } from './widgets';
+import { BoundKey, Key, SegBar, fmtClock } from './widgets';
 
 export function Overlays() {
   const tactical = useHud((s) => s.tacticalActive);
@@ -33,7 +33,6 @@ export function Overlays() {
       </div>
       <div className="damage-vignette" />
       <div className={`lowhp ${low > 0 ? 'on' : ''}`} />
-      <div className="scanlines" />
     </div>
   );
 }
@@ -147,43 +146,17 @@ export function RunPanel() {
         <span className="rp-name">{tier.name}</span>
       </div>
       <div className="rp-row">
-        <span>SALVAGE</span>
-        <b className="unsec">{run.salvageUnsecured}</b>
-        <em>UNSECURED</em>
-        <div className="gains">
-          {gains.map((g) => (
-            <div key={g.id} className="gain">
-              +{g.v}
-            </div>
-          ))}
-        </div>
+        <span>Salvage at risk</span><b className="unsec">{run.salvageUnsecured}</b>
+        <div className="gains">{gains.map(g => <div key={g.id} className="gain">+{g.v}</div>)}</div>
       </div>
+      {run.salvageSecured > 0 && <div className="rp-row"><span>Banked salvage</span><b className="sec">{run.salvageSecured}</b></div>}
+      {run.creditsUnsecured + run.creditsSecured > 0 && <div className="rp-row"><span>Credits <small>held / banked</small></span><b>{run.creditsUnsecured} / {run.creditsSecured}</b></div>}
+      {run.componentsUnsecured + run.componentsSecured > 0 && <div className="rp-row"><span>Components <small>held / banked</small></span><b>{run.componentsUnsecured} / {run.componentsSecured}</b></div>}
       <div className="rp-row">
-        <span />
-        <b className="sec">{run.salvageSecured}</b>
-        <em>SECURED</em>
+        <span>Cargo <BoundKey action="inventory" /></span><b>{cargo} / {cargoMax}</b>
+        <div className="gains">{cgains.map(g => <div key={g.id} className={`gain ${g.c ? 'comp' : 'cr'}`}>+{g.v} {g.c ? 'COMP' : 'CR'}</div>)}</div>
       </div>
-      <div className="rp-row">
-        <span>CREDITS</span>
-        <b className="unsec">{run.creditsUnsecured}</b>
-        <em>
-          + {run.creditsSecured} SEC · COMP <b className="unsec">{run.componentsUnsecured}</b>/{run.componentsSecured}
-        </em>
-        <div className="gains">
-          {cgains.map((g) => (
-            <div key={g.id} className={`gain ${g.c ? 'comp' : 'cr'}`}>
-              +{g.v}
-              {g.c ? ' COMP' : ' CR'}
-            </div>
-          ))}
-        </div>
-      </div>
-      <div className="rp-row">
-        <span>CARGO</span>
-        <b className="unsec">{cargo}</b>
-        <em>/ {cargoMax} ITEMS · <kbd>I</kbd></em>
-      </div>
-      <div className={`rp-cp ${run.checkpointOpen ? 'open' : ''}`}>{run.checkpointOpen ? <>CHECKPOINT · <kbd>H</kbd> RETURN TO HQ</> : `CHECKPOINT AT WAVE ${run.nextCheckpoint}`}</div>
+      <div className={`rp-cp ${run.checkpointOpen ? 'open' : ''}`}>{run.checkpointOpen ? <>CHECKPOINT · <BoundKey action="checkpoint" /> RETURN TO HQ</> : `Checkpoint · Wave ${run.nextCheckpoint}`}</div>
     </div>
   );
 }
@@ -218,7 +191,7 @@ export function PlayerPanel() {
       )}
       <div className="dash">
         <span className="label">
-          DASH <Key k="SHIFT" />
+          DASH <BoundKey action="dash" />
         </span>
         <div className="chevrons">
           {Array.from({ length: dashMax }, (_, i) => (
@@ -257,7 +230,7 @@ export function CenterPanel() {
             {msg}
           </div>
           <div className="keys">
-            <Key k="C" /> weapon <Key k="V" /> core <Key k="N" /> mod <Key k="M" /> base · <Key k="LMB" /> place <Key k="RMB" /> cancel {active ? <span className="rapid">RAPID PLACEMENT</span> : <><Key k="Q" /> tactical</>}
+            <Key k="C" /> weapon <Key k="V" /> core <Key k="N" /> mod <Key k="M" /> base · <Key k="LMB" /> place <Key k="RMB" /> cancel {active ? <span className="rapid">RAPID PLACEMENT</span> : <><BoundKey action="tactical" /> tactical</>}
           </div>
         </div>
       )}
@@ -298,14 +271,14 @@ export function CenterPanel() {
             </div>
           )}
           <div className="keys">
-            Hold <Key k="X" /> to recycle
+            Hold <BoundKey action="recycle" /> to recycle
           </div>
           {inspect.recycle > 0 && <SegBar value={inspect.recycle} tone="amber" segments={12} />}
         </div>
       )}
       <div className={`tactical ${active ? 'active' : ''} ${tac < min && !active ? 'low' : ''}`}>
         <div className="tac-label">
-          <Key k="Q" />
+          <BoundKey action="tactical" />
           <span>TACTICAL</span>
           <em>{active ? 'TIME DILATED' : tac < min ? 'RECHARGING' : 'READY'}</em>
         </div>
@@ -332,10 +305,10 @@ export function WeaponPanel() {
       </div>
       <div className="slots">
         <span className={!build ? 'on' : ''}>
-          <Key k="1" /> REPEATER
+          <Key k="1" /> WEAPON
         </span>
         <span className={build ? 'on' : ''}>
-          <Key k="2" /> SENTINEL
+          <Key k="2" /> BUILD
         </span>
       </div>
     </div>

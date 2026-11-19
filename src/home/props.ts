@@ -1,13 +1,16 @@
 import { Color3, type DynamicTexture, type Material, Matrix, MeshBuilder, type PBRMaterial, type Scene, type TransformNode, VertexBuffer } from '@babylonjs/core';
 import { createRiftMaterial } from '../visuals/atmosphere';
+import { buildWardenDrone } from '../visuals/droneModel';
 import { type Kit } from '../visuals/kit';
-import { unlit } from '../visuals/materials';
+import { type Palette, unlit } from '../visuals/materials';
 import { createPathLight } from '../visuals/pathLighting';
 import { segmentedRing } from '../visuals/rings';
+import { placeScan } from '../visuals/scannedProps';
+import { loftData, smoothLatheData } from '../visuals/sculpt';
 import { canvas, flareSprite, toTexture } from '../visuals/textures';
 import { ARENA } from '../world/layout';
 import type { HqMaterials } from './HqBuilder';
-import type { Station } from './layout';
+import { SURVEY_DESK, type Station } from './layout';
 import type { Placeable } from './placeables';
 
 export type Animator = (dt: number, t: number) => void;
@@ -51,8 +54,8 @@ export interface ScreenTex {
   base: number;
 }
 
-export const SCREEN_FONT = '"Chakra Petch", "Rajdhani", "Segoe UI", sans-serif';
-export const MONO_FONT = '"JetBrains Mono", ui-monospace, monospace';
+export const SCREEN_FONT = '"Helvetica Neue", Arial, sans-serif';
+export const MONO_FONT = '"SFMono-Regular", Consolas, monospace';
 
 export function makeScreen(scene: Scene, name: string, w = 512, h = 288, tint: [number, number, number] = [1, 1, 1]): ScreenTex {
   const { c, ctx } = canvas(w, h);
@@ -62,43 +65,22 @@ export function makeScreen(scene: Scene, name: string, w = 512, h = 288, tint: [
   return { tex, mat, ctx, w, h, base: 1 };
 }
 
-/** Standard terminal UI frame: dark glass, grid, header bar, corner ticks. */
-export function drawScreenFrame(s: ScreenTex, title: string, accent = '#4fe6f5'): void {
+/** The header and divider align with the live readouts drawn by each station. */
+export function drawScreenFrame(s: ScreenTex, title: string, accent = '#a9ddd1'): void {
   const { ctx, w, h } = s;
-  const g = ctx.createLinearGradient(0, 0, 0, h);
-  g.addColorStop(0, '#062029');
-  g.addColorStop(1, '#020b10');
-  ctx.fillStyle = g;
+  ctx.fillStyle = '#19221f';
   ctx.fillRect(0, 0, w, h);
-  ctx.strokeStyle = 'rgba(79,230,245,0.08)';
-  ctx.lineWidth = 1;
-  for (let x = 0; x < w; x += 24) {
-    ctx.beginPath();
-    ctx.moveTo(x + 0.5, 0);
-    ctx.lineTo(x + 0.5, h);
-    ctx.stroke();
-  }
-  for (let y = 0; y < h; y += 24) {
-    ctx.beginPath();
-    ctx.moveTo(0, y + 0.5);
-    ctx.lineTo(w, y + 0.5);
-    ctx.stroke();
-  }
-  ctx.fillStyle = accent;
-  ctx.globalAlpha = 0.9;
-  ctx.fillRect(18, 18, 6, 30);
-  ctx.globalAlpha = 1;
-  ctx.font = `700 30px ${SCREEN_FONT}`;
+  ctx.fillStyle = '#e5e8d8';
+  ctx.fillRect(0, 0, w, 57);
+  ctx.fillStyle = '#18211e';
+  ctx.font = `700 28px ${SCREEN_FONT}`;
   ctx.textBaseline = 'middle';
-  ctx.fillStyle = '#e8f7fb';
-  ctx.fillText(title, 34, 34);
-  ctx.strokeStyle = accent;
-  ctx.globalAlpha = 0.5;
-  ctx.lineWidth = 2;
-  ctx.strokeRect(6, 6, w - 12, h - 12);
-  ctx.globalAlpha = 1;
+  ctx.textAlign = 'left';
+  ctx.fillText(title, 30, 30, w - 92);
+  ctx.fillStyle = '#bf603e';
+  ctx.fillRect(w - 51, 19, 22, 18);
   ctx.fillStyle = accent;
-  for (const [x, y] of [[6, 6], [w - 26, 6], [6, h - 8], [w - 26, h - 8]]) ctx.fillRect(x, y, 20, 2);
+  ctx.fillRect(29, h - 13, 32, 2);
 }
 
 export function screenLine(s: ScreenTex, y: number, label: string, value: string, color = '#9ef7ff'): void {
@@ -121,33 +103,19 @@ export function makeSign(ctx: PropCtx, text: string, pos: [number, number, numbe
   const W = 1024;
   const H = 128;
   const { c, ctx: g } = canvas(W, H);
-  g.fillStyle = '#101d26';
-  g.beginPath();
-  g.roundRect(5, 8, W - 10, H - 16, 14);
-  g.fill();
-  g.globalAlpha = 0.64;
-  g.strokeStyle = color;
-  g.lineWidth = 2;
-  g.strokeRect(19, 17, W - 38, H - 34);
+  // Matte enamel wayfinding with a station-color index at the leading edge.
+  g.fillStyle = '#e4e8d7';
+  g.fillRect(0, 0, W, H);
+  g.fillStyle = '#283832';
+  g.fillRect(0, 0, 74, H);
   g.fillStyle = color;
-  g.fillRect(30, 32, 12, H - 64);
-  g.fillRect(W - 42, 32, 12, H - 64);
-  g.globalAlpha = 1;
-  g.font = `700 65px ${SCREEN_FONT}`;
-  g.textAlign = 'center';
+  g.fillRect(17, 26, 9, H - 52);
+  g.fillRect(35, 26, 19, H - 52);
+  g.fillStyle = '#202a25';
+  g.font = `700 72px ${SCREEN_FONT}`;
+  g.textAlign = 'left';
   g.textBaseline = 'middle';
-  g.fillStyle = color;
-  g.shadowColor = color;
-  g.shadowBlur = 7;
-  // Letter spacing by drawing glyphs individually.
-  const spacing = 12;
-  const glyphs = [...text];
-  const widths = glyphs.map((ch) => g.measureText(ch).width + spacing);
-  let x = W / 2 - widths.reduce((a, b) => a + b, 0) / 2 + spacing / 2;
-  for (let i = 0; i < glyphs.length; i++) {
-    g.fillText(glyphs[i], x + widths[i] / 2 - spacing / 2, H / 2 + 4);
-    x += widths[i];
-  }
+  g.fillText(text, 108, H / 2 + 4, W - 152);
   const tex = toTexture(`sign_${text}`, c, ctx.scene, { aniso: 4 });
   tex.hasAlpha = true;
   tex.wrapU = tex.wrapV = 0;
@@ -185,10 +153,21 @@ export function consoleDesk(ctx: PropCtx, st: Station, screen: ScreenTex, width 
   const { kit, M } = ctx;
   const root = kit.node(`station_${st.id}`, null, [st.pos[0], 0, st.pos[1]]);
   root.rotation.y = st.yaw;
-  kit.part('box', M.graphite, root, { pos: [0, 0.45, -0.05], scale: [width * 0.7, 0.9, 0.55] });
-  kit.part('box', M.white, root, { pos: [0, 0.92, 0.05], rot: [-0.25, 0, 0], scale: [width, 0.08, 0.75] });
+  const pedestal = kit.sculpt('consolePedestal', () => loftData([
+    { t: 0.07, w: 0.31, h: 0.35, n: 6 }, { t: 0.25, w: 0.27, h: 0.24, v: -0.045, n: 6 },
+    { t: 0.68, w: 0.30, h: 0.24, v: -0.07, n: 6 }, { t: 0.92, w: 0.42, h: 0.35, n: 6 },
+  ], 'y', 20));
+  kit.part(pedestal, M.graphite, root, { scale: [width, 1, 1] });
+  kit.part('box', M.white, root, { pos: [0, 0.92, 0.05], rot: [-0.25, 0, 0], scale: [width, 0.12, 0.75] });
   kit.part('box', M.cyan, root, { pos: [0, 0.9, 0.43], rot: [-0.25, 0, 0], scale: [width * 0.96, 0.025, 0.02] });
   kit.part('box', M.graphite, root, { pos: [0, 0.06, 0.05], scale: [width * 0.9, 0.12, 0.9] });
+  kit.part('box', M.metal, root, { pos: [0, 0.39, 0.197], rot: [0.07, 0, 0], scale: [width * 0.43, 0.50, 0.12] });
+  for (let i = 0; i < 5; i++) kit.part('box', M.graphite, root, { pos: [0, 0.23 + i * 0.076, 0.264 - i * 0.005], scale: [width * 0.34, 0.032, 0.019] });
+  for (const side of [-1, 1]) {
+    kit.part('box', M.metal, root, { pos: [side * width * 0.33, 1.08, -0.315], rot: [-0.22, 0, 0], scale: [0.105, 0.46, 0.13] });
+    kit.part('cyl6', M.graphite, root, { pos: [side * width * 0.33, 1.23, -0.27], rot: [0, 0, Math.PI / 2], scale: [0.13, 0.155, 0.13] });
+    kit.part('box', M.screenFrame, root, { pos: [side * width * 0.39, 0.976, 0.23], rot: [-0.25, 0, 0], scale: [width * 0.12, 0.018, 0.19] });
+  }
   // Screen housing + screen
   kit.part('box', M.screenFrame, root, { pos: [0, 1.36, -0.22], rot: [-0.35, 0, 0], scale: [width * 0.92, 0.62, 0.06] });
   const plane = planeBuilder(ctx.scene, `screen_${st.id}`, width * 0.86, 0.54);
@@ -197,7 +176,7 @@ export function consoleDesk(ctx: PropCtx, st: Station, screen: ScreenTex, width 
   plane.position.set(0, 1.36, -0.185);
   plane.rotation.x = -0.35;
   // Status light on the pedestal
-  kit.part('box', M.cyan, root, { pos: [0, 0.6, 0.235], scale: [0.4, 0.03, 0.01] });
+  for (let i = -1; i <= 1; i++) kit.part('box', i === 0 ? M.teal : M.cyan, root, { pos: [i * 0.077, 0.589, 0.248], scale: [0.044, 0.024, 0.012], shadow: false });
   // Collider (rotated footprint approximated by its AABB)
   const r = width / 2 + 0.1;
   const along = Math.abs(Math.sin(st.yaw)) > 0.5;
@@ -214,15 +193,26 @@ export function launchRing(ctx: PropCtx): void {
   kit.part('torus', M.graphite, root, { pos: [0, 4.2, 0], rot: [Math.PI / 2, 0, 0], scale: [7.4, 7.4, 7.4] });
   kit.part('torusThin', M.cyan, root, { pos: [0, 4.2, -0.3], rot: [Math.PI / 2, 0, 0], scale: [6.6, 6.6, 6.6] });
   kit.part('torusThin', M.white, root, { pos: [0, 4.2, 0.3], rot: [Math.PI / 2, 0, 0], scale: [8.1, 8.1, 8.1] });
+  const shoe = kit.sculpt('launchClamp', () => loftData([
+    { t: -0.75, w: 0.28, h: 0.33, n: 5 }, { t: -0.51, w: 0.49, h: 0.41, n: 6 },
+    { t: 0.35, w: 0.43, h: 0.37, n: 6 }, { t: 0.62, w: 0.25, h: 0.26, n: 5 },
+  ], 'z', 20));
   // Clamps around the ring
   for (let i = 0; i < 8; i++) {
     const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
-    kit.part('box', M.white, root, { pos: [Math.cos(a) * 3.75, 4.2 + Math.sin(a) * 3.75, 0], rot: [0, 0, a], scale: [0.7, 0.5, 1.1] });
+    const clamp = kit.node('launchClamp', root, [Math.cos(a) * 3.75, 4.2 + Math.sin(a) * 3.75, 0]);
+    clamp.rotation.z = a;
+    kit.part(shoe, M.white, clamp);
+    kit.part('box', M.graphite, clamp, { pos: [0, 0, -0.64], scale: [0.59, 0.50, 0.22] });
+    kit.part('box', M.cyanDim, clamp, { pos: [0, 0, -0.761], scale: [0.32, 0.071, 0.025], shadow: false });
   }
   // Pylons
   for (const s of [-1, 1]) {
     kit.part('box', M.graphite, root, { pos: [s * 4.6, 3.4, 0], scale: [0.9, 6.8, 1.6] });
     kit.part('box', M.cyan, root, { pos: [s * 4.12, 3.4, -0.4], scale: [0.04, 5.6, 0.08] });
+    kit.part('box', M.metal, root, { pos: [s * 4.6, 0.26, 0], scale: [1.2, 0.52, 1.82] });
+    kit.part('box', M.white, root, { pos: [s * 4.66, 3.0, -0.75], scale: [0.67, 4.7, 0.25] });
+    for (let i = 0; i < 6; i++) kit.part('box', M.graphite, root, { pos: [s * 4.66, 1.17 + 0.25 * i, -0.886], scale: [0.51, 0.075, 0.05] });
   }
   ctx.collider(-5.3, 0, 18.6, 5.3, 8, 20.6);
   const mat = createRiftMaterial(scene, 'launchMembrane', new Color3(0.11, 1.25, 1.9), 5.1);
@@ -271,21 +261,31 @@ export function stationWayfinding(ctx: PropCtx): void {
   }
 }
 
-/** Central holo-table with a slowly turning miniature of the arena and orbiting rings. */
-export function commandTable(ctx: PropCtx): void {
+/** Cantilevered survey table on the west side of the launch approach. */
+export function commandTable(ctx: PropCtx, station: Station): void {
   const { kit, M, scene } = ctx;
-  const root = kit.node('commandTable', null, [0, 0, 0]);
-  kit.part('cyl8', M.graphite, root, { pos: [0, 0.45, 0], scale: [4.2, 0.9, 4.2] });
-  kit.part('cyl8', M.white, root, { pos: [0, 0.95, 0], scale: [4.6, 0.12, 4.6] });
-  kit.part('torusThin', M.cyan, root, { pos: [0, 1.02, 0], scale: [4.3, 1, 4.3] });
-  kit.part('cyl', M.screenFrame, root, { pos: [0, 1.0, 0], scale: [3.6, 0.04, 3.6] });
-  kit.part('cyl', M.cyanDim, root, { pos: [0, 1.03, 0], scale: [1.2, 0.02, 1.2] });
-  ctx.collider(-2.3, 0, -2.3, 2.3, 1.1, 2.3);
+  const [x, z] = station.pos;
+  const root = kit.node('commandTable', null, [x, 0, z]);
+  const fin = kit.sculpt('surveyTableSpine', () => loftData([
+    { t: 0.04, w: 0.44, h: 0.71, n: 3.5 }, { t: 0.12, w: 0.45, h: 0.73, n: 4 },
+    { t: 0.22, w: 0.31, h: 0.58, n: 4 }, { t: 0.65, w: 0.20, h: 0.56, u: -0.32, n: 3 },
+    { t: 0.88, w: 0.28, h: 0.71, u: -0.43, n: 3 }, { t: 1.02, w: 0.67, h: 0.8, u: -0.25, n: 4 },
+  ], 'y', 36));
+  for (const end of [-1, 1]) kit.part(fin, M.bronze, root, { pos: [0.15, 0, end * 1.01] });
+  const worktop = kit.sculpt('surveyTableTop', () => loftData([
+    { t: 0.89, w: 1.11, h: 1.87, n: 3 }, { t: 0.97, w: 1.40, h: 2.03, n: 3.5 },
+    { t: 1.03, w: 1.46, h: 2.09, n: 3.5 }, { t: 1.08, w: 1.44, h: 2.07, n: 3.5 },
+  ], 'y', 52));
+  kit.part(worktop, M.white, root);
+  kit.part(worktop, M.screenFrame, root, { pos: [0, 0.041, 0], scale: [0.962, 1, 0.974] });
+  ctx.collider(x - SURVEY_DESK.halfX, 0, z - SURVEY_DESK.halfZ, x + SURVEY_DESK.halfX, 1.12, z + SURVEY_DESK.halfZ);
   // Hologram: arena blocks as translucent cyan boxes (data from the real arena layout).
   const holoMat = unlit(scene, 'holoMat', [0.05, 0.4, 0.5], { additive: true });
   const holoEdge = unlit(scene, 'holoEdge', [0.3, 1.6, 2.0], { additive: true });
-  const holo = kit.node('holo', root, [0, 1.45, 0]);
-  const k = 1 / 40;
+  holoMat.alpha = 0.37;
+  holoEdge.alpha = 0.68;
+  const holo = kit.node('holo', root, [0, 1.25, 0]);
+  const k = 1 / 55;
   for (const b of ARENA.boxes) {
     const w = (b.max[0] - b.min[0]) * k;
     const h = Math.max(0.02, (b.max[1] - b.min[1]) * k);
@@ -303,69 +303,77 @@ export function commandTable(ctx: PropCtx): void {
     }
   }
   // Segmented emitter around the table and a scan plane that climbs through the map.
-  const emitter = segmentedRing(scene, 'tableEmitter', 1.87, 0.09, 16, 0.55);
+  const emitter = segmentedRing(scene, 'tableEmitter', 1.23, 0.020, 4, 0.83);
   emitter.parent = root;
-  emitter.position.y = 1.045;
+  emitter.position.y = 1.126;
   emitter.material = holoEdge;
   const scanDisc = segmentedRing(scene, 'tableScan', 1.37, 0.034, 24, 0.38);
   scanDisc.parent = root;
   const scanLight = unlit(scene, 'tableScanLight', [0.08, 0.55, 0.67], { additive: true, twoSided: true });
   scanDisc.material = scanLight;
-  const ringA = kit.node('ringA', root, [0, 2.1, 0]);
-  kit.part('torusThin', holoEdge, ringA, { scale: [2.6, 2.6, 2.6] });
-  const ringB = kit.node('ringB', root, [0, 2.1, 0]);
-  kit.part('torusThin', holoMat, ringB, { scale: [2.0, 2.0, 2.0] });
-  const cone = MeshBuilder.CreateCylinder('holoCone', { diameterTop: 3.6, diameterBottom: 0.6, height: 1.2, tessellation: 32, cap: 0 }, scene);
+  const ringA = segmentedRing(scene, 'tableOrbit', 1.21, 0.022, 12, 0.6);
+  ringA.parent = root;
+  ringA.position.y = 1.49;
+  ringA.material = scanLight;
+  const ringB = segmentedRing(scene, 'tableOrbitInner', 0.96, 0.017, 8, 0.49);
+  ringB.parent = root;
+  ringB.position.y = 1.59;
+  ringB.material = scanLight;
+  const cone = MeshBuilder.CreateCylinder('holoCone', { diameterTop: 3, diameterBottom: 0.6, height: 0.61, tessellation: 32, cap: 0 }, scene);
   const coneTex = flareSprite(scene);
   const coneMat = unlit(scene, 'holoConeMat', [0.03, 0.18, 0.22], { additive: true, twoSided: true, opacity: coneTex });
   cone.material = coneMat;
   cone.parent = root;
-  cone.position.y = 1.65;
+  cone.position.y = 1.395;
   cone.isPickable = false;
+  const footprint = MeshBuilder.CreateGround('tableContactShadow', { width: 6.1, height: 6.1 }, scene);
+  const shadow = unlit(scene, 'tableContactShadow', [0.008, 0.012, 0.017], { opacity: coneTex });
+  shadow.alpha = 0.68;
+  shadow.disableDepthWrite = true;
+  footprint.material = shadow;
+  footprint.position.set(x, 0.009, z);
+  footprint.scaling.set(0.62, 1, 0.87);
+  footprint.isPickable = false;
+  footprint.freezeWorldMatrix();
   ctx.animators.push((dt, t) => {
     holo.rotation.y += dt * 0.12;
-    holo.position.y = 1.45 + Math.sin(t * 0.8) * 0.03;
+    holo.position.y = 1.25 + Math.sin(t * 0.8) * 0.023;
     ringA.rotation.set(0.25 + Math.sin(t * 0.5) * 0.1, t * 0.4, 0);
     ringB.rotation.set(-0.3, -t * 0.55, Math.sin(t * 0.7) * 0.15);
     holoMat.emissiveColor.set(0.05, 0.4 + Math.sin(t * 3.1) * 0.04, 0.5);
     emitter.rotation.y -= dt * 0.25;
     const pass = (t * 0.32) % 1;
-    scanDisc.position.y = 1.38 + pass * 0.45;
+    scanDisc.position.y = 1.24 + pass * 0.33;
     scanDisc.rotation.y = t * 0.21;
     scanLight.alpha = Math.sin(pass * Math.PI) * 0.75;
   });
 }
 
 /** Drone cradle in the configuration bay: the player's drone on display, scanned. */
-export function droneCradle(ctx: PropCtx, at: [number, number]): void {
+export function droneCradle(ctx: PropCtx, pal: Palette, at: [number, number]): void {
   const { kit, M } = ctx;
   const root = kit.node('cradle', null, [at[0], 0, at[1]]);
   kit.part('cyl8', M.graphite, root, { pos: [0, 0.2, 0], scale: [3.0, 0.4, 3.0] });
   kit.part('cyl8', M.white, root, { pos: [0, 0.45, 0], scale: [2.4, 0.1, 2.4] });
   kit.part('torusThin', M.cyan, root, { pos: [0, 0.52, 0], scale: [2.2, 1, 2.2] });
+  for (let i = 0; i < 4; i++) {
+    const angle = (i + 0.5) * Math.PI / 2;
+    const clamp = kit.node('cradleClamp', root, [1.12 * Math.sin(angle), 0.39, 1.12 * Math.cos(angle)]);
+    clamp.rotation.y = angle;
+    kit.part('box', M.metal, clamp, { scale: [0.45, 0.31, 0.56] });
+    kit.part('box', M.graphite, clamp, { pos: [0, 0.16, 0.03], rot: [-0.24, 0, 0], scale: [0.38, 0.13, 0.39] });
+    kit.part('box', M.cyanDim, clamp, { pos: [0, 0.12, 0.28], scale: [0.19, 0.025, 0.02], shadow: false });
+  }
   ctx.collider(at[0] - 1.5, 0, at[1] - 1.5, at[0] + 1.5, 0.6, at[1] + 1.5);
   // Overhead gantry
   for (const s of [-1, 1]) kit.part('box', M.graphite, root, { pos: [0, 4.4, s * 1.4], scale: [0.3, 0.3, 0.3] });
   kit.part('box', M.white, root, { pos: [0, 4.6, 0], scale: [0.5, 0.25, 3.4] });
   kit.part('box', M.lamp, root, { pos: [0, 4.46, 0], scale: [0.3, 0.02, 2.6] });
 
-  // The drone itself (built from the same kit as everything else).
-  const drone = kit.node('displayDrone', root, [0, 1.75, 0]);
-  kit.part('ico', M.white, drone, { scale: [0.95, 0.62, 1.15] });
-  kit.part('box', M.graphite, drone, { pos: [0, -0.05, 0], scale: [1.05, 0.22, 0.9] });
-  kit.part('sphere', M.cyan, drone, { pos: [0, 0.02, 0.56], scale: [0.26, 0.2, 0.12] });
-  kit.part('torusThin', M.cyanDim, drone, { pos: [0, 0.02, 0.5], rot: [Math.PI / 2, 0, 0], scale: [0.42, 0.42, 0.42] });
-  for (const s of [-1, 1]) {
-    const pod = kit.node('pod', drone, [s * 0.78, -0.02, -0.1]);
-    kit.part('torus', M.graphite, pod, { scale: [0.62, 0.9, 0.62] });
-    kit.part('cyl', M.cyanDim, pod, { scale: [0.5, 0.04, 0.5] });
-    kit.part('box', M.graphite, pod, { pos: [-s * 0.22, 0, 0], scale: [0.3, 0.1, 0.16] });
-  }
-  // Plasma repeater slung under the chassis
-  const gun = kit.node('gun', drone, [0.32, -0.32, 0.2]);
-  kit.part('box', M.graphite, gun, { scale: [0.2, 0.18, 0.8] });
-  kit.part('cyl', M.metal, gun, { pos: [0, 0.01, 0.55], rot: [Math.PI / 2, 0, 0], scale: [0.09, 0.4, 0.09] });
-  for (let i = 0; i < 3; i++) kit.part('torusThin', M.cyan, gun, { pos: [0, 0.01, 0.1 + i * 0.14], rot: [Math.PI / 2, 0, 0], scale: [0.2, 0.2, 0.2] });
+  const { root: drone } = buildWardenDrone(ctx.scene, kit, pal, 0);
+  drone.parent = root;
+  drone.position.y = 1.75;
+  drone.scaling.setAll(1.42);
   // Scanner ring
   const scan = kit.node('scan', root, [0, 1.75, 0]);
   const scanMat = unlit(ctx.scene, 'scanMat', [0.2, 1.4, 1.7], { additive: true });
@@ -413,6 +421,12 @@ export function workshop(ctx: PropCtx, st: Station, screen: ScreenTex): void {
   const root = kit.node('workshop', null, [st.pos[0], 0, st.pos[1] - 1.0]);
   kit.part('box', M.white, root, { pos: [0, 0.92, 0], scale: [4.2, 0.1, 1.2] });
   kit.part('box', M.graphite, root, { pos: [0, 0.45, -0.1], scale: [4.0, 0.85, 0.9] });
+  for (const x of [-1.43, -0.48, 0.48, 1.43]) {
+    for (const y of [0.31, 0.68]) {
+      kit.part('box', M.metal, root, { pos: [x, y, 0.352], scale: [0.87, 0.33, 0.065] });
+      kit.part('box', M.graphite, root, { pos: [x, y + 0.07, 0.398], scale: [0.39, 0.07, 0.045] });
+    }
+  }
   kit.part('box', M.cyan, root, { pos: [0, 0.88, 0.6], scale: [4.1, 0.02, 0.02] });
   ctx.collider(st.pos[0] - 2.1, 0, st.pos[1] - 1.6, st.pos[0] + 2.1, 1.0, st.pos[1] - 0.4);
   // Screen on an arm above the bench
@@ -431,10 +445,16 @@ export function workshop(ctx: PropCtx, st: Station, screen: ScreenTex): void {
   const base = kit.node('armBase', root, [1.7, 0.97, -0.2]);
   kit.part('cyl', M.graphite, base, { pos: [0, 0.08, 0], scale: [0.36, 0.16, 0.36] });
   const j1 = kit.node('j1', base, [0, 0.16, 0]);
-  kit.part('box', M.white, j1, { pos: [0, 0.35, 0], scale: [0.12, 0.7, 0.12] });
+  const arm = kit.sculpt('workshopLink', () => loftData([
+    { t: 0.02, w: 0.11, h: 0.092, n: 4 }, { t: 0.14, w: 0.092, h: 0.077, n: 5 },
+    { t: 0.52, w: 0.072, h: 0.058, n: 4 }, { t: 0.67, w: 0.084, h: 0.099, n: 4 },
+  ], 'y', 16));
+  kit.part(arm, M.white, j1);
+  kit.part('cyl8', M.metal, j1, { pos: [0.09, 0.31, 0], scale: [0.079, 0.47, 0.079] });
   const j2 = kit.node('j2', j1, [0, 0.7, 0]);
   kit.part('sphere', M.graphite, j2, { scale: [0.16, 0.16, 0.16] });
-  kit.part('box', M.white, j2, { pos: [0, 0.28, 0], scale: [0.1, 0.56, 0.1] });
+  kit.part(arm, M.white, j2, { scale: [0.85, 0.81, 0.85] });
+  kit.part('cyl8', M.metal, j2, { rot: [0, 0, Math.PI / 2], scale: [0.18, 0.24, 0.18] });
   const tip = kit.node('tip', j2, [0, 0.56, 0]);
   kit.part('cone', M.graphite, tip, { pos: [0, 0.06, 0], rot: [Math.PI, 0, 0], scale: [0.12, 0.14, 0.12] });
   kit.part('sphere', M.amber, tip, { pos: [0, -0.04, 0], scale: [0.04, 0.04, 0.04] });
@@ -464,14 +484,13 @@ export function buildPlaceable(ctx: PropCtx, p: Placeable): TransformNode {
   let half: [number, number, number] = [0.5, 1, 0.5];
   switch (p.type) {
     case 'planter': {
-      kit.part('box', M.graphite, root, { pos: [0, 0.3, 0], scale: [1.3, 0.6, 1.3] });
-      kit.part('box', M.white, root, { pos: [0, 0.62, 0], scale: [1.4, 0.08, 1.4] });
-      kit.part('box', accent, root, { pos: [0, 0.5, 0.66], scale: [1.0, 0.03, 0.01] });
-      for (let i = 0; i < 7; i++) {
-        const a = i * 2.4;
-        const r = i === 0 ? 0 : 0.35;
-        kit.part('ico', M.plant, root, { pos: [Math.cos(a) * r, 0.85 + (i % 3) * 0.18, Math.sin(a) * r], rot: [a, a * 0.7, 0], scale: [0.55 - (i % 3) * 0.1, 0.5, 0.55] });
-      }
+      const bowl = kit.sculpt('planterBowl', () => smoothLatheData([
+        [0.39, 0.01], [0.43, 0.07], [0.48, 0.18], [0.55, 0.53], [0.56, 0.61],
+        [0.55, 0.64], [0.51, 0.64], [0.49, 0.56],
+      ], 40));
+      kit.part(bowl, M.white, root);
+      kit.part('cyl', M.graphite, root, { pos: [0, 0.56, 0], scale: [0.99, 0.025, 0.99] });
+      placeScan(root, 'fern', [0, 0.55, 0], p.rotationY + 0.4, [1.55, 1.65, 1.55]);
       half = [0.7, 1.2, 0.7];
       break;
     }
@@ -480,6 +499,10 @@ export function buildPlaceable(ctx: PropCtx, p: Placeable): TransformNode {
       kit.part('box', M.graphite, root, { pos: [0.1, 1.1, 0.05], rot: [0, 0.25, 0], scale: [0.9, 0.6, 0.7] });
       kit.part('box', M.white, root, { pos: [-1.05, 0.35, 0.1], rot: [0, -0.2, 0], scale: [0.7, 0.7, 0.7] });
       kit.part('box', accent, root, { pos: [0, 0.6, 0.455], scale: [0.9, 0.04, 0.01] });
+      for (const s of [-1, 1]) {
+        kit.part('box', M.metal, root, { pos: [s * 0.48, 0.41, 0], scale: [0.12, 0.76, 0.95] });
+        kit.part('box', M.graphite, root, { pos: [s * 0.38, 0.46, 0.474], scale: [0.16, 0.18, 0.05] });
+      }
       half = [1.5, 1.4, 0.7];
       break;
     }
@@ -487,20 +510,23 @@ export function buildPlaceable(ctx: PropCtx, p: Placeable): TransformNode {
       kit.part('box', M.graphite, root, { pos: [0, 1.2, 0], scale: [1.1, 2.4, 0.8] });
       kit.part('box', M.white, root, { pos: [0, 2.44, 0], scale: [1.15, 0.08, 0.85] });
       for (let i = 0; i < 8; i++) kit.part('box', i % 3 === 1 ? accent : M.screenFrame, root, { pos: [0, 0.4 + i * 0.25, 0.405], scale: [0.9, 0.04, 0.01] });
+      for (const s of [-1, 1]) kit.part('box', M.metal, root, { pos: [s * 0.49, 1.22, 0.397], scale: [0.12, 2.26, 0.105] });
       half = [0.6, 2.5, 0.45];
       break;
     }
     case 'lightPylon': {
       kit.part('box', M.graphite, root, { pos: [0, 0.1, 0], scale: [0.7, 0.2, 0.7] });
-      kit.part('cyl', M.white, root, { pos: [0, 1.6, 0], scale: [0.22, 3.0, 0.22] });
-      kit.part('cyl', accent, root, { pos: [0, 1.7, 0], scale: [0.12, 2.4, 0.12] });
+      const column = kit.sculpt('lampColumn', () => smoothLatheData([[0.28, 0.18], [0.24, 0.29], [0.115, 0.5], [0.095, 2.64], [0.16, 2.88], [0.16, 3.10]], 16));
+      kit.part(column, M.white, root);
+      for (const s of [-1, 1]) kit.part('box', accent, root, { pos: [0, 1.57, s * 0.102], scale: [0.068, 2.02, 0.019], shadow: false });
       kit.part('box', M.graphite, root, { pos: [0, 3.15, 0], scale: [0.4, 0.12, 0.4] });
       half = [0.35, 3.2, 0.35];
       break;
     }
     case 'bench': {
       kit.part('box', M.white, root, { pos: [0, 0.48, 0], scale: [2.4, 0.1, 0.6] });
-      for (const s of [-1, 1]) kit.part('box', M.graphite, root, { pos: [s * 0.95, 0.22, 0], scale: [0.12, 0.44, 0.5] });
+      kit.part('box', M.metal, root, { pos: [0, 0.35, 0], scale: [2.05, 0.10, 0.42] });
+      for (const s of [-1, 1]) kit.part('box', M.graphite, root, { pos: [s * 0.95, 0.22, 0], rot: [0, 0, s * 0.27], scale: [0.16, 0.44, 0.5] });
       half = [1.2, 0.55, 0.3];
       break;
     }
@@ -536,8 +562,10 @@ export function buildPlaceable(ctx: PropCtx, p: Placeable): TransformNode {
     }
     case 'sofa': {
       kit.part('box', M.graphite, root, { pos: [0, 0.22, 0], scale: [2.6, 0.44, 0.9] });
-      kit.part('box', M.white, root, { pos: [0, 0.5, 0.05], scale: [2.5, 0.16, 0.8] });
-      kit.part('box', M.white, root, { pos: [0, 0.85, -0.38], scale: [2.5, 0.6, 0.16] });
+      for (const x of [-0.81, 0, 0.81]) {
+        kit.part('box', M.white, root, { pos: [x, 0.5, 0.05], scale: [0.79, 0.16, 0.8] });
+        kit.part('box', M.white, root, { pos: [x, 0.85, -0.36], rot: [-0.16, 0, 0], scale: [0.79, 0.6, 0.19] });
+      }
       for (const sd of [-1, 1]) kit.part('box', M.graphite, root, { pos: [sd * 1.25, 0.6, 0], scale: [0.14, 0.5, 0.9] });
       kit.part('box', accent, root, { pos: [0, 0.12, 0.46], scale: [2.4, 0.03, 0.01] });
       half = [1.35, 1.2, 0.5];
@@ -602,7 +630,9 @@ export function buildPlaceable(ctx: PropCtx, p: Placeable): TransformNode {
     }
     case 'vaultDisplay': {
       kit.part('box', M.graphite, root, { pos: [0, 0.45, 0], scale: [1.2, 0.9, 0.8] });
+      kit.part('box', M.metal, root, { pos: [0, 0.91, 0], scale: [1.09, 0.19, 0.72] });
       kit.part('box', M.white, root, { pos: [0, 1.15, 0], scale: [0.9, 0.5, 0.6] });
+      for (const x of [-0.37, 0.37]) kit.part('box', M.graphite, root, { pos: [x, 1.15, 0.30], scale: [0.09, 0.37, 0.07] });
       kit.part('box', M.amber, root, { pos: [0, 1.15, 0.31], scale: [0.6, 0.08, 0.01], shadow: false });
       half = [0.6, 1.4, 0.4];
       break;

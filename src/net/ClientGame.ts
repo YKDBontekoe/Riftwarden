@@ -158,6 +158,7 @@ export class ClientGame extends Game {
   offerChooser: string | null = null;
   offerChooserName = '';
   offerLeft = 0;
+  private sendingUpgrade = false;
   voteOpen = false;
   voteLeft = 0;
   myVote: boolean | null = null;
@@ -297,8 +298,9 @@ export class ClientGame extends Game {
   }
 
   override chooseUpgrade(id: string): boolean {
-    if (!this.offer || this.offerChooser !== this.you) return false;
-    void this.request({ a: 'upgrade', pick: id });
+    if (this.sendingUpgrade || this.offerChooser !== this.you || !this.offer?.some(u => u.id === id)) return false;
+    this.sendingUpgrade = true;
+    void this.request({ a: 'upgrade', pick: id }).finally(() => { this.sendingUpgrade = false; });
     return true;
   }
 

@@ -20,8 +20,14 @@ function towerShapes(kit: Kit) {
     baseSpire: T('tBaseSpire', [[0.92, 0], [0.92, 0.08], [0.78, 0.22], [0.36, 0.34], [0.24, 0.6], [0.2, 1.5], [0.27, 1.62], [0.3, 1.78], [0.22, 1.84]], 32),
     foot: L('tFoot', [{ t: -0.36, w: 0.1, h: 0.08 }, { t: -0.2, w: 0.15, h: 0.18, v: 0.04, n: 5 }, { t: 0.3, w: 0.16, h: 0.22, v: 0.06, n: 5 }, { t: 0.38, w: 0.1, h: 0.12, v: 0.04 }]),
     head: L('tHead', [{ t: -0.62, w: 0.3, h: 0.2 }, { t: -0.48, w: 0.47, h: 0.3, n: 5 }, { t: 0.28, w: 0.48, h: 0.31, v: 0.02, n: 5 }, { t: 0.5, w: 0.36, h: 0.2, v: -0.02, n: 4 }, { t: 0.56, w: 0.24, h: 0.12, v: -0.03, n: 3 }], 'z', 32),
+    shield: L('tShield', [
+      { t: -0.64, w: 0.28, h: 0.092 }, { t: -0.50, w: 0.48, h: 0.145, v: 0.026 },
+      { t: -0.24, w: 0.54, h: 0.151, v: 0.048, n: 5 }, { t: 0.11, w: 0.52, h: 0.106, v: 0.07, n: 5 },
+      { t: 0.45, w: 0.40, h: 0.068, v: 0.105, n: 4 }, { t: 0.53, w: 0.27, h: 0.043, v: 0.126 },
+    ], 'z', 28),
     cheek: L('tCheek', [{ t: -0.5, w: 0.06, h: 0.12 }, { t: -0.35, w: 0.08, h: 0.22, n: 5 }, { t: 0.3, w: 0.08, h: 0.2, n: 5 }, { t: 0.42, w: 0.05, h: 0.1 }], 'z', 16),
-    barrel: T('tBarrel', [[0.09, -0.6], [0.11, -0.56], [0.11, -0.2], [0.075, -0.16], [0.07, 0.42], [0.095, 0.46], [0.095, 0.56], [0.07, 0.6]], 18),
+    bearing: T('tBearing', [[0.2, -0.11], [0.23, -0.075], [0.23, 0.03], [0.19, 0.072], [0.126, 0.072], [0.115, 0.05]], 24),
+    barrel: T('tBarrel', [[0.103, -0.6], [0.13, -0.55], [0.13, -0.38], [0.09, -0.32], [0.082, 0.35], [0.112, 0.45], [0.112, 0.55], [0.094, 0.60], [0.061, 0.60], [0.052, 0.48]], 20),
     breech: T('tBreech', [[0.1, -0.22], [0.14, -0.18], [0.14, 0.16], [0.1, 0.2]], 18),
     longBarrel: T('tLongBarrel', [[0.08, -0.95], [0.1, -0.9], [0.1, -0.5], [0.07, -0.45], [0.06, 0.8], [0.085, 0.85], [0.085, 0.95], [0.06, 0.98]], 18),
     coil: T('tCoil', [[0.1, -0.55], [0.12, -0.5], [0.12, 0.5], [0.16, 0.55], [0.1, 0.6]], 18),
@@ -50,10 +56,13 @@ export function buildTowerRig(kit: Kit, P: Palette, cfg: TowerConfig, level = 1,
   if (base.look === 'standard') {
     part(S.baseStd, P.graphite, root, {});
     part(S.hub, P.white, root, { pos: [0, 0.3, 0], scale: [1.6, 0.6, 1.6] });
-    part('torus', P.cyanGlow, root, { pos: [0, 0.26, 0], scale: [1.98, 1.0, 1.98] });
+    part('torusThin', accent, root, { pos: [0, 0.26, 0], scale: [1.98, 0.68, 1.98], shadow: false });
     for (let i = 0; i < 3; i++) {
       const a = (i / 3) * Math.PI * 2;
-      part(S.foot, P.graphite, root, { pos: [Math.sin(a) * 0.98, 0.05, Math.cos(a) * 0.98], rot: [0, a, 0] });
+      const x = Math.sin(a), z = Math.cos(a);
+      part(S.foot, P.graphite, root, { pos: [x * 0.98, 0.05, z * 0.98], rot: [0, a, 0] });
+      part(S.foot, P.metal, root, { pos: [x * 1.1, 0.218, z * 1.1], rot: [0, a, 0], scale: [0.8, 0.36, 0.64] });
+      part('cyl6', P.graphite, root, { pos: [x * 1.24, 0.276, z * 1.24], scale: [0.13, 0.071, 0.13] });
     }
   } else if (base.look === 'bastion') {
     part(S.baseBastion, P.graphite, root, {});
@@ -62,10 +71,13 @@ export function buildTowerRig(kit: Kit, P: Palette, cfg: TowerConfig, level = 1,
     for (let i = 0; i < 4; i++) {
       const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
       part(S.foot, P.graphite, root, { pos: [Math.sin(a) * 1.2, 0.08, Math.cos(a) * 1.2], rot: [0, a, 0], scale: [1.4, 1.4, 1.2] });
+      part(S.foot, P.metal, root, { pos: [Math.sin(a) * 1.24, 0.33, Math.cos(a) * 1.24], rot: [0, a, 0], scale: [1.08, 0.45, 1] });
     }
   } else {
     part(S.baseSpire, P.white, root, {});
     part('torus', P.cyanGlow, root, { pos: [0, 0.24, 0], scale: [1.6, 1.0, 1.6] });
+    part(S.hub, P.graphite, root, { pos: [0, 0.96, 0], scale: [0.6, 1.25, 0.6] });
+    part('torusThin', accent, root, { pos: [0, 1.27, 0], scale: [0.58, 0.58, 0.58], shadow: false });
     for (let i = 0; i < 3; i++) {
       const a = (i / 3) * Math.PI * 2;
       part('box', P.graphite, root, { pos: [Math.sin(a) * 0.5, 0.7, Math.cos(a) * 0.5], rot: [0.35 * Math.cos(a), a, -0.35 * Math.sin(a)], scale: [0.08, 1.3, 0.08] });
@@ -84,11 +96,17 @@ export function buildTowerRig(kit: Kit, P: Palette, cfg: TowerConfig, level = 1,
   let coreGlow!: AbstractMesh;
 
   if (weapon.archetype === 'ballistic') {
-    part(S.head, P.white, yaw, { pos: [0, 0.12, -0.05] });
-    part(S.hub, P.graphite, yaw, { pos: [0, -0.24, -0.05], scale: [0.9, 0.5, 0.9] });
-    for (const side of [-1, 1]) part(S.cheek, P.graphite, yaw, { pos: [side * 0.5, 0.1, -0.05] });
-    part('box', accent, yaw, { pos: [0, 0.2, 0.5], scale: [0.46, 0.05, 0.03], shadow: false });
-    coreGlow = part('cyl', accent, yaw, { pos: [0, 0.12, -0.6], rot: [Math.PI / 2, 0, 0], scale: [0.35, 0.12, 0.35] });
+    part(S.head, P.graphite, yaw, { pos: [0, 0.046, -0.06], scale: [1, 0.76, 1] });
+    part(S.shield, P.white, yaw, { pos: [0, 0.269, -0.04] });
+    part(S.hub, P.metal, yaw, { pos: [0, -0.24, -0.05], scale: [0.9, 0.5, 0.9] });
+    for (const side of [-1, 1]) {
+      part(S.cheek, P.panel, yaw, { pos: [side * 0.42, 0.078, -0.04] });
+      part(S.bearing, P.metal, pitch, { pos: [side * 0.41, 0, -0.03], rot: [0, 0, side * -HP] });
+      part('box', accent, yaw, { pos: [side * 0.195, 0.27, 0.471], scale: [0.12, 0.023, 0.019], shadow: false });
+      part('cyl6', P.graphite, pitch, { pos: [side * 0.489, 0, -0.03], rot: [0, 0, HP], scale: [0.22, 0.082, 0.22] });
+    }
+    part(S.bearing, P.metal, yaw, { pos: [0, 0.12, -0.64], rot: [-HP, 0, 0], scale: [0.72, 0.53, 0.72] });
+    coreGlow = part('cyl', accent, yaw, { pos: [0, 0.12, -0.681], rot: [HP, 0, 0], scale: [0.17, 0.022, 0.17], shadow: false });
     if (weapon.id === 'marksman') {
       part(S.longBarrel, P.graphite, pitch, { pos: [0, 0, 0.9], rot: [HP, 0, 0] });
       part(S.breech, P.metal, pitch, { pos: [0, 0, 0.3], rot: [HP, 0, 0], scale: [1.1, 1.3, 1.1] });
@@ -97,9 +115,9 @@ export function buildTowerRig(kit: Kit, P: Palette, cfg: TowerConfig, level = 1,
       muzzles.push(kit.node('muzzle', pitch, [0, 0, 1.95]));
     } else {
       for (const side of [-1, 1]) {
-        part(S.barrel, P.graphite, pitch, { pos: [side * 0.22, 0, 0.55], rot: [HP, 0, 0] });
-        part(S.breech, P.metal, pitch, { pos: [side * 0.22, 0, 0.25], rot: [HP, 0, 0] });
-        part('torusThin', accent, pitch, { pos: [side * 0.22, 0, 1.12], rot: [Math.PI / 2, 0, 0], scale: [0.2, 0.2, 0.2] });
+        part(S.barrel, P.metal, pitch, { pos: [side * 0.22, 0, 0.55], rot: [HP, 0, 0] });
+        part(S.breech, P.graphite, pitch, { pos: [side * 0.22, 0, 0.34], rot: [HP, 0, 0] });
+        part('torusThin', accent, pitch, { pos: [side * 0.22, 0, 1.092], rot: [HP, 0, 0], scale: [0.22, 0.11, 0.22], shadow: false });
         muzzles.push(kit.node('muzzle', pitch, [side * 0.22, 0, 1.2]));
       }
     }
@@ -111,6 +129,7 @@ export function buildTowerRig(kit: Kit, P: Palette, cfg: TowerConfig, level = 1,
     // Coil stack on the barrel axis with a charged emitter globe at the tip.
     part(S.coil, P.graphite, pitch, { pos: [0, 0, 0.6], rot: [HP, 0, 0] });
     for (let i = 0; i < 3; i++) part('torusThin', accent, pitch, { pos: [0, 0, 0.2 + i * 0.32], rot: [Math.PI / 2, 0, 0], scale: [0.62 - i * 0.08, 0.62 - i * 0.08, 0.62 - i * 0.08] });
+    for (const side of [-1, 1]) part(S.cheek, P.metal, pitch, { pos: [side * 0.28, 0.03, 0.54], rot: [0, -side * 0.12, 0], scale: [0.58, 0.46, 1] });
     for (const side of [-1, 1]) part('box', P.metal, pitch, { pos: [side * 0.26, 0.05, 1.15], rot: [0, side * 0.35, 0], scale: [0.05, 0.05, 0.55] });
     part('sphere', P.whiteGlow, pitch, { pos: [0, 0, 1.25], scale: [0.3, 0.3, 0.3], shadow: false });
     muzzles.push(kit.node('muzzle', pitch, [0, 0, 1.3]));
@@ -120,6 +139,7 @@ export function buildTowerRig(kit: Kit, P: Palette, cfg: TowerConfig, level = 1,
     for (const side of [-1, 1]) part(S.cheek, P.white, yaw, { pos: [side * 0.6, 0.25, -0.1], scale: [1.4, 1.8, 1] });
     coreGlow = part('cyl', accent, yaw, { pos: [0, 0.12, -0.7], rot: [Math.PI / 2, 0, 0], scale: [0.32, 0.1, 0.32] });
     part(S.launcher, P.white, pitch, { pos: [0, 0.18, 0.25] });
+    for (const side of [-1, 1]) part('box', P.panel, pitch, { pos: [side * 0.525, 0.16, 0.24], scale: [0.074, 0.27, 0.48] });
     part('box', P.graphite, pitch, { pos: [0, 0.18, 0.71], scale: [0.86, 0.6, 0.03] });
     for (const x of [-0.24, 0.24]) {
       for (const y of [0.0, 0.36]) {
@@ -145,6 +165,7 @@ export function buildTowerRig(kit: Kit, P: Palette, cfg: TowerConfig, level = 1,
     // Cryogenic field projector: dome, crystal array, orbiting emitter ring.
     part(S.hub, P.white, yaw, { pos: [0, -0.1, 0], scale: [1.2, 0.8, 1.2] });
     part(S.dome, P.panel, yaw, { pos: [0, 0.2, 0] });
+    part('torus', P.metal, yaw, { pos: [0, 0.22, 0], scale: [1.22, 0.55, 1.22] });
     coreGlow = part('sphere', accent, yaw, { pos: [0, 0.62, 0], scale: [0.45, 0.45, 0.45], shadow: false });
     for (let i = 0; i < 6; i++) {
       const a = (i / 6) * Math.PI * 2;

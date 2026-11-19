@@ -1,4 +1,4 @@
-import { Color3, type Material, type Mesh, MeshBuilder, PointLight, type Scene, TransformNode, Vector3 } from '@babylonjs/core';
+import { Color3, DirectionalLight, type Material, type Mesh, MeshBuilder, PointLight, type Scene, TransformNode, Vector3 } from '@babylonjs/core';
 import { sfx } from '../audio/Sfx';
 import type { WeaponDef, WeaponFamily } from '../data/defs';
 import { chargeFactor } from '../loot/equipment';
@@ -55,7 +55,7 @@ export const SCATTER_PELLETS = 7;
 
 const REF_FOV = 2 * Math.atan(Math.tan(Math.PI / 4) / (16 / 9));
 /** Viewmodel anchor relative to the camera (metres). */
-const ANCHOR = { x: 0.15, y: -0.138, z: 0.47, scale: 0.8, yaw: -0.12, pitch: 0.0, roll: -0.04 };
+const ANCHOR = { x: 0.162, y: -0.145, z: 0.48, scale: 0.72, yaw: -0.115, pitch: 0.0, roll: -0.04 };
 
 /**
  * The equipped weapon: firing mechanics per mechanism, heat, spread and the procedural
@@ -103,6 +103,7 @@ export class Weapon {
   private flashT = 0;
   private flashScale = 1;
   private light: PointLight;
+  private readonly modelKey: DirectionalLight;
   private readonly tmpDir = new Vector3();
   private readonly tmpPos = new Vector3();
   private readonly right = new Vector3();
@@ -135,6 +136,12 @@ export class Weapon {
     this.light = new PointLight('muzzleLight', Vector3.Zero(), scene);
     this.light.range = 14;
     this.light.intensity = 0;
+    this.modelKey = new DirectionalLight('viewmodelKey', new Vector3(0.55, -1, 0.28), scene);
+    this.modelKey.parent = player.camera;
+    this.modelKey.diffuse.set(0.9, 0.94, 1);
+    this.modelKey.specular.set(0.8, 0.86, 1);
+    this.modelKey.intensity = 0.86;
+    this.modelKey.renderPriority = 2;
     this.setItem(item ?? null, def, true);
   }
 
@@ -151,6 +158,7 @@ export class Weapon {
     const ri = ['common', 'uncommon', 'rare', 'epic', 'legendary', 'exotic'].indexOf(item?.rarity ?? 'common');
     this.rig = buildWeaponModel(this.scene, build, installed, { renderingGroupId: 1, name: 'vm' }, Math.max(0, ri));
     this.rig.root.parent = this.vm;
+    this.modelKey.includedOnlyMeshes = this.rig.meshes;
     this.anim = new WeaponAnimator(this.rig);
     const e = this.rig.energyBase;
     this.flashMat.emissiveColor.set(1.4 + e.r * 0.9, 1.4 + e.g * 0.9, 1.4 + e.b * 0.9);

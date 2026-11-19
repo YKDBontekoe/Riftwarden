@@ -167,7 +167,8 @@ export class Flow {
     this.coopPresence(dt);
     // While a new scene warms up behind the transit overlay it renders but does not simulate.
     if (!this.busy) w.step(dt, this.engine.getFps());
-    w.scene.render();
+    // Warm the HQ and its reflections once behind the opaque title artwork.
+    if (w !== this.home || this.home.screen !== 'menu' || !w.scene.environmentTexture || this.busy) w.scene.render();
     this.input.endFrame();
   }
 
@@ -744,6 +745,7 @@ export class Flow {
 /** Settings that live outside any world: key remapping, interface scale, colour accessibility. */
 export function applyGlobalSettings(s: Settings, input: Input): void {
   input.remap = keyRemap(s);
+  hudStore.set({ bindings: s.keys });
   if (typeof document !== 'undefined') {
     document.documentElement.style.setProperty('--ui-scale', String(s.uiScale));
     document.documentElement.dataset.motion = s.reduceMotion ? 'reduced' : 'full';

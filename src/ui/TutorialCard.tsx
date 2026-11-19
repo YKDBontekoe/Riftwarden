@@ -1,3 +1,4 @@
+import { BoundKey } from './hud/widgets';
 import { useHud } from './store';
 
 /** Contextual onboarding card (M7). Completes itself when the player does the thing. */
@@ -14,7 +15,7 @@ export function TutorialCard() {
       {t.keys && (
         <div className="tc-keys">
           {t.keys.map((k) => (
-            <kbd key={k}>{k}</kbd>
+            k === 'MOUSE' || k === 'LMB' ? <kbd key={k}>{k}</kbd> : <BoundKey key={k} action={k} />
           ))}
         </div>
       )}

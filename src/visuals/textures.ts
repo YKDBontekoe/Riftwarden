@@ -1,9 +1,8 @@
 import { DynamicTexture, type Scene, Texture } from '@babylonjs/core';
 
 /**
- * Procedural texture generation. Everything is drawn at startup into canvases so the
- * game ships no image assets: tileable value-noise/fbm, height -> normal map conversion,
- * PBR texture sets (albedo / normal / ORM) and particle sprites.
+ * Canvas-generated tileable noise, height-to-normal conversion, PBR texture sets
+ * (albedo, normal, ORM) and particle sprites.
  */
 
 function hash(ix: number, iy: number, seed: number): number {
@@ -122,33 +121,68 @@ function ormPixel(d: Uint8ClampedArray, i: number, ao: number, rough: number, me
   d[i + 3] = 255;
 }
 
-function deckWetness(stain: number, grime: number): number {
-  return smooth(Math.max(0, Math.min(1, (stain + grime * 0.16 - 0.59) * 7)));
-}
-
-/** Read the same 12 m tiling and wetness field used by the arena deck material. */
+/** Sample the same puddle field used by the yard's roughness map. */
 export function arenaDeckWetness(x: number, z: number): number {
-  const u = (x + 60) / 12;
-  const v = (z + 60) / 12;
-  return deckWetness(fbm(u, v, 5, 3, 21), fbm(u, v, 12, 2, 11));
+  const u = (x + 60) / 120;
+  const v = (z + 60) / 120;
+  const depression = fbm(u, v, 25, 3, 21);
+  const watershed = vnoise(u * 9, v * 9, 9, 83);
+  return smooth(Math.max(0, Math.min(1, (depression * 0.78 + watershed * 0.22 - 0.59) * 12)));
 }
 
-/** Steel deck plates with recessed fasteners, grip strips and worn paint. */
-export function floorSet(scene: Scene, high: boolean, indoor: boolean): PbrSet {
-  const size = (indoor ? 512 : 1024) * (high ? 2 : 1);
-  const name = indoor ? 'hqDeck' : 'arenaDeck';
+/** Poured yard slab. The macro map spans the entire yard so puddles don't repeat. */
+export function yardDeckSet(scene: Scene, high: boolean): PbrSet {
+  const size = high ? 1024 : 512;
   const { c: ac, ctx: a } = canvas(size);
   const { c: oc, ctx: o } = canvas(size);
   const albedo = a.createImageData(size, size);
   const orm = o.createImageData(size, size);
   const height = new Float32Array(size * size);
-  const random = rng(indoor ? 18 : 7);
-  const plates = indoor ? 2 : 4;
-  const panelTint = Array.from({ length: plates * plates }, () => (random() - 0.5) * 0.1);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const u = (x + 0.5) / size;
+      const v = (y + 0.5) / size;
+      const wet = arenaDeckWetness(u * 120 - 60, v * 120 - 60);
+      const grit = fbm(u, v, 43, 3, 53);
+      const stain = vnoise(u * 13, v * 13, 13, 71);
+      const slab = (u * 9) % 1;
+      const seam = Math.min(slab, 1 - slab, Math.abs(((v * 9 + Math.floor(u * 9) * 0.5) % 1) - 0.5));
+      const expansionJoint = Math.max(0, 1 - seam * 155);
+      const base = 0.46 + (grit - 0.5) * 0.16 + (stain - 0.5) * 0.12 - wet * 0.115 - expansionJoint * 0.12;
+      const i = (y * size + x) * 4;
+      albedo.data[i] = base * 255;
+      albedo.data[i + 1] = base * 255 * 0.98;
+      albedo.data[i + 2] = base * 255 * 0.945;
+      albedo.data[i + 3] = 255;
+      height[y * size + x] = 0.5 + (grit - 0.5) * (0.035 - wet * 0.025) - expansionJoint * 0.19;
+      ormPixel(orm.data, i, 1 - expansionJoint * 0.24, 0.79 + (grit - 0.5) * 0.11 - wet * 0.66, 0);
+    }
+  }
+  a.putImageData(albedo, 0, 0);
+  o.putImageData(orm, 0, 0);
+  return {
+    albedo: toTexture('yardAlbedo', ac, scene),
+    normal: toTexture('yardNormal', heightToNormal(height, size, 2.6), scene, { srgb: false }),
+    orm: toTexture('yardOrm', oc, scene, { srgb: false }),
+  };
+}
+
+/** Steel HQ deck plates with recessed fasteners, grip strips and worn paint. */
+export function floorSet(scene: Scene, high: boolean): PbrSet {
+  const size = high ? 1024 : 512;
+  const name = 'hqDeck';
+  const { c: ac, ctx: a } = canvas(size);
+  const { c: oc, ctx: o } = canvas(size);
+  const albedo = a.createImageData(size, size);
+  const orm = o.createImageData(size, size);
+  const height = new Float32Array(size * size);
+  const random = rng(18);
+  const plates = 2;
+  const panelTint = Array.from({ length: plates * plates }, () => (random() - 0.5) * 0.09);
 
   // Scratch marks contribute to all three maps, including the exposed metal beneath the paint.
   const { ctx: scratches } = canvas(size);
-  for (let i = 0; i < (indoor ? 80 : 380); i++) {
+  for (let i = 0; i < 80; i++) {
     const x = random() * size;
     const y = random() * size;
     const length = (0.002 + random() ** 3 * 0.026) * size;
@@ -176,35 +210,34 @@ export function floorSet(scene: Scene, high: boolean, indoor: boolean): PbrSet {
       const stain = fbm(u, v, 5, 3, 21);
       const i = (y * size + x) * 4;
       const nick = scuffs[i + 3] / 255;
-      const wet = indoor ? 0 : deckWetness(stain, grime);
-      const dirt = (indoor ? 0.05 : 0.13) * grime * Math.max(0, 1 - edge * 9);
-      let base = (indoor ? 0.55 : 0.47) + panelTint[panel] + grain * 0.045 + (stain - 0.5) * 0.10;
-      base += nick * 0.09 - dirt - wet * 0.065;
-      let metal = (indoor ? 0.17 : 0.32) + nick * 0.5;
-      let rough = (indoor ? 0.4 : 0.5) + (grime - 0.5) * 0.17 + grain * 0.045 - wet * 0.38 - nick * 0.08;
+      const dirt = 0.045 * grime * Math.max(0, 1 - edge * 7);
+      let base = 0.58 + panelTint[panel] + grain * 0.037 + (stain - 0.5) * 0.16 + nick * 0.14 - dirt;
+      let metal = 0.13 + nick * 0.5;
+      let rough = 0.57 + (grime - 0.5) * 0.18 + grain * 0.045 - nick * 0.08;
       let ao = 1;
-      let relief = 0.58 + grain * 0.042 - nick * 0.075 + wet * 0.026;
+      let relief = 0.58 + grain * 0.028 - nick * 0.075;
 
       // Separate the top face, machined bevel and dark gap between plates.
-      if (edge < 0.022) {
-        const bevel = smooth(Math.min(1, edge / 0.022));
-        relief -= (1 - bevel) * 0.51;
-        base *= 0.32 + 0.68 * bevel;
+      const seam = 0.012;
+      if (edge < seam) {
+        const bevel = smooth(edge / seam);
+        relief -= (1 - bevel) * 0.38;
+        base *= 0.43 + 0.57 * bevel;
         rough += (1 - bevel) * 0.25;
         ao = 0.53 + 0.47 * bevel;
       }
 
-      const bx = dx - 0.064;
-      const by = dy - 0.064;
+      const bx = dx - 0.05;
+      const by = dy - 0.05;
       const bolt = bx * bx + by * by;
-      if (bolt < 0.0006) {
-        if (bolt > 0.00036) {
+      if (bolt < 0.00031) {
+        if (bolt > 0.0002) {
           base *= 0.54;
           relief -= 0.19;
           ao = 0.7;
         } else {
-          const slot = Math.abs(bx + by * 0.55) < 0.0035 && bolt < 0.00024;
-          base = slot ? 0.24 : indoor ? 0.65 : 0.58;
+          const slot = Math.abs(bx + by * 0.55) < 0.0025 && bolt < 0.00013;
+          base = slot ? 0.24 : 0.65;
           relief = slot ? 0.41 : 0.7 - bolt * 180;
           rough = slot ? 0.65 : 0.28;
           metal = 0.82;
@@ -221,9 +254,9 @@ export function floorSet(scene: Scene, high: boolean, indoor: boolean): PbrSet {
       }
 
       height[y * size + x] = relief;
-      albedo.data[i] = base * 255 * (indoor ? 0.88 : 0.94);
+      albedo.data[i] = base * 0.95 * 255;
       albedo.data[i + 1] = base * 255;
-      albedo.data[i + 2] = base * 255 * (indoor ? 1.13 : 1.05);
+      albedo.data[i + 2] = base * 1.045 * 255;
       albedo.data[i + 3] = 255;
       ormPixel(orm.data, i, ao, rough, metal);
     }
@@ -238,7 +271,7 @@ export function floorSet(scene: Scene, high: boolean, indoor: boolean): PbrSet {
 }
 
 /** Wall cladding: vertical panels with seams, rivet rows, vents and rain/grime streaks. One tile = 4 m. */
-export function wallSet(scene: Scene, high: boolean): PbrSet {
+export function wallSet(scene: Scene, high: boolean, indoor: boolean): PbrSet {
   const S = high ? 1024 : 512;
   const scale = S / 512;
   const { c: ac, ctx: a } = canvas(S);
@@ -261,39 +294,40 @@ export function wallSet(scene: Scene, high: boolean): PbrSet {
       const depth = PH / scale;
       const edge = Math.min(px, py, width - px, depth - py);
       const streak = vnoise(u * 64, v * 3, 64, 9, 3);
-      const runoff = Math.max(0, streak - 0.43) * Math.max(0, 1 - py / (depth * 0.62));
+      const runoff = (indoor ? 0.12 : 1) * Math.max(0, streak - 0.43) * Math.max(0, 1 - py / (depth * 0.86));
       const grime = fbm(u, v, 8, 3, 2);
       const grain = vnoise(u * 192, v * 192, 192, 25) - 0.5;
-      const tint = ((Math.floor(y / PH) + Math.floor(x / PW)) % 2) * 0.05;
+      const panel = Math.floor(y / PH) * cols + Math.floor(x / PW);
+      const tint = [0.04, -0.064, -0.026, 0.07][panel];
       let h = 0.6 + grain * 0.03;
-      let alb = 0.72 + tint + (grime - 0.5) * 0.11 + grain * 0.034 - runoff * 0.30;
+      let alb = 0.72 + tint + (grime - 0.5) * (indoor ? 0.055 : 0.23) + grain * 0.034 - runoff * 0.31;
       let rough = 0.42 + (grime - 0.5) * 0.12 + Math.max(0, streak - 0.6) * 0.2;
-      if (edge < 3) {
+      if (edge < 2) {
         h = 0.1;
         alb *= 0.35;
         rough = 0.7;
-      } else if (edge < 7) {
+      } else if (edge < 6) {
         h = 0.62;
         rough -= 0.1;
       }
       // horizontal stiffener ribs
       const rib = Math.abs(py - depth * 0.5);
-      if (rib < 6) {
+      if (!indoor && panel !== 1 && rib < 4) {
         h = 0.75 - rib * 0.02;
         alb *= 0.55; // dark accent band
         rough = 0.3;
       }
       // vent slots on lower panels
-      if (Math.floor(y / PH) === 1 && px > width * 0.2 && px < width * 0.8 && py > depth * 0.62 && py < depth * 0.86 && py % 12 < 5) {
+      if (panel === 2 && px > width * 0.2 && px < width * 0.8 && py > depth * 0.62 && py < depth * 0.86 && py % 12 < 4) {
         h = 0.15;
         alb *= 0.25;
         rough = 0.9;
       }
       height[y * S + x] = h;
       const i = (y * S + x) * 4;
-      d[i] = alb * 255 * 0.92;
-      d[i + 1] = alb * 255 * 0.98;
-      d[i + 2] = alb * 255 * 1.08;
+      d[i] = alb * 255 * (indoor ? 1 : 0.91);
+      d[i + 1] = alb * 255 * (indoor ? 1.015 : 0.99);
+      d[i + 2] = alb * 255 * (indoor ? 1.025 : 1.06);
       d[i + 3] = 255;
       ormPixel(oimg.data, i, edge < 3 ? 0.5 : 1, rough, 1);
     }

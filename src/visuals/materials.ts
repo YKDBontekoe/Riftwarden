@@ -1,5 +1,5 @@
-import { type BaseTexture, Color3, Constants, FresnelParameters, type Material, PBRMaterial, type Scene, StandardMaterial } from '@babylonjs/core';
-import { floorSet, type PbrSet, wallSet, wearSet } from './textures';
+import { type BaseTexture, Color3, Constants, FresnelParameters, type Material, NullEngine, PBRMaterial, type Scene, StandardMaterial, Texture } from '@babylonjs/core';
+import { floorSet, type PbrSet, wallSet, wearSet, yardDeckSet } from './textures';
 
 /**
  * Material palette. Surfaces are metallic/roughness PBR lit by the captured
@@ -9,8 +9,11 @@ import { floorSet, type PbrSet, wallSet, wearSet } from './textures';
 export interface Palette {
   white: PBRMaterial;
   panel: PBRMaterial;
+  concrete: PBRMaterial;
+  glazing: PBRMaterial;
   graphite: PBRMaterial;
   metal: PBRMaterial;
+  enamel: PBRMaterial;
   floor: PBRMaterial;
   cyanGlow: PBRMaterial;
   cyanDim: PBRMaterial;
@@ -108,34 +111,28 @@ function glow(scene: Scene, name: string, e: [number, number, number]): PBRMater
 }
 
 export function createPalette(scene: Scene, high: boolean, indoor = false): Palette {
-  const floorTex = floorSet(scene, high, indoor);
-  const wallTex = wallSet(scene, high);
+  const floorTex = indoor ? floorSet(scene, high) : yardDeckSet(scene, high);
+  const wallTex = wallSet(scene, high, indoor);
   const wear = wearSet(scene, high);
 
-  // The arena uses a 120 m ground plane, the HQ projects a 6 m tile in world space.
-  if (!indoor) {
-    for (const texture of [floorTex.albedo, floorTex.normal, floorTex.orm]) {
-      texture.uScale = texture.vScale = 10;
-    }
-  }
   const floor = pbr(scene, indoor ? 'hqFloor' : 'floor', {
-    albedo: indoor ? [0.71, 0.76, 0.8] : [0.98, 1, 1.04],
+    albedo: indoor ? [0.59, 0.60, 0.54] : [0.80, 0.81, 0.82],
     metallic: 1,
     roughness: 1,
     set: floorTex,
   });
-  floorTex.normal.level = indoor ? 0.55 : 0.8;
+  floorTex.normal.level = indoor ? 0.20 : 0.32;
 
   const shield = new StandardMaterial('shield', scene);
   shield.diffuseColor = Color3.Black();
   shield.specularColor = Color3.Black();
-  shield.emissiveColor = new Color3(2.2, 0.55, 0.08);
-  shield.alpha = 0.5;
+  shield.emissiveColor = new Color3(1.55, 0.58, 0.16);
+  shield.alpha = 0.09;
   shield.disableLighting = true;
   // Front faces only: back faces read as grazing angles to the fresnel and filled the whole sphere.
   shield.backFaceCulling = true;
-  shield.opacityFresnelParameters = new FresnelParameters({ bias: 0.08, power: 2.4, leftColor: Color3.White(), rightColor: Color3.Black() });
-  shield.emissiveFresnelParameters = new FresnelParameters({ bias: 0.05, power: 2.2, leftColor: new Color3(2.6, 0.9, 0.2), rightColor: new Color3(0.08, 0.015, 0.0) });
+  shield.opacityFresnelParameters = new FresnelParameters({ bias: 0, power: 0.75, leftColor: new Color3(0.57, 0.57, 0.57), rightColor: Color3.Black() });
+  shield.emissiveFresnelParameters = new FresnelParameters({ bias: 0, power: 0.72, leftColor: Color3.White(), rightColor: new Color3(0.05, 0.025, 0.01) });
   // Additive: a bright rim with a nearly clear centre, so the machine inside stays readable.
   shield.alphaMode = Constants.ALPHA_ADD;
 
@@ -157,27 +154,49 @@ export function createPalette(scene: Scene, high: boolean, indoor = false): Pale
   rift.backFaceCulling = false;
 
   // Clean hard-surface set: off-white composite panels, dark gunmetal trims, bright machined metal.
-  const panel = pbr(scene, 'panel', { albedo: [0.86, 0.88, 0.9], metallic: 0.12, roughness: 1, set: wallTex, clearCoat: 0.3 });
-  const white = pbr(scene, 'white', { albedo: [0.88, 0.89, 0.9], metallic: 0.05, roughness: 0.45, set: wear, clearCoat: 0.7 });
-  const graphite = pbr(scene, 'graphite', { albedo: [0.13, 0.14, 0.16], metallic: 0.75, roughness: 0.5, set: wear });
-  const metal = pbr(scene, 'metal', { albedo: [0.82, 0.83, 0.86], metallic: 1, roughness: 0.32, set: wear, noAlbedo: true });
-  const enemyArmor = pbr(scene, 'enemyArmor', { albedo: [0.55, 0.22, 0.12], metallic: 0.35, roughness: 0.5, set: wear, clearCoat: 0.4 });
-  const enemyDark = pbr(scene, 'enemyDark', { albedo: [0.07, 0.065, 0.07], metallic: 0.85, roughness: 0.38, set: wear });
+  const panel = pbr(scene, 'panel', { albedo: [0.88, 0.87, 0.78], metallic: 0.12, roughness: 1, set: wallTex, clearCoat: 0.3 });
+  const concrete = indoor ? panel : pbr(scene, 'castConcrete', { albedo: [0.64, 0.62, 0.53], metallic: 0, roughness: 0.84 });
+  const glazing = pbr(scene, 'smokedFacade', { albedo: [0.06, 0.17, 0.20], metallic: 0.67, roughness: 0.17, clearCoat: 0.65 });
+  const white = pbr(scene, 'white', { albedo: [0.87, 0.86, 0.76], metallic: 0.08, roughness: 0.65, set: wear, noAlbedo: true, clearCoat: 0.18 });
+  const graphite = pbr(scene, 'graphite', { albedo: [0.155, 0.185, 0.18], metallic: 0.44, roughness: 0.67, set: wear });
+  const metal = pbr(scene, 'metal', { albedo: [0.69, 0.74, 0.78], metallic: 0.78, roughness: 0.49, set: wear, noAlbedo: true });
+  const enamel = pbr(scene, 'safetyEnamel', { albedo: [0.84, 0.30, 0.14], metallic: 0.12, roughness: 0.65, set: wear });
+  const enemyArmor = pbr(scene, 'enemyArmor', { albedo: [0.65, 0.29, 0.15], metallic: 0.24, roughness: 0.66, set: wear, clearCoat: 0.21 });
+  const enemyDark = pbr(scene, 'enemyDark', { albedo: [0.12, 0.13, 0.15], metallic: 0.52, roughness: 0.59, set: wear });
 
-  wallTex.normal.level = 0.65;
-  wear.normal.level = 0.42;
+  wallTex.normal.level = indoor ? 0.19 : 0.36;
+  wear.normal.level = 0.21;
 
-  // Generous sky fill so shadowed areas stay readable (daylight bounce).
-  for (const m of [white, panel, graphite, metal, floor, enemyArmor, enemyDark]) m.environmentIntensity = 1.45;
+  const lit = [white, panel, graphite, metal, enamel, floor, enemyArmor, enemyDark];
+  if (!indoor) {
+    lit.push(concrete, glazing);
+    if (!(scene.getEngine() instanceof NullEngine)) {
+      const grit = new Texture(new URL('../assets/yard-concrete-detail.png', import.meta.url).href, scene);
+      grit.gammaSpace = false;
+      grit.anisotropicFilteringLevel = 12;
+      const deckGrit = grit.clone();
+      deckGrit.uScale = deckGrit.vScale = 40;
+      for (const [material, detail] of [[concrete, grit], [floor, deckGrit]] as const) {
+        material.detailMap.texture = detail;
+        material.detailMap.diffuseBlendLevel = 0.42;
+        material.detailMap.bumpLevel = material === floor ? 0.21 : 0.43;
+        material.detailMap.roughnessBlendLevel = 0;
+        material.detailMap.isEnabled = true;
+      }
+    }
+  }
+  for (const m of lit) m.environmentIntensity = indoor ? 1.15 : 0.89;
 
   return {
     white,
     panel,
+    concrete, glazing,
     graphite,
     metal,
+    enamel,
     floor,
-    cyanGlow: glow(scene, 'cyanGlow', [0.25, 1.9, 2.2]),
-    cyanDim: glow(scene, 'cyanDim', [0.05, 0.55, 0.65]),
+    cyanGlow: glow(scene, 'cyanGlow', [0.68, 1.49, 1.24]),
+    cyanDim: glow(scene, 'cyanDim', [0.18, 0.45, 0.38]),
     orangeGlow: glow(scene, 'orangeGlow', [2.9, 0.45, 0.03]),
     orangeDim: glow(scene, 'orangeDim', [0.75, 0.13, 0.01]),
     redGlow: glow(scene, 'redGlow', [2.6, 0.28, 0.12]),
@@ -188,7 +207,7 @@ export function createPalette(scene: Scene, high: boolean, indoor = false): Pale
     ghostOk: ghost('ghostOk', [0.2, 1.4, 1.6]),
     ghostBad: ghost('ghostBad', [1.8, 0.2, 0.12]),
     rift,
-    lit: [white, panel, graphite, metal, floor, enemyArmor, enemyDark],
+    lit,
     wear,
   };
 }

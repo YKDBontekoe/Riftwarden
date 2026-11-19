@@ -6,6 +6,7 @@ export function segmentedRing(scene: Scene, name: string, radius: number, width:
   const data = new VertexData();
   const positions: number[] = [];
   const normals: number[] = [];
+  const uvs: number[] = [];
   const indices: number[] = [];
   const step = Math.PI * 2 / count;
   const subdivisions = Math.max(2, Math.ceil(48 * coverage / count));
@@ -19,11 +20,13 @@ export function segmentedRing(scene: Scene, name: string, radius: number, width:
       const k = positions.length / 3;
       positions.push(x * inside, 0, z * inside, x * outside, 0, z * outside);
       normals.push(0, 1, 0, 0, 1, 0);
+      uvs.push(x * inside, z * inside, x * outside, z * outside);
       if (j > 0) indices.push(k - 2, k, k - 1, k - 1, k, k + 1);
     }
   }
   data.positions = positions;
   data.normals = normals;
+  data.uvs = uvs;
   data.indices = indices;
   data.applyToMesh(mesh);
   mesh.isPickable = false;

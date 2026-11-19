@@ -1,5 +1,6 @@
 // HUD view-model pieces as pure functions of plain data. The arena gathers the inputs; nothing here touches a scene,
 // the store or `Game`, so every branch is unit-testable and the same rules serve every Game flavour.
+import { DEFAULT_SETTINGS, keyLabel, type Settings } from '../core/settings';
 import { expiresAfterWave } from '../loot/lifetime';
 import type { LootTargetInfo, RunHud, WavePhase } from './store';
 import { nextCheckpoint } from '../progression/tiers';
@@ -20,13 +21,13 @@ export interface HintState {
 }
 
 /** The one-line contextual hint under the HUD ('' = none). */
-export function hintFor(s: HintState): string {
+export function hintFor(s: HintState, keys: Settings['keys'] = DEFAULT_SETTINGS.keys): string {
   if (!s.playing || !s.playerAlive || s.suppress) return '';
-  if (s.canReturnHome) return 'Checkpoint secured. Press H to return to HQ, or start the next wave with G.';
-  if (s.phase === 'prep' && s.wave === 1) return 'Build Sentinel turrets beside the orange enemy lanes (2 / B). Press G to start the wave.';
-  if (s.phase === 'prep') return 'Preparation: build and reposition. Press G to start early.';
+  if (s.canReturnHome) return `Checkpoint secured. Press ${keyLabel(keys.checkpoint)} to return to HQ, or start the next wave with ${keyLabel(keys.wave)}.`;
+  if (s.phase === 'prep' && s.wave === 1) return `Build Sentinel turrets beside the orange enemy lanes (2 / ${keyLabel(keys.build)}). Press ${keyLabel(keys.wave)} to start the wave.`;
+  if (s.phase === 'prep') return `Preparation: build and reposition. Press ${keyLabel(keys.wave)} to start early.`;
   if (s.wave === 1 && s.phase === 'combat' && s.kills < 3) return 'Aim for the glowing visors: weakpoints always crit.';
-  if (s.wave === 2 && s.phase === 'combat' && s.tacticalEnergy >= 99 && !s.tacticalActive) return 'Q: tactical slow-time lets you place several turrets mid-fight.';
+  if (s.wave === 2 && s.phase === 'combat' && s.tacticalEnergy >= 99 && !s.tacticalActive) return `${keyLabel(keys.tactical)}: tactical slow-time lets you place several turrets mid-fight.`;
   return '';
 }
 

@@ -1,4 +1,5 @@
-import { coreCell, connectedFloors, edgeCells, cellKey, emptyStructure, inBounds, isMovableStation, parseCell, type StationPose, type Structure } from '../../home/build/model';
+import { SURVEY_DESK } from '../../home/layout';
+import { furnitureOccupied, coreCell, connectedFloors, edgeCells, cellKey, emptyStructure, inBounds, isMovableStation, parseCell, type StationPose, type Structure } from '../../home/build/model';
 import { pieceDef } from '../../home/build/catalog';
 import { rollSignature, signatureDef } from '../../loot/signatures';
 import { TECH_LIST, techKey } from '../../towers/components';
@@ -479,6 +480,9 @@ export function sanitizeSave(raw: unknown, now = Date.now()): { data: SaveData; 
   data.storage.capacity = STORAGE_CAPACITY + data.storage.expansions * STORAGE_EXPANSION + facilityCount(data, 'storageAnnex') * ANNEX_BAYS;
   data.base.structure = sanitizeStructure(base.structure);
   data.base.stations = sanitizeStations(base.stations);
+  if (!data.base.stations.command && furnitureOccupied(SURVEY_DESK, data.base.placeables, data.base.stations)) {
+    data.base.stations.command = { x: 0, z: 0, yaw: 0 };
+  }
   data.base.blueprints = [...new Set(arr(base.blueprints).filter((b): b is string => typeof b === 'string' && pieceDef(b)?.unlock.by === 'merchant'))];
   data.base.owned = {};
   for (const [k, v] of Object.entries(obj(base.owned))) if (pieceDef(k)?.owned) data.base.owned[k] = int(v, 0, 0, 99);

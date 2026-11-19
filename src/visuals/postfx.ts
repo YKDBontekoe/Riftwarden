@@ -12,11 +12,26 @@ import {
   SSRRenderingPipeline,
 } from '@babylonjs/core';
 
+/** Exposure and contrast are uniforms. Their shader variants only change at unity. */
+class CameraGrade extends ImageProcessingConfiguration {
+  private uniformOnly = false;
+
+  animate(exposure: number, contrast: number): void {
+    this.uniformOnly = (this.exposure === 1) === (exposure === 1) && (this.contrast === 1) === (contrast === 1);
+    this.exposure = exposure;
+    this.contrast = contrast;
+    this.uniformOnly = false;
+  }
+
+  protected override _updateParameters(): void {
+    if (!this.uniformOnly) super._updateParameters();
+  }
+}
+
 /**
  * Post-processing stack.
- * - High: SSAO (contact shadows/grounding) and screen-space reflections on glossy and wet
- *   surfaces, then the HDR chain below.
- * - Both: HDR bloom, ACES tone mapping, filmic grade, vignette, grain, subtle chromatic
+ * - High: SSAO (contact shadows) and, in the arena, screen-space reflections on wet surfaces.
+ * - All presets: HDR bloom, ACES tone mapping, filmic grade, vignette, grain, subtle chromatic
  *   aberration that spikes on hits/explosions, and a desaturated cool grade in tactical mode.
  */
 export class PostFx {
@@ -24,15 +39,16 @@ export class PostFx {
   private ssao: SSAO2RenderingPipeline | null = null;
   private ssr: SSRRenderingPipeline | null = null;
   private aberration = 0;
+  private readonly grade = new CameraGrade();
   /** Per-location grade baselines (the HQ uses a calmer, brighter look). */
-  baseExposure = 0.94;
-  baseGrain = 1.2;
-  baseContrast = 1.12;
-  baseVignette = 0.92;
+  baseExposure = 1.02;
+  baseGrain = 0.30;
+  baseContrast = 1.08;
+  baseVignette = 0.68;
   /** Situation mood offsets (see MoodDirector); zero in calm play and in the HQ. */
   mood = { exposure: 0, contrast: 0, vignette: 0 };
 
-  constructor(scene: Scene, engine: Engine, camera: Camera, high: boolean) {
+  constructor(scene: Scene, engine: Engine, camera: Camera, high: boolean, wetReflections = false) {
     const supportsGBuffer = engine.getCaps().drawBuffersExtension && engine.webGLVersion >= 2;
     if (high && supportsGBuffer) {
       try {
@@ -49,20 +65,22 @@ export class PostFx {
       } catch (e) {
         console.warn('SSAO unavailable', e);
       }
+    }
+    if (high && supportsGBuffer && wetReflections) {
       try {
         const ssr = new SSRRenderingPipeline('ssr', scene, [camera], true, Constants.TEXTURETYPE_HALF_FLOAT);
-        ssr.strength = 0.62;
-        ssr.reflectionSpecularFalloffExponent = 1.6;
-        ssr.step = 2;
-        ssr.maxSteps = 96;
-        ssr.maxDistance = 60;
-        ssr.thickness = 0.28;
+        ssr.strength = 0.36;
+        ssr.reflectionSpecularFalloffExponent = 2.2;
+        ssr.step = 1;
+        ssr.maxSteps = 82;
+        ssr.maxDistance = 32;
+        ssr.thickness = 0.13;
         ssr.selfCollisionNumSkip = 2;
         ssr.ssrDownsample = 1;
-        ssr.blurDispersionStrength = 0.07;
+        ssr.blurDispersionStrength = 0.055;
         ssr.blurDownsample = 1;
-        ssr.roughnessFactor = 0.08;
-        ssr.reflectivityThreshold = 0.02;
+        ssr.roughnessFactor = 0.045;
+        ssr.reflectivityThreshold = 0.048;
         ssr.enableSmoothReflections = true;
         ssr.attenuateFacingCamera = true;
         ssr.attenuateScreenBorders = true;
@@ -88,12 +106,12 @@ export class PostFx {
     p.fxaaEnabled = true;
     p.bloomEnabled = true;
     p.bloomThreshold = 1.0;
-    p.bloomWeight = high ? 0.26 : 0.23;
-    p.bloomKernel = high ? 72 : 48;
+    p.bloomWeight = high ? 0.20 : 0.18;
+    p.bloomKernel = high ? 65 : 46;
     p.bloomScale = 0.5;
     // FXAA softens the image; sharpen on every preset (stronger where there is no MSAA) to keep it crisp.
     p.sharpenEnabled = true;
-    p.sharpen.edgeAmount = high ? 0.12 : 0.2;
+    p.sharpen.edgeAmount = high ? 0.045 : 0.115;
     p.chromaticAberrationEnabled = true;
     p.chromaticAberration.aberrationAmount = 0;
     p.chromaticAberration.radialIntensity = 1.2;
@@ -101,7 +119,9 @@ export class PostFx {
     p.grain.intensity = this.baseGrain;
     p.grain.animated = true;
 
-    const ip = p.imageProcessing;
+    // Scene-wide image processing changes invalidate every material. Give the camera
+    // pass its own configuration and reattach it when settings rebuild the pipeline.
+    const ip = this.grade;
     ip.toneMappingEnabled = true;
     ip.toneMappingType = ImageProcessingConfiguration.TONEMAPPING_ACES;
     ip.exposure = this.baseExposure;
@@ -122,7 +142,8 @@ export class PostFx {
     cc.highlightsSaturation = 8;
     cc.globalSaturation = 10;
     ip.colorCurves = cc;
-
+    p.imageProcessing.imageProcessingConfiguration = ip;
+    p.onBuildObservable.add(() => { p.imageProcessing.imageProcessingConfiguration = ip; });
   }
 
   /** Brief lens punch (explosions near the player, taking hits). */
@@ -147,16 +168,15 @@ export class PostFx {
   update(dt: number, tactical: number, hurt: number, lightning: number): void {
     this.aberration = Math.max(0, this.aberration - dt * 2.5);
     const p = this.pipeline;
-    const cc = p.imageProcessing.colorCurves!;
+    const ip = this.grade;
+    const cc = ip.colorCurves!;
     cc.globalSaturation = 10 - 70 * tactical - 20 * hurt;
     cc.globalHue = 220;
     cc.globalDensity = 18 * tactical;
-    p.chromaticAberration.aberrationAmount = 25 * this.aberration + 6 * tactical + 14 * hurt;
-    const ip = p.imageProcessing;
-    ip.exposure = this.baseExposure + lightning * 0.05 + this.mood.exposure;
-    ip.contrast = this.baseContrast + this.mood.contrast;
+    p.chromaticAberration.aberrationAmount = 16 * this.aberration + 3 * tactical + 9 * hurt;
+    ip.animate(this.baseExposure + lightning * 0.05 + this.mood.exposure, this.baseContrast + this.mood.contrast);
     ip.vignetteWeight = this.baseVignette + this.mood.vignette;
-    p.grain.intensity = this.baseGrain + tactical * 6;
+    p.grain.intensity = this.baseGrain + tactical * 2.5;
   }
 
   /** Meshes that should not write into the geometry buffer (the first-person viewmodel). */

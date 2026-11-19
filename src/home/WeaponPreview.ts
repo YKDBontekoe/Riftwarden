@@ -45,7 +45,7 @@ export class WeaponPreview {
     scene.clearColor = new Color4(0.025, 0.035, 0.045, 1);
     scene.skipPointerMovePicking = true;
 
-    const cam = new ArcRotateCamera('previewCam', -Math.PI / 2 + 0.55, 1.2, 1.2, new Vector3(0, 0, 0), scene);
+    const cam = new ArcRotateCamera('previewCam', Math.PI * 0.84, 1.25, 1.2, new Vector3(0, 0.02, 0), scene);
     cam.minZ = 0.02;
     cam.fov = 0.6;
     cam.lowerRadiusLimit = 0.35;
@@ -104,7 +104,7 @@ export class WeaponPreview {
     floor.material = fm;
     const ring = MeshBuilder.CreateTorus('pvRing', { diameter: 1.6, thickness: 0.006, tessellation: 64 }, scene);
     ring.position.y = -0.158;
-    ring.material = glow('pvRingMat', [0.1, 0.7, 0.9]);
+    ring.material = glow('pvRingMat', [0.037, 0.082, 0.108]);
     studio.push(floor, ring);
     // Softboxes double as visible studio lights and as the reflection environment.
     captureEnvironment(scene, studio, [], new Vector3(0, 0.1, 0), 128);
@@ -148,9 +148,11 @@ export class WeaponPreview {
     const len = this.rig.front - this.rig.rear;
     this.rig.root.position.set(0, 0, -mid);
     if (!sameWeapon) {
+      const halfWidth = Math.tan(this.camera.fov / 2) * this.engine.getAspectRatio(this.camera);
+      this.idle = 0;
       this.camera.target.set(0, 0.02, 0);
-      this.camera.radius = Math.max(0.5, len * 1.05);
-      this.camera.alpha = -Math.PI / 2 - 0.9 + Math.PI; // visible (-x) flank, muzzle to the left
+      this.camera.radius = Math.max(0.56, len * 1.12, len * 0.55 / halfWidth);
+      this.camera.alpha = Math.PI * 0.84;
       this.camera.beta = 1.25;
     }
   }

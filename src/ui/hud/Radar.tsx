@@ -4,7 +4,7 @@ import { ARENA } from '../../world/layout';
 import { useHud } from '../store';
 import { rarity } from '../../loot/rarity';
 
-const RADAR_PX = 184;
+const RADAR_PX = 156;
 
 const RADAR_RANGE = 57; // metres from center to edge (arena + gate tunnels)
 
@@ -26,7 +26,7 @@ export function Radar({ game }: { game: Game }) {
     const base = document.createElement('canvas');
     base.width = base.height = S;
     const b = base.getContext('2d')!;
-    b.fillStyle = 'rgba(4,12,18,0.72)';
+    b.fillStyle = 'rgba(4,12,18,0.35)';
     b.fillRect(0, 0, S, S);
     b.strokeStyle = 'rgba(80,220,240,0.06)';
     b.lineWidth = 1;
@@ -52,12 +52,12 @@ export function Radar({ game }: { game: Game }) {
       return { gate, path, x: X(points[0].x), y: Y(points[0].z) };
     });
     // Reactor
-    b.strokeStyle = 'rgba(80,230,245,0.9)';
+    b.strokeStyle = 'rgba(159,221,194,0.9)';
     b.lineWidth = 1.5 * dpr;
     b.beginPath();
     b.arc(X(ARENA.reactor.x), Y(ARENA.reactor.z), ARENA.reactor.radius * k, 0, Math.PI * 2);
     b.stroke();
-    b.fillStyle = 'rgba(80,230,245,0.35)';
+    b.fillStyle = 'rgba(159,221,194,0.35)';
     b.fill();
 
     let raf = 0;
@@ -87,7 +87,7 @@ export function Radar({ game }: { game: Game }) {
       ctx.globalAlpha = 1;
       ctx.setLineDash([]);
       // Turrets: cyan diamonds with range hint
-      ctx.fillStyle = '#5ff0ff';
+      ctx.fillStyle = '#adddce';
       for (const t of game.turrets.turrets) {
         const x = X(t.pos.x);
         const y = Y(t.pos.z);
@@ -160,8 +160,8 @@ export function Radar({ game }: { game: Game }) {
   return (
     <div className="radar panel-frame">
       <div className="radar-head">
-        <span>TACTICAL MAP</span>
-        <span className={phase === 'combat' ? 'hot' : ''}>{phase === 'combat' ? `${hostiles} CONTACTS` : 'SECTOR CLEAR'}</span>
+        <span>RADAR</span>
+        <span className={phase === 'combat' ? 'hot' : ''}>{phase === 'combat' ? `${hostiles} CONTACTS` : 'CLEAR'}</span>
       </div>
       <div className="radar-body">
         <canvas ref={ref} style={{ width: RADAR_PX, height: RADAR_PX }} />

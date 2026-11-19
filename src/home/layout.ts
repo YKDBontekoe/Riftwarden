@@ -72,9 +72,19 @@ export const HQ_SPAWN = { x: 0, z: -6.5, yaw: 0 };
 /** Global default interaction distance (stations may override). */
 export const INTERACT_RANGE = 3.6;
 
+/** Floor envelopes of fixed command-deck furniture, in world metres. */
+export const SURVEY_DESK = { x: -3.8, z: -0.9, halfX: 1.44, halfZ: 2.06 };
+export const ATRIUM_BED = { x: 7.9, z: 10.21, halfX: 2.52, halfZ: 0.49 };
+
+export function touchesFurniture(f: typeof SURVEY_DESK, x: number, z: number, radius: number): boolean {
+  const dx = Math.max(0, Math.abs(x - f.x) - f.halfX);
+  const dz = Math.max(0, Math.abs(z - f.z) - f.halfZ);
+  return dx * dx + dz * dz < radius * radius;
+}
+
 export const HQ_STATIONS: readonly Station[] = [
   { id: 'deploy', title: 'DEPLOYMENT TERMINAL', action: 'Plan a survival operation', area: 'LAUNCH BAY', pos: [0, 15.2], yaw: Math.PI, focus: [0, 1.3, 14.75], range: INTERACT_RANGE },
-  { id: 'command', title: 'COMMAND CONSOLE', action: 'Service record & survival records', area: 'COMMAND DECK', pos: [0, 0], yaw: 0, focus: [0, 1.25, 0], range: 4.2 },
+  { id: 'command', title: 'COMMAND CONSOLE', action: 'Service record & survival records', area: 'COMMAND DECK', pos: [SURVEY_DESK.x, SURVEY_DESK.z], yaw: Math.PI / 2, focus: [SURVEY_DESK.x + 0.3, 1.25, SURVEY_DESK.z], range: 4.2 },
   { id: 'loadout', title: 'DRONE CONFIGURATION', action: 'Inspect loadout & equipment slots', area: 'DRONE BAY', pos: [-15.2, 0], yaw: Math.PI / 2, focus: [-14.75, 1.3, 0], range: INTERACT_RANGE },
   { id: 'storage', title: 'STORAGE TERMINAL', action: 'Secured equipment & resources', area: 'STORAGE', pos: [17, 6.6], yaw: Math.PI, focus: [17, 1.3, 6.15], range: INTERACT_RANGE },
   { id: 'workshop', title: 'ENGINEERING WORKSHOP', action: 'Modules · affixes · enhancement · components', area: 'WORKSHOP', pos: [17, -6.6], yaw: 0, focus: [17, 1.3, -6.15], range: INTERACT_RANGE },

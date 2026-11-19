@@ -8,6 +8,15 @@ async function deploy(p, tier = 1) {
   await ev(p, () => window.__rift.advance(0.5));
 }
 
+async function enterHq(p) {
+  await ev(p, async () => {
+    const R = window.__rift;
+    if (R.game) await R.flow.abandonRun();
+    await R.flow.enterHq();
+  });
+  await p.waitForFunction(() => window.__rift.state().location === 'home' && !window.__rift.state().busy, null, { timeout: 120000 });
+}
+
 (async () => {
   const { b, p, errs } = await launch({ skipUpgrades: true });
   const want = H.sectionFilter();
@@ -82,8 +91,7 @@ async function deploy(p, tier = 1) {
       check('C3 mood recovers after the boss dies', Math.abs(r.after.d - r.calm.d) < r.calm.d * 0.05, `${r.after.d.toFixed(4)}`);
     }
     if (want('D')) {
-      await ev(p, async () => { const R = window.__rift; await R.flow.enterHq(); });
-      await p.waitForFunction(() => window.__rift.state().location === 'home' && !window.__rift.state().busy, null, { timeout: 120000 });
+      await enterHq(p);
       await ev(p, () => { const R = window.__rift; if (R.state().screen !== 'home') R.home.takeControl(false); R.advance(0.3); });
       const r = await ev(p, async () => {
         const R = window.__rift;
@@ -103,8 +111,7 @@ async function deploy(p, tier = 1) {
       check('D2 closing returns to the exact view', r.closed.dolly === 0 && Math.abs(r.closed.ry - r.closed.yaw) < 0.03, JSON.stringify(r.closed));
     }
     if (want('E')) {
-      await ev(p, async () => { const R = window.__rift; await R.flow.enterHq(); });
-      await p.waitForFunction(() => window.__rift.state().location === 'home' && !window.__rift.state().busy, null, { timeout: 120000 });
+      await enterHq(p);
       await ev(p, () => { const R = window.__rift; if (R.state().screen !== 'home') R.home.takeControl(false); R.advance(0.2); });
       const r = await ev(p, () => {
         const R = window.__rift;

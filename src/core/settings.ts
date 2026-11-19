@@ -142,3 +142,14 @@ export function keyRemap(s: Settings): Map<string, string> {
   for (const a of ACTIONS) if (!bound.has(a.def) && !m.has(a.def)) m.set(a.def, '__unbound');
   return m;
 }
+
+export function keyLabel(code: string | undefined): string {
+  if (!code) return '—';
+  return code.replace(/^Key/, '').replace(/^Digit/, '').replace('ShiftLeft', 'L-SHIFT').replace('ShiftRight', 'R-SHIFT').replace('ControlLeft', 'L-CTRL').replace('Space', 'SPACE').toUpperCase();
+}
+
+/** Printed movement keys follow the same left-to-right order as the familiar WASD legend. */
+export function movementLabel(keys: Settings['keys']): string {
+  const labels = ['forward', 'left', 'back', 'right'].map(action => keyLabel(keys[action]));
+  return labels.join(labels.every(label => label.length === 1) ? '' : ' / ');
+}

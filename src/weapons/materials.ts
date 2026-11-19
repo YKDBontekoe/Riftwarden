@@ -1,5 +1,5 @@
-import { Color3, Constants, PBRMaterial, type Scene, type Texture } from '@babylonjs/core';
-import { canvas, fbm, heightToNormal, toTexture, vnoise } from '../visuals/textures';
+import { Color3, Constants, PBRMaterial, type Scene, Texture } from '@babylonjs/core';
+import { canvas, fbm, heightToNormal, rng, toTexture, vnoise } from '../visuals/textures';
 import type { Finish } from './build';
 
 /**
@@ -13,7 +13,9 @@ export interface WeaponMaterials {
   satin: PBRMaterial;
   dark: PBRMaterial;
   polymer: PBRMaterial;
+  copper: PBRMaterial;
   glass: PBRMaterial;
+  markings: PBRMaterial;
   shell(f: Finish): PBRMaterial;
   trim(f: Finish): PBRMaterial;
 }
@@ -34,6 +36,19 @@ function micro(scene: Scene): Micro {
   const albedo = a.createImageData(size, size);
   const orm = o.createImageData(size, size);
   const height = new Float32Array(size * size);
+  const { ctx: scratch } = canvas(size);
+  const random = rng(721);
+  for (let i = 0; i < 96; i++) {
+    const x = random() * size, y = random() * size;
+    const length = 0.8 + random() ** 2.5 * 16;
+    scratch.strokeStyle = `rgba(255,255,255,${0.19 + random() * 0.55})`;
+    scratch.lineWidth = 0.6 + random() * 0.75;
+    scratch.beginPath();
+    scratch.moveTo(x, y);
+    scratch.lineTo(x + length, y + length * 0.16);
+    scratch.stroke();
+  }
+  const scratches = scratch.getImageData(0, 0, size, size).data;
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const u = x / size;
@@ -42,24 +57,59 @@ function micro(scene: Scene): Micro {
       const brush = vnoise((u + v) * 5, v * 112, 5, 12, 112) - 0.5;
       const rub = Math.max(0, fbm(u, v, 5, 3, 40) - 0.55);
       const i = (y * size + x) * 4;
-      const tint = 0.91 + grain * 0.11 + brush * 0.14 + rub * 0.32;
+      const scrape = scratches[i + 3] / 255;
+      const tint = 0.90 + grain * 0.11 + brush * 0.06 + rub * 0.38 + scrape * 0.25;
       albedo.data[i] = albedo.data[i + 1] = albedo.data[i + 2] = tint * 255;
       albedo.data[i + 3] = 255;
       orm.data[i] = 255;
-      orm.data[i + 1] = (0.89 + grain * 0.19 + brush * 0.15 - rub * 0.52) * 255;
+      orm.data[i + 1] = (0.89 + grain * 0.19 + brush * 0.15 - rub * 0.52 - scrape * 0.26) * 255;
       orm.data[i + 2] = orm.data[i + 3] = 255;
-      height[y * size + x] = grain * 0.09 + brush * 0.11;
+      height[y * size + x] = grain * 0.085 + brush * 0.05 - scrape * 0.037;
     }
   }
   a.putImageData(albedo, 0, 0);
   o.putImageData(orm, 0, 0);
   const normal = toTexture('wpnMicroNrm', heightToNormal(height, size, 2.2), scene, { srgb: false });
-  normal.level = 0.48;
+  normal.level = 0.31;
   return {
     albedo: toTexture('wpnMicroAlb', ac, scene),
     orm: toTexture('wpnMicroOrm', oc, scene, { srgb: false }),
     normal,
   };
+}
+
+function markingMaterial(scene: Scene): PBRMaterial {
+  const { c, ctx } = canvas(384, 192);
+  for (const [i, name] of ['PR–01', 'LC–02', 'FO–03'].entries()) {
+    const row = i * 64;
+    ctx.fillStyle = '#ff996e';
+    ctx.save();
+    ctx.translate(20, row + 9);
+    ctx.transform(1, 0, -0.42, 1, 0, 0);
+    ctx.fillRect(10, 0, 11, 43);
+    ctx.fillRect(26, 0, 11, 43);
+    ctx.restore();
+    ctx.fillStyle = '#ecebdb';
+    ctx.font = 'bold 41px Arial, sans-serif';
+    ctx.fillText(name, 68, row + 47);
+    ctx.fillRect(241, row + 44, 112, 2);
+    ctx.fillStyle = '#ff996e';
+    ctx.fillRect(333, row + 37, 20, 5);
+  }
+  const texture = toTexture('weaponMarkingAtlas', c, scene);
+  texture.hasAlpha = true;
+  texture.wrapU = texture.wrapV = Texture.CLAMP_ADDRESSMODE;
+  const material = new PBRMaterial('wpnMarkings', scene);
+  material.albedoTexture = texture;
+  material.useAlphaFromAlbedoTexture = true;
+  material.transparencyMode = PBRMaterial.PBRMATERIAL_ALPHATEST;
+  material.alphaCutOff = 0.31;
+  material.unlit = true;
+  material.roughness = 1;
+  material.metallic = 0;
+  material.metallicF0Factor = 0;
+  material.zOffset = -1;
+  return material;
 }
 
 function surface(scene: Scene, m: Micro, name: string, albedo: [number, number, number], metallic: number, roughness: number, clearCoat = 0): PBRMaterial {
@@ -86,7 +136,7 @@ function surface(scene: Scene, m: Micro, name: string, albedo: [number, number, 
 }
 
 const SHELL: Record<Finish, [[number, number, number], number, number, number?]> = {
-  arctic: [[0.8, 0.81, 0.82], 0.02, 0.4, 0.55],
+  arctic: [[0.85, 0.85, 0.76], 0.07, 0.48, 0.19],
   gunmetal: [[0.15, 0.16, 0.18], 0.65, 0.34, 0.3],
   sand: [[0.58, 0.51, 0.39], 0.02, 0.5, 0.35],
   slate: [[0.22, 0.29, 0.37], 0.08, 0.42, 0.5],
@@ -121,11 +171,13 @@ export function weaponMaterials(scene: Scene): WeaponMaterials {
   glass.useSpecularOverAlpha = true;
   glass.backFaceCulling = true;
   const lib: WeaponMaterials = {
-    graphite: surface(scene, m, 'wpnGraphite', [0.045, 0.048, 0.054], 0.35, 0.58),
-    satin: surface(scene, m, 'wpnSatin', [0.66, 0.67, 0.7], 1, 0.3),
+    graphite: surface(scene, m, 'wpnGraphite', [0.08, 0.087, 0.096], 0.52, 0.64),
+    satin: surface(scene, m, 'wpnSatin', [0.47, 0.48, 0.52], 0.82, 0.46),
     dark: surface(scene, m, 'wpnDark', [0.03, 0.031, 0.035], 0.85, 0.4),
     polymer: surface(scene, m, 'wpnPolymer', [0.028, 0.028, 0.03], 0, 0.82),
+    copper: surface(scene, m, 'wpnCopper', [0.62, 0.32, 0.17], 0.73, 0.43),
     glass,
+    markings: markingMaterial(scene),
     shell(f) {
       let mat = shells.get(f);
       if (!mat) {

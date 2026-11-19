@@ -22,6 +22,7 @@ import { createPathLight } from './pathLighting';
 import { segmentedRing } from './rings';
 import { ArenaDecals } from './arenaDecals';
 import { ArenaDressing } from './arenaDressing';
+import { smoothLatheData } from './sculpt';
 
 interface GateVisual {
   lane: ReturnType<typeof createPathLight>;
@@ -112,6 +113,12 @@ export class ArenaBuilder {
     this.buildConduits();
     const decals = new ArenaDecals(this.scene);
     this.buildGates(decals);
+    decals.floor(8, 0, -12.4, 8, 5.2, 0);
+    decals.floor(9, 0, -15.3, 3.7, 4, 0);
+    decals.floor(10, -8.6, 0, 5.9, 4, Math.PI / 2);
+    decals.floor(10, 8.6, 0, 5.9, 4, -Math.PI / 2);
+    decals.floor(11, -15, -31, 5.3, 4, Math.PI / 2);
+    decals.floor(11, 15, -31, 5.3, 4, -Math.PI / 2);
     for (const b of L.boxes) {
       if (b.kind === 'machine') decals.floor(0, (b.min[0] + b.max[0]) * 0.5, (b.min[2] + b.max[2]) * 0.5, 11, 9, 0.6);
     }
@@ -139,19 +146,11 @@ export class ArenaBuilder {
     const [x1, y1, z1] = b.max;
     switch (b.kind) {
       case 'wall': {
-        this.box(x0, y0, z0, x1, y1, z1, P.panel, 'wall');
-        // graphite skirting + cap, cyan light strip on the inner face
+        this.box(x0, y0, z0, x1, y1, z1, P.concrete, 'wall');
+        // Armored kick plate and cable cap.
         const inset = 0.08;
-        this.box(x0 - inset, 0, z0 - inset, x1 + inset, 0.6, z1 + inset, P.graphite, 'wall');
+        this.box(x0 - inset, 0, z0 - inset, x1 + inset, 1.05, z1 + inset, P.graphite, 'wall');
         this.box(x0 - inset, y1 - 0.5, z0 - inset, x1 + inset, y1, z1 + inset, P.graphite, 'wall');
-        this.box(x0 - 0.04, 5.2, z0 - 0.04, x1 + 0.04, 5.35, z1 + 0.04, P.cyanDim, null);
-        // vertical pilasters every 8 m along the long axis
-        const alongX = x1 - x0 > z1 - z0;
-        const len = alongX ? x1 - x0 : z1 - z0;
-        for (let s = 4; s < len - 1; s += 8) {
-          if (alongX) this.box(x0 + s - 0.5, 0, z0 - 0.3, x0 + s + 0.5, y1, z1 + 0.3, P.graphite, 'wall');
-          else this.box(x0 - 0.3, 0, z0 + s - 0.5, x1 + 0.3, y1, z0 + s + 0.5, P.graphite, 'wall');
-        }
         break;
       }
       case 'gate': {
@@ -170,45 +169,64 @@ export class ArenaBuilder {
         break;
       }
       case 'platform': {
-        this.box(x0, y0, z0, x1, y1 - 0.12, z1, P.graphite, 'wall');
-        this.box(x0, y1 - 0.12, z0, x1, y1, z1, P.white, 'platform');
-        // edge light strip + low railing posts
-        this.box(x0 - 0.03, y1 - 0.4, z0 - 0.03, x1 + 0.03, y1 - 0.3, z1 + 0.03, P.cyanGlow, null);
+        this.box(x0, y0, z0, x1, y1 - 0.24, z1, P.concrete, 'wall');
+        this.box(x0, y1 - 0.24, z0, x1, y1, z1, P.graphite, 'platform');
+        this.box(x0 - 0.045, y1 - 0.49, z0 - 0.045, x1 + 0.045, y1 - 0.38, z1 + 0.045, P.enamel, null);
         // Support columns
         for (const [cx, cz] of [[x0 + 0.6, z0 + 0.6], [x1 - 0.6, z0 + 0.6], [x0 + 0.6, z1 - 0.6], [x1 - 0.6, z1 - 0.6]]) {
           this.box(cx - 0.45, 0, cz - 0.45, cx + 0.45, y1 - 0.12, cz + 0.45, P.metal, 'wall');
         }
+        // Flush fascia hides the bearing plates under the deck overhang.
+        for (const edge of [z0, z1]) {
+          const side = edge === z0 ? -1 : 1;
+          const fascia = (x: number, w: number, y: number, h: number, near: number, far: number, mat: Material) => {
+            const a = edge + side * near;
+            const b = edge + side * far;
+            this.box(x - w, y, Math.min(a, b), x + w, y + h, Math.max(a, b), mat, 'wall');
+          };
+          for (let x = x0 + 2.3; x < x1 - 1.5; x += 3.6) {
+            fascia(x, 0.91, y1 - 1.44, 0.84, 0, 0.085, P.graphite);
+            fascia(x, 0.77, y1 - 1.31, 0.58, 0.084, 0.132, P.panel);
+            fascia(x, 0.47, y1 - 1.04, 0.07, 0.13, 0.15, P.metal);
+          }
+        }
         break;
       }
-      case 'block': {
-        this.box(x0, y0, z0, x1, y1 - 0.4, z1, P.white, 'wall');
-        this.box(x0 - 0.05, y1 - 0.4, z0 - 0.05, x1 + 0.05, y1, z1 + 0.05, P.graphite, 'wall');
-        this.box(x0 - 0.04, 0.5, z0 - 0.04, x1 + 0.04, 0.62, z1 + 0.04, P.orangeDim, null);
+      case 'block':
+        // ArenaDressing builds the pickable cooling plant inside this collision footprint.
         break;
-      }
       case 'machine': {
         this.box(x0, y0, z0, x1, y1, z1, P.graphite, 'wall');
-        // capacitor cylinders on top
+        const capacitor = smoothLatheData([
+          [0.61, 0], [0.73, 0.10], [0.73, 0.28], [0.56, 0.39], [0.56, 1.01],
+          [0.71, 1.12], [0.71, 1.34], [0.59, 1.48], [0.35, 1.60],
+        ], 24);
         const alongX = x1 - x0 > z1 - z0;
+        const face = alongX ? z1 : x0 < 0 ? x1 : x0;
+        const side = alongX || x0 < 0 ? 1 : -1;
         const n = 3;
         for (let i = 0; i < n; i++) {
           const f = (i + 0.5) / n;
           const cx = alongX ? x0 + (x1 - x0) * f : (x0 + x1) / 2;
           const cz = alongX ? (z0 + z1) / 2 : z0 + (z1 - z0) * f;
-          const c = MeshBuilder.CreateCylinder('cap', { height: 1.6, diameter: 1.5, tessellation: 20 }, this.scene);
-          c.position.set(cx, y1 + 0.8, cz);
+          const c = new Mesh('cap', this.scene);
+          capacitor.applyToMesh(c);
+          c.position.set(cx, y1, cz);
           this.add(c, P.metal, 'wall');
-          const ring = MeshBuilder.CreateCylinder('capRing', { height: 0.12, diameter: 1.56, tessellation: 20 }, this.scene);
+          const ring = MeshBuilder.CreateTorus('capRing', { thickness: 0.08, diameter: 1.42, tessellation: 24 }, this.scene);
           ring.position.set(cx, y1 + 1.2, cz);
           this.add(ring, i % 2 ? P.cyanGlow : P.cyanDim, null);
           this.collider(new Vector3(cx, y1 + 0.8, cz), new Vector3(1.5, 1.6, 1.5));
-        }
-        // indicator lights
-        const inner = alongX ? (z0 + z1) / 2 : x0 < 0 ? x1 + 0.02 : x0 - 0.02;
-        for (let i = 0; i < 6; i++) {
-          const f = (i + 0.5) / 6;
-          if (alongX) this.box(x0 + (x1 - x0) * f - 0.2, 1.6, z1, x0 + (x1 - x0) * f + 0.2, 1.75, z1 + 0.04, i % 3 === 0 ? P.orangeGlow : P.cyanGlow, null);
-          else this.box(inner - 0.02, 1.6, z0 + (z1 - z0) * f - 0.2, inner + 0.02, 1.75, z0 + (z1 - z0) * f + 0.2, i % 3 === 0 ? P.orangeGlow : P.cyanGlow, null);
+          const slot = (w: number, y: number, height: number, near: number, far: number, mat: Material, surface: string | null) => {
+            const a = face + side * near;
+            const b = face + side * far;
+            if (alongX) this.box(cx - w, y, a, cx + w, y + height, b, mat, surface);
+            else this.box(Math.min(a, b), y, cz - w, Math.max(a, b), y + height, cz + w, mat, surface);
+          };
+          slot(1.13, 0.37, y1 - 0.63, -0.025, 0.12, P.metal, 'wall');
+          slot(0.95, 0.57, y1 - 1.1, 0.117, 0.17, P.panel, 'wall');
+          for (let j = 0; j < 4; j++) slot(0.81, 0.78 + j * 0.156, 0.062, 0.166, 0.218, P.graphite, 'wall');
+          slot(0.48, y1 - 0.8, 0.064, 0.17, 0.202, i === 1 ? P.cyanDim : P.orangeDim, null);
         }
         break;
       }
@@ -318,21 +336,38 @@ export class ArenaBuilder {
       root.position.copyFrom(f.pos);
       root.rotation.y = f.yaw;
       const mk = (w: number, h: number, d: number, x: number, y: number, z: number, mat: Material) => {
-        const m = MeshBuilder.CreateBox('gatePart', { width: w, height: h, depth: d }, this.scene);
-        root.computeWorldMatrix(true);
+        const m = createBeveledBox('gatePart', w, h, d, Math.min(w, h, d, 0.32) * 0.32, this.scene);
         m.rotation.y = f.yaw;
         m.position = Vector3.TransformCoordinates(new Vector3(x, y, z), root.getWorldMatrix());
-        this.add(m, mat, mat === lights || mat === P.orangeDim ? null : 'wall');
+        this.add(m, mat, mat === lights || mat === P.orangeDim || mat === P.whiteGlow ? null : 'wall');
         return m;
       };
-      // massive frame
+      root.computeWorldMatrix(true);
+      // Blast-gate structure, weather shields and chevron-shaped energy clamps.
       mk(1.4, 9.4, 2.6, -5.12, 4.7, 0.2, P.graphite);
       mk(1.4, 9.4, 2.6, 5.12, 4.7, 0.2, P.graphite);
       mk(11.8, 1.6, 2.6, 0, 8.6, 0.2, P.graphite);
-      mk(9.0, 0.18, 0.1, 0, 7.6, -1.17, lights);
-      mk(0.18, 6.8, 0.1, -4.33, 3.6, -1.17, lights);
-      mk(0.18, 6.8, 0.1, 4.33, 3.6, -1.17, lights);
-      const stencilPosition = Vector3.TransformCoordinates(new Vector3(0, 8.65, -1.128), root.getWorldMatrix());
+      mk(11.78, 0.24, 0.54, 0, 9.19, -1.29, P.metal);
+      mk(9.25, 0.45, 0.4, 0, 7.87, -1.1, P.metal);
+      mk(8.7, 0.07, 0.08, 0, 7.68, -1.33, lights);
+      for (const side of [-1, 1]) {
+        mk(0.53, 6.95, 0.34, side * 4.65, 3.72, -1.15, P.metal);
+        mk(0.09, 5.3, 0.08, side * 4.55, 3.64, -1.35, lights);
+        mk(0.75, 1.72, 0.48, side * 5.13, 1.1, -1.25, P.enamel);
+        mk(0.8, 1.15, 0.44, side * 5.24, 6.23, -1.21, P.panel);
+        mk(0.8, 0.12, 0.36, side * 5.24, 6.17, -1.36, P.whiteGlow);
+        for (let i = 0; i < 4; i++) {
+          mk(0.64, 0.067, 0.048, side * 5.13, 0.63 + i * 0.26, -1.50, P.graphite);
+        }
+        // Hydraulic ram and receiver casing behind each guide.
+        mk(0.83, 2.95, 0.51, side * 5.22, 3.77, -1.32, P.panel);
+        mk(0.3, 2.45, 0.09, side * 5.22, 3.75, -1.6, P.graphite);
+        mk(0.15, 1.56, 0.09, side * 5.22, 4.02, -1.655, P.metal);
+        for (const y of [2.55, 4.95]) mk(0.54, 0.14, 0.20, side * 5.22, y, -1.61, P.enamel);
+        const gusset = mk(1.34, 0.39, 0.53, side * 4.47, 7.38, -1.27, P.graphite);
+        gusset.rotate(Vector3.Forward(), side * 0.68);
+      }
+      const stencilPosition = Vector3.TransformCoordinates(new Vector3(0, 8.67, -1.128), root.getWorldMatrix());
       decals.gate(f.id, stencilPosition, f.yaw);
       for (const side of [-1, 1]) {
         const threshold = Vector3.TransformCoordinates(new Vector3(side * 3.5, 0, -1.55), root.getWorldMatrix());
@@ -354,6 +389,10 @@ export class ArenaBuilder {
       rim.material = P.graphite;
       rim.parent = frame;
       rim.isPickable = false;
+      const cage = segmentedRing(this.scene, 'gateFieldCage', 3.79, 0.34, 8, 0.79);
+      cage.parent = frame;
+      cage.position.y = 0.09;
+      cage.material = P.metal;
       const rotor = segmentedRing(this.scene, 'gateRotor', 3.66, 0.12, 8, 0.57);
       rotor.parent = frame;
       rotor.position.y = 0.11;
@@ -371,9 +410,44 @@ export class ArenaBuilder {
   private buildSkyline(): void {
     const P = this.pal;
     const H = this.layout.half;
-    for (const x of [-22, 0, 22]) {
-      this.box(x - 0.4, 12, -H - 2, x + 0.4, 12.8, H + 2, P.graphite, null);
-      this.box(x - 0.05, 11.9, -H - 2, x + 0.05, 12.0, H + 2, P.cyanDim, null);
+    for (const x of [-22, 22]) {
+      this.box(x - 0.46, 12.09, -H - 2, x + 0.46, 12.36, H + 2, P.graphite, null);
+      this.box(x - 0.40, 13.12, -H - 2, x + 0.40, 13.34, H + 2, P.graphite, null);
+      for (let z = -H; z < H; z += 4) {
+        const brace = createBeveledBox('trussBrace', 0.3, 0.28, Math.hypot(4, 1.03), 0.04, this.scene);
+        brace.position.set(x, 12.73, z + 2);
+        brace.rotation.x = (Math.round((z + H) / 4) % 2 === 0 ? 1 : -1) * Math.atan2(1.03, 4);
+        this.add(brace, P.metal, null);
+        if (z % 12 === 0) this.box(x - 0.075, 12.01, z + 0.8, x + 0.075, 12.09, z + 1.6, P.cyanDim, null);
+      }
+    }
+    for (const z of [-34, 36]) {
+      const arch = [[-22, 12.95], [-13, 16.9], [13, 16.9], [22, 12.95]];
+      for (let i = 1; i < arch.length; i++) {
+        const [x0, y0] = arch[i - 1];
+        const [x1, y1] = arch[i];
+        const strut = createBeveledBox('gantrySpan', Math.hypot(x1 - x0, y1 - y0) + 0.45, 0.67, 0.91, 0.095, this.scene);
+        strut.position.set((x0 + x1) / 2, (y0 + y1) / 2, z);
+        strut.rotation.z = Math.atan2(y1 - y0, x1 - x0);
+        this.add(strut, P.graphite, null);
+      }
+      const catenary = Array.from({ length: 15 }, (_, i) => {
+        const span = i / 14;
+        return new Vector3(25 * (span - 0.5), 16.62 - 1.3 * Math.sin(span * Math.PI), z - 0.56);
+      });
+      this.add(MeshBuilder.CreateTube('overheadUtilityCable', { path: catenary, radius: 0.065, tessellation: 7 }, this.scene), P.graphite, null);
+      if (z > 0) {
+        for (const x of [-10, 10]) {
+          this.box(x - 0.09, 11.58, z - 0.09, x + 0.09, 16.68, z + 0.09, P.metal, null);
+          this.box(x - 0.45, 16.43, z - 0.44, x + 0.45, 16.7, z + 0.44, P.graphite, null);
+        }
+      }
+    }
+    for (const z of [-H - 1, H + 1]) {
+      for (const x of [-22, 22]) {
+        this.box(x - 0.8, 0, z - 0.85, x + 0.8, 13.34, z + 0.85, P.graphite, null);
+        this.box(x - 1, 11.4, z - 1.05, x + 1, 13.48, z + 1.05, P.concrete, null);
+      }
     }
     for (const [x, z] of [[-H - 1, -H - 1], [H + 1, -H - 1], [-H - 1, H + 1], [H + 1, H + 1]]) {
       this.box(x - 1.2, 0, z - 1.2, x + 1.2, 13, z + 1.2, P.graphite, null);
@@ -388,11 +462,12 @@ export class ArenaBuilder {
       merged.name = `arena:${key}`;
       merged.material = g.mat;
       // World-scale texturing: panels tile every 4 m, worn metal every 2 m.
-      if (g.mat === this.pal.panel) boxProjectUVs(merged, 4);
-      else if (g.mat === this.pal.white || g.mat === this.pal.graphite || g.mat === this.pal.metal) boxProjectUVs(merged, 2.5);
+      const masonry = g.mat === this.pal.concrete;
+      if (masonry || g.mat === this.pal.panel) boxProjectUVs(merged, masonry ? 3 : 4);
+      else if (g.mat === this.pal.white || g.mat === this.pal.graphite || g.mat === this.pal.metal || g.mat === this.pal.enamel) boxProjectUVs(merged, 2.5);
       this.meshes.push(merged);
       merged.isPickable = g.surface !== null;
-      merged.metadata = g.surface ? { surface: g.surface, impact: g.mat === this.pal.white || g.mat === this.pal.panel ? 'ceramic' : 'alloy' } : null;
+      merged.metadata = g.surface ? { surface: g.surface, impact: masonry || g.mat === this.pal.white || g.mat === this.pal.panel ? 'ceramic' : 'alloy' } : null;
       merged.receiveShadows = g.surface !== null;
       merged.freezeWorldMatrix();
       merged.doNotSyncBoundingInfo = true;

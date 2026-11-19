@@ -1,3 +1,5 @@
+import { keyLabel, movementLabel } from '../../core/settings';
+import { useHud } from '../store';
 import { useEffect, useState } from 'react';
 
 /** Segmented bar with a delayed "damage trail" that drains after the real value. */
@@ -24,6 +26,11 @@ export function SegBar({ value, tone, segments = 20, marker, className = '' }: {
 
 export function Key({ k }: { k: string }) {
   return <kbd>{k}</kbd>;
+}
+
+export function BoundKey({ action }: { action: string }) {
+  const keys = useHud(s => s.bindings);
+  return <kbd>{action === 'move' ? movementLabel(keys) : keyLabel(keys[action])}</kbd>;
 }
 
 // ---------------------------------------------------------------- overlays

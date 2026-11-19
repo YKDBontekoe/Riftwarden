@@ -15,19 +15,19 @@ export interface TutorialStep {
 }
 
 export const TUTORIAL: readonly TutorialStep[] = [
-  { id: 'hq_look', where: 'hq', title: 'WELCOME TO HEADQUARTERS', text: 'Look around with the mouse and fly with WASD. This is your base: everything you secure in operations comes back here.', keys: ['WASD', 'MOUSE'] },
-  { id: 'hq_deploy', where: 'hq', title: 'YOUR FIRST OPERATION', text: 'Head north into the Launch Bay and use the Deployment Terminal to start a survival operation.', keys: ['E'] },
-  { id: 'move', where: 'arena', title: 'FLIGHT CONTROLS', text: 'You are a combat drone. Move with WASD, jump with Space and press Space again in the air for a boost.', keys: ['WASD', 'SPACE'] },
-  { id: 'dash', where: 'arena', title: 'DASH', text: 'Shift dashes (two charges). Hold it while moving forward to sprint.', keys: ['SHIFT'] },
+  { id: 'hq_look', where: 'hq', title: 'WELCOME TO HEADQUARTERS', text: 'Look around and move across the command deck. Cargo you bank during an operation returns here.', keys: ['move', 'MOUSE'] },
+  { id: 'hq_deploy', where: 'hq', title: 'YOUR FIRST OPERATION', text: 'Head north into the Launch Bay and use the Deployment Terminal to start a survival operation.', keys: ['use'] },
+  { id: 'move', where: 'arena', title: 'FLIGHT CONTROLS', text: 'Move across the yard and jump. Jump again in midair for a directional boost.', keys: ['move', 'jump'] },
+  { id: 'dash', where: 'arena', title: 'DASH', text: 'Dash to spend a charge. Hold the dash key while moving forward to sprint.', keys: ['dash'] },
   { id: 'reactor', where: 'arena', title: 'DEFEND THE REACTOR', text: 'Machines come down the orange lanes for the reactor. If it is destroyed the operation fails; your drone respawns, the reactor does not.' },
-  { id: 'tower', where: 'arena', title: 'BUILD A TOWER', text: 'Press B to enter build mode and click to place a Sentinel beside a lane. Towers cost cores; kills earn more.', keys: ['B', 'LMB'] },
-  { id: 'wave', where: 'arena', title: 'START THE WAVE', text: 'You are preparing. Press G to start the wave early, or wait for the countdown.', keys: ['G'] },
+  { id: 'tower', where: 'arena', title: 'BUILD A TOWER', text: 'Enter build mode, then click beside a lane to place a Sentinel. Kills earn cores for more towers.', keys: ['build', 'LMB'] },
+  { id: 'wave', where: 'arena', title: 'START THE WAVE', text: 'Start the wave when your defenses are ready, or wait for the countdown.', keys: ['wave'] },
   { id: 'shoot', where: 'arena', title: 'OPEN FIRE', text: 'Shoot with the left mouse button. Glowing visors and cores are weakpoints: hits there always crit.', keys: ['LMB'] },
   { id: 'heat', where: 'arena', title: 'WEAPON HEAT', text: 'Energy weapons never run out, but they heat up. Overheat locks the trigger until it cools: fire in bursts.' },
-  { id: 'loot', where: 'arena', title: 'LOOT', text: 'Destroyed machines drop equipment. Look at a hologram and press E to collect it. It stays unsecured until the next checkpoint.', keys: ['E'] },
+  { id: 'loot', where: 'arena', title: 'LOOT', text: 'Look at dropped equipment and use the pickup key to collect it. Bank it at the next checkpoint.', keys: ['use'] },
   { id: 'upgrade', where: 'arena', title: 'RUN UPGRADES', text: 'After each wave pick one upgrade. Upgrades stack into powerful builds but last only for this operation.' },
-  { id: 'tactical', where: 'arena', title: 'TACTICAL TIME', text: 'Q slows every enemy and opens build mode so you can place several towers mid-fight. It drains energy that recharges.', keys: ['Q'] },
-  { id: 'bank', where: 'arena', title: 'CHECKPOINT', text: 'Every five waves everything you collected is banked to HQ. You can continue for more, or return home with it safe.', keys: ['H'] },
+  { id: 'tactical', where: 'arena', title: 'TACTICAL TIME', text: 'Activate tactical time to slow enemies and place towers. Your tactical energy recharges between uses.', keys: ['tactical'] },
+  { id: 'bank', where: 'arena', title: 'CHECKPOINT', text: 'Every five waves everything you collected is banked to HQ. You can continue for more, or return home with it safe.', keys: ['checkpoint'] },
   { id: 'hq_return', where: 'hq', title: 'BACK HOME', text: 'Secured loot is in the Storage terminal; equip it at Drone Configuration, upgrade it in the Workshop, and build out your base at the Architect Console.' },
 ];
 

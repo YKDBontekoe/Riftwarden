@@ -1,5 +1,5 @@
 import { TutorialCard } from './TutorialCard';
-import { TeamHud } from './TeamHud';
+import { TeamHud, TeamTags } from './TeamHud';
 import { RunBadges } from './Roguelite';
 import type { Game } from '../core/Game';
 import { LootFeed, LootLabels, LootPrompt } from './LootHud';
@@ -17,25 +17,30 @@ export function Hud({ game }: { game: Game }) {
       <DamageNumbers game={game} />
       <LootLabels game={game} />
       <DamageDirection />
+      <TeamTags />
       <Crosshair />
       <Hitmarker />
       <LootPrompt />
-      <LootFeed />
-      <Radar game={game} />
+      <aside className="hud-rail hud-port">
+        <Radar game={game} />
+        <TeamHud />
+        <RunBadges />
+        <TutorialCard />
+      </aside>
       <TopCenter />
       <SurvivalHud />
-      <Cores />
-      <RunPanel />
+      <aside className="hud-rail hud-starboard">
+        <Cores />
+        <RunPanel />
+        <LootFeed />
+      </aside>
       <PlayerPanel />
       <CenterPanel />
       <WeaponPanel />
       <Banner />
       <Hint />
       <Respawn />
-      <RunBadges />
       <Perf />
-      <TeamHud />
-      <TutorialCard />
     </div>
   );
 }

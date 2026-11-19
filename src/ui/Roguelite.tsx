@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import type { Game } from '../core/Game';
 import { STAT_DEFS } from '../combat/stats';
-import { CATEGORY_LABEL, RARITY_COLOR, upgradeDef, type UpgradeDef } from '../roguelite/upgrades';
+import { CATEGORY_LABEL, RARITY_COLOR, upgradeDef } from '../roguelite/upgrades';
 import { BASES, CORES, MAX_TOWER_LEVEL, MODIFIERS, partDef, partsFor, swapCost, TOWER_SLOTS, type TowerConfig, type TowerSlot, WEAPONS } from '../towers/components';
 import { ELEMENT_COLOR_CSS } from './elements';
+import { BoundKey } from './hud/widgets';
 import { useHud } from './store';
 
 const SLOT_LABEL: Record<TowerSlot, string> = { base: 'BASE', weapon: 'WEAPON MODULE', core: 'POWER CORE', modifier: 'MODIFIER' };
@@ -18,32 +19,24 @@ function useForce() {
 export function UpgradePanel({ game }: { game: Game }) {
   const offer = game.offer ?? [];
   const build = game.director.build;
-  const [picked, setPicked] = useState<string | null>(null);
+  const coop = useHud((s) => s.coop);
+  const waiting = coop?.offerChooser;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const i = ['Digit1', 'Digit2', 'Digit3'].indexOf(e.code);
-      if (i >= 0 && offer[i]) {
+      if (!e.repeat && !waiting && i >= 0 && game.offer?.[i]) {
         e.preventDefault();
-        choose(offer[i]);
+        game.chooseUpgrade(game.offer[i].id);
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [offer.map((o) => o.id).join()]);
-  const coop = useHud((s) => s.coop);
-  const waiting = coop ? coop.offerChooser : null;
-  const choose = (u: UpgradeDef) => {
-    if (picked || waiting) return;
-    setPicked(u.id);
-    // Short selection flash before the choice is applied.
-    setTimeout(() => game.chooseUpgrade(u.id), 220);
-  };
+  }, [game, waiting]);
   return (
     <div className="screen dim upgrade-screen" data-testid="upgrade-panel">
       <div className="upgrade-wrap">
         <div className="cp-kicker">WAVE {game.waves.number - 1} CLEARED · RIFT UPGRADE</div>
-        <div className="cp-title">{waiting ? `${waiting.toUpperCase()} IS CHOOSING` : coop ? 'CHOOSE THE TEAM UPGRADE' : 'CHOOSE ONE UPGRADE'}</div>
+        <div className="cp-title">{waiting ? `${waiting.toUpperCase()} IS CHOOSING` : coop ? 'Choose a team upgrade' : 'Choose an upgrade'}</div>
         {coop && (
           <div className="cp-sub">
             {waiting ? 'Team upgrades are picked in turn; this one applies to every warden.' : 'Your turn: this upgrade applies to the whole team.'} · {coop.offerLeft} s
@@ -52,28 +45,28 @@ export function UpgradePanel({ game }: { game: Game }) {
             </button>
           </div>
         )}
-        <div className="cp-sub">Temporary: lasts for this run only and is never saved to your profile or banked at checkpoints. The next wave countdown is paused.</div>
+        <div className="cp-sub">Upgrades last for this operation.{!coop && ' The next wave waits for your choice.'}</div>
         <div className="upgrade-cards">
           {offer.map((u, i) => {
             const have = build.count(u.id);
             const color = RARITY_COLOR[u.rarity];
             return (
-              <button key={u.id} data-testid={`upgrade-card-${i}`} data-id={u.id} className={`ucard r-${u.rarity} ${picked === u.id ? 'picked' : ''} ${picked && picked !== u.id ? 'faded' : ''}`} style={{ ['--rc' as string]: color, animationDelay: `${i * 0.09}s` }} onClick={() => choose(u)}>
+              <button key={u.id} data-testid={`upgrade-card-${i}`} data-id={u.id} className="ucard" disabled={!!waiting} style={{ ['--rc' as string]: color, animationDelay: `${i * 0.09}s` }} onClick={() => game.chooseUpgrade(u.id)}>
                 <div className="uc-top">
-                  <span className="uc-icon">{u.icon}</span>
                   <span className="uc-rarity">{u.rarity.toUpperCase()}</span>
                   <span className="uc-key">{i + 1}</span>
                 </div>
+                <span aria-hidden="true" className={`uc-art art-${u.category}`} />
                 <div className="uc-name">{u.name}</div>
                 <div className="uc-cat">{CATEGORY_LABEL[u.category]}{u.needs?.towers ? ' · TOWERS' : ''}</div>
                 <div className="uc-text">{u.text(have + 1)}</div>
-                {u.hint && <div className="uc-hint">◇ {u.hint}</div>}
+                {u.hint && <div className="uc-hint">{u.hint}</div>}
                 <div className="uc-stack">{have > 0 ? `STACK ${have} → ${have + 1} / ${u.maxStacks}` : u.maxStacks > 1 ? `NEW · MAX ${u.maxStacks}` : 'NEW · UNIQUE'}</div>
               </button>
             );
           })}
         </div>
-        <div className="uc-foot">Press <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> or click · run seed {game.director.build.seed}</div>
+        {!waiting && <div className="uc-foot">Press <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> or click a card</div>}
       </div>
     </div>
   );
@@ -230,7 +223,7 @@ export function TowerPanel({ game }: { game: Game }) {
           <div className="term-code">TWR</div>
           <div className="term-titles">
             <div className="term-title">TOWER ENGINEERING</div>
-            <div className="term-sub">Preparation: refit freely for cores · in combat, use tactical mode (Q) and the aim hotkeys</div>
+            <div className="term-sub">Preparation: refit freely for cores · in combat, use tactical mode <BoundKey action="tactical" /> and the aim hotkeys</div>
           </div>
           <div className="tp-cores">◆ {cores}</div>
           <button className="term-close" onClick={() => void game.closePanel()}>
@@ -248,7 +241,7 @@ export function TowerPanel({ game }: { game: Game }) {
                 <SlotChips game={game} slot={slot} cfg={tpl} onPick={(id) => act(game.setBuildConfig(slot, id))} />
               </div>
             ))}
-            <div className="tp-blurb">Place towers with <kbd>B</kbd> / <kbd>2</kbd>. Weapon changes reset dependants that no longer fit.</div>
+            <div className="tp-blurb">Place towers with <BoundKey action="build" /> / <kbd>2</kbd>. Weapon changes reset dependants that no longer fit.</div>
           </div>
           <div className="tp-col">
             <div className="cp-label">DEPLOYED TOWERS ({towers.length})</div>
