@@ -15,6 +15,8 @@ import { useHud } from './store';
 import { TerminalHost } from './TerminalHost';
 import { ArenaInventory } from './LootHud';
 import { BriefList } from './items';
+import { XpGain } from './Directory';
+import { XP } from '../progression/level';
 import { BuildOverview, TowerPanel, UpgradePanel } from './Roguelite';
 import { DevPanel } from './DevPanel';
 import { milestoneLabel } from '../survival/records';
@@ -302,6 +304,7 @@ function CheckpointPanel({ flow, game }: { flow: Flow; game: Game }) {
               ['SALVAGE SECURED', String(run.salvageSecured)],
               ['CREDITS BANKED', String(run.creditsSecured)],
               ['COMPONENTS BANKED', String(run.componentsSecured)],
+              ['WARDEN XP BANKED', String(run.xpSecured ?? 0)],
               ['HOSTILES', String(run.kills)],
               ['TIME', fmtTime(run.duration)],
             ] as const
@@ -312,6 +315,7 @@ function CheckpointPanel({ flow, game }: { flow: Flow; game: Game }) {
             </div>
           ))}
         </div>
+        {!!run.xpSecured && game.lastBankSaved && <XpGain gained={run.xpSecured} totalAfter={save.progress.xp} label="WARDEN XP BANKED THIS OPERATION" />}
         {game.lastCache.length > 0 && (
           <>
             <div className="cp-label">CHECKPOINT CACHE · SECURED</div>
@@ -376,6 +380,7 @@ export function RunSummary({ result, extra }: { result: RunResult; extra?: { tur
     ['Salvage', result.salvageSecured, result.salvageLost],
     ['Credits', result.creditsSecured ?? 0, result.creditsLost ?? 0],
     ['Components', result.componentsSecured ?? 0, result.componentsLost ?? 0],
+    ['Warden XP', (result.xpSecured ?? 0) + (result.xpKept ?? 0), result.xpLost ?? 0],
     ['Equipment', result.itemsSecured, result.itemsLost],
   ] as const;
   const details: [string, string | number][] = [['Final wave', result.finalWave], ['Threat tier', `${tier.roman} · ${tier.name}`]];
@@ -443,6 +448,7 @@ export function RunSummary({ result, extra }: { result: RunResult; extra?: { tur
 
 function DefeatScreen({ flow }: { flow: Flow }) {
   const result = useHud((s) => s.lastRun);
+  const save = useSave(flow);
   const stats = useHud((s) => s.stats);
   const [ready, setReady] = useState(false);
   useEffect(() => {
@@ -459,6 +465,7 @@ function DefeatScreen({ flow }: { flow: Flow }) {
         <div className="defeat-sub">
           Containment failed on wave {result.finalWave}. Your banked cargo and starting equipment are safe.
         </div>
+        {!result.survival?.dev && <XpGain gained={(result.xpSecured ?? 0) + (result.xpKept ?? 0)} totalAfter={save.progress.xp} label={`WARDEN XP · ${Math.round(XP.keepOnLoss * 100)}% OF UNSECURED XP KEPT`} />}
         <RunSummary result={result} extra={stats} />
         <div className="row2">
           <button className="primary" onClick={() => void flow.leaveArena()}>
@@ -484,6 +491,7 @@ function SummaryScreen({ flow }: { flow: Flow }) {
         <div className="cp-sub">
           {extracted ? 'Checkpoint extraction successful.' : 'Unsecured cargo was lost when you left the arena.'} HQ reserve: <b className="o">{save.resources.salvage} salvage</b> · <b className="c">{save.resources.credits} credit{save.resources.credits === 1 ? '' : 's'}</b> · <b className="v">{save.resources.components} component{save.resources.components === 1 ? '' : 's'}</b>. Merchants have restocked.
         </div>
+        {!result.survival?.dev && <XpGain gained={(result.xpSecured ?? 0) + (result.xpKept ?? 0)} totalAfter={save.progress.xp} />}
         <RunSummary result={result} />
         <button className="primary" onClick={() => void flow.home?.takeControl()}>
           CONTINUE

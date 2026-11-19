@@ -9,17 +9,22 @@ import type { RunResult } from '../progression/run';
  */
 export type Screen = 'loading' | 'menu' | 'home' | 'terminal' | 'summary' | 'transit' | 'playing' | 'paused' | 'checkpoint' | 'defeat' | 'inventory' | 'upgrade' | 'build' | 'towers' | 'dev' | 'construct';
 export type Location = 'home' | 'arena';
-export type TerminalId = 'deploy' | 'loadout' | 'storage' | 'workshop' | 'command' | 'merchant' | 'modules' | 'salvage' | 'fabricate' | 'architect';
+export type TerminalId = 'deploy' | 'loadout' | 'storage' | 'workshop' | 'command' | 'merchant' | 'modules' | 'salvage' | 'fabricate' | 'architect' | 'lattice';
 
 export interface PromptInfo {
   key: string;
   title: string;
   action: string;
+  /** What the station is for (station info table). */
+  purpose?: string;
 }
 
 export interface RunHud {
   tier: number;
   salvageUnsecured: number;
+  /** Warden XP earned this run: at risk (until the next checkpoint) and banked. */
+  xpUnsecured?: number;
+  xpSecured?: number;
   salvageSecured: number;
   creditsUnsecured: number;
   creditsSecured: number;

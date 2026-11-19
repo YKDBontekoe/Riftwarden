@@ -1,5 +1,6 @@
 import type { ItemInstance } from './items';
 import { isCheckpointWave } from './tiers';
+import { XP, xpFor } from './level';
 
 /**
  * Per-run reward ledger (pure; never touches persistence).
@@ -15,6 +16,8 @@ export interface Rewards {
   /** M4: trade currency and advanced components (banked like salvage). */
   credits: number;
   components: number;
+  /** Warden XP (derived from run statistics by accrueXp; banked like salvage). */
+  xp: number;
   items: ItemInstance[];
 }
 
@@ -60,6 +63,11 @@ export interface RunResult {
   creditsLost: number;
   componentsSecured: number;
   componentsLost: number;
+  /** XP banked at checkpoints during the run. */
+  xpSecured?: number;
+  /** Unsecured XP kept at the end (all of it on extraction, a share on defeat/abandon). */
+  xpKept?: number;
+  xpLost?: number;
   /** Names of lost / secured items for the summary screens (capped). */
   lostItems?: ItemBrief[];
   securedItems?: ItemBrief[];
@@ -84,7 +92,7 @@ export interface ItemBrief {
 
 export const brief = (i: ItemInstance): ItemBrief => ({ uid: i.uid, name: i.name, rarity: i.rarity, level: i.level, category: i.category });
 
-export const emptyRewards = (): Rewards => ({ salvage: 0, credits: 0, components: 0, items: [] });
+export const emptyRewards = (): Rewards => ({ salvage: 0, credits: 0, components: 0, xp: 0, items: [] });
 
 export class RunLedger {
   duration = 0;
@@ -98,6 +106,12 @@ export class RunLedger {
   /** M6 survival statistics (mutated by the arena; frozen into the result). */
   survival: SurvivalStats = emptySurvival();
   private result: RunResult | null = null;
+  /** Co-op replica: XP pools are mirrored from the server, never derived locally. */
+  xpReplica = false;
+  /** XP multiplier (skill tree keystones), set at deploy. */
+  xpMult = 1;
+  /** XP already moved into the unsecured/secured pools. */
+  private xpAccounted = 0;
 
   constructor(
     readonly id: string,
@@ -123,6 +137,8 @@ export class RunLedger {
     const s = Math.max(0, Math.floor(r.salvage ?? 0));
     const cr = Math.max(0, Math.floor(r.credits ?? 0));
     const co = Math.max(0, Math.floor(r.components ?? 0));
+    const xp = Math.max(0, Math.floor(r.xp ?? 0));
+    this.unsecured.xp += xp;
     this.unsecured.salvage += s;
     this.unsecured.credits += cr;
     this.unsecured.components += co;
@@ -133,7 +149,7 @@ export class RunLedger {
       this.itemsCollected++;
       added++;
     }
-    return s > 0 || cr > 0 || co > 0 || added > 0;
+    return s > 0 || cr > 0 || co > 0 || xp > 0 || added > 0;
   }
 
   /** Items collected so far (for statistics). */
@@ -157,6 +173,27 @@ export class RunLedger {
     return this.unsecured.items.splice(idx, 1)[0];
   }
 
+  /** Move XP earned since the last call (from the run statistics) into the unsecured pool. */
+  accrueXp(): number {
+    if (this.ended) return 0;
+    const total = this.xpTotal();
+    const delta = total - this.xpAccounted;
+    if (delta <= 0) return 0;
+    this.unsecured.xp += delta;
+    this.xpAccounted = total;
+    return delta;
+  }
+
+  private xpTotal(): number {
+    if (this.xpReplica) return this.xpAccounted;
+    return Math.floor(xpFor(this) * Math.max(0, Math.min(10, this.xpMult)));
+  }
+
+  /** XP earned this run so far (secured + unsecured, without accruing). */
+  get xpEarned(): number {
+    return this.secured.xp + this.unsecured.xp + Math.max(0, this.xpTotal() - this.xpAccounted);
+  }
+
   waveReached(n: number): void {
     if (!this.ended) this.wave = Math.max(this.wave, n);
   }
@@ -172,11 +209,13 @@ export class RunLedger {
    */
   bank(wave: number): Rewards | null {
     if (this.ended || !isCheckpointWave(wave) || wave <= this.lastBankedWave || wave > this.wavesCleared) return null;
+    this.accrueXp();
     const moved = this.unsecured;
     this.unsecured = emptyRewards();
     this.secured.salvage += moved.salvage;
     this.secured.credits += moved.credits;
     this.secured.components += moved.components;
+    this.secured.xp += moved.xp;
     this.secured.items.push(...moved.items);
     this.lastBankedWave = wave;
     this.checkpoints++;
@@ -191,6 +230,8 @@ export class RunLedger {
   /** End the run. Idempotent: later calls return the first result unchanged. */
   finalize(outcome: RunOutcome, now = Date.now()): RunResult {
     if (this.result) return this.result;
+    this.accrueXp();
+    const xpKept = outcome === 'returned' ? this.unsecured.xp : Math.floor(this.unsecured.xp * XP.keepOnLoss);
     this.result = {
       id: this.id,
       tier: this.tier,
@@ -207,6 +248,9 @@ export class RunLedger {
       creditsLost: this.unsecured.credits,
       componentsSecured: this.secured.components,
       componentsLost: this.unsecured.components,
+      xpSecured: this.secured.xp,
+      xpKept,
+      xpLost: this.unsecured.xp - xpKept,
       lostItems: this.unsecured.items.slice(0, 12).map(brief),
       securedItems: this.secured.items.slice(0, 12).map(brief),
       checkpoints: this.checkpoints,

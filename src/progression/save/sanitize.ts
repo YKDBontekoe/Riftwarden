@@ -17,7 +17,10 @@ import { canInstall } from '../../weapons/modules';
 import type { WeaponFamily } from '../../data/defs';
 import { MAX_BALANCE, MAX_ENHANCE_ANY, MARKET } from '../../economy/config';
 import { generateMarket, type MarketEntry, type MarketState } from '../../economy/market';
-import { ANNEX_BAYS, EconomyState, EconomyStats, HISTORY_LIMIT, HistoryOutcome, PRESET_COUNT, RunHistoryEntry, SAVE_VERSION, STORAGE_CAPACITY, SaveData, TX_HISTORY, TierRecord, emptyEconomy } from './types';
+import { ANNEX_BAYS, EconomyState, EconomyStats, HISTORY_LIMIT, HistoryOutcome, PRESET_COUNT, RunHistoryEntry, SAVE_VERSION, STORAGE_CAPACITY, SaveData, TX_HISTORY, TierRecord, emptyEconomy, emptyProgress, MAX_XP, type ProgressState } from './types';
+import { levelForXp } from '../level';
+import { pruneAllocation } from '../skilltree';
+
 import { DEFAULT_FACILITIES, createDefaultSave, defaultPresets, emptyLoadout, facilityCount, marketProgress } from './defaults';
 import { MAX_TIER, arr, int, num, obj, str } from './coerce';
 import { allOwnedUids } from './ownership';
@@ -337,6 +340,7 @@ export function sanitizeSave(raw: unknown, now = Date.now()): { data: SaveData; 
     market: def.market,
     economy: emptyEconomy(),
     towers: { unlocked: sanitizeTowerTech(obj(r.towers).unlocked) },
+    progress: emptyProgress(''),
   };
 
   // Capacity is derived from purchased expansions (cannot be edited independently).
@@ -493,6 +497,7 @@ export function sanitizeSave(raw: unknown, now = Date.now()): { data: SaveData; 
 
   data.market = sanitizeMarket(r.market, data, new Set(allOwnedUids(data)), repairs, now);
   data.economy = sanitizeEconomy(r.economy);
+  data.progress = sanitizeProgress(r.progress, data.profile.id);
 
   return { data, repairs };
 }
@@ -539,3 +544,15 @@ function sanitizeStations(v: unknown): Record<string, StationPose> {
   return out;
 }
 
+
+/** XP and tree allocation; allocations are de-duplicated and pruned by the tree rules (see skilltree.ts). */
+export function sanitizeProgress(raw: unknown, profileId: string): ProgressState {
+  const p = obj(raw);
+  const tree = obj(p.tree);
+  const out = emptyProgress(profileId, int(p.xp, 0, 0, MAX_XP));
+  if (typeof tree.seed === 'number' && Number.isInteger(tree.seed) && tree.seed >= 0 && tree.seed <= 0xffffffff) out.tree.seed = tree.seed;
+  out.tree.allocated = [...new Set(arr(tree.allocated).filter((x): x is string => typeof x === 'string' && x.length <= 24))].slice(0, 2000);
+  out.respecs = int(p.respecs, 0, 0, 10_000);
+  out.tree.allocated = pruneAllocation(out.tree.seed, levelForXp(out.xp), out.tree.allocated);
+  return out;
+}

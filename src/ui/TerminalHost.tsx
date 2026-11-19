@@ -4,6 +4,7 @@ import { EngineeringTerminal } from './Engineering';
 import { FabricateTerminal, MerchantTerminal, SalvageTerminal } from './Market';
 import { useHud } from './store';
 import { ArchitectTerminal } from './Construction';
+import { SkillTreeTerminal } from './SkillTree';
 import { CommandTerminal, DeployTerminal, LoadoutTerminal, StorageTerminal } from './Terminals';
 
 /** Routes the open station to its interface. */
@@ -31,6 +32,8 @@ export function TerminalHost({ flow, home }: { flow: Flow; home: HomeBase }) {
       return <FabricateTerminal flow={flow} close={close} />;
     case 'architect':
       return <ArchitectTerminal flow={flow} close={close} />;
+    case 'lattice':
+      return <SkillTreeTerminal flow={flow} close={close} />;
     default:
       return null;
   }

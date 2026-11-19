@@ -60,7 +60,9 @@ export function lootTargetInfo(i: LootTargetInput): LootTargetInfo {
 
 export interface RunLedgerView {
   unsecured: { salvage: number; credits: number; components: number };
-  secured: { salvage: number; credits: number; components: number };
+  secured: { salvage: number; credits: number; components: number; xp?: number };
+  /** XP earned so far (secured + at risk). */
+  xpEarned?: number;
   wavesCleared: number;
   lastBankedWave: number;
   kills: number;
@@ -77,6 +79,8 @@ export function runHud(tier: number, run: RunLedgerView, checkpointOpen: boolean
     creditsSecured: run.secured.credits,
     componentsUnsecured: run.unsecured.components,
     componentsSecured: run.secured.components,
+    xpSecured: run.secured.xp ?? 0,
+    xpUnsecured: Math.max(0, (run.xpEarned ?? 0) - (run.secured.xp ?? 0)),
     nextCheckpoint: nextCheckpoint(run.wavesCleared + 1),
     checkpointOpen,
     lastBankedWave: run.lastBankedWave,

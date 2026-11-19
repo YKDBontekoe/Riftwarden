@@ -1,3 +1,7 @@
+import { stationInfo } from './stationInfo';
+import { drawStationScreen } from './stationScreens';
+import { levelForXp } from '../progression/level';
+import { freePoints } from '../progression/skilltree';
 import { placeScan } from '../visuals/scannedProps';
 import { loftData } from '../visuals/sculpt';
 import {
@@ -22,14 +26,11 @@ import { type Emitter, sfx } from '../audio/Sfx';
 import type { Input } from '../core/Input';
 import { keyLabel, type Settings } from '../core/settings';
 import { HQ_MOVE, Player } from '../player/Player';
-import { SLOT_IDS } from '../progression/items';
-import { rarity } from '../loot/rarity';
 import type { Profile } from '../progression/Profile';
-import { equippedItem, type SaveData } from '../progression/save';
-import { getTier, THREAT_TIERS } from '../progression/tiers';
+import { type SaveData } from '../progression/save';
+import { THREAT_TIERS } from '../progression/tiers';
 import { hudStore, type Screen, type TerminalId, uiEvents } from '../ui/store';
 import { calibrationRing, type EconCtx, equipmentExchange, fabricator, moduleBroker, reclamation } from './economyProps';
-import { fabricationLevel } from '../economy/transactions';
 import { captureEnvironment } from '../visuals/envCapture';
 import { Kit } from '../visuals/kit';
 import { createPalette, unlit } from '../visuals/materials';
@@ -64,7 +65,6 @@ import {
   planeBuilder,
   SCREEN_FONT,
   type ScreenTex,
-  screenLine,
   storageRacks,
   workshop,
 } from './props';
@@ -332,8 +332,8 @@ export class HomeBase {
     this.applySettings(settings);
     if (hooks.tutorial)
       this.tut = new TutorialDirector('hq', hooks.tutorial, {
-        available: (id) => this.screen === 'home' && (id !== 'hq_return' || this.profile.save.history.length > 0),
-        complete: (id, t) => (id === 'hq_look' ? this.tutDist > 4 || t > 9 : id === 'hq_deploy' ? this.openedTerminals.has('deploy') : this.openedTerminals.has('storage') || t > 12),
+        available: (id) => this.screen === 'home' && (id === 'hq_level' ? freePoints(levelForXp(this.profile.save.progress.xp), this.profile.save.progress.tree.allocated) > 0 : id !== 'hq_return' || this.profile.save.history.length > 0),
+        complete: (id, t) => (id === 'hq_look' ? this.tutDist > 4 || t > 9 : id === 'hq_deploy' ? this.openedTerminals.has('deploy') : id === 'hq_level' ? this.openedTerminals.has('lattice') || t > 20 : this.openedTerminals.has('storage') || t > 12),
       });
   }
 
@@ -354,6 +354,7 @@ export class HomeBase {
       const st = base;
       switch (st.id) {
         case 'architect':
+        case 'lattice':
           screen = makeScreen(this.scene, st.id);
           consoleDesk(ctx, st, screen, 1.6);
           break;
@@ -466,73 +467,10 @@ export class HomeBase {
   private refreshScreens(): void {
     if (this.disposed) return;
     const save = this.profile.save;
-    const tier = getTier(save.threat.selected);
-    const rec = save.records[String(tier.id)];
     for (const rig of this.rigs) {
       const s = rig.screen;
       if (!s) continue;
-      switch (rig.station.id) {
-        case 'deploy':
-          drawScreenFrame(s, 'DEPLOYMENT');
-          screenLine(s, 100, 'OPERATION', 'SECTOR 07');
-          screenLine(s, 150, 'THREAT TIER', `${tier.roman} · ${tier.name}`, '#ffb547');
-          screenLine(s, 200, 'BEST WAVE', rec ? String(rec.bestWave) : '—');
-          screenLine(s, 250, 'LAUNCH RING', 'READY');
-          break;
-        case 'loadout': {
-          const w = equippedItem(save, 'weapon');
-          const gear = SLOT_IDS.filter((id) => save.loadout[id]).length;
-          drawScreenFrame(s, 'DRONE CONFIG');
-          screenLine(s, 100, 'CHASSIS', 'WARDEN MK-I');
-          screenLine(s, 150, 'PRIMARY', (w?.name ?? 'NONE').toUpperCase().slice(0, 22), w ? rarity(w.rarity).color : undefined);
-          screenLine(s, 200, 'EQUIPPED', `${gear} / ${SLOT_IDS.length} SLOTS`, '#cdd9df');
-          screenLine(s, 250, 'STATUS', 'NOMINAL');
-          break;
-        }
-        case 'storage':
-          drawScreenFrame(s, 'STORAGE');
-          screenLine(s, 100, 'BAYS IN USE', `${save.storage.uids.length} / ${save.storage.capacity}`, save.storage.uids.length > save.storage.capacity ? '#ff6a55' : undefined);
-          screenLine(s, 150, 'SALVAGE', String(save.resources.salvage), '#ffb547');
-          screenLine(s, 200, 'ITEMS OWNED', String(save.items.length));
-          screenLine(s, 250, 'LOCK', 'SECURED');
-          break;
-        case 'workshop':
-          drawScreenFrame(s, 'ENGINEERING', '#ffb547');
-          screenLine(s, 100, 'WEAPONS', String(save.items.filter((i) => i.category === 'weapon').length), '#cdd9df');
-          screenLine(s, 150, 'MODULES', String(save.items.filter((i) => i.category === 'module').length), '#cdd9df');
-          screenLine(s, 200, 'SALVAGE · COMP', `${save.resources.salvage} · ${save.resources.components}`, '#ffb547');
-          break;
-        case 'fabricate':
-          drawScreenFrame(s, 'FABRICATOR', '#ffb547');
-          screenLine(s, 90, 'OUTPUT LEVEL', String(fabricationLevel(save as SaveData)), '#ffd59a');
-          screenLine(s, 140, 'CRAFTED', String(save.economy.stats.itemsCrafted), '#cdd9df');
-          screenLine(s, 190, 'STATUS', 'READY');
-          break;
-        case 'merchant': {
-          const left = save.market.equipment.filter((e) => !e.sold).length;
-          drawScreenFrame(s, 'EXCHANGE');
-          screenLine(s, 100, 'CREDITS', String(save.resources.credits), '#9ef7ff');
-          screenLine(s, 150, 'IN STOCK', `${left} / ${save.market.equipment.length}`);
-          screenLine(s, 200, 'MANIFEST', `#${save.market.rotation}`, '#cdd9df');
-          screenLine(s, 250, 'RESTOCK', 'AFTER NEXT OPERATION', '#cdd9df');
-          break;
-        }
-        case 'modules': {
-          const left = save.market.modules.filter((e) => !e.sold).length;
-          drawScreenFrame(s, 'MODULE BROKER');
-          screenLine(s, 100, 'CREDITS', String(save.resources.credits), '#9ef7ff');
-          screenLine(s, 150, 'MODULES', `${left} / ${save.market.modules.length}`);
-          screenLine(s, 200, 'EXCHANGE', save.market.exchange.map((o) => o.left).join(' · '), '#ffd59a');
-          break;
-        }
-        case 'salvage':
-          drawScreenFrame(s, 'RECLAMATION', '#ffb547');
-          screenLine(s, 100, 'SALVAGE', String(save.resources.salvage), '#ffb547');
-          screenLine(s, 150, 'ADV. COMPONENTS', String(save.resources.components), '#9ef7ff');
-          screenLine(s, 200, 'DISMANTLED', String(save.economy.stats.itemsDismantled), '#cdd9df');
-          screenLine(s, 250, 'PRESS', 'ARMED');
-          break;
-      }
+      drawStationScreen(rig.station.id, s, save);
       s.tex.update(false);
     }
     this.displays.exchange?.update(save.market.equipment);
@@ -658,6 +596,10 @@ export class HomeBase {
       if (input.pressed('Escape') || input.pressed('KeyB')) void this.exitConstruction();
     }
     if (this.screen !== 'terminal') this.focus.closeStation();
+    if (this.pinged && (this.pingT -= dt) <= 0) {
+      this.pinged = null;
+      if (!this.target) this.focus.setTarget(null);
+    }
     this.focus.update(dt, this.reduceMotion);
     this.ambient.update(dt);
     this.layer.update(dt);
@@ -725,8 +667,21 @@ export class HomeBase {
       next?.screen?.mat.emissiveColor.setAll(1.6);
       if (next) sfx.play('ui', { volume: 0.25, pitch: 1.6 });
       this.target = next;
-      this.focus.setTarget(next?.station ?? null);
-    }
+      this.focus.setTarget(next?.station ?? this.pinged?.station ?? null);
+    } else if (!next && this.pinged) this.focus.setTarget(this.pinged.station);
+
+  }
+
+  /** Station directory: light up a station's floor ring for a few seconds so the player can find it. */
+  private pinged: { station: Station } | null = null;
+  private pingT = 0;
+  pingStation(id: string): boolean {
+    const rig = this.rigs.find((r) => r.station.id === id);
+    if (!rig) return false;
+    this.pinged = { station: rig.station };
+    this.pingT = 10;
+    uiEvents.emit('banner', { title: rig.station.title, sub: `Marked in ${rig.station.area}`, tone: 'cyan' });
+    return true;
   }
 
   /** Station feedback for a committed transaction (animation + sound). */
@@ -748,7 +703,7 @@ export class HomeBase {
     hudStore.set({
       location: 'home',
       area: areaAt(p.x, p.z),
-      prompt: t && this.screen === 'home' ? { key: keyLabel(this.settings.keys.use), title: t.title, action: t.action } : null,
+      prompt: t && this.screen === 'home' ? { key: keyLabel(this.settings.keys.use), title: t.title, action: t.action, purpose: stationInfo(t.id)?.purpose } : null,
       perf: this.perfOn
         ? { fps: Math.round(this.fpsSmooth), enemies: 0, draws: Math.round(this.instrumentation?.drawCallsCounter.current ?? 0), particles: 0 }
         : null,

@@ -4,7 +4,7 @@ import { starterWeapon } from '../../loot/generate';
 import { newUid, SLOT_IDS, type SlotId } from '../items';
 import { STARTING_CREDITS } from '../../economy/config';
 import { generateMarket, progressLevel } from '../../economy/market';
-import { LoadoutPreset, PRESET_COUNT, SAVE_VERSION, STORAGE_CAPACITY, SaveData, TierRecord, emptyEconomy } from './types';
+import { LoadoutPreset, PRESET_COUNT, SAVE_VERSION, STORAGE_CAPACITY, SaveData, TierRecord, emptyEconomy, emptyProgress } from './types';
 
 export const DEFAULT_FACILITIES = ['command', 'deployment', 'configuration', 'storage', 'workshop', 'merchant', 'modules', 'salvage', 'fabricate'];
 
@@ -40,6 +40,7 @@ export function createDefaultSave(now = Date.now()): SaveData {
     market: generateMarket(profileId, 0, { level: 1, tier: 1 }, now),
     economy: emptyEconomy(),
     towers: { unlocked: [] },
+    progress: emptyProgress(profileId),
   };
 }
 

@@ -143,7 +143,8 @@ async function profileRows(id) {
     SELECT
       ARRAY(SELECT uid FROM profile_items WHERE player_id = $1 AND scope = 'owned' ORDER BY position) AS items,
       ARRAY(SELECT id FROM profile_run_history WHERE player_id = $1 ORDER BY position) AS history,
-      EXISTS(SELECT 1 FROM profile_active_runs WHERE player_id = $1) AS active_run
+      EXISTS(SELECT 1 FROM profile_active_runs WHERE player_id = $1) AS active_run,
+      (SELECT xp FROM profiles WHERE player_id = $1) AS xp
   `, [id]);
   return rows[0];
 }
@@ -259,6 +260,8 @@ async function profileRows(id) {
       check('D5 banked items are written to that player\'s server profile only', A.snap.me.run.is > 0 ? [...securedUids].some((u) => u.startsWith(A.run.runId)) : true, `${profA.items.length} items`);
       const profB = await profileRows(B.welcome.playerId);
       check('D6 no item exists in two profiles', !profB.items.some((uid) => securedUids.has(uid) && uid.startsWith(A.run.runId)));
+      const xps = [Number(profA.xp), Number(profB.xp)];
+      check('D6b each player banks their own Warden XP at the checkpoint', xps.every((x) => x > 0) && A.snap.me.run.xs === xps[0], `xp ${xps} (snapshot ${A.snap.me.run.xs})`);
       // Vote: one says continue -> continues; all say home -> extract.
       for (let i = 0; i < 40 && A.snap.of; i++) {
         const chooser = bots.find((b) => b.welcome.playerId === A.snap.of[1]);

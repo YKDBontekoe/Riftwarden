@@ -1,3 +1,4 @@
+import { currencyTooltip } from '../../economy/currencies';
 import { useEffect, useRef, useState } from 'react';
 import { getTier } from '../../progression/tiers';
 import { type BannerEvent, uiEvents, useHud } from '../store';
@@ -151,6 +152,7 @@ export function RunPanel() {
       </div>
       {run.salvageSecured > 0 && <div className="rp-row"><span>Banked salvage</span><b className="sec">{run.salvageSecured}</b></div>}
       {run.creditsUnsecured + run.creditsSecured > 0 && <div className="rp-row"><span>Credits <small>held / banked</small></span><b>{run.creditsUnsecured} / {run.creditsSecured}</b></div>}
+      {(run.xpUnsecured ?? 0) + (run.xpSecured ?? 0) > 0 && <div className="rp-row res-xp" title={currencyTooltip('xp')}><span>Warden XP <small>at risk / banked</small></span><b data-testid="run-xp">{run.xpUnsecured ?? 0} / {run.xpSecured ?? 0}</b></div>}
       {run.componentsUnsecured + run.componentsSecured > 0 && <div className="rp-row"><span>Components <small>held / banked</small></span><b>{run.componentsUnsecured} / {run.componentsSecured}</b></div>}
       <div className="rp-row">
         <span>Cargo <BoundKey action="inventory" /></span><b>{cargo} / {cargoMax}</b>

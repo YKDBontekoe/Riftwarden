@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import type { Flow } from '../core/Flow';
 import { RESOURCE_KEYS, type ResourceKey } from '../economy/config';
 import { RES_CLASS, RES_ICON } from './economy';
+import { currencyTooltip } from '../economy/currencies';
+import { levelInfo, pointsAt } from '../progression/level';
 import { uiEvents } from './store';
 import { getTier } from '../progression/tiers';
 import { useSave } from './App';
@@ -30,7 +32,7 @@ export function HomeHud({ flow }: { flow: Flow }) {
           <span>RESERVES</span>
           <div className="res-line" data-testid="hq-resources">
             {RESOURCE_KEYS.map((k) => (
-              <span key={k} className={RES_CLASS[k]} title={k}>
+              <span key={k} className={RES_CLASS[k]} title={currencyTooltip(k)}>
                 <i>{RES_ICON[k]}</i>
                 {save.resources[k].toLocaleString()}
               </span>
@@ -38,6 +40,7 @@ export function HomeHud({ flow }: { flow: Flow }) {
           </div>
           <Deltas />
         </div>
+        <WardenLevel xp={save.progress.xp} allocated={save.progress.tree.allocated.length} />
         <div>
           <span>THREAT TIER</span>
           <b>
@@ -52,6 +55,7 @@ export function HomeHud({ flow }: { flow: Flow }) {
           <div>
             <b>{prompt.title}</b>
             <span>{prompt.action}</span>
+            {prompt.purpose && <em className="hq-purpose">{prompt.purpose}</em>}
           </div>
         </div>
       )}
@@ -88,5 +92,26 @@ function Deltas() {
         </b>
       ))}
     </>
+  );
+}
+
+/** Warden level, XP progress and unspent skill points (HQ overlay). */
+export function WardenLevel({ xp, allocated }: { xp: number; allocated: number }) {
+  const info = levelInfo(xp);
+  const free = Math.max(0, pointsAt(info.level) - allocated);
+  return (
+    <div className="warden-level" data-testid="warden-level" title={currencyTooltip('xp')}>
+      <span>WARDEN LEVEL</span>
+      <b>
+        {info.level}
+        {free > 0 && <em className="pts">+{free} PT</em>}
+      </b>
+      <div className="xp-bar">
+        <i style={{ width: `${Math.round(info.frac * 100)}%` }} />
+      </div>
+      <small>
+        {info.into.toLocaleString()} / {info.need.toLocaleString()} XP
+      </small>
+    </div>
   );
 }

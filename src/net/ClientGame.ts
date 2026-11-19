@@ -743,6 +743,9 @@ export class ClientGame extends Game {
     run.secured.credits = r.cs;
     run.unsecured.components = r.ku;
     run.secured.components = r.ks;
+    run.xpReplica = true;
+    run.secured.xp = r.xs ?? 0;
+    run.unsecured.xp = r.xu ?? 0;
     run.wavesCleared = r.wc;
     run.lastBankedWave = r.lb;
     run.kills = r.k;

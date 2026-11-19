@@ -4,7 +4,7 @@ import { fitsSlot, getSlot, type ItemInstance, SLOT_IDS, type SlotId, slotsFor }
 import type { Rewards, RunResult } from '../run';
 import { CHECKPOINT_INTERVAL, unlocksNextTier } from '../tiers';
 import { dismantleYield, MAX_BALANCE } from '../../economy/config';
-import { HISTORY_LIMIT, RunHistoryEntry, STORAGE_CAPACITY, SaveData, TierRecord } from './types';
+import { HISTORY_LIMIT, MAX_XP, RunHistoryEntry, STORAGE_CAPACITY, SaveData, TierRecord } from './types';
 import { emptyRecord, rotateMarket } from './defaults';
 import { sanitizeItem } from './sanitize';
 import { allOwnedUids, equippedItem, itemByUid, slotOf } from './ownership';
@@ -92,7 +92,9 @@ export function bankRewards(data: SaveData, runId: string, wave: number, rewards
   const s = Math.max(0, Math.floor(rewards.salvage));
   const cr = Math.max(0, Math.floor(rewards.credits ?? 0));
   const co = Math.max(0, Math.floor(rewards.components ?? 0));
+  const xp = Math.max(0, Math.floor(rewards.xp ?? 0));
   a.salvageSecured += s;
+  data.progress.xp = Math.min(MAX_XP, data.progress.xp + xp);
   a.itemsSecured += incoming.length;
   a.creditsSecured += cr;
   a.componentsSecured += co;
@@ -155,6 +157,8 @@ export function recordRun(data: SaveData, result: RunResult): boolean {
       t.reactorDamage = Math.min(1e300, t.reactorDamage + sv.reactorDamage);
       for (const m of sv.milestones) if (!data.milestones.includes(m)) data.milestones.push(m);
     }
+    // XP banked at checkpoints is already applied; the end of the run adds what was kept.
+    data.progress.xp = Math.min(MAX_XP, data.progress.xp + Math.max(0, Math.floor(result.xpKept ?? 0)));
     data.totals.runs++;
     data.totals.kills += result.kills;
     data.totals.itemsLost += result.itemsLost;
