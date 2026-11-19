@@ -67,8 +67,8 @@ function seamProfile(edge: number, gap: number, bevel: number): { k: number; rim
 
 /**
  * Deck: four 3 m plates per 6 m tile. Plate 0 brushed with corner bolts, plate 1 split
- * into four service tiles, plate 2 a traction plate with milled grip bands, plate 3 a
- * vent grate. Bevels show worn bright metal; one seam carries an inset LED channel.
+ * into four service tiles, plate 2 a traction plate with milled grip bands, plate 3 plain
+ * brushed steel. Bevels show worn bright metal; one seam carries an inset LED channel.
  */
 export function hqDeckSet(scene: Scene, high: boolean): HqSet {
   const size = high ? 1024 : 512;
@@ -132,29 +132,6 @@ export function hqDeckSet(scene: Scene, high: boolean): HqSet {
         h -= groove * 0.08;
         rough += 0.18;
         metal -= 0.15;
-      }
-      // Vent grate: framed field of slots.
-      if (plate === 3 && eu > 0.36 && ev > 0.14) {
-        const frame = eu < 0.38 || ev < 0.16;
-        if (frame) {
-          base = 0.32;
-          h = 0.66;
-          metal = 0.7;
-          rough = 0.4;
-        } else {
-          const slot = Math.abs(((pu * 40) % 1) - 0.5) < 0.22 && Math.abs(((pv * 10) % 1) - 0.5) < 0.4;
-          if (slot) {
-            base = 0.12;
-            h = 0.25;
-            ao = 0.35;
-            rough = 0.9;
-            metal = 0.2;
-          } else {
-            base = 0.42 + brushed * 0.03;
-            metal = 0.8;
-            rough = 0.35;
-          }
-        }
       }
       // Inset LED channel along the seam between the two plate columns (u = 0.5).
       const du = Math.abs(u - 0.5);
@@ -314,7 +291,8 @@ export function hqCeilingSet(scene: Scene, high: boolean): HqSet {
         rough = 0.4;
       }
       const slot = Math.abs(pu - 0.5);
-      if (slot < 0.035 && pv > 0.08 && pv < 0.92) {
+      const lit = u < 0.5 && v < 0.5;
+      if (lit && slot < 0.035 && pv > 0.08 && pv < 0.92) {
         base = 0.9;
         rough = 0.3;
         h = 0.45;

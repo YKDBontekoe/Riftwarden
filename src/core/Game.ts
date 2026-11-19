@@ -84,7 +84,7 @@ const TMP = new Vector3();
 /** Seconds between kills that keep a kill chain going. */
 const KILL_CHAIN_WINDOW = 2.5;
 /** Sun intensity (directional, range-free). */
-const SUN = 1.52;
+const SUN = 1.85;
 const TMP2 = new Vector3();
 /** Arc Conductor reach (m): enemies on the lanes are spread a few metres apart. */
 export const ARC_RANGE = 12;
@@ -259,7 +259,7 @@ export class Game {
   ) {
     const scene = new Scene(engine);
     this.scene = scene;
-    scene.clearColor = new Color4(0.55, 0.55, 0.56, 1);
+    scene.clearColor = new Color4(0.2, 0.2, 0.22, 1);
     scene.ambientColor = new Color3(0.04, 0.045, 0.05);
     scene.skipPointerMovePicking = true;
     scene.enablePhysics(new Vector3(0, -26, 0), new HavokPlugin(true, havok));
@@ -272,14 +272,14 @@ export class Game {
     this.atmosphere = new Atmosphere(scene, this.pal, ARENA);
     this.atmosphere.setQuality(high);
     scene.fogMode = Scene.FOGMODE_EXP2;
-    scene.fogDensity = 0.0054;
+    scene.fogDensity = 0.0042;
     scene.fogColor = this.atmosphere.fogColor;
 
     // Low warm key against the mountain sky. Sky fill also keeps shaded enemies readable.
     const moon = new DirectionalLight('sun', this.atmosphere.sunDir.scale(-1), scene);
     moon.position = this.atmosphere.sunDir.scale(120);
     moon.intensity = SUN;
-    moon.diffuse = new Color3(1, 0.81, 0.62);
+    moon.diffuse = new Color3(1, 0.74, 0.5);
     moon.specular = new Color3(1, 0.86, 0.70);
     this.moon = moon;
     this.reactorLight = new PointLight('reactorLight', new Vector3(0, 5, 0), scene);
@@ -303,6 +303,7 @@ export class Game {
     this.weapon = new Weapon(scene, weaponDef, this.player, cfg.loadout.weapon);
     scene.setRenderingAutoClearDepthStencil(1, true, true, true);
     this.post = new PostFx(scene, engine, this.player.camera, high, true);
+    Object.assign(this.post, { baseContrast: 1.22, baseExposure: 1.08 }); // arena grade: punchier than the HQ
     this.mood = new MoodDirector(scene, this.moon, this.post);
 
     this.fx = new Effects(scene, this.kit, this.pal, ARENA, high);

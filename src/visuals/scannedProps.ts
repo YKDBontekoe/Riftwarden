@@ -19,6 +19,9 @@ export function placeScan(parent: TransformNode, species: keyof typeof sources, 
         m.usePhysicalLightFalloff = false;
         m.maxSimultaneousLights = 8;
         if (species === 'fern') { m.backFaceCulling = false; m.twoSidedLighting = true; }
+        // Quarry rocks are 100+ m silhouettes: dark, cool basalt so the dusk sun rims them instead of
+        // turning them into orange mud, and the fog can carry them into the panorama.
+        if (species === 'rock') { m.albedoColor.set(0.38, 0.39, 0.43); m.environmentIntensity = 0.55; }
       }
       return container;
     });

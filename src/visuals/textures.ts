@@ -172,8 +172,9 @@ export function yardDeckSet(scene: Scene, high: boolean): PbrSet {
       const seam = Math.min(slab, 1 - slab, Math.abs(((v * 9 + Math.floor(u * 9) * 0.5) % 1) - 0.5));
       const expansionJoint = Math.max(0, 1 - seam * 155);
       const i = (y * size + x) * 4;
-      const oil = smooth(Math.max(0, Math.min(1, (fbm(u, v, 9, 3, 91) - 0.66) * 8)));
-      const rustStain = smooth(Math.max(0, Math.min(1, (fbm(u, v, 11, 3, 133) - 0.64) * 6))) * (0.4 + expansionJoint * 0.6);
+      // Stains ~2-4 m across (the deck map spans the whole 120 m yard).
+      const oil = smooth(Math.max(0, Math.min(1, (fbm(u, v, 36, 3, 91) - 0.68) * 8))) * 0.8;
+      const rustStain = smooth(Math.max(0, Math.min(1, (fbm(u, v, 40, 3, 133) - 0.64) * 6))) * (0.4 + expansionJoint * 0.6);
       const crack = cracks[i + 3] / 255;
       const base = (0.46 + (grit - 0.5) * 0.16 + (stain - 0.5) * 0.12 - wet * 0.115 - expansionJoint * 0.12) * (1 - oil * 0.45) * (1 - crack * 0.6);
       albedo.data[i] = base * 255 * (1 + rustStain * 0.12);

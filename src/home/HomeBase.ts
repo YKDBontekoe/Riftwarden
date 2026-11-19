@@ -193,9 +193,11 @@ export class HomeBase {
       }
       return m;
     };
-    const floor = surface('hqDeck', deckSet, [0.8, 0.82, 0.83], 0.32, 1.6, 0);
-    const wall = surface('hqWall', wallSet, [0.9, 0.92, 0.92], 0.28, 1.5, 0.1);
-    const ceiling = surface('hqCeiling', ceilSet, [0.62, 0.64, 0.64], 0.25, 1.35, 0);
+    // Dark graphite deck, mid-grey composite walls, dark ceiling: the light comes from fixtures,
+    // accents and screens, not from every surface being white.
+    const floor = surface('hqDeck', deckSet, [0.34, 0.36, 0.38], 0.32, 1.6, 0.25);
+    const wall = surface('hqWall', wallSet, [0.6, 0.62, 0.64], 0.28, 1.5, 0.1);
+    const ceiling = surface('hqCeiling', ceilSet, [0.2, 0.21, 0.23], 0.25, 2.2, 0);
     const glass = new PBRMaterial('hqGlass', scene);
     glass.albedoColor = new Color3(0.02, 0.06, 0.08);
     glass.metallic = 0;
@@ -217,7 +219,7 @@ export class HomeBase {
       m.maxSimultaneousLights = 8;
       return m;
     };
-    const terrazzo = plain('castTerrazzo', [0.59, 0.59, 0.52], 0.04, 0.65);
+    const terrazzo = plain('castTerrazzo', [0.3, 0.3, 0.29], 0.04, 0.42);
     const aggregate = new Texture(new URL('../assets/cast-aggregate.webp', import.meta.url).href, scene);
     aggregate.anisotropicFilteringLevel = 8;
     terrazzo.albedoTexture = aggregate;
@@ -277,7 +279,7 @@ export class HomeBase {
 
     // ---- lighting: cool fill, sunlight through the window, cyan/teal accents, warm workshop
     const hemi = new HemisphericLight('hqFill', new Vector3(0, 1, 0), scene);
-    hemi.intensity = 0.54;
+    hemi.intensity = 0.3;
     hemi.diffuse = new Color3(0.94, 0.95, 1);
     hemi.groundColor = new Color3(0.5, 0.53, 0.56);
     hemi.specular = Color3.Black();
@@ -335,7 +337,7 @@ export class HomeBase {
     this.post.pipeline.bloomKernel = high ? 64 : 48;
     this.post.baseGrain = 0.4;
     this.post.baseExposure = 0.91;
-    this.post.baseContrast = 1.09;
+    this.post.baseContrast = 1.16;
 
     this.input.onLockChange = (locked) => {
       if (!locked && this.screen === 'home') this.setScreen('paused');

@@ -23,6 +23,7 @@ import { segmentedRing } from './rings';
 import { ArenaDecals } from './arenaDecals';
 import { ArenaDressing } from './arenaDressing';
 import { RubbleBuilder } from './rubble';
+import { ArenaFloor } from './arenaFloor';
 import { planRubble } from '../world/rubblePlan';
 import { smoothLatheData } from './sculpt';
 
@@ -133,6 +134,8 @@ export class ArenaBuilder {
     decals.finish();
     this.buildSkyline();
     new ArenaDressing({ scene: this.scene, box: (...a) => this.box(...a), add: (m, mat, s) => this.add(m, mat, s) }, this.pal, this.layout).build();
+    // Floor zoning: reactor plaza, wall gutters, gate chevrons (thin inlays under decals and lanes).
+    new ArenaFloor({ scene: this.scene, add: (m, mat, s) => this.add(m, mat, s) }, this.pal, this.layout).build();
     // Weathering: rubble piles, scattered debris and wreckage (visual only, planned off every lane).
     new RubbleBuilder({ scene: this.scene, add: (m, mat, s) => this.add(m, mat, s) }, { concrete: P.debris, rust: P.rust, graphite: P.graphite, enamel: P.enamel }, true).build(planRubble(L));
 
