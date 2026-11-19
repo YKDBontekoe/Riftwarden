@@ -7,7 +7,9 @@ import { craftCostFor, fabricationLevel, previewDismantle, protectionReason, ref
 import { fmtNum } from '../combat/stats';
 import { rarity, RARITIES } from '../loot/rarity';
 import { CATEGORY_LABEL, type Category, type ItemInstance } from '../loot/types';
-import { slotsFor } from '../progression/items';
+import { SLOTS, slotsFor } from '../progression/items';
+import { swapImpact } from '../loot/loadoutScore';
+import { useScore } from './compare';
 import { type SaveData } from '../progression/save';
 import { FAMILIES, SOCKET_LABEL } from '../weapons/build';
 import { canInstall, moduleTypeDef } from '../weapons/modules';
@@ -134,6 +136,13 @@ type Tx = ReturnType<typeof useTx>;
 
 function BuyPane({ save, merchant, tx }: { save: SaveData; merchant: MerchantId; tx: Tx }) {
   const equipped = useEquipped(save);
+  const eqList = useMemo(() => SLOTS.map((s) => equipped[s.id]), [equipped]);
+  const base = useScore(eqList);
+  const impactOf = (it: ItemInstance) => {
+    if (it.category === 'module') return null;
+    const s = slotsFor(it.category).find((x) => !equipped[x]) ?? slotsFor(it.category)[0];
+    return s ? swapImpact(eqList, it, equipped[s], base) : null;
+  };
   const entries = merchant === 'equipment' ? save.market.equipment : save.market.modules;
   const [sel, setSel] = useState<string | null>(null);
   const [cat, setCat] = useState<Category | 'all'>('all');
@@ -163,6 +172,7 @@ function BuyPane({ save, merchant, tx }: { save: SaveData; merchant: MerchantId;
               e={asEntry(e.item)}
               selected={e.id === entry?.id}
               disabled={e.sold}
+              impact={e.sold ? null : impactOf(e.item)}
               onSelect={() => {
                 setSel(e.id);
                 tx.setMsg(null);
