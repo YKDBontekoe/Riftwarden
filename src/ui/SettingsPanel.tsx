@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Flow } from '../core/Flow';
-import { ACTIONS, DEFAULT_SETTINGS, PRESETS, type Quality, type Settings } from '../core/settings';
+import { keyLabel, ACTIONS, DEFAULT_SETTINGS, PRESETS, type Quality, type Settings } from '../core/settings';
 
 type Tab = 'display' | 'audio' | 'controls' | 'access';
 
@@ -175,9 +175,4 @@ function TutorialToggle({ flow }: { flow: Flow }) {
       </div>
     </div>
   );
-}
-
-export function keyLabel(code: string | undefined): string {
-  if (!code) return '—';
-  return code.replace(/^Key/, '').replace(/^Digit/, '').replace('ShiftLeft', 'L-SHIFT').replace('ShiftRight', 'R-SHIFT').replace('ControlLeft', 'L-CTRL').replace('Space', 'SPACE').toUpperCase();
 }

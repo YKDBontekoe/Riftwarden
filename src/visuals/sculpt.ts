@@ -21,6 +21,8 @@ export interface Section {
   v?: number;
   /** Superellipse exponent (2 = ellipse, higher = squarer). */
   n?: number;
+  /** Rotation of the cross section in its own plane, in radians. */
+  roll?: number;
 }
 
 export type LoftAxis = 'x' | 'y' | 'z';
@@ -48,12 +50,13 @@ export function loftData(sections: Section[], axis: LoftAxis = 'z', segs = 28): 
   const rings: number[][] = [];
   for (const s of sections) {
     const ring: number[] = [];
+    const c = Math.cos(s.roll ?? 0), sin = Math.sin(s.roll ?? 0);
     for (let k = 0; k < segs; k++) {
       // Start on a diagonal so the flat-ish sides get whole facets.
       const a = (k / segs) * Math.PI * 2 + Math.PI / segs;
       const [p, q] = superPoint(Math.max(1e-4, s.w), Math.max(1e-4, s.h), s.n ?? 4, a);
       ring.push(pos.length / 3);
-      pos.push(...place(axis, p + (s.u ?? 0), q + (s.v ?? 0), s.t));
+      pos.push(...place(axis, p * c - q * sin + (s.u ?? 0), p * sin + q * c + (s.v ?? 0), s.t));
     }
     rings.push(ring);
   }
@@ -89,7 +92,7 @@ export function loftData(sections: Section[], axis: LoftAxis = 'z', segs = 28): 
     for (let k = 0; k < segs; k++) {
       const a = base + 1 + k;
       const b = base + 1 + ((k + 1) % segs);
-      const out = (dir > 0) !== flip;
+      const out = (dir > 0) === (axis === 'z');
       if (out) idx.push(base, b, a);
       else idx.push(base, a, b);
     }

@@ -74,13 +74,13 @@ import type { BossHud } from '../ui/store';
 import type { EnemyKind } from '../data/defs';
 import type { EliteModId } from '../survival/elites';
 import type { Input } from './Input';
-import { type Settings, saveSettings } from './settings';
+import { type Settings, keyLabel, saveSettings } from './settings';
 import { TacticalEnergy, Wallet } from './tactical';
 import { type TutorialHost, TutorialDirector } from './TutorialDirector';
 
 const TMP = new Vector3();
 /** Sun intensity (directional, range-free). */
-const SUN = 2.65;
+const SUN = 1.52;
 const TMP2 = new Vector3();
 /** Arc Conductor reach (m): enemies on the lanes are spread a few metres apart. */
 export const ARC_RANGE = 12;
@@ -253,19 +253,19 @@ export class Game {
     this.pal = createPalette(scene, high);
     this.kit = new Kit(scene);
 
-    // Dusk sky, haze, lamps and embers. PBR ambient comes from the captured environment.
+    // Alpine horizon, haze, lamps and embers. PBR ambient comes from the captured environment.
     this.atmosphere = new Atmosphere(scene, this.pal, ARENA);
     this.atmosphere.setQuality(high);
     scene.fogMode = Scene.FOGMODE_EXP2;
-    scene.fogDensity = 0.0053;
+    scene.fogDensity = 0.0054;
     scene.fogColor = this.atmosphere.fogColor;
 
-    // Lighting: low golden-hour sun (key), sky IBL (fill), cyan reactor glow, orange rift light at the gates.
+    // Low warm key against the mountain sky. Sky fill also keeps shaded enemies readable.
     const moon = new DirectionalLight('sun', this.atmosphere.sunDir.scale(-1), scene);
     moon.position = this.atmosphere.sunDir.scale(120);
     moon.intensity = SUN;
-    moon.diffuse = new Color3(1, 0.84, 0.66);
-    moon.specular = new Color3(1, 0.9, 0.75);
+    moon.diffuse = new Color3(1, 0.81, 0.62);
+    moon.specular = new Color3(1, 0.86, 0.70);
     this.moon = moon;
     this.reactorLight = new PointLight('reactorLight', new Vector3(0, 5, 0), scene);
     this.reactorLight.diffuse = new Color3(0.3, 0.9, 1);
@@ -276,9 +276,10 @@ export class Game {
     // Arena
     const arena = new ArenaBuilder(scene, this.pal, ARENA);
     arena.build();
+    this.atmosphere.lightYard(arena.meshes);
     this.arenaVisuals = arena;
     this.atmosphere.adoptPortals();
-    this.reactor = buildReactor(scene, this.pal);
+    this.reactor = buildReactor(scene, this.pal, high);
 
     this.player = new Player(scene, ARENA.playerSpawn);
     scene.activeCamera = this.player.camera;
@@ -286,7 +287,7 @@ export class Game {
     if (!weaponDef) throw new Error('deployment requires an equipped weapon');
     this.weapon = new Weapon(scene, weaponDef, this.player, cfg.loadout.weapon);
     scene.setRenderingAutoClearDepthStencil(1, true, true, true);
-    this.post = new PostFx(scene, engine, this.player.camera, high);
+    this.post = new PostFx(scene, engine, this.player.camera, high, true);
     this.mood = new MoodDirector(scene, this.moon, this.post);
 
     this.fx = new Effects(scene, this.kit, this.pal, ARENA, high);
@@ -300,7 +301,8 @@ export class Game {
       this.post.kick(k * 0.8);
     };
     // Shadows (high quality only); enemies & turrets register as casters via the kit.
-    const sg = createSunShadows(moon, settings.shadows ?? (high ? 'high' : 'low'), high, [...arena.shadowCasters, ...this.reactor.root.getChildMeshes()]);
+    const reactorCasters = this.reactor.root.getChildMeshes().filter((m) => m.material && !m.material.needAlphaBlendingForMesh(m));
+    const sg = createSunShadows(moon, settings.shadows ?? (high ? 'high' : 'low'), high, [...arena.shadowCasters, ...reactorCasters]);
     if (sg) this.kit.shadowSink = (m) => sg.addShadowCaster(m);
     this.enemies = new EnemyManager(scene, this.kit, this.pal);
     for (const [kind, b] of Object.entries({ ...CORE_BEHAVIORS, ...M6_BEHAVIORS, ...JAMMER_CRAWLER_BEHAVIORS, ...BOSS_BEHAVIORS })) if (b) this.enemies.register(kind as EnemyKind, b as Behavior);
@@ -580,7 +582,7 @@ export class Game {
     this.player.shakeScale = s.shake;
     this.weapon.anim.reduceMotion = s.reduceMotion;
     this.fx.setDensity(s.particles);
-    this.atmosphere.setDensity(s.particles === 'low' ? 0.45 : s.particles === 'medium' ? 0.75 : 1);
+    this.atmosphere.setDensity(s.particles === 'low' ? 0.45 : s.particles === 'medium' ? 0.75 : 1, s.reduceMotion);
     this.post.setOptions({ bloom: s.bloom, reduceMotion: s.reduceMotion });
     sfx.setVolume(s.volume);
     sfx.setMix(s.sfxVolume, s.uiVolume, s.ambienceVolume);
@@ -899,7 +901,7 @@ export class Game {
   /** Why tower modifications are unavailable right now (null = allowed). */
   towerEditReason(): string | null {
     if (this.screen !== 'playing' && this.screen !== 'towers') return 'Not available right now';
-    if (this.waves.phase === 'combat' && !this.tactical.active) return 'Activate tactical mode (Q) to modify towers during a wave';
+    if (this.waves.phase === 'combat' && !this.tactical.active) return `Activate tactical mode (${keyLabel(this.settings.keys.tactical)}) to modify towers during a wave`;
     return null;
   }
 
@@ -1008,6 +1010,8 @@ export class Game {
 
   async resume(): Promise<void> {
     sfx.init();
+    // A key that dismissed a panel belongs to the panel, even if the scene ticks immediately.
+    this.input.clear();
     await this.input.requestLock();
     // The pointerlockchange event (which updates `captured`) can lag the
     // requestPointerLock promise. Query the lock directly so resuming from the
@@ -1910,11 +1914,11 @@ export class Game {
     const h = this.reactorHitT;
     const core = this.reactor.coreMat.emissiveColor;
     core.set(
-      (0.3 + danger * 2.2 + h * 1.5) * flicker,
-      (2.0 - danger * 1.4 + h * 0.4) * flicker,
-      (2.4 - danger * 2.3) * flicker,
+      (0.76 + danger * 1.74 + h * 1.5) * flicker,
+      (1.96 - danger * 1.36 + h * 0.4) * flicker,
+      (1.57 - danger * 1.47) * flicker,
     );
-    this.reactorLight.diffuse.set(0.3 + danger * 0.7, 0.9 - danger * 0.5, 1 - danger * 0.8);
+    this.reactorLight.diffuse.set(0.50 + danger * 0.50, 0.93 - danger * 0.53, 0.78 - danger * 0.58);
     this.reactorLight.intensity = (3 + h * 2.5 + Math.sin(performance.now() * 0.004) * 0.2) * flicker;
     this.reactor.beamMat.alpha = 0.18 + 0.2 * f;
     this.reactor.update(dt, f, h);
@@ -1998,7 +2002,7 @@ export class Game {
       canReturnHome: this.canReturnHome,
       playerAlive: this.player.alive,
       suppress: c.active || !!this.tut?.showing,
-    });
+    }, this.settings.keys);
     const run = this.cfg.run;
     const lt = this.lootTarget;
     let lootTarget: LootTargetInfo | null = null;

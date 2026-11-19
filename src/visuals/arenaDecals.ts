@@ -13,7 +13,7 @@ export class ArenaDecals {
   constructor(private scene: Scene) {
     const { c, ctx } = canvas(size);
     const random = rng(201);
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < 12; i++) {
       ctx.save();
       ctx.translate((i % 4) * cell, Math.floor(i / 4) * cell);
       ctx.beginPath();
@@ -41,21 +41,29 @@ export class ArenaDecals {
           ctx.lineTo(x + 47, 161);
           ctx.fill();
         }
-      } else {
+      } else if (i < 8) {
         const direction = ['NORTH', 'EAST', 'WEST', 'SOUTH'][i - 4];
-        ctx.fillStyle = '#28313b';
+        ctx.fillStyle = '#e3e5ce';
         ctx.fillRect(12, 20, 232, 216);
-        ctx.strokeStyle = '#94754a';
-        ctx.lineWidth = 3;
-        ctx.strokeRect(16, 26, 224, 204);
-        ctx.fillStyle = '#dc9d54';
-        ctx.fillRect(24, 42, 208, 8);
-        ctx.fillStyle = '#f4d8a8';
+        ctx.fillStyle = '#b96546';
+        ctx.fillRect(12, 20, 22, 216);
+        ctx.fillStyle = '#202b26';
+        ctx.textAlign = 'left';
+        ctx.font = 'bold 82px Arial, sans-serif';
+        ctx.fillText(direction, 46, 147, 185);
+        ctx.font = 'bold 27px Arial, sans-serif';
+        ctx.fillText('RIFT GATE', 48, 199);
+      } else {
+        const label = ['REACTOR', 'SECTOR 07', 'KEEP CLEAR', 'SERVICE'][i - 8];
+        ctx.fillStyle = i === 10 ? '#d5a054' : '#b4c4c9';
         ctx.textAlign = 'center';
-        ctx.font = 'bold 58px monospace';
-        ctx.fillText(direction, 128, 135);
-        ctx.font = 'bold 31px monospace';
-        ctx.fillText('RIFT GATE', 128, 189);
+        ctx.font = '900 31px sans-serif';
+        ctx.fillText(label, 128, 144, 220);
+        ctx.fillRect(35, 155, 186, 4);
+        for (const x of [24, 194]) {
+          ctx.fillRect(x, 101, 38, 4);
+          ctx.fillRect(x < 100 ? x : x + 34, 105, 4, 14);
+        }
       }
       ctx.globalCompositeOperation = 'destination-out';
       for (let n = 0; n < (i < 3 ? 100 : 235); n++) {
@@ -89,7 +97,7 @@ export class ArenaDecals {
   }
 
   gate(id: GateId, position: Vector3, yaw: number): void {
-    const sign = MeshBuilder.CreatePlane('gateStencil', { width: 3.0, height: 0.92 }, this.scene);
+    const sign = MeshBuilder.CreatePlane('gateStencil', { width: 3.25, height: 1.04 }, this.scene);
     sign.position.copyFrom(position);
     sign.rotation.y = yaw;
     this.add(sign, gateCells[id]);

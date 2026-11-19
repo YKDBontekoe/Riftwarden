@@ -28,6 +28,16 @@ export function TeamHud() {
         })}
         <div className="tm-link">{c.rtt} ms</div>
       </div>
+    </>
+  );
+}
+
+/** Labels use absolute viewport coordinates supplied by the game camera. */
+export function TeamTags() {
+  const c = useHud((s) => s.coop);
+  if (!c) return null;
+  return (
+    <>
       {c.team
         .filter((m) => !m.self && m.screen && m.connected)
         .map((m) => (

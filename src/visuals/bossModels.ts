@@ -2,6 +2,7 @@ import type { AbstractMesh, TransformNode } from '@babylonjs/core';
 import { enemyMats } from './enemyModels';
 import type { Kit } from './kit';
 import type { Palette } from './materials';
+import { loftData, smoothLatheData } from './sculpt';
 
 // ============================================================================ Siege Colossus
 
@@ -43,9 +44,22 @@ export function buildColossus(kit: Kit, P: Palette): ColossusRig {
   const root = kit.node('colossus', null);
   root.scaling.setAll(COLOSSUS_SCALE);
   const hull = kit.node('cHull', root, [0, COLOSSUS_HULL_Y, 0]);
+  const citadel = kit.sculpt('colossusCitadel', () => loftData([
+    { t: -3.02, w: 1.47, h: 0.82, n: 6 }, { t: -2.42, w: 2.16, h: 1.1, v: -0.06, n: 7 },
+    { t: 1.65, w: 2.24, h: 1.04, n: 7 }, { t: 2.48, w: 2.0, h: 0.96, v: 0.06, n: 6 },
+    { t: 3.12, w: 1.39, h: 0.65, v: 0.17, n: 5 },
+  ], 'z', 32));
+  const flankPlate = kit.sculpt('colossusFlank', () => loftData([
+    { t: -1.24, w: 0.10, h: 0.38, v: 0.13, n: 5 }, { t: -0.86, w: 0.29, h: 0.73, n: 6 },
+    { t: 0.68, w: 0.28, h: 0.68, n: 7 }, { t: 1.16, w: 0.12, h: 0.4, v: -0.13, n: 5 },
+  ], 'z', 16));
+  const shin = kit.sculpt('colossusShin', () => loftData([
+    { t: -2.68, w: 0.40, h: 0.47, n: 5 }, { t: -2.27, w: 0.57, h: 0.52, n: 6 },
+    { t: -0.82, w: 0.42, h: 0.47, n: 5 }, { t: -0.28, w: 0.32, h: 0.34, n: 4 },
+  ], 'y', 20));
   // Hull layers
   kit.part('box', M.bossDark, hull, { pos: [0, -1.25, 0], scale: [3.6, 0.9, 5.4] });
-  kit.part('box', M.bossArmor, hull, { scale: [4.4, 2.0, 5.8] });
+  kit.part(citadel, M.bossArmor, hull);
   kit.part('box', P.graphite, hull, { pos: [0, 1.1, -0.2], scale: [3.6, 0.3, 4.8] });
   kit.part('box', M.bossArmor, hull, { pos: [0, 1.38, -0.4], scale: [2.2, 0.35, 3.6] });
   kit.part('box', M.bossArmor, hull, { pos: [0, 0.5, 3.05], scale: [3.8, 1.3, 0.5], rot: [-0.35, 0, 0] });
@@ -58,7 +72,7 @@ export function buildColossus(kit: Kit, P: Palette): ColossusRig {
   // Ejectable flank plates (phase 2 strips them)
   const plates: AbstractMesh[] = [];
   for (const side of [-1, 1]) {
-    for (const z of [-1.4, 1.2]) plates.push(kit.part('box', M.plate, hull, { pos: [side * 2.62, 0.3, z], scale: [0.28, 1.3, 2.2], rot: [0, 0, side * 0.12] }));
+    for (const z of [-1.4, 1.2]) plates.push(kit.part(flankPlate, M.plate, hull, { pos: [side * 2.60, 0.3, z], rot: [0, 0, side * 0.12] }));
   }
   // Heat vents along the flanks (glow when exposed)
   const vents: AbstractMesh[] = [];
@@ -137,7 +151,9 @@ export function buildColossus(kit: Kit, P: Palette): ColossusRig {
     const knee = kit.node('cKnee', thigh, [0, -2.3, 0]);
     knee.rotation.z = -side * 0.95;
     kit.part('sphere', P.metal, knee, { scale: [0.75, 0.75, 0.75] });
-    kit.part('box', M.bossArmor, knee, { pos: [0, -1.4, 0], scale: [0.95, 2.6, 0.95] });
+    kit.part(shin, M.bossArmor, knee);
+    kit.part('cyl', P.metal, knee, { pos: [side * 0.44, -1.35, -front * 0.13], scale: [0.16, 1.9, 0.16] });
+    kit.part('cyl8', P.graphite, knee, { pos: [side * 0.43, -1.93, -front * 0.13], scale: [0.23, 0.83, 0.23] });
     kit.part('box', P.graphite, knee, { pos: [0, -1.0, front * 0.38], scale: [0.5, 1.6, 0.12] });
     kit.part('box', P.orangeDim, knee, { pos: [0, -0.9, front * 0.45], scale: [0.08, 1.0, 0.02], shadow: false });
     kit.part('cyl6', P.graphite, knee, { pos: [0, -2.75, 0], scale: [1.5, 0.3, 1.7] });
@@ -171,13 +187,28 @@ export function buildOverseer(kit: Kit, P: Palette): OverseerRig {
   const root = kit.node('overseer', null);
   root.scaling.setAll(OVERSEER_SCALE);
   const body = kit.node('oBody', root);
-  kit.part('sphere', M.bossDark, body, { scale: [2.5, 2.5, 2.5] });
+  const housing = kit.sculpt('overseerHousing', () => smoothLatheData([
+    [0.42, -1.19], [0.92, -0.96], [1.15, -0.48], [1.19, -0.18],
+    [1.19, 0.18], [1.15, 0.48], [0.91, 0.98], [0.41, 1.24],
+  ], 32));
+  const gimbalPlate = kit.sculpt('overseerGimbalPlate', () => loftData([
+    { t: -0.75, w: 0.09, h: 0.16, u: -0.16, n: 4 },
+    { t: -0.55, w: 0.16, h: 0.28, u: -0.065, n: 6 },
+    { t: 0, w: 0.19, h: 0.35, n: 6 },
+    { t: 0.55, w: 0.16, h: 0.28, u: -0.065, n: 6 },
+    { t: 0.75, w: 0.09, h: 0.16, u: -0.16, n: 4 },
+  ], 'x', 16));
+  kit.part(housing, M.bossDark, body);
   const inner = kit.part('sphere', M.violet, body, { scale: [1.7, 1.7, 1.7], shadow: false });
   // Equator band + lens
   kit.part('torus', P.graphite, body, { scale: [2.7, 2.7, 2.7] });
   kit.part('cyl', M.bossArmor, body, { pos: [0, 0, 1.1], rot: [Math.PI / 2, 0, 0], scale: [1.2, 0.4, 1.2] });
   kit.part('torus', P.metal, body, { pos: [0, 0, 1.32], rot: [Math.PI / 2, 0, 0], scale: [1.15, 1.15, 1.15] });
   const eye = kit.part('sphere', M.bossCore, body, { pos: [0, 0, 1.32], scale: [0.7, 0.7, 0.25], shadow: false });
+  for (let i = 0; i < 6; i++) {
+    const angle = i * Math.PI / 3;
+    kit.part('box', M.bossArmor, body, { pos: [Math.cos(angle) * 0.6, Math.sin(angle) * 0.6, 1.32], rot: [0, 0, angle], scale: [0.33, 0.12, 0.28] });
+  }
   // Plate rings
   const rings: OverseerRig['rings'] = [];
   const specs: [('x' | 'y' | 'z'), number, number][] = [['y', 0.35, 2.15], ['x', -0.25, 2.55], ['z', 0.18, 2.95]];
@@ -191,9 +222,9 @@ export function buildOverseer(kit: Kit, P: Palette): OverseerRig {
       const holder = kit.node('oPlateH', node);
       holder.rotation.y = a;
       const plate = kit.node('oPlate', holder, [0, 0, r]);
-      kit.part('box', M.bossArmor, plate, { scale: [1.5, 0.55, 0.22] });
-      kit.part('box', P.graphite, plate, { pos: [0, 0, 0.12], scale: [1.1, 0.25, 0.08] });
-      kit.part('box', M.violetDim, plate, { pos: [0, 0.18, 0.13], scale: [0.9, 0.04, 0.02], shadow: false });
+      kit.part(gimbalPlate, M.bossArmor, plate);
+      kit.part('box', P.graphite, plate, { pos: [0, 0, 0.171], scale: [0.92, 0.28, 0.09] });
+      kit.part('box', M.violetDim, plate, { pos: [0, 0.02, 0.222], scale: [0.69, 0.043, 0.02], shadow: false });
       plates.push(plate);
     }
     rings.push({ node, plates, axis, speed });
@@ -237,8 +268,10 @@ export function buildPylon(kit: Kit, P: Palette): PylonRig {
   const M = enemyMats(P.white.getScene(), P);
   const root = kit.node('pylon', null);
   const body = kit.node('pBody', root);
-  kit.part('ico', P.enemyDark, body, { scale: [1.2, 1.6, 1.2] });
+  const spindle = kit.sculpt('pylonSpindle', () => smoothLatheData([[0.19, -0.93], [0.37, -0.83], [0.57, -0.47], [0.55, -0.27], [0.24, -0.13], [0.24, 0.16], [0.54, 0.32], [0.52, 0.49], [0.33, 0.83], [0.13, 0.96]], 12));
+  kit.part(spindle, P.enemyDark, body);
   kit.part('sphere', M.violet, body, { scale: [0.6, 0.6, 0.6], shadow: false });
+  kit.part('torus', M.violetDim, body, { scale: [1.03, 1.75, 1.03], shadow: false });
   for (const s of [-1, 1]) kit.part('cone4', P.enemyArmor, body, { pos: [0, s * 0.95, 0], rot: [s < 0 ? Math.PI : 0, 0, 0], scale: [0.6, 0.6, 0.6] });
   const ring = kit.part('torusThin', M.violet, body, { scale: [1.9, 1.9, 1.9], shadow: false });
   return { root, body, ring };

@@ -1,3 +1,4 @@
+import { BoundKey } from './hud/widgets';
 import { TutorialCard } from './TutorialCard';
 import { useEffect, useState } from 'react';
 import type { Flow } from '../core/Flow';
@@ -56,7 +57,7 @@ export function HomeHud({ flow }: { flow: Flow }) {
       )}
       {walking && (
         <div className="hq-keys">
-          <kbd>WASD</kbd> move <kbd>E</kbd> use terminal <kbd>ESC</kbd> pause
+          <BoundKey action="move" /> move <BoundKey action="use" /> use terminal <kbd>ESC</kbd> pause
         </div>
       )}
       <Banner />

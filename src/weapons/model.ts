@@ -1,6 +1,7 @@
 import { Color3, type Material, Matrix, Mesh, type PBRMaterial, Quaternion, type Scene, TransformNode, Vector3, VertexData } from '@babylonjs/core';
 import type { WeaponFamily } from '../data/defs';
 import type { ItemInstance } from '../loot/types';
+import { loftData } from '../visuals/sculpt';
 import { FAMILIES, type SocketKind, type WeaponBuild } from './build';
 import { boxData, cylProfile, latheData, type P2, prismData, tubeProfile } from './geometry';
 import { heatMetal, weaponGlow, type WeaponMaterials, weaponMaterials } from './materials';
@@ -218,9 +219,24 @@ interface Mounts {
   core: { pos: V3; len: number };
   /** Top surface y and z-range available for fins/sight. */
   top: { y: number; z0: number; z1: number };
+  status: { y: number; z: number };
   /** Lower flank for heat sinks / capacitors. */
   flank: { y: number; z0: number; z1: number; x: number };
   rear: number;
+}
+
+/** Small printed flank marking. Each family uses one row of the shared atlas. */
+function chassisMark(c: Ctx, row: number, width: number, at: V3): void {
+  const height = width / 6;
+  const half = width / 2;
+  const v0 = row / 3;
+  const v1 = (row + 1) / 3;
+  const data = new VertexData();
+  data.positions = [0, -height / 2, half, 0, height / 2, half, 0, height / 2, -half, 0, -height / 2, -half];
+  data.normals = [-1, 0, 0, -1, 0, 0, -1, 0, 0, -1, 0, 0];
+  data.uvs = [0, v1, 0, v0, 1, v0, 1, v1];
+  data.indices = [0, 2, 1, 0, 3, 2];
+  c.a.add(data, c.M.markings, c.a.root, at);
 }
 
 // ------------------------------------------------------------------ chassis: plasma repeater
@@ -230,44 +246,76 @@ function plasmaChassis(c: Ctx): Mounts {
   const root = a.root;
   const heavy = c.b.chassis === 'heavy_repeater';
   const light = c.b.chassis === 'light_repeater';
-  const L = heavy ? 1.08 : light ? 0.86 : 1; // length scale
+  const L = heavy ? 1.08 : light ? 0.86 : 1;
   const H = (heavy ? 1.14 : light ? 0.9 : 1) * (0.96 + 0.08 * c.b.params.bulk);
-  const W = heavy ? 0.078 : light ? 0.064 : 0.07;
+  const W = heavy ? 0.086 : light ? 0.069 : 0.079;
   const z = (v: number) => v * L;
   const y = (v: number) => v * H;
-  // Upper shell: angular receiver with a raked nose and a stepped rear.
-  a.add(prismData([[z(-0.2), y(0.004)], [z(0.215), y(0.004)], [z(0.25), y(0.03)], [z(0.235), y(0.074)], [z(0.13), y(0.094)], [z(-0.1), y(0.094)], [z(-0.165), y(0.084)], [z(-0.205), y(0.05)]], W, 0.007), c.shell, root);
-  // Lower frame (graphite): carries the mount and the core bay.
-  a.add(prismData([[z(-0.19), y(-0.048)], [z(0.15), y(-0.048)], [z(0.2), y(-0.022)], [z(0.205), y(0.006)], [z(-0.215), y(0.006)], [z(-0.225), y(-0.02)]], W - 0.008, 0.005), M.graphite, root);
-  // Tail: energy pack housing with a polymer pad.
-  a.add(prismData([[z(-0.31), y(-0.03)], [z(-0.2), y(-0.04)], [z(-0.2), y(0.072)], [z(-0.255), y(0.07)], [z(-0.315), y(0.035)]], W - 0.014, 0.006), M.graphite, root);
-  a.add(boxData(W - 0.02, y(0.085), 0.016, 0.004), M.polymer, root, [0, y(0.016), z(-0.318)]);
-  // Side inset panels and seams (visible flank and the far side).
-  for (const s of [-1, 1]) {
-    // Raised nose plate (dark) and seams; the core sits mid-flank as the focal point.
-    a.add(prismData([[z(0.13), y(0.058)], [z(0.2), y(0.058)], [z(0.215), y(0.072)], [z(0.14), y(0.084)], [z(0.115), y(0.07)]], 0.006, 0.0018), M.dark, root, [s * (W / 2 + 0.002), 0, 0]);
-    a.add(boxData(0.003, 0.0035, z(0.36), 0.001), c.trim, root, [s * (W / 2 + 0.001), y(0.006), z(-0.02)]);
-    a.add(boxData(0.003, 0.003, z(0.14), 0.0008), M.dark, root, [s * (W / 2 + 0.0012), y(0.08), z(-0.07)]);
-    // Rear panel with two vent slots.
-    a.add(prismData([[z(-0.3), y(-0.02)], [z(-0.215), y(-0.026)], [z(-0.215), y(0.055)], [z(-0.26), y(0.056)], [z(-0.3), y(0.03)]], 0.004, 0.0012), c.shell, root, [s * ((W - 0.014) / 2 + 0.002), 0, 0]);
-    for (let i = 0; i < 2; i++) a.add(boxData(0.003, 0.006, z(0.06), 0.001), M.dark, root, [s * ((W - 0.014) / 2 + 0.0045), y(0.0 + i * 0.016), z(-0.255)]);
+
+  // Compound tapers keep the shoulder, receiver and front coupler distinct in silhouette.
+  a.add(loftData([
+    { t: z(-0.331), w: W * 0.34, h: y(0.024), v: y(0.021), n: 6 },
+    { t: z(-0.285), w: W * 0.43, h: y(0.04), v: y(0.018), n: 6 },
+    { t: z(-0.174), w: W * 0.47, h: y(0.059), v: y(0.02), n: 7 },
+    { t: z(0.091), w: W * 0.50, h: y(0.05), v: y(0.022), n: 7 },
+    { t: z(0.218), w: W * 0.38, h: y(0.039), v: y(0.033), n: 5 },
+    { t: z(0.253), w: W * 0.32, h: y(0.029), v: y(0.04), n: 5 },
+  ], 'z', 24), M.graphite, root);
+  // The upper shell splits around the cooling spine, standing clear at the waist.
+  for (const side of [-1, 1]) {
+    a.add(loftData([
+      { t: z(-0.307), w: 0.010, h: y(0.009), u: side * W * 0.19, v: y(0.044), n: 3 },
+      { t: z(-0.253), w: 0.018, h: y(0.013), u: side * W * 0.34, v: y(0.067), n: 3 },
+      { t: z(-0.16), w: 0.015, h: y(0.014), u: side * W * 0.49, v: y(0.082), n: 3.5 },
+      { t: z(-0.062), w: 0.012, h: y(0.012), u: side * W * 0.57, v: y(0.086), n: 3 },
+      { t: z(0.08), w: 0.013, h: y(0.013), u: side * W * 0.48, v: y(0.073), n: 3 },
+      { t: z(0.199), w: 0.013, h: y(0.013), u: side * W * 0.31, v: y(0.059), n: 3 },
+      { t: z(0.235), w: 0.006, h: y(0.007), u: side * W * 0.27, v: y(0.052), n: 3 },
+    ], 'z', 32), c.shell, root);
   }
-  // Top rail with teeth.
-  a.add(boxData(0.022, 0.006, z(0.12), 0.002), M.dark, root, [0, y(0.097), z(-0.08)]);
-  // Mount yoke: pivot drum and the drone hardpoint arm (runs off-screen to the hull).
-  a.add(cylX(0.026, -0.04, 0.04, 0.004), M.satin, root, [0, y(-0.058), z(-0.02)]);
-  a.add(prismData([[-0.05, -0.03], [0.03, -0.03], [0.02, 0.02], [-0.06, 0.02]], 0.05, 0.005), M.graphite, root, [0.03, y(-0.07), z(-0.02)]);
-  if (c.mount) a.add(boxData(0.04, 0.045, 0.34, 0.006), M.graphite, root, [0.1, y(-0.13), -0.12], [0.35, -0.55, 0.15]);
-  if (c.mount) a.add(boxData(0.044, 0.012, 0.3, 0.003), c.trim, root, [0.1, y(-0.105), -0.13], [0.35, -0.55, 0.15]);
-  // Status window on the top rear (heat LEDs sit here).
-  a.add(boxData(0.03, 0.006, 0.07, 0.002), M.dark, root, [0, y(0.097), z(-0.15)]);
+  // Replaceable power cartridge and two skids under the receiver.
+  a.add(loftData([
+    { t: z(-0.227), w: W * 0.27, h: y(0.017), v: y(-0.042), n: 4 },
+    { t: z(-0.181), w: W * 0.40, h: y(0.025), v: y(-0.049), n: 6 },
+    { t: z(-0.071), w: W * 0.40, h: y(0.023), v: y(-0.056), n: 6 },
+    { t: z(-0.024), w: W * 0.31, h: y(0.017), v: y(-0.044), n: 5 },
+  ], 'z', 16), M.polymer, root);
+  // The rear cap and cartridge catches are visible from the drone's mount.
+  a.add(loftData([
+    { t: z(-0.330), w: W * 0.35, h: y(0.025), v: y(0.022), n: 6 },
+    { t: z(-0.311), w: W * 0.45, h: y(0.042), v: y(0.020), n: 6 },
+    { t: z(-0.289), w: W * 0.47, h: y(0.045), v: y(0.019), n: 6 },
+    { t: z(-0.278), w: W * 0.43, h: y(0.042), v: y(0.019), n: 6 },
+  ], 'z', 16), M.satin, root);
+  a.add(boxData(W * 0.48, y(0.016), z(0.004), 0.0015), M.dark, root, [0, y(0.027), z(-0.331)]);
+  a.add(boxData(W * 0.34, y(0.0038), z(0.003), 0.0009), c.energy, root, [0, y(0.027), z(-0.334)]);
+  for (const side of [-1, 1]) {
+    const at = side * W / 2;
+    a.add(prismData([[z(-0.19), y(0.021)], [z(0.146), y(0.019)], [z(0.206), y(0.048)], [z(0.13), y(0.071)], [z(-0.148), y(0.064)]], 0.009, 0.0031), M.dark, root, [at - side * 0.001, 0, 0]);
+    a.add(prismData([[z(-0.189), y(0.017)], [z(0.122), y(0.014)], [z(0.168), y(0.024)], [z(-0.168), y(0.028)]], 0.0075, 0.0017), c.trim, root, [at + side * 0.002, 0, 0]);
+    a.add(prismData([[z(-0.29), y(-0.014)], [z(-0.19), y(-0.035)], [z(-0.13), y(-0.026)], [z(-0.153), y(-0.003)], [z(-0.233), y(0.019)], [z(-0.282), y(0.008)]], 0.009, 0.003), c.shell, root, [side * W * 0.43, 0, 0]);
+    for (let i = 0; i < 4; i++) {
+      a.add(boxData(0.0065, y(0.018), z(0.009), 0.0015), c.trim, root, [at + side * 0.005, y(0.041), z(0.063 + i * 0.021)], [-0.31, 0, 0]);
+    }
+    for (const zz of [-0.150, 0.166]) {
+      a.add(cylX(0.0046, -0.002, 0.002, 0.001, 12), M.satin, root, [at + side * 0.004, y(0.048), z(zz)]);
+    }
+    a.add(prismData([[z(-0.287), y(0.054)], [z(-0.193), y(0.073)], [z(-0.1), y(0.092)], [z(-0.127), y(0.099)], [z(-0.249), y(0.077)]], 0.011, 0.0024), M.graphite, root, [side * W * 0.34, 0, 0]);
+    for (let i = 0; i < 3; i++) {
+      a.add(boxData(0.010, y(0.006), z(0.010), 0.0014), i === 0 ? M.copper : M.dark, root, [side * W * 0.345, y(0.074 + i * 0.0044), z(-0.254 + i * 0.021)], [-0.20, 0, 0]);
+    }
+  }
+  chassisMark(c, 0, z(0.107), [-W / 2 - 0.0044, y(0.049), z(-0.079)]);
+  a.add(cylX(0.025, -W * 0.55, W * 0.55, 0.004), M.satin, root, [0, y(-0.051), z(-0.009)]);
+  a.add(prismData([[z(-0.203), y(0.091)], [z(-0.098), y(0.091)], [z(-0.123), y(0.104)], [z(-0.181), y(0.104)]], 0.032, 0.003), M.dark, root);
   return {
     axisY: y(0.042),
     barrelZ: z(0.235),
-    core: { pos: [-(W / 2) - 0.002, y(0.0), z(-0.03)], len: z(0.2) },
-    top: { y: y(0.094), z0: z(0.0), z1: z(0.12) },
-    flank: { y: y(-0.025), z0: z(-0.15), z1: z(0.1), x: (W - 0.008) / 2 },
-    rear: z(-0.32),
+    core: { pos: [-W / 2 - 0.002, y(-0.021), z(-0.023)], len: z(0.2) },
+    top: { y: y(0.092), z0: z(0.0), z1: z(0.12) },
+    status: { y: y(0.106), z: z(-0.149) },
+    flank: { y: y(-0.036), z0: z(-0.15), z1: z(0.1), x: W * 0.48 },
+    rear: z(-0.332),
   };
 }
 
@@ -280,41 +328,67 @@ function railChassis(c: Ctx): Mounts {
   const striker = c.b.chassis === 'rail_striker';
   const L = siege ? 1.12 : striker ? 0.86 : 1;
   const H = (siege ? 1.1 : striker ? 0.92 : 1) * (0.96 + 0.08 * c.b.params.bulk);
-  const W = siege ? 0.08 : 0.072;
+  const W = siege ? 0.086 : 0.075;
   const z = (v: number) => v * L;
   const y = (v: number) => v * H;
-  // Long spine (graphite) and a raised power housing at the rear (shell).
-  a.add(prismData([[z(-0.3), y(-0.035)], [z(0.22), y(-0.035)], [z(0.25), y(-0.01)], [z(0.25), y(0.03)], [z(-0.3), y(0.03)]], W - 0.016, 0.005), M.graphite, root);
-  a.add(prismData([[z(-0.34), y(0.0)], [z(-0.02), y(0.0)], [z(0.03), y(0.05)], [z(0.0), y(0.105)], [z(-0.22), y(0.115)], [z(-0.32), y(0.09)], [z(-0.36), y(0.04)]], W, 0.008), c.shell, root);
-  // Forward upper shroud bridging housing and rails.
-  a.add(prismData([[z(0.0), y(0.03)], [z(0.22), y(0.03)], [z(0.26), y(0.05)], [z(0.24), y(0.07)], [z(0.02), y(0.075)]], W - 0.024, 0.005), c.shell, root);
-  // Visible-flank capacitor bank: three cans in a cage.
-  const bank = a.node('railBank', root, [-(W / 2) - 0.012, y(0.055), z(-0.2)]);
+
+  a.add(loftData([
+    { t: z(-0.362), w: W * 0.38, h: y(0.031), v: y(0.023), n: 6 },
+    { t: z(-0.311), w: W * 0.43, h: y(0.063), v: y(0.038), n: 7 },
+    { t: z(-0.131), w: W * 0.50, h: y(0.064), v: y(0.039), n: 7 },
+    { t: z(0.035), w: W * 0.47, h: y(0.042), v: y(0.019), n: 6 },
+    { t: z(0.245), w: W * 0.33, h: y(0.031), v: y(0.008), n: 5 },
+  ], 'z', 24), M.graphite, root);
+  // Offset forged spines leave a sightline into the recessed copper power bus.
+  a.add(loftData([
+    { t: z(-0.341), w: W * 0.24, h: y(0.012), v: y(0.058), n: 4 },
+    { t: z(-0.244), w: W * 0.31, h: y(0.012), v: y(0.102), n: 4 },
+    { t: z(-0.079), w: W * 0.22, h: y(0.012), v: y(0.092), n: 4 },
+    { t: z(0.045), w: W * 0.15, h: y(0.009), v: y(0.052), n: 3 },
+  ], 'z', 28), M.copper, root);
+  for (const side of [-1, 1]) {
+    a.add(loftData([
+      { t: z(-0.35), w: 0.010, h: y(0.019), u: side * W * 0.36, v: y(0.051), n: 4 },
+      { t: z(-0.277), w: 0.015, h: y(0.022), u: side * W * 0.52, v: y(0.091), n: 4 },
+      { t: z(-0.215), w: 0.014, h: y(0.019), u: side * W * 0.54, v: y(side < 0 ? 0.121 : 0.099), n: 4 },
+      { t: z(-0.102), w: 0.013, h: y(0.019), u: side * W * 0.51, v: y(side < 0 ? 0.109 : 0.093), n: 4 },
+      { t: z(0.012), w: 0.012, h: y(0.013), u: side * W * 0.43, v: y(0.070), n: 3.5 },
+      { t: z(0.073), w: 0.006, h: y(0.008), u: side * W * 0.38, v: y(0.049), n: 3 },
+    ], 'z', 28), c.shell, root);
+    const x = side * W * 0.47;
+    // Tapered forward braces carry the exposed rail loads back into the power housing.
+    a.add(prismData([[z(-0.135), y(-0.031)], [z(0.17), y(-0.024)], [z(0.253), y(-0.011)], [z(0.251), y(0.022)], [z(0.123), y(0.036)], [z(-0.107), y(0.024)]], 0.013, 0.003), c.trim, root, [x, 0, 0]);
+    a.add(prismData([[z(-0.28), y(0.044)], [z(-0.044), y(0.035)], [z(-0.067), y(0.072)], [z(-0.255), y(0.087)]], 0.005, 0.002), M.dark, root, [side * W / 2, 0, 0]);
+    a.add(boxData(0.006, 0.008, z(0.134), 0.0013), M.polymer, root, [x + side * 0.006, y(-0.006), z(0.139)]);
+    // Ceramic stand-offs hold the bus above the receiver's metal shell.
+    a.add(prismData([[z(-0.351), y(0.008)], [z(-0.202), y(0.008)], [z(-0.15), y(0.018)], [z(-0.158), y(0.035)], [z(-0.215), y(0.021)], [z(-0.32), y(0.022)]], 0.007, 0.0015), M.copper, root, [side * W * 0.52, 0, 0]);
+    for (const zz of [-0.326, -0.19]) a.add(boxData(0.011, y(0.026), z(0.022), 0.002), M.satin, root, [side * W * 0.50, y(0.017), z(zz)]);
+  }
+  // Pair of raised shoulders protect the status strip and expose the rear insulator.
+  for (const side of [-1, 1]) {
+    a.add(prismData([[z(-0.352), y(0.046)], [z(-0.306), y(0.087)], [z(-0.23), y(0.124)], [z(-0.247), y(0.135)], [z(-0.322), y(0.108)], [z(-0.361), y(0.064)]], 0.012, 0.0031), c.trim, root, [side * W * 0.32, 0, 0]);
+  }
+  for (const [yy, ww] of [[0.015, 0.56], [0.031, 0.58], [0.047, 0.49]]) {
+    a.add(boxData(W * ww, y(0.006), z(0.016), 0.0015), M.dark, root, [0, y(yy), z(-0.358)]);
+  }
+  chassisMark(c, 1, z(0.104), [-W / 2 - 0.0036, y(0.066), z(-0.218)]);
+  const bank = a.node('railBank', root, [W * 0.53, y(0.012), z(-0.275)]);
   for (let i = 0; i < 3; i++) {
-    const n = a.node('railCap', bank, [0, 0, i * 0.052]);
-    a.add(cylZ(0.016, -0.022, 0.022, 0.003), M.satin, n);
-    a.add(tubeZ(0.0172, 0.014, -0.006, 0.006), c.chargeGlow, n);
+    const n = a.node('railCap', bank, [0, 0, z(i * 0.054)]);
+    a.add(cylZ(0.0125, -0.018, 0.022, 0.003, 16), M.satin, n);
+    a.add(tubeZ(0.0135, 0.012, -0.005, 0.002, 16), c.chargeGlow, n);
     c.rig.charge.push({ node: n, travel: 0.006, z0: n.position.z });
   }
-  a.add(boxData(0.006, 0.042, z(0.17), 0.002), M.dark, root, [-(W / 2) - 0.004, y(0.055), z(-0.15)]);
-  for (const s of [-1, 1]) a.add(boxData(0.028, 0.004, z(0.17), 0.001), M.dark, root, [-(W / 2) - 0.012, y(0.055) + s * 0.019, z(-0.15)]);
-  // Seams and trim.
-  for (const s of [-1, 1]) {
-    a.add(boxData(0.003, 0.004, z(0.28), 0.001), c.trim, root, [s * (W / 2 + 0.001), y(0.02), z(-0.18)]);
-    a.add(prismData([[z(-0.26), y(0.03)], [z(-0.05), y(0.03)], [z(-0.03), y(0.06)], [z(-0.24), y(0.08)]], 0.004, 0.001), M.dark, root, [s * (W / 2 + 0.0015), 0, 0]);
-  }
-  // Mount yoke and hardpoint arm.
-  a.add(cylX(0.028, -0.042, 0.042, 0.004), M.satin, root, [0, y(-0.05), z(-0.08)]);
-  if (c.mount) a.add(boxData(0.04, 0.045, 0.34, 0.006), M.graphite, root, [0.1, y(-0.12), -0.18], [0.35, -0.55, 0.15]);
-  if (c.mount) a.add(boxData(0.044, 0.012, 0.3, 0.003), c.trim, root, [0.1, y(-0.095), -0.19], [0.35, -0.55, 0.15]);
-  a.add(boxData(0.03, 0.006, 0.07, 0.002), M.dark, root, [0, y(0.118), z(-0.2)]);
+  a.add(cylX(0.027, -W * 0.58, W * 0.58, 0.004), M.satin, root, [0, y(-0.051), z(-0.09)]);
+  a.add(prismData([[z(-0.256), y(0.109)], [z(-0.129), y(0.104)], [z(-0.162), y(0.125)], [z(-0.242), y(0.127)]], 0.030, 0.0029), M.dark, root);
   return {
     axisY: y(0.0),
     barrelZ: z(0.25),
-    core: { pos: [-(W / 2) - 0.002, y(0.0), z(0.1)], len: z(0.14) },
-    top: { y: y(0.115), z0: z(-0.2), z1: z(-0.04) },
-    flank: { y: y(-0.02), z0: z(-0.25), z1: z(0.05), x: (W - 0.016) / 2 },
-    rear: z(-0.36),
+    core: { pos: [-W / 2 - 0.002, y(-0.017), z(0.051)], len: z(0.14) },
+    top: { y: y(0.112), z0: z(-0.2), z1: z(-0.04) },
+    status: { y: y(0.129), z: z(-0.219) },
+    flank: { y: y(-0.031), z0: z(-0.25), z1: z(0.05), x: W * 0.49 },
+    rear: z(-0.363),
   };
 }
 
@@ -327,45 +401,76 @@ function beamChassis(c: Ctx): Mounts {
   const focus = c.b.chassis === 'beam_focus';
   const L = lattice ? 1.06 : focus ? 0.94 : 1;
   const H = (lattice ? 1.12 : focus ? 0.94 : 1) * (0.96 + 0.08 * c.b.params.bulk);
-  const W = lattice ? 0.096 : 0.086;
+  const W = lattice ? 0.108 : 0.091;
   const z = (v: number) => v * L;
   const y = (v: number) => v * H;
-  // Bulky body: lower frame + a stepped upper shell around the central focus chamber.
-  a.add(prismData([[z(-0.22), y(-0.045)], [z(0.14), y(-0.045)], [z(0.2), y(-0.015)], [z(0.2), y(0.02)], [z(-0.24), y(0.02)]], W - 0.01, 0.006), M.graphite, root);
-  a.add(prismData([[z(-0.25), y(0.015)], [z(0.18), y(0.015)], [z(0.215), y(0.045)], [z(0.17), y(0.085)], [z(0.07), y(0.09)], [z(0.05), y(0.07)], [z(-0.07), y(0.07)], [z(-0.09), y(0.09)], [z(-0.2), y(0.09)], [z(-0.26), y(0.05)]], W, 0.009), c.shell, root);
-  // Central focus chamber: large glass sphere in a ring cradle (the family's signature).
-  const chamber = a.node('beamChamber', root, [0, y(0.088), z(-0.01)]);
-  a.add(lathe([[0, -0.042], [0.03, -0.03], [0.042, 0], [0.03, 0.03], [0, 0.042]], 28), M.glass, chamber);
-  const coreSpin = a.node('beamCoreSpin', chamber);
-  a.add(lathe([[0, -0.026], [0.02, -0.008], [0.02, 0.008], [0, 0.026]], 8), c.energy, coreSpin);
-  c.rig.spin.push({ node: coreSpin, axis: 'y', rate: 1.6 });
-  a.add(tubeZ(0.05, 0.042, -0.008, 0.008, 32), c.trim, chamber, [0, 0, 0], [0, 0, 0]);
-  a.add(alongX(latheData(tubeProfile(0.05, 0.043, -0.006, 0.006), 32)), M.dark, chamber);
-  // Side radiator grilles on both flanks (heat-reactive edges).
-  for (const s of [-1, 1]) {
-    for (let i = 0; i < 6; i++) {
-      const f = s < 0 ? a.node('beamFin', root, [s * (W / 2 + 0.004), y(0.04), z(-0.18 + i * 0.026)]) : a.frame('beamFin', root, [s * (W / 2 + 0.004), y(0.04), z(-0.18 + i * 0.026)]);
-      // Whole fin in heat-reactive metal: one draw per animated fin, glows as a unit when hot.
-      a.add(boxData(0.008, y(0.05), 0.006, 0.0015), s < 0 ? c.heat : M.dark, f);
-      a.add(boxData(0.0085, y(0.006), 0.0062, 0.001), c.heat, f, [0, y(0.026), 0]);
-      if (s < 0) c.rig.fins.push({ node: f, max: 0.35 });
-    }
-    a.add(boxData(0.003, 0.004, z(0.3), 0.001), c.trim, root, [s * (W / 2 + 0.001), y(0.005), z(0.0)]);
+
+  // Broad, rounded optics housing with a low keel and sweeping side cheeks.
+  a.add(loftData([
+    { t: z(-0.273), w: W * 0.32, h: y(0.025), v: y(0.013), n: 3 },
+    { t: z(-0.217), w: W * 0.49, h: y(0.054), v: y(0.029), n: 4 },
+    { t: z(-0.12), w: W * 0.53, h: y(0.061), v: y(0.039), n: 5 },
+    { t: z(0.066), w: W * 0.52, h: y(0.047), v: y(0.025), n: 5 },
+    { t: z(0.192), w: W * 0.42, h: y(0.041), v: y(0.023), n: 4 },
+    { t: z(0.217), w: W * 0.34, h: y(0.034), v: y(0.022), n: 4 },
+  ], 'z', 28), M.graphite, root);
+  for (const side of [-1, 1]) {
+    const x = side * W * 0.47;
+    a.add(loftData([
+      { t: z(-0.254), w: 0.009, h: y(0.012), u: side * W * 0.38, v: y(0.030), n: 2.3 },
+      { t: z(-0.164), w: 0.019, h: y(0.031), u: side * W * 0.55, v: y(0.024), n: 2.5 },
+      { t: z(-0.085), w: 0.017, h: y(0.031), u: side * W * 0.67, v: y(0.018), n: 2.5 },
+      { t: z(0.013), w: 0.014, h: y(0.025), u: side * W * 0.66, v: y(0.013), n: 2.5 },
+      { t: z(0.112), w: 0.016, h: y(0.029), u: side * W * 0.47, v: y(0.020), n: 2.4 },
+      { t: z(0.204), w: 0.008, h: y(0.016), u: side * W * 0.34, v: y(0.028), n: 2.2 },
+    ], 'z', 36), c.shell, root);
+    a.add(prismData([[z(-0.172), y(0.015)], [z(0.05), y(0.016)], [z(0.129), y(0.037)], [z(0.037), y(0.048)], [z(-0.154), y(0.039)]], 0.008, 0.0029), M.dark, root, [x + side * 0.008, 0, 0]);
+    a.add(boxData(0.008, 0.006, z(0.108), 0.0012), c.trim, root, [x + side * 0.009, y(-0.014), z(0.009)]);
+    // Split crash frame feeds loads around the rear of the optical chamber.
+    a.add(prismData([[z(-0.273), y(0.013)], [z(-0.225), y(-0.014)], [z(-0.139), y(-0.021)], [z(-0.151), y(-0.033)], [z(-0.232), y(-0.031)], [z(-0.274), y(-0.004)]], 0.013, 0.003), c.trim, root, [side * W * 0.4, 0, 0]);
+    a.add(prismData([[z(-0.27), y(0.027)], [z(-0.206), y(0.047)], [z(-0.14), y(0.066)], [z(-0.14), y(0.08)], [z(-0.229), y(0.066)]], 0.012, 0.0025), M.satin, root, [side * W * 0.35, 0, 0]);
+    a.add(boxData(0.005, y(0.006), z(0.052), 0.001), c.chargeGlow, root, [side * W * 0.39, y(0.052), z(-0.205)], [-0.25, 0, 0]);
   }
-  a.add(boxData(W - 0.03, y(0.07), 0.016, 0.004), M.polymer, root, [0, y(0.02), z(-0.26)]);
-  // Mount yoke and hardpoint arm.
-  a.add(cylX(0.03, -0.046, 0.046, 0.004), M.satin, root, [0, y(-0.058), z(-0.04)]);
-  if (c.mount) a.add(boxData(0.04, 0.045, 0.34, 0.006), M.graphite, root, [0.1, y(-0.13), -0.15], [0.35, -0.55, 0.15]);
-  if (c.mount) a.add(boxData(0.044, 0.012, 0.3, 0.003), c.trim, root, [0.1, y(-0.105), -0.16], [0.35, -0.55, 0.15]);
-  a.add(boxData(0.03, 0.006, 0.07, 0.002), M.dark, root, [0, y(0.093), z(-0.15)]);
+  chassisMark(c, 2, z(0.091), [-W * 0.47 - 0.0133, y(0.028), z(-0.104)]);
+
+  // The resonator is secured inside a damped cradle. Its internal prism remains animated.
+  const chamber = a.node('beamChamber', root, [0, y(0.09), z(-0.042)]);
+  a.add(alongZ(lathe([[0.021, -0.054], [0.039, -0.048], [0.042, -0.025], [0.036, 0.026], [0.028, 0.048], [0.021, 0.052]], 28)), M.glass, chamber);
+  const coreSpin = a.node('beamCoreSpin', chamber);
+  a.add(alongZ(lathe([[0, -0.041], [0.016, -0.025], [0.021, 0.015], [0.013, 0.034], [0, 0.045]], 8)), c.energy, coreSpin);
+  c.rig.spin.push({ node: coreSpin, axis: 'z', rate: 1.6 });
+  for (const zz of [-0.049, 0.044]) a.add(tubeZ(0.041, 0.028, zz - 0.007, zz + 0.007, 20), c.trim, chamber);
+  for (const side of [-1, 1]) {
+    a.add(boxData(0.011, 0.012, 0.112, 0.0024), M.graphite, chamber, [side * 0.034, 0.022, -0.003]);
+    for (const zz of [-0.047, 0.037]) a.add(cylX(0.006, -0.004, 0.004, 0.0012, 12), M.satin, chamber, [side * 0.039, 0.022, zz]);
+  }
+  for (const side of [-1, 1]) {
+    a.add(prismData([[z(-0.102), y(0.076)], [z(-0.081), y(0.118)], [z(-0.041), y(0.111)], [z(-0.031), y(0.067)]], 0.018, 0.004), M.graphite, root, [side * W * 0.40, 0, 0]);
+  }
+  a.add(cylX(0.029, -0.046, 0.046, 0.004), M.satin, root, [0, y(-0.055), z(-0.048)]);
+  a.add(boxData(0.029, 0.007, z(0.065), 0.0018), M.dark, root, [0, y(0.093), z(-0.156)]);
   return {
     axisY: y(0.025),
     barrelZ: z(0.205),
-    core: { pos: [-(W / 2) - 0.002, y(-0.01), z(0.08)], len: z(0.11) },
-    top: { y: y(0.09), z0: z(0.075), z1: z(0.17) },
-    flank: { y: y(-0.02), z0: z(-0.2), z1: z(0.1), x: (W - 0.01) / 2 },
-    rear: z(-0.27),
+    core: { pos: [-W * 0.52 - 0.001, y(-0.024), z(0.065)], len: z(0.11) },
+    top: { y: y(0.082), z0: z(0.075), z1: z(0.17) },
+    status: { y: y(0.098), z: z(-0.156) },
+    flank: { y: y(-0.030), z0: z(-0.2), z1: z(0.1), x: W * 0.51 },
+    rear: z(-0.274),
   };
+}
+
+/** Visible linkage between the drone and the tool receiver. */
+function hardpoint(c: Ctx, m: Mounts): void {
+  if (!c.mount) return;
+  const { a, M } = c;
+  const pivot = (m.rear + m.barrelZ) / 2;
+  const frame = a.frame('hardpoint', a.root, [0.071, m.flank.y - 0.071, pivot - 0.06], [0.34, -0.46, 0.17]);
+  a.add(prismData([[-0.197, -0.016], [0.068, -0.016], [0.116, 0.018], [0.070, 0.039], [-0.173, 0.021]], 0.047, 0.009), M.graphite, frame);
+  a.add(prismData([[-0.183, 0.009], [0.067, 0.022], [0.089, 0.029], [0.051, 0.038], [-0.167, 0.024]], 0.038, 0.005), c.trim, frame);
+  for (const side of [-1, 1]) {
+    a.add(cylX(0.011, -0.005, 0.005, 0.002, 12), M.polymer, frame, [side * 0.024, 0.009, 0.062]);
+  }
 }
 
 // ------------------------------------------------------------------ barrels / emitters
@@ -389,26 +494,37 @@ function barrel(c: Ctx, m: Mounts): number {
       const twin = b.barrel === 'pb_twin';
       const L = (long ? 0.32 : 0.21) + 0.08 * lenK;
       const sh = twin ? 0.036 : 0.03;
-      // Shroud: angular prism with a raked front, vent slots on top.
-      const sw = twin ? 0.054 : 0.048;
-      // Shroud body (graphite) with a shell-coloured top cover: reads as its own assembly.
-      a.add(prismData([[z0 - 0.012, ay - sh], [z0 + L * 0.7, ay - sh * 0.9], [z0 + L * 0.78, ay - sh * 0.5], [z0 + L * 0.78, ay + sh * 0.55], [z0 + L * 0.7, ay + sh * 0.8], [z0 - 0.012, ay + sh * 0.85]], sw, 0.005), M.graphite, slide);
-      a.add(prismData([[z0 - 0.016, ay + sh * 0.7], [z0 + L * 0.6, ay + sh * 0.7], [z0 + L * 0.68, ay + sh * 0.92], [z0 + L * 0.56, ay + sh * 1.12], [z0 - 0.016, ay + sh * 1.15]], sw + 0.004, 0.005), c.shell, slide);
-      // Underbarrel energy rail: gives the front a deeper silhouette.
-      a.add(prismData([[z0 - 0.01, ay - sh * 0.95], [z0 + L * 0.5, ay - sh * 0.95], [z0 + L * 0.58, ay - sh * 1.3], [z0 + L * 0.1, ay - sh * 1.55], [z0 - 0.01, ay - sh * 1.45]], sw - 0.016, 0.004), c.shell, slide);
-      const slots = long ? 5 : 3;
-      for (let i = 0; i < slots; i++) for (const s of [-1, 1]) a.add(boxData(0.004, sh * 0.55, 0.012, 0.0012), M.dark, slide, [s * (sw / 2 + 0.0005), ay - sh * 0.05, z0 + 0.03 + i * (L * 0.5 / slots)]);
+      const sw = twin ? 0.058 : 0.055;
+      a.add(loftData([
+        { t: z0 - 0.019, w: sw * 0.48, h: sh, v: ay, n: 6 },
+        { t: z0 + L * 0.13, w: sw * 0.52, h: sh * 0.97, v: ay, n: 6 },
+        { t: z0 + L * 0.53, w: sw * 0.47, h: sh * 0.86, v: ay, n: 5 },
+        { t: z0 + L * 0.76, w: sw * 0.36, h: sh * 0.67, v: ay, n: 4 },
+      ], 'z', 20), M.graphite, slide);
+      for (const side of [-1, 1]) {
+        a.add(prismData([[z0 - 0.006, ay + sh * 0.38], [z0 + L * 0.38, ay + sh * 0.47], [z0 + L * 0.69, ay + sh * 0.55], [z0 + L * 0.56, ay + sh * 1.06], [z0 - 0.008, ay + sh * 1.12]], 0.012, 0.0038), c.shell, slide, [side * sw * 0.34, 0, 0]);
+        a.add(prismData([[z0 + L * 0.09, ay - sh * 0.76], [z0 + L * 0.61, ay - sh * 0.59], [z0 + L * 0.66, ay - sh * 0.79], [z0 + L * 0.25, ay - sh * 1.28]], 0.010, 0.0026), c.trim, slide, [side * sw * 0.36, 0, 0]);
+        for (let i = 0; i < (long ? 5 : 4); i++) {
+          a.add(boxData(0.006, sh * 0.45, L * 0.034, 0.0012), M.dark, slide, [side * sw * (0.49 - i * 0.012), ay - sh * 0.09, z0 + L * (0.14 + i * 0.102)], [-0.45, 0, 0]);
+        }
+        a.add(cylZ(0.0035, L * 0.04, L * 0.62, 0.0007, 12), M.copper, slide, [side * sw * 0.49, ay - sh * 0.52, z0]);
+        for (const f of [0.09, 0.55]) {
+          a.add(boxData(0.011, 0.012, 0.012, 0.002), M.graphite, slide, [side * sw * 0.49, ay - sh * 0.52, z0 + L * f]);
+        }
+      }
       const bores = twin ? [ay + 0.016, ay - 0.016] : [ay];
       const coils = a.node('coils', slide, [0, 0, 0]);
       for (const by of bores) {
         a.add(cylZ(twin ? 0.011 : 0.0145, z0 + L * 0.5, z0 + L + 0.045, 0.002), M.satin, slide, [0, by, 0]);
         // Accelerator coils (energy) between shroud and tip.
         const coilSpin = a.node('coilSpin', coils, [0, by, 0]);
-        for (let i = 0; i < 3; i++) a.add(tubeZ(twin ? 0.019 : 0.025, twin ? 0.0125 : 0.016, 0, 0.007), c.chargeGlow, coilSpin, [0, 0, z0 + L * 0.8 + i * 0.019]);
+        for (let i = 0; i < 3; i++) a.add(tubeZ(twin ? 0.016 : 0.0205, twin ? 0.0125 : 0.016, 0, 0.005, 20), c.chargeGlow, coilSpin, [0, 0, z0 + L * 0.8 + i * 0.019]);
         for (let i = 0; i < 4; i++) a.add(tubeZ(twin ? 0.0165 : 0.022, twin ? 0.012 : 0.0155, 0, 0.005), M.dark, coilSpin, [0, 0, z0 + L * 0.8 - 0.006 + i * 0.019]);
         c.rig.spin.push({ node: coilSpin, axis: 'z', rate: 3 });
         // Muzzle crown (heat-reactive tip).
         a.add(alongZ(lathe([[0.009, 0], [0.021, 0], [0.024, 0.006], [0.024, 0.02], [0.018, 0.03], [0.009, 0.03]], 24)), c.heat, slide, [0, by, z0 + L + 0.03]);
+        const collar = twin ? 0.017 : 0.0225;
+        a.add(tubeZ(collar, collar * 0.77, -0.013, 0.003, 12), c.trim, slide, [0, by, z0 + L + 0.04]);
         muzzle(z0 + L + 0.06, by);
       }
       if (long) {
@@ -429,21 +545,30 @@ function barrel(c: Ctx, m: Mounts): number {
         const n = a.frame('rail', slide, [rx, ay + ry, 0], [0, 0, rz]);
         const outer = ry > 0 ? 1 : -1;
         // Rail bar: tapered front, inner face lit by charge.
-        a.add(prismData([[z0, -0.011], [z0 + L, -0.008], [z0 + L + 0.025, 0.0], [z0 + L, 0.008], [z0, 0.011]], quad ? 0.012 : 0.02, 0.003), c.trim, n);
+        a.add(prismData([[z0, -0.013], [z0 + L * 0.68, -0.012], [z0 + L, -0.007], [z0 + L + 0.025, 0.001], [z0 + L * 0.925, 0.009], [z0, 0.013]], quad ? 0.015 : 0.025, 0.003), c.trim, n);
         a.add(boxData(quad ? 0.006 : 0.012, 0.002, L * 0.92, 0.0005), c.chargeGlow, n, [0, -outer * 0.0115, z0 + L * 0.48]);
-        a.add(boxData(quad ? 0.014 : 0.024, 0.006, L * 0.9, 0.002), M.dark, n, [0, outer * 0.012, z0 + L * 0.47]);
+        a.add(prismData([[z0 + L * 0.025, 0], [z0 + L * 0.90, -outer * 0.001], [z0 + L * 0.82, outer * 0.006], [z0 + L * 0.12, outer * 0.012]], quad ? 0.015 : 0.026, 0.002), M.graphite, n, [0, outer * 0.010, 0]);
       }
       // Brackets clamping the rails.
       const nb = 3 + Math.round(lenK);
       for (let i = 0; i < nb; i++) {
         const zz = z0 + 0.04 + (i * (L - 0.08)) / Math.max(1, nb - 1);
-        a.add(prismData([[-0.009, -0.05], [0.009, -0.05], [0.009, 0.05], [-0.009, 0.05]], quad ? 0.075 : 0.05, 0.004), M.graphite, slide, [0, ay, zz]);
-        a.add(boxData(quad ? 0.078 : 0.053, 0.008, 0.004, 0.001), c.trim, slide, [0, ay + 0.044, zz]);
+        for (const side of [-1, 1]) {
+          a.add(prismData([[-0.014, -0.046], [0.012, -0.042], [0.017, 0.039], [-0.012, 0.047]], 0.011, 0.003), M.graphite, slide, [side * (quad ? 0.041 : 0.020), ay, zz]);
+        }
+        a.add(boxData(quad ? 0.086 : 0.050, 0.009, 0.019, 0.002), c.trim, slide, [0, ay + 0.044, zz]);
+        if (!shroud) {
+          a.add(boxData(quad ? 0.081 : 0.047, 0.008, 0.015, 0.002), M.graphite, slide, [0, ay - 0.044, zz]);
+        }
+        for (const side of [-1, 1]) {
+          const x = side * (quad ? 0.047 : 0.025);
+          a.add(cylX(0.0059, -0.002, 0.002, 0.0009, 10), M.satin, slide, [x, ay + 0.024, zz]);
+        }
       }
       // Accelerator rings that pulse forward with charge.
       for (let i = 0; i < 3; i++) {
         const n = a.node('railRing', slide, [0, ay, z0 + 0.1 + i * 0.08]);
-        a.add(tubeZ(0.052, 0.045, -0.004, 0.004, 32), c.chargeGlow, n);
+        a.add(tubeZ(0.039, 0.036, -0.0028, 0.0028, 24), c.chargeGlow, n);
         c.rig.charge.push({ node: n, travel: 0.02, z0: n.position.z });
       }
       if (shroud) {
@@ -466,6 +591,7 @@ function barrel(c: Ctx, m: Mounts): number {
           const ang = (i / 3) * Math.PI * 2 + Math.PI / 2;
           const n = a.frame('prong', slide, [0, ay, 0], [0, 0, ang]);
           a.add(prismData([[z0 + L * 0.3, 0.02], [z0 + L + 0.03, 0.038], [z0 + L + 0.06, 0.032], [z0 + L + 0.04, 0.022], [z0 + L * 0.6, 0.014]], 0.012, 0.003), c.shell, n);
+          a.add(prismData([[z0 + L * 0.42, 0.016], [z0 + L + 0.032, 0.024], [z0 + L + 0.043, 0.02], [z0 + L * 0.65, 0.011]], 0.008, 0.0015), M.satin, n);
           a.add(boxData(0.006, 0.006, 0.02, 0.001), c.chargeGlow, n, [0, 0.03, z0 + L + 0.045]);
         }
         a.add(alongZ(lathe(cylProfile(0.01, 0, 0.03), 16)), c.chargeGlow, slide, [0, ay, z0 + L * 0.65]);
@@ -483,11 +609,16 @@ function barrel(c: Ctx, m: Mounts): number {
         muzzle(z0 + L + 0.08);
         return z0 + L + 0.08;
       }
-      // be_lens: flared horn + crystal lens.
-      a.add(alongZ(lathe([[0.024, 0], [0.03, 0], [0.05, L * 0.3], [0.052, L * 0.36], [0.046, L * 0.36], [0.026, 0.004]], 32)), c.shell, slide, [0, ay, z0 + L * 0.55]);
+      // Recessed optics with a dark flare hood and three load-bearing ribs.
+      a.add(alongZ(lathe([[0.024, 0], [0.035, 0], [0.051, L * 0.27], [0.056, L * 0.37], [0.055, L * 0.47], [0.048, L * 0.47], [0.045, L * 0.30], [0.026, 0.004]], 32)), M.graphite, slide, [0, ay, z0 + L * 0.55]);
+      for (let i = 0; i < 3; i++) {
+        const rib = a.frame('lensRib', slide, [0, ay, z0], [0, 0, i * Math.PI * 2 / 3]);
+        a.add(prismData([[L * 0.23, 0.031], [L * 0.38, 0.043], [L * 0.87, 0.061], [L * 0.97, 0.055], [L * 0.48, 0.032]], 0.021, 0.005), c.shell, rib);
+        a.add(boxData(0.008, 0.0036, L * 0.20, 0.0009), c.chargeGlow, rib, [0, 0.055, L * 0.68], [-0.23, 0, 0]);
+      }
       a.add(alongZ(lathe([[0, 0], [0.04, 0], [0.043, 0.004], [0.04, 0.008], [0, 0.012]], 32)), M.glass, slide, [0, ay, z0 + L * 0.55 + L * 0.3]);
       a.add(alongZ(lathe([[0, 0], [0.022, 0], [0, 0.006]], 24)), c.chargeGlow, slide, [0, ay, z0 + L * 0.55 + L * 0.3]);
-      a.add(tubeZ(0.054, 0.049, 0, 0.006, 32), c.heat, slide, [0, ay, z0 + L * 0.55 + L * 0.34]);
+      a.add(tubeZ(0.055, 0.052, 0, 0.008, 28), c.heat, slide, [0, ay, z0 + L * 0.92]);
       muzzle(z0 + L + 0.02);
       return z0 + L + 0.02;
     }
@@ -540,8 +671,11 @@ function core(c: Ctx, m: Mounts): void {
       a.add(cylZ(0.019, -len / 2, -len / 2 + 0.016, 0.003), M.satin, n);
       a.add(cylZ(0.019, len / 2 - 0.016, len / 2, 0.003), M.satin, n);
       a.add(alongZ(latheData([[0.0175, -len / 2 + 0.016], [0.0175, len / 2 - 0.016]], 24)), M.glass, n);
-      a.add(cylZ(0.009, -len / 2 + 0.014, len / 2 - 0.014, 0.002, 16), c.energy, n);
-      for (let k = 0; k < 2; k++) a.add(tubeZ(0.021, 0.0178, -0.004, 0.004), M.dark, n, [0, 0, -len / 6 + (k * len) / 3]);
+      a.add(cylZ(0.008, -len / 2 + 0.014, len / 2 - 0.014, 0.002, 16), c.energy, n);
+      for (let k = 0; k < 2; k++) a.add(tubeZ(0.021, 0.0178, -0.005, 0.005, 16), M.dark, n, [0, 0, -len / 6 + (k * len) / 3]);
+      for (const side of [-1, 1]) {
+        a.add(boxData(0.007, 0.004, len * 0.87, 0.0013), c.trim, n, [-0.010, side * 0.016, 0]);
+      }
       a.add(boxData(0.012, 0.03, len + 0.01, 0.003), M.graphite, root, [cx - 0.002, cy + 0.03, cz]);
     }
   }
@@ -570,16 +704,21 @@ function cooling(c: Ctx, m: Mounts): void {
       break;
     }
     default: {
-      // cl_fins: fin stack on top that flares open with heat.
+      // Low-profile radiators on a common saddle, with independently hinged vanes.
       const t = m.top;
       const n = 6;
+      const vane = loftData([
+        { t: -0.026, w: 0.0017, h: 0.003, v: 0.004, n: 4 },
+        { t: -0.018, w: 0.003, h: 0.0075, v: 0.008, n: 5 },
+        { t: 0.018, w: 0.003, h: 0.0075, v: 0.008, n: 5 },
+        { t: 0.026, w: 0.0017, h: 0.003, v: 0.004, n: 4 },
+      ], 'x', 12);
       for (let i = 0; i < n; i++) {
         const node = a.node('fin', root, [0, t.y + 0.002, t.z0 + 0.012 + (i * (t.z1 - t.z0 - 0.02)) / (n - 1)]);
-        a.add(prismData([[-0.004, 0], [0.004, 0], [0.003, 0.02], [-0.002, 0.022]], 0.05, 0.0012), c.heat, node);
-        a.add(boxData(0.051, 0.003, 0.0045, 0.0006), c.heat, node, [0, 0.021, -0.0005]);
+        a.add(vane, c.heat, node, [0, 0, 0], [-0.4, 0, 0]);
         c.rig.fins.push({ node, max: -0.55 });
       }
-      a.add(boxData(0.056, 0.004, t.z1 - t.z0, 0.001), M.graphite, root, [0, t.y, (t.z0 + t.z1) / 2]);
+      a.add(prismData([[t.z0 - 0.012, t.y - 0.019], [t.z1 + 0.017, t.y - 0.02], [t.z1, t.y + 0.003], [t.z0, t.y + 0.003]], 0.056, 0.004), c.trim, root);
     }
   }
 }
@@ -745,6 +884,7 @@ export function buildWeaponModel(scene: Scene, build: WeaponBuild, installed: (I
   rig.slide = a.node('slide', root);
 
   const mounts = build.family === 'rail' ? railChassis(c) : build.family === 'beam' ? beamChassis(c) : plasmaChassis(c);
+  hardpoint(c, mounts);
   const front = barrel(c, mounts);
   core(c, mounts);
   cooling(c, mounts);
@@ -754,9 +894,9 @@ export function buildWeaponModel(scene: Scene, build: WeaponBuild, installed: (I
   if (rarityIndex >= 3) for (const s of [-1, 1]) a.add(boxData(0.0025, 0.0025, 0.12, 0.0006), M.trim(build.finish), root, [s * (mounts.flank.x + 0.006), mounts.top.y - 0.012, mounts.top.z0 - 0.05]);
   // Heat LEDs: 5 segments on the top-rear status window.
   const leds: Mesh[] = [];
-  const ledZ = (build.family === 'rail' ? -0.2 : -0.15) * 1;
-  const ledY = build.family === 'rail' ? mounts.top.y + 0.004 : build.family === 'beam' ? mounts.top.y + 0.004 : mounts.top.y + 0.0065;
-  for (let i = 0; i < 5; i++) leds.push(a.single(boxData(0.02, 0.003, 0.009, 0.0008), ledOff, root, [0, ledY, ledZ - 0.026 + i * 0.013]));
+  for (let i = 0; i < 5; i++) {
+    leds.push(a.single(boxData(0.015, 0.003, 0.006, 0.0008), ledOff, root, [0, mounts.status.y, mounts.status.z - 0.018 + i * 0.009]));
+  }
   a.finalize();
 
   const meshes = a.meshes;

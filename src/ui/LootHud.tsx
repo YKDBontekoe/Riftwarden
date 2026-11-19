@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { BoundKey } from './hud/widgets';
 import { fmtNum } from '../combat/stats';
 import type { Game } from '../core/Game';
 import { rarity } from '../loot/rarity';
@@ -19,7 +20,7 @@ export function LootPrompt() {
   const delta = t.equippedName ? t.level - t.equippedLevel : null;
   return (
     <div key={t.uid} className={`loot-prompt r-${r.id}`} style={{ ['--rc' as string]: r.color }}>
-      <kbd>E</kbd>
+      <BoundKey action="use" />
       <div>
         <div className="lp-rarity">
           {r.label.toUpperCase()} · {cat(t.category)} · LV {fmtNum(t.level)}
@@ -27,7 +28,7 @@ export function LootPrompt() {
         <b>{t.name}</b>
         <span className="lp-sub">
           {t.cargoFull ? (
-            <i className="bad">CARGO HOLD FULL · discard in preparation (I)</i>
+            <i className="bad">CARGO HOLD FULL · discard in preparation <BoundKey action="inventory" /></i>
           ) : t.category === 'module' ? (
             'Upgrade module · stored for engineering'
           ) : t.equippedName ? (
@@ -165,7 +166,7 @@ export function ArenaInventory({ game }: { game: Game }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.repeat) return;
-      if (e.code === 'Escape' || e.code === 'KeyI' || e.code === 'Tab') {
+      if (e.code === 'Escape' || e.code === game.settings.keys.inventory || e.code === 'Tab') {
         e.preventDefault();
         void game.closeInventory();
       }
@@ -188,7 +189,7 @@ export function ArenaInventory({ game }: { game: Game }) {
             </div>
           </div>
           <button className="term-close" onClick={() => void game.closeInventory()}>
-            <kbd>I</kbd>/<kbd>ESC</kbd> CLOSE
+            <BoundKey action="inventory" />/<kbd>ESC</kbd> CLOSE
           </button>
         </div>
         <div className="term-body">

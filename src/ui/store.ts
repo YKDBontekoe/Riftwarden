@@ -1,3 +1,4 @@
+import { DEFAULT_SETTINGS, type Settings } from '../core/settings';
 import { useSyncExternalStore } from 'react';
 import type { RunResult } from '../progression/run';
 
@@ -127,6 +128,7 @@ export interface CoopHud {
 }
 
 export interface HudState {
+  bindings: Settings['keys'];
   /** M7 onboarding card. */
   tutorial?: (import('../progression/tutorial').TutorialStep & { index: number; total: number }) | null;
   coop?: CoopHud | null;
@@ -183,6 +185,7 @@ export interface HudState {
 }
 
 export const initialHud: HudState = {
+  bindings: DEFAULT_SETTINGS.keys,
   screen: 'loading',
   location: 'home',
   terminal: null,

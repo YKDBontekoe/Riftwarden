@@ -209,6 +209,10 @@ export function reclamation(ctx: EconCtx, st: Station, screen: ScreenTex): { upd
   }
   kit.part('box', M.white, press, { pos: [0, 5.05, 0], scale: [2.8, 0.7, 3.4] });
   kit.part('box', M.amber, press, { pos: [1.42, 5.05, 0], scale: [0.02, 0.06, 2.4] });
+  for (const z of [-0.95, 0.95]) {
+    kit.part('cyl8', M.metal, press, { pos: [0.34, 3.72, z], scale: [0.15, 2.22, 0.15] });
+    kit.part('cyl', M.graphite, press, { pos: [0.34, 4.54, z], scale: [0.26, 0.86, 0.26] });
+  }
   const ram = kit.node('pressRam', press, [0, 3.4, 0]);
   kit.part('cyl', M.metal, ram, { pos: [0, 0.9, 0], scale: [0.5, 1.8, 0.5] });
   kit.part('box', M.graphite, ram, { pos: [0, 0, 0], scale: [2.0, 0.5, 2.0] });
@@ -220,6 +224,10 @@ export function reclamation(ctx: EconCtx, st: Station, screen: ScreenTex): { upd
   const conv = kit.node('conveyor', null, [px, 0, 4.0]);
   kit.part('box', M.graphite, conv, { pos: [0, 0.45, 0], scale: [1.4, 0.9, 4.2] });
   kit.part('box', M.metal, conv, { pos: [0, 0.92, 0], scale: [1.2, 0.04, 4.2] });
+  for (const side of [-1, 1]) {
+    kit.part('box', M.white, conv, { pos: [side * 0.665, 0.83, 0], scale: [0.11, 0.21, 4.19] });
+    for (const z of [-1.64, 0, 1.64]) kit.part('cyl6', M.graphite, conv, { pos: [side * 0.725, 0.82, z], rot: [0, 0, Math.PI / 2], scale: [0.11, 0.053, 0.11] });
+  }
   const slats: TransformNode[] = [];
   for (let i = 0; i < 8; i++) {
     const n = kit.node('slat', conv, [0, 0.95, -2 + i * 0.5]);
@@ -286,10 +294,17 @@ export function fabricator(ctx: EconCtx, st: Station, screen: ScreenTex): void {
   const { kit, M, scene } = ctx;
   const fab = kit.node('fabricator', null, [st.pos[0], 0, st.pos[1]]);
   fab.rotation.y = st.yaw;
-  kit.part('box', M.white, fab, { pos: [0, 1.45, -0.05], scale: [2.8, 2.9, 1.7] });
+  kit.part('box', M.white, fab, { pos: [0, 1.45, -0.28], scale: [2.8, 2.9, 1.1] });
   kit.part('box', M.graphite, fab, { pos: [0, 0.15, 0.15], scale: [2.9, 0.3, 2.0] });
-  // Chamber: dark interior box seen through a glass window
-  kit.part('box', M.graphite, fab, { pos: [0, 1.3, 0.28], scale: [1.9, 1.5, 0.06] });
+  // The face steps back into a print chamber, with side pylons and a fixed top rail.
+  kit.part('box', M.white, fab, { pos: [0, 2.47, 0.54], scale: [2.8, 0.8, 0.54] });
+  kit.part('box', M.white, fab, { pos: [0, 0.413, 0.54], scale: [2.8, 0.235, 0.54] });
+  for (const s of [-1, 1]) {
+    kit.part('box', M.white, fab, { pos: [s * 1.22, 1.36, 0.55], scale: [0.36, 1.78, 0.59] });
+    kit.part('box', M.metal, fab, { pos: [s * 1.235, 1.37, 0.856], scale: [0.2, 0.69, 0.059] });
+    for (let i = 0; i < 4; i++) kit.part('box', M.graphite, fab, { pos: [s * 1.235, 1.15 + i * 0.145, 0.889], scale: [0.146, 0.05, 0.024] });
+  }
+  kit.part('box', M.graphite, fab, { pos: [0, 1.3, 0.322], scale: [1.9, 1.5, 0.105] });
   for (const sx of [-1, 1]) kit.part('box', M.graphite, fab, { pos: [sx * 0.93, 1.3, 0.56], scale: [0.04, 1.5, 0.56] });
   const chamberGlow = unlit(scene, 'fabChamber', [0.4, 0.2, 0.05]);
   kit.part('box', chamberGlow, fab, { pos: [0, 0.6, 0.6], scale: [1.7, 0.03, 0.5] });
@@ -302,6 +317,7 @@ export function fabricator(ctx: EconCtx, st: Station, screen: ScreenTex): void {
   kit.part('box', M.metal, headRail, { scale: [1.7, 0.05, 0.05] });
   const head = kit.node('fabHead', headRail, [0, -0.12, 0]);
   kit.part('box', M.white, head, { scale: [0.2, 0.16, 0.2] });
+  kit.part('cyl8', M.metal, head, { pos: [0, -0.1, 0], scale: [0.13, 0.092, 0.13] });
   const beamMat = unlit(scene, 'fabBeam', [2.2, 1.0, 0.15], { additive: true });
   const beam = kit.node('fabBeamNode', head, [0, -0.45, 0]);
   kit.part('cyl', beamMat, beam, { scale: [0.02, 0.75, 0.02] });

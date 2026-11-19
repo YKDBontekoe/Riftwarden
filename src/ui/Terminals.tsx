@@ -9,6 +9,7 @@ import { FAMILIES, SOCKET_LABEL } from '../weapons/build';
 import { canInstall, moduleTypeDef, removalCost } from '../weapons/modules';
 import { WeaponViewer } from './WeaponViewer';
 import { rarity } from '../loot/rarity';
+import { ARENA } from '../world/layout';
 import { MOVE } from '../player/Player';
 import { type ItemInstance, type SlotId, SLOTS } from '../progression/items';
 import {
@@ -28,7 +29,7 @@ import { dismantleYield } from '../economy/config';
 import { uiEvents } from './store';
 import { type InvEntry, InventoryView, ItemCard, ItemDetail, RarityLegend, sortEntries } from './items';
 
-const pct = (m: number) => (m === 1 ? '—' : `×${m.toFixed(2)}`);
+const multiplier = (value: number) => `${Number(value.toFixed(2))}×`;
 
 // ------------------------------------------------------------------ deployment
 
@@ -64,31 +65,18 @@ export function DeployTerminal({ flow, close }: { flow: Flow; close: () => void 
       ) : (
       <div className="deploy-grid">
         <div className="arena-card">
-          <div className="arena-art">
-            <svg viewBox="0 0 200 120" className="arena-map">
-              <rect x="20" y="10" width="160" height="100" className="wall" />
-              <path d="M100 10 V40 M180 60 H140 M20 60 H60" className="lane" />
-              <path d="M100 40 L100 52 M140 60 L112 60 M60 60 L88 60" className="lane" />
-              <path d="M100 110 V82 L112 75 L112 66 L104 64" className="lane sealed" />
-              <circle cx="100" cy="60" r="9" className="core" />
-              <circle cx="100" cy="60" r="16" className="ring" />
-              <rect x="64" y="84" width="22" height="12" className="plat" />
-              <rect x="114" y="84" width="22" height="12" className="plat" />
-            </svg>
-          </div>
-          <div className="arena-name">SECTOR 07 · REACTOR DEFENSE</div>
-          <p>Hold the reactor against endless machine waves arriving through three rift gates (a sealed fourth gate opens as the facility evolves). Build turrets beside the orange lanes; the grey reserved corridor stays free for the future route.</p>
-          <ul className="rules">
-            <li>
-              Enemies drop <b>equipment</b>. Collected loot and salvage are <b className="o">unsecured</b> until a checkpoint.
-            </li>
-            <li>
-              Every <b>{CHECKPOINT_INTERVAL} waves</b> everything collected is <b className="c">banked</b> to HQ storage, plus a checkpoint cache, and you may return home.
-            </li>
-            <li>Reactor loss forfeits unsecured loot, even if equipped. Gear you deploy with and secured items are never lost.</li>
-            <li>Higher threat tiers raise item levels and rarity odds, elite frequency, events and boss power.</li>
-            <li>The facility evolves during a run: new access routes open and containment machinery activates. Bosses and events are announced before their wave.</li>
-          </ul>
+          <div className="operation-heading"><h2>Reactor yard</h2><span>Sector 07</span></div>
+          <FacilityPlan />
+          <p>Hold the reactor. Build along the marked approaches and bank your haul every {CHECKPOINT_INTERVAL} waves.</p>
+          <details className="field-notes">
+            <summary>Survival rules</summary>
+            <ul className="rules">
+              <li>Each checkpoint banks collected equipment and salvage, awards a cache, and opens a route home.</li>
+              <li>Reactor loss costs all unsecured cargo, including newly found gear you equip. Your starting gear stays safe.</li>
+              <li>The sealed southern approach opens as the facility evolves. Keep its marked lane clear for machines.</li>
+              <li>Higher tiers increase rewards and enemy strength. Watch for event and boss warnings before a wave.</li>
+            </ul>
+          </details>
           <div className="loadout-line">
             <span>LOADOUT · {gearCount}/{SLOTS.length} SLOTS</span>
             <b style={weapon ? { color: rarity(weapon.rarity).color } : undefined}>{weapon?.name.toUpperCase() ?? 'NO WEAPON'}</b>
@@ -97,12 +85,18 @@ export function DeployTerminal({ flow, close }: { flow: Flow; close: () => void 
         </div>
         <div className="tier-col">
           <div className="col-label">SELECT THREAT TIER</div>
-          {THREAT_TIERS.map((t) => (
-            <TierCard key={t.id} tier={t} save={save} selected={t.id === selected.id} onSelect={() => flow.selectTier(t.id)} />
-          ))}
+          <div className="tier-selector" role="group" aria-label="Threat tier">
+            {THREAT_TIERS.map(t => {
+              const locked = t.id > save.threat.unlocked;
+              return <button key={t.id} className={`tier-card ${t.id === selected.id ? 'on' : ''}`} disabled={locked || busy}
+                aria-pressed={t.id === selected.id} aria-label={`Tier ${t.roman}, ${t.name}`}
+                title={locked ? `${t.name} · ${unlockText(t.id)}` : t.name} onClick={() => flow.selectTier(t.id)}>{t.roman}</button>;
+            })}
+          </div>
+          <TierBrief tier={selected} save={save} />
           <button className="primary deploy" disabled={busy || !!blocker} onClick={deploy}>
             <span>{busy ? 'LAUNCHING…' : `DEPLOY · TIER ${selected.roman}`}</span>
-            <i>▶</i>
+            <span aria-hidden="true">↗</span>
           </button>
         </div>
       </div>
@@ -111,51 +105,46 @@ export function DeployTerminal({ flow, close }: { flow: Flow; close: () => void 
   );
 }
 
-function TierCard({ tier, save, selected, onSelect }: { tier: ThreatTier; save: SaveData; selected: boolean; onSelect: () => void }) {
-  const locked = tier.id > save.threat.unlocked;
-  const rec = save.records[String(tier.id)];
-  return (
-    <button className={`tier-card ${selected ? 'on' : ''} ${locked ? 'locked' : ''}`} disabled={locked} onClick={onSelect}>
-      <div className="tc-head">
-        <span className="tc-roman">{tier.roman}</span>
-        <span className="tc-name">{tier.name}</span>
-        <span className="tc-rec">{locked ? 'LOCKED' : rec ? `BEST WAVE ${rec.bestWave} · ${rec.runs} RUN${rec.runs === 1 ? '' : 'S'}` : 'NO RECORD'}</span>
-      </div>
-      <div className="tc-blurb">{locked ? unlockText(tier.id) : tier.blurb}</div>
-      <div className="tc-mods">
-        <span>
-          HP <b>{pct(tier.hpMult)}</b>
-        </span>
-        <span>
-          DMG <b>{pct(tier.damageMult)}</b>
-        </span>
-        <span>
-          SPEED <b>{pct(tier.speedMult)}</b>
-        </span>
-        <span>
-          COUNT <b>{pct(tier.countMult)}</b>
-        </span>
-        <span className="o">
-          SALVAGE <b>{pct(tier.salvageMult)}</b>
-        </span>
-        <span className="c">
-          ITEM LV <b>+{tier.lootLevelBonus}</b>
-        </span>
-        <span className="c">
-          LOOT LUCK <b>{pct(tier.lootLuck)}</b>
-        </span>
-        <span className="v">
-          ELITES <b>{pct(tier.eliteRate)}</b>
-        </span>
-        <span className="v">
-          MODS ≤ <b>{tier.maxMods}</b>
-        </span>
-        <span className="v">
-          BOSSES FROM W<b>{tier.bossFirstWave}</b>
-        </span>
-      </div>
-    </button>
-  );
+function FacilityPlan() {
+  return <figure className="facility-plan">
+    <svg viewBox="-84 -64 168 128" role="img" aria-label="North-up yard plan. North, east and west lanes converge on the reactor. The southern gate starts sealed.">
+      <g transform="scale(1 -1)">
+        {ARENA.boxes.filter(box => box.kind !== 'reactor').map(({ min, max, kind }, i) =>
+          <rect key={i} className={`plan-${kind}`} x={min[0]} y={min[2]} width={max[0] - min[0]} height={max[2] - min[2]} />)}
+        {ARENA.ramps.map((r, i) => <rect key={i} className="plan-ramp" x={r.x0} y={r.z0} width={r.x1 - r.x0} height={r.z1 - r.z0} />)}
+        {Object.values(ARENA.routes).map(route => <polyline key={route.gate} className={ARENA.initialGates.includes(route.gate) ? 'plan-lane' : 'plan-sealed'}
+          points={route.points.map(p => `${p.x},${p.z}`).join(' ')} />)}
+        <circle className="plan-ring" cx={ARENA.reactor.x} cy={ARENA.reactor.z} r={ARENA.reactor.radius + 2} />
+        <circle className="plan-core" cx={ARENA.reactor.x} cy={ARENA.reactor.z} r={ARENA.reactor.radius} />
+      </g>
+      <text x="-77" y="-49">N ↑</text>
+    </svg>
+    <figcaption><span><i className="open" />Open lane</span><span><i className="sealed" />Sealed lane</span><span><i className="core" />Reactor</span></figcaption>
+  </figure>;
+}
+
+function TierBrief({ tier, save }: { tier: ThreatTier; save: SaveData }) {
+  const record = save.records[String(tier.id)];
+  const next = THREAT_TIERS.find(t => t.id === save.threat.unlocked + 1);
+  const modifiers = [
+    ['Enemy health', multiplier(tier.hpMult)], ['Enemy damage', multiplier(tier.damageMult)],
+    ['Movement speed', multiplier(tier.speedMult)], ['Spawn count', multiplier(tier.countMult)],
+    ['Salvage', multiplier(tier.salvageMult)], ['Item level', `+${tier.lootLevelBonus}`],
+    ['Loot luck', multiplier(tier.lootLuck)], ['Elite rate', multiplier(tier.eliteRate)],
+    ['Max elite modifiers', tier.maxMods], ['Bosses from', `Wave ${tier.bossFirstWave}`],
+  ];
+  return <div className="tier-brief">
+    <h3>{tier.name.toLowerCase()}</h3><p>{tier.blurb}</p>
+    <div className="tier-facts">
+      <div><b>{multiplier(tier.salvageMult)}</b><span>Salvage</span></div>
+      <div><b>{tier.bossFirstWave}</b><span>First possible boss wave</span></div>
+      <div><b>{record?.bestWave ?? '—'}</b><span>Best wave · {record?.runs ?? 0} runs</span></div>
+    </div>
+    <details className="field-notes"><summary>Tier modifiers</summary>
+      <dl className="tier-modifiers">{modifiers.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
+    </details>
+    {next && <p className="next-tier"><strong>Tier {next.roman} · {next.name.toLowerCase()}</strong> {unlockText(next.id)}</p>}
+  </div>;
 }
 
 // ------------------------------------------------------------------ drone configuration

@@ -30,7 +30,7 @@ export interface Mood {
   flicker: number;
 }
 
-export const BASE_FOG: Rgb = [0.38, 0.42, 0.51];
+export const BASE_FOG: Rgb = [0.49, 0.55, 0.50];
 
 export const calmMood = (): Mood => ({ fog: [...BASE_FOG], fogMul: 1, exposureAdd: 0, contrastAdd: 0, vignetteAdd: 0, sunTint: [1, 1, 1], tension: 0, flicker: 0 });
 

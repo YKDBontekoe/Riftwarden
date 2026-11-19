@@ -175,8 +175,11 @@ export class ExpansionLayer {
     kit.part('box', M.graphite, root, { pos: [0, -0.18, 0], scale: [CELL, 0.32, CELL] });
     kit.part('box', top, root, { pos: [0, -0.02, 0], scale: [CELL - 0.06, 0.04, CELL - 0.06] });
     if (type === 'floor_grate') {
-      for (let n = -2; n <= 2; n++) kit.part('box', M.graphite, root, { pos: [n * 1.0, 0.005, 0], scale: [0.08, 0.02, CELL - 0.2] });
-      kit.part('box', M.amberDim, root, { pos: [0, 0.004, 0], scale: [CELL - 0.4, 0.01, 0.06], shadow: false });
+      for (const x of [-1.66, 0, 1.66]) {
+        kit.part('box', M.graphite, root, { pos: [x, 0.002, 0], scale: [1.48, 0.012, CELL - 0.36] });
+        for (let n = -4; n <= 4; n++) kit.part('box', M.metal, root, { pos: [x, 0.009, n * 0.51], scale: [1.41, 0.013, 0.27] });
+      }
+      for (const z of [-2.31, 2.31]) kit.part('box', M.amberDim, root, { pos: [0, 0.009, z], scale: [CELL - 0.4, 0.014, 0.05], shadow: false });
     } else if (type === 'floor_lab') {
       for (const d of [-1, 1]) kit.part('box', M.cyan, root, { pos: [d * 1.6, 0.004, 0], scale: [0.04, 0.01, CELL - 0.3], shadow: false });
       kit.part('box', M.cyanDim, root, { pos: [0, 0.004, 0], scale: [CELL - 0.3, 0.01, 0.04], shadow: false });
@@ -266,7 +269,11 @@ export class ExpansionLayer {
           const right = kit.node('doorR', root, [0.6, 0, 0]);
           for (const [n, s] of [[left, -1], [right, 1]] as const) {
             kit.part('box', M.white, n, { pos: [0, 1.6, 0], scale: [1.2, 3.2, 0.12] });
-            kit.part('box', M.amberDim, n, { pos: [s * -0.5, 1.6, 0.07], scale: [0.06, 2.6, 0.01], shadow: false });
+            for (const z of [-1, 1]) {
+              kit.part('box', M.metal, n, { pos: [0, 1.04, z * 0.068], scale: [1.1, 0.9, 0.032] });
+              kit.part('box', M.graphite, n, { pos: [-s * 0.47, 1.66, z * 0.08], scale: [0.14, 1.8, 0.05] });
+              kit.part('box', M.amberDim, n, { pos: [-s * 0.47, 1.79, z * 0.108], scale: [0.055, 1.11, 0.012], shadow: false });
+            }
           }
           this.doors.push({ key: `e:${k}`, left, right, open: 0, c: new Vector3(cx, 1, cz), axis: seg.axis });
         }
@@ -275,7 +282,10 @@ export class ExpansionLayer {
       case 'wall_reinforced': {
         panel(-L / 2, L / 2, 0, H, M.graphite);
         for (let n = 0; n < 4; n++) kit.part('box', n % 2 ? M.graphite : M.amberDim, root, { pos: [0, 0.4 + n * 0.25, 0], scale: [L - 0.2, 0.12, T + 0.06], shadow: false });
-        kit.part('box', M.metal, root, { pos: [0, 2.6, 0], scale: [L - 0.4, 0.4, T + 0.1] });
+        for (const f of [-1, 1]) for (let i = -1; i <= 1; i++) {
+          kit.part('box', M.metal, root, { pos: [i * 1.43, 2.7, f * 0.18], scale: [1.32, 2.33, 0.11] });
+          kit.part('box', M.graphite, root, { pos: [i * 1.43, 2.7, f * 0.234], scale: [1.12, 1.66, 0.032] });
+        }
         post(-L / 2 + 0.2);
         post(L / 2 - 0.2);
         solid(-L / 2, L / 2, 0, H);
@@ -309,8 +319,10 @@ export class ExpansionLayer {
       g.isPickable = false;
     } else {
       kit.part('box', M.ceiling, root, { pos: [0, 0.08, 0], scale: [CELL, 0.16, CELL] });
-      kit.part('box', M.lamp, root, { pos: [0, -0.01, 0], scale: [CELL * 0.7, 0.02, 0.22], shadow: false });
-      kit.part('box', M.graphite, root, { pos: [0, -0.02, 0], scale: [CELL * 0.74, 0.04, 0.32] });
+      for (const z of [-1.53, 1.53]) {
+        kit.part('box', M.graphite, root, { pos: [0, -0.035, z], scale: [CELL * 0.76, 0.07, 0.38] });
+        kit.part('box', M.lamp, root, { pos: [0, -0.072, z], scale: [CELL * 0.69, 0.014, 0.155], shadow: false });
+      }
     }
     return { root, body: this.body([[x, WALL_H, z, x + CELL, WALL_H + 0.3, z + CELL]]), sig: '' };
   }

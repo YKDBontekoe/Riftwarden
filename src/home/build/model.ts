@@ -1,5 +1,5 @@
 import type { TerminalId } from '../../ui/store';
-import { HQ_PORTALS, HQ_ROOMS, HQ_SPAWN, HQ_STATIONS } from '../layout';
+import { ATRIUM_BED, SURVEY_DESK, touchesFurniture, HQ_PORTALS, HQ_ROOMS, HQ_SPAWN, HQ_STATIONS } from '../layout';
 import { LIMITS, MOVABLE_STATIONS, type PieceDef, pieceDef } from './catalog';
 
 /**
@@ -167,6 +167,12 @@ export interface PlacedProp {
   props: Record<string, string | number | boolean>;
 }
 
+/** Legacy saves can already contain custom furniture in a new fixture's footprint. */
+export function furnitureOccupied(area: typeof SURVEY_DESK, props: readonly PlacedProp[], stations: Record<string, StationPose>): boolean {
+  return props.some(p => touchesFurniture(area, p.position[0], p.position[2], (pieceDef(p.type)?.radius ?? 0.9) * p.scale)) ||
+    Object.values(stations).some(st => touchesFurniture(area, st.x, st.z, 1));
+}
+
 /** Keep-out zones: spawn, launch pad, doorways, station access. */
 export function keepOut(s: Structure, stations: Record<string, StationPose>): { x: number; z: number; r: number; what: string }[] {
   const out: { x: number; z: number; r: number; what: string }[] = [
@@ -285,6 +291,8 @@ export function checkFree(s: Structure, type: string, x: number, z: number, scal
   if (!Number.isFinite(x) || !Number.isFinite(z) || !Number.isFinite(scale)) return no('Invalid position');
   if (!station && (scale < 0.75 || scale > 1.3)) return no('Scale must stay between 75% and 130%');
   const r = (station ? 1.0 : def!.radius ?? 1) * (station ? 1 : scale);
+  if (touchesFurniture(ATRIUM_BED, x, z, r)) return no('Overlaps the planted wall');
+  if (!stations.command && ignoreStation !== 'command' && touchesFurniture(SURVEY_DESK, x, z, r)) return no('Overlaps the survey table');
   const walk = walkableFloors(s);
   for (const [dx, dz] of [[0, 0], [r, 0], [-r, 0], [0, r], [0, -r]]) if (!onFloor(s, x + dx, z + dz, 0.3, walk)) return no('Must stand fully on a reachable floor, clear of walls');
   for (const k of keepOut(s, stations)) {

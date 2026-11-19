@@ -1,3 +1,4 @@
+import { BoundKey } from './hud/widgets';
 import { useState } from 'react';
 import type { Flow } from '../core/Flow';
 import { BUILD_CATEGORIES, costText } from '../home/build/BuildMode';
@@ -139,7 +140,7 @@ export function ConstructionPanel({ flow }: { flow: Flow }) {
           REDO ({h.redo})
         </button>
         <button className="mini" onClick={() => void flow.home?.exitConstruction()} data-testid="cons-exit">
-          DONE (B)
+          DONE <BoundKey action="build" />
         </button>
       </div>
       <div className="cons-side">
@@ -151,7 +152,7 @@ export function ConstructionPanel({ flow }: { flow: Flow }) {
             REMOVE
           </button>
           <button className={h.snap ? 'on' : ''} onClick={() => bm.toggleSnap()}>
-            SNAP {h.snap ? 'ON' : 'OFF'} (G)
+            SNAP {h.snap ? 'ON' : 'OFF'} <BoundKey action="wave" />
           </button>
         </div>
         <div className="cons-cats">
@@ -209,7 +210,7 @@ export function ConstructionPanel({ flow }: { flow: Flow }) {
         </div>
       )}
       <div className="cons-help">
-        <kbd>WASD</kbd> pan · <kbd>Q</kbd>/<kbd>E</kbd> orbit · wheel zoom · <kbd>LMB</kbd> place/select · <kbd>RMB</kbd> cancel · <kbd>R</kbd> rotate · <kbd>+</kbd>/<kbd>−</kbd> scale · <kbd>Del</kbd> remove · <kbd>Ctrl+Z</kbd>/<kbd>Ctrl+Y</kbd> undo/redo
+        <BoundKey action="move" /> pan · <BoundKey action="tactical" />/<BoundKey action="use" /> orbit · wheel zoom · <kbd>LMB</kbd> place/select · <kbd>RMB</kbd> cancel · <kbd>R</kbd> rotate · <kbd>+</kbd>/<kbd>−</kbd> scale · <kbd>Del</kbd> remove · <kbd>Ctrl+Z</kbd>/<kbd>Ctrl+Y</kbd> undo/redo
       </div>
     </div>
   );
