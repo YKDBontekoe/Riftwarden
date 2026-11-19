@@ -143,7 +143,7 @@ export class ArenaDressing {
           .map(([t,w,h,u]) => ({ t,w,h,u: side * u,n: 3.2 })), 'y', 28).applyToMesh(cheek);
         cheek.position.set(cx, y0, cz);
         cheek.rotation.y = cx > 0 ? 0.43 : -0.52;
-        this.h.add(cheek, P.white, 'wall');
+        this.h.add(cheek, P.panel, 'wall');
       }
       this.pipe('y', span - 0.22, span - 0.13, cx, cz, 2.35, P.enamel, 'wall');
       return;
@@ -167,7 +167,7 @@ export class ArenaDressing {
     for (const side of [-1,1]) {
       shell('transformerCheek', [[0,shellHalf-0.10,h*0.42,h*0.51],[0.2,shellHalf+0.02,h*0.45,h*0.52],
         [0.76,shellHalf+0.01,h*0.44,h*0.55],[1.18,shellHalf-0.09,h*0.36,h*0.57]],
-        P.white, side * halfRun, -side);
+        P.panel, side * halfRun, -side);
     }
     for (let bay = -2; bay <= 2; bay++) {
       const center = bay * (run - 3.15) / 5;

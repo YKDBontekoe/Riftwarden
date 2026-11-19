@@ -57,7 +57,7 @@ export const SCATTER_PELLETS = 7;
 const FORWARD = Vector3.Forward();
 const REF_FOV = 2 * Math.atan(Math.tan(Math.PI / 4) / (16 / 9));
 /** Viewmodel anchor relative to the camera (metres). */
-const ANCHOR = { x: 0.162, y: -0.145, z: 0.48, scale: 0.72, yaw: -0.115, pitch: 0.0, roll: -0.04 };
+const ANCHOR = { x: 0.19, y: -0.172, z: 0.46, scale: 0.72, yaw: -0.085, pitch: 0.015, roll: -0.04 };
 
 /**
  * The equipped weapon: firing mechanics per mechanism, heat, spread and the procedural

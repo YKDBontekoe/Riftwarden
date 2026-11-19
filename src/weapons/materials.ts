@@ -58,7 +58,9 @@ function micro(scene: Scene): Micro {
       const rub = Math.max(0, fbm(u, v, 5, 3, 40) - 0.55);
       const i = (y * size + x) * 4;
       const scrape = scratches[i + 3] / 255;
-      const tint = 0.90 + grain * 0.11 + brush * 0.06 + rub * 0.38 + scrape * 0.25;
+      // Handling grime collects in broad patches; rubbed-through areas and scratches read brighter.
+      const grime = Math.max(0, fbm(u, v, 4, 3, 91) - 0.5) * 0.55;
+      const tint = 0.88 + grain * 0.14 + brush * 0.08 + rub * 0.42 + scrape * 0.32 - grime;
       albedo.data[i] = albedo.data[i + 1] = albedo.data[i + 2] = tint * 255;
       albedo.data[i + 3] = 255;
       orm.data[i] = 255;
@@ -70,7 +72,7 @@ function micro(scene: Scene): Micro {
   a.putImageData(albedo, 0, 0);
   o.putImageData(orm, 0, 0);
   const normal = toTexture('wpnMicroNrm', heightToNormal(height, size, 2.2), scene, { srgb: false });
-  normal.level = 0.31;
+  normal.level = 0.45;
   return {
     albedo: toTexture('wpnMicroAlb', ac, scene),
     orm: toTexture('wpnMicroOrm', oc, scene, { srgb: false }),
@@ -136,7 +138,7 @@ function surface(scene: Scene, m: Micro, name: string, albedo: [number, number, 
 }
 
 const SHELL: Record<Finish, [[number, number, number], number, number, number?]> = {
-  arctic: [[0.85, 0.85, 0.76], 0.07, 0.48, 0.19],
+  arctic: [[0.64, 0.65, 0.63], 0.12, 0.56, 0.12],
   gunmetal: [[0.15, 0.16, 0.18], 0.65, 0.34, 0.3],
   sand: [[0.58, 0.51, 0.39], 0.02, 0.5, 0.35],
   slate: [[0.22, 0.29, 0.37], 0.08, 0.42, 0.5],

@@ -29,3 +29,19 @@ describe('arena rubble plan', () => {
       for (let j = i + 1; j < spots.length; j++) expect(Math.hypot(spots[i].x - spots[j].x, spots[i].z - spots[j].z)).toBeGreaterThan((spots[i].r + spots[j].r) * 0.8);
   });
 });
+
+describe('build pads', () => {
+  it('flank lane bends, never touch a lane, solid, reserved area or each other', async () => {
+    const { planPads } = await import('../src/world/rubblePlan');
+    const { distToBoxXZ } = await import('../src/world/geometry');
+    const pads = planPads(ARENA);
+    expect(pads.length).toBeGreaterThanOrEqual(8);
+    for (const p of pads) {
+      const diag = p.half * Math.SQRT2;
+      for (const r of Object.values(ARENA.routes)) expect(distToPolyline(p.x, p.z, r.points)).toBeGreaterThan(ARENA.laneHalfWidth + diag);
+      for (const b of ARENA.boxes) if (b.kind !== 'reactor') expect(distToBoxXZ(p.x, p.z, b)).toBeGreaterThan(diag);
+      for (const q of ARENA.reserved) expect(p.x > q.x0 - diag && p.x < q.x1 + diag && p.z > q.z0 - diag && p.z < q.z1 + diag).toBe(false);
+    }
+    for (let i = 0; i < pads.length; i++) for (let j = i + 1; j < pads.length; j++) expect(Math.hypot(pads[i].x - pads[j].x, pads[i].z - pads[j].z)).toBeGreaterThan(pads[i].half * 2);
+  });
+});

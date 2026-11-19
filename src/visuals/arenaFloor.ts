@@ -1,5 +1,6 @@
 import { type Material, type Mesh, MeshBuilder, type Scene } from '@babylonjs/core';
 import type { ArenaLayout } from '../world/layout';
+import { planPads } from '../world/rubblePlan';
 import type { Palette } from './materials';
 
 /**
@@ -30,6 +31,7 @@ export class ArenaFloor {
   build(): void {
     this.plaza();
     this.gutters();
+    for (const p of planPads(this.L)) this.pad(p.x, p.z, p.half, p.yaw);
     for (const g of [
       { x: 0, z: this.L.half, yaw: 0 },
       { x: 0, z: -this.L.half, yaw: Math.PI },
@@ -98,6 +100,26 @@ export class ArenaFloor {
         }
       }
     }
+  }
+
+  /** Painted build pad: lighter deck square, corner brackets and a centre mark. */
+  private pad(x: number, z: number, half: number, yaw: number): void {
+    const P = this.P;
+    const c = Math.cos(yaw), s = Math.sin(yaw);
+    const at = (u: number, v: number): [number, number] => [x + u * c + v * s, z - u * s + v * c];
+    // Dark sealed square, bright corner brackets: reads as paint on the deck, not as a loose sheet.
+    this.plate(x, z, half * 2, half * 2, yaw, P.enemyDark, TOP * 0.6);
+    const arm = half * 0.5;
+    const t = 0.18;
+    for (const su of [-1, 1])
+      for (const sv of [-1, 1]) {
+        const [ax, az] = at(su * (half - arm / 2), sv * (half - t / 2));
+        this.plate(ax, az, arm, t, yaw, P.enamel, TOP * 1.2);
+        const [bx, bz] = at(su * (half - t / 2), sv * (half - arm / 2));
+        this.plate(bx, bz, t, arm, yaw, P.enamel, TOP * 1.2);
+      }
+    this.plate(x, z, 0.7, 0.08, yaw, P.metal, TOP * 1.2);
+    this.plate(x, z, 0.08, 0.7, yaw, P.metal, TOP * 1.2);
   }
 
   /** Diagonal hazard stripes across a gate mouth (yaw: 0 = north gate). */

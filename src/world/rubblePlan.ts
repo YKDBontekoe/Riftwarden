@@ -43,7 +43,9 @@ export function planRubble(L: ArenaLayout, seed = 0x51ab): RubbleSpot[] {
   const rand = mulberry32(seed >>> 0);
   const out: RubbleSpot[] = [];
   const H = L.half;
-  const ok = (x: number, z: number, r: number) => !spotBlocked(L, x, z, r) && out.every((s) => Math.hypot(s.x - x, s.z - z) > (s.r + r) * 0.85);
+  const pads = planPads(L);
+  const ok = (x: number, z: number, r: number) =>
+    !spotBlocked(L, x, z, r) && out.every((s) => Math.hypot(s.x - x, s.z - z) > (s.r + r) * 0.85) && pads.every((p) => Math.hypot(p.x - x, p.z - z) > p.half * 1.5 + r);
   const push = (kind: RubbleKind, x: number, z: number, r: number, yaw: number) => {
     if (!ok(x, z, r)) return false;
     out.push({ kind, x, z, r, yaw, seed: Math.floor(rand() * 2 ** 31) });
@@ -89,6 +91,60 @@ export function planRubble(L: ArenaLayout, seed = 0x51ab): RubbleSpot[] {
     const x = (rand() * 2 - 1) * (H - 1);
     const z = (rand() * 2 - 1) * (H - 1);
     push('scatter', x, z, 0.35 + rand() * 0.5, rand() * Math.PI * 2);
+  }
+  return out;
+}
+
+/** A painted build pad on the deck (visual hint for good tower spots). */
+export interface Pad {
+  x: number;
+  z: number;
+  /** Half size of the square (m). */
+  half: number;
+  /** Rotation aligned with the lane segment it flanks. */
+  yaw: number;
+}
+
+/**
+ * Build pads beside each lane bend, on both sides, where towers cover the turn. Kept clear of
+ * every lane (with margin), the reactor plaza, the spawn, solids, ramps, reserved footprints,
+ * vents and each other. Purely visual: placement rules are unchanged.
+ */
+export function planPads(L: ArenaLayout, half = 1.8): Pad[] {
+  const out: Pad[] = [];
+  const diag = half * Math.SQRT2;
+  const clear = (x: number, z: number) => {
+    const H = L.half;
+    if (Math.abs(x) > H - diag - 1 || Math.abs(z) > H - diag - 1) return false;
+    for (const r of Object.values(L.routes)) if (distToPolyline(x, z, r.points) < L.laneHalfWidth + 0.6 + diag) return false;
+    if (Math.hypot(x - L.reactor.x, z - L.reactor.z) < 11.6 + diag) return false;
+    if (Math.hypot(x - L.playerSpawn.x, z - L.playerSpawn.z) < 5 + diag) return false;
+    for (const b of [...L.boxes, ...L.barriers, L.southDoor]) if (distToBoxXZ(x, z, b) < diag + 0.4) return false;
+    for (const m of L.ramps) if (x > m.x0 - diag && x < m.x1 + diag && z > m.z0 - diag && z < m.z1 + diag) return false;
+    for (const q of L.reserved) if (x > q.x0 - diag && x < q.x1 + diag && z > q.z0 - diag && z < q.z1 + diag) return false;
+    for (const v of L.vents) if (Math.hypot(x - v.x, z - v.z) < v.r + diag + 0.5) return false;
+    return out.every((p) => Math.hypot(p.x - x, p.z - z) > (p.half + half) * 1.6);
+  };
+  for (const route of Object.values(L.routes)) {
+    const pts = route.points;
+    for (let i = 1; i < pts.length - 1; i++) {
+      const a = pts[i - 1], b = pts[i];
+      const dx = b.x - a.x, dz = b.z - a.z;
+      const len = Math.hypot(dx, dz) || 1;
+      const nx = -dz / len, nz = dx / len;
+      const yaw = Math.atan2(dx, dz);
+      for (const side of [-1, 1]) {
+        const off = L.laneHalfWidth + 0.7 + diag;
+        for (const back of [0, 2.5, 5]) {
+          const x = b.x + nx * side * off - (dx / len) * back;
+          const z = b.z + nz * side * off - (dz / len) * back;
+          if (clear(x, z)) {
+            out.push({ x, z, half, yaw });
+            break;
+          }
+        }
+      }
+    }
   }
   return out;
 }

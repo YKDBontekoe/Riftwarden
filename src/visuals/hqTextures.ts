@@ -178,10 +178,11 @@ export function hqWallSet(scene: Scene, high: boolean): HqSet {
       let ao = 1;
       let h = 0.6 + grain * 0.004;
       let er = 0, eg = 0, eb = 0;
-      const s = seamProfile(edge, 0.0025, 0.006);
+      // Faint seams: the wall-run frames already divide the wall; the texture must not add a grid.
+      const s = seamProfile(edge, 0.002, 0.005);
       if (s.k < 1) {
-        h = 0.3 + 0.3 * s.k;
-        base = base * (0.45 + 0.55 * s.k) + s.rim * 0.04;
+        h = 0.45 + 0.15 * s.k;
+        base = base * (0.8 + 0.2 * s.k) + s.rim * 0.03;
         ao = 0.4 + 0.6 * s.k;
         rough = 0.7;
       }

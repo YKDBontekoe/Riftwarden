@@ -159,7 +159,32 @@ export class HqBuilder {
     if (r.id === 'command') {
       for (const x of [-6.3, 2.45, 2.53, 7.6]) this.box(x, 0.001, z0, x + 0.018, 0.005, z1, M.bronze, null, 0);
       for (const z of [-5.8, 3.2, 9.1]) this.box(x0, 0.001, z, x1, 0.004, z + 0.012, M.graphite, null, 0);
+      this.commandInlay();
     }
+  }
+
+  /**
+   * Command deck floor inlay: bronze rings around the survey desk, a glowing accent ring and light
+   * lines running out to the three doorways, so the big atrium floor reads as a designed space.
+   */
+  private commandInlay(): void {
+    const M = this.M;
+    const { x: cx, z: cz } = SURVEY_DESK;
+    const acc = M.accents?.command ?? M.cyanDim;
+    const ring = (r: number, t: number, mat: Material, y: number) => {
+      const m = MeshBuilder.CreateTorus('inlayRing', { diameter: r * 2, thickness: t, tessellation: 96 }, this.scene);
+      m.scaling.y = 0.12;
+      m.position.set(cx, y, cz);
+      this.add(m, mat, null);
+    };
+    ring(3.35, 0.05, M.bronze, 0.003);
+    ring(3.75, 0.05, M.bronze, 0.003);
+    ring(4.3, 0.06, acc, 0.004);
+    ring(6.4, 0.04, M.graphite, 0.003);
+    const w = 0.035;
+    this.box(-10.6, 0.001, cz - w, cx - 4.3, 0.006, cz + w, acc, null, 0); // to the west doorway
+    this.box(cx + 4.3, 0.001, cz - w, 10.6, 0.006, cz + w, acc, null, 0); // to the east doorway
+    this.box(cx - w, 0.001, cz + 4.3, cx + w, 0.006, 10.6, acc, null, 0); // to the launch bay
   }
 
   /** Ceiling section: slab, recessed coffers with light panels, perimeter cove light. */
