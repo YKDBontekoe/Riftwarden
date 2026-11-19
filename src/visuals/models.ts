@@ -346,7 +346,7 @@ export function buildReactor(scene: Scene, P: Palette, high: boolean): ReactorRi
   collar.position.y = 6.92;
   for (let i = 0; i < 12; i++) {
     const a = i * Math.PI / 6;
-    const foot = fitting(createBeveledBox('rMount', 0.94, 0.29, 1.13, 0.09, scene), i % 3 === 0 ? P.enamel : P.graphite);
+    const foot = fitting(createBeveledBox('rMount', 0.94, 0.29, 1.13, 0.04, scene), i % 3 === 0 ? P.enamel : P.graphite);
     foot.position.set(4.15 * Math.sin(a), 0.51, 4.15 * Math.cos(a));
     foot.rotation.y = a;
     const fastener = fitting(MeshBuilder.CreateCylinder('rMountBolt', { height: 0.1, diameter: 0.19, tessellation: 6 }, scene), P.metal);

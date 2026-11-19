@@ -74,7 +74,7 @@ export class HqBuilder {
     const w = Math.abs(x1 - x0);
     const h = Math.abs(y1 - y0);
     const d = Math.abs(z1 - z0);
-    const m = createBeveledBox('hq', w, h, d, bevel ?? Math.min(0.06, Math.min(w, h, d) * 0.22), this.scene);
+    const m = createBeveledBox('hq', w, h, d, bevel ?? Math.min(0.035, Math.min(w, h, d) * 0.12), this.scene);
     m.position.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
     this.add(m, mat, surface);
     return m;
