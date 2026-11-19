@@ -90,3 +90,17 @@ describe('loadout score', () => {
     for (const k of STAT_KEYS) expect(STAT_HELP[k]?.length ?? 0).toBeGreaterThan(10);
   });
 });
+
+describe('HQ room styles', () => {
+  it('every HQ room has a distinct accent colour and an in-range light tint', async () => {
+    const { roomStyle } = await import('../src/home/roomStyle');
+    const { HQ_ROOMS } = await import('../src/home/layout');
+    const seen = new Set<string>();
+    for (const r of HQ_ROOMS) {
+      const s = roomStyle(r.id);
+      seen.add(s.accent.join(','));
+      for (const c of s.light) expect(c >= 0 && c <= 1).toBe(true);
+    }
+    expect(seen.size).toBe(HQ_ROOMS.length);
+  });
+});

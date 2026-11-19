@@ -34,6 +34,8 @@ export interface HqMaterials {
   amber: Material;
   amberDim: Material;
   lamp: Material;
+  /** Accent emissive per room id (roomStyle); rooms without one use cyanDim. */
+  accents?: Record<string, Material>;
 }
 
 /**
@@ -189,8 +191,69 @@ export class HqBuilder {
       }
     // Cove light strip around the perimeter
     const t = 0.08;
-    this.box(x0 + 0.3, h - 0.5, z0 + 0.3, x1 - 0.3, h - 0.45, z0 + 0.3 + t, M.cyanDim, null);
-    this.box(x0 + 0.3, h - 0.5, z1 - 0.3 - t, x1 - 0.3, h - 0.45, z1 - 0.3, M.cyanDim, null);
+    const cove = M.accents?.[r.id] ?? M.cyanDim;
+    this.box(x0 + 0.3, h - 0.5, z0 + 0.3, x1 - 0.3, h - 0.45, z0 + 0.3 + t, cove, null);
+    this.box(x0 + 0.3, h - 0.5, z1 - 0.3 - t, x1 - 0.3, h - 0.45, z1 - 0.3, cove, null);
+    this.serviceRun(r);
+  }
+
+  /**
+   * Room identity: inset accent line around the floor perimeter and corner columns with
+   * vertical accent slits (both in the room's accent colour, see roomStyle).
+   */
+  roomAccents(r: Room): void {
+    const M = this.M;
+    const acc = M.accents?.[r.id];
+    if (!acc) return;
+    const [x0, z0] = r.min;
+    const [x1, z1] = r.max;
+    const h = r.height;
+    const i = 0.62;
+    const w = 0.035;
+    const y = 0.006;
+    this.box(x0 + i, 0, z0 + i, x1 - i, y, z0 + i + w, acc, null, 0);
+    this.box(x0 + i, 0, z1 - i - w, x1 - i, y, z1 - i, acc, null, 0);
+    this.box(x0 + i, 0, z0 + i, x0 + i + w, y, z1 - i, acc, null, 0);
+    this.box(x1 - i - w, 0, z0 + i, x1 - i, y, z1 - i, acc, null, 0);
+    if (r.id === 'command') return; // the atrium keeps its open corners (window, displays)
+    const c = 0.25;
+    const d = 0.36;
+    for (const [cx, sx] of [[x0, 1], [x1, -1]] as const)
+      for (const [cz, sz] of [[z0, 1], [z1, -1]] as const) {
+        const ax = cx + sx * c;
+        const bx = cx + sx * (c + d);
+        const az = cz + sz * c;
+        const bz = cz + sz * (c + d);
+        this.solid(Math.min(ax, bx), 0, Math.min(az, bz), Math.max(ax, bx), h - 0.3, Math.max(az, bz), M.graphite);
+        const mx = (ax + bx) / 2;
+        const mz = (az + bz) / 2;
+        // Slits on the two room-facing faces.
+        this.box(bx - sx * 0.005, 0.5, mz - 0.025, bx + sx * 0.012, h - 0.9, mz + 0.025, acc, null, 0);
+        this.box(mx - 0.025, 0.5, bz - sz * 0.005, mx + 0.025, h - 0.9, bz + sz * 0.012, acc, null, 0);
+        this.box(Math.min(ax, bx) - 0.02, 0.32, Math.min(az, bz) - 0.02, Math.max(ax, bx) + 0.02, 0.4, Math.max(az, bz) + 0.02, M.metal, null);
+      }
+  }
+
+  /** Cable tray with hangers along the room's long axis, close to the north/west wall. */
+  private serviceRun(r: Room): void {
+    const M = this.M;
+    const [x0, z0] = r.min;
+    const [x1, z1] = r.max;
+    const h = r.height;
+    const alongX = x1 - x0 >= z1 - z0;
+    const y = h - 0.95;
+    const a = (alongX ? x0 : z0) + 0.9;
+    const b = (alongX ? x1 : z1) - 0.9;
+    const off = (alongX ? z0 : x0) + 0.85;
+    const run = (l: number, rr: number, o0: number, o1: number, y0: number, y1: number, m: Material) =>
+      alongX ? this.box(l, y0, o0, rr, y1, o1, m, null) : this.box(o0, y0, l, o1, y1, rr, m, null);
+    run(a, b, off, off + 0.42, y, y + 0.05, M.metal);
+    run(a, b, off, off + 0.03, y, y + 0.14, M.metal);
+    run(a, b, off + 0.39, off + 0.42, y, y + 0.14, M.metal);
+    run(a, b, off + 0.06, off + 0.18, y + 0.05, y + 0.13, M.graphite);
+    run(a, b, off + 0.21, off + 0.3, y + 0.05, y + 0.11, M.graphite);
+    run(a, b, off + 0.32, off + 0.36, y + 0.05, y + 0.09, M.accents?.[r.id] ?? M.cyanDim);
+    for (let p = a + 0.4; p < b; p += 2.4) run(p - 0.02, p + 0.02, off + 0.19, off + 0.23, y + 0.05, h - 0.25, M.graphite);
   }
 
   private atriumCeiling(h: number): void {
@@ -312,6 +375,7 @@ export class HqBuilder {
     for (const r of HQ_ROOMS) {
       this.floor(r);
       this.ceiling(r);
+      this.roomAccents(r);
     }
     // Ground collider under everything (floor slabs are visual).
     this.collider(-40, -1, -20, 44, 0, 30);

@@ -34,6 +34,12 @@ src/progression/treeOps.ts M8: treeAllocate / treeRespec profile operations     
 src/economy/currencies.ts  M8: one table for every currency (name, icon, earned/spent/banking) for tooltips and cost text [pure]
 src/home/stationInfo.ts    M8: purpose + currencies per HQ station (terminal headers, HQ prompt, Command Console directory) [pure]
 src/home/stationScreens.ts M8: live station screen drawing (moved out of HomeBase)
+src/loot/loadoutScore.ts   loadout headline scores (firepower/survivability/mobility/towers), swapImpact + verdict, statSources  [pure]
+src/ui/compare.tsx         ImpactBanner / ImpactChips / VerdictTag / ScoreCards / statTooltip (shared comparison widgets)
+src/ui/statHelp.ts         one-line help text per stat key (tooltips)                                         [pure]
+src/ui/DroneStats.tsx      drone configuration stat panel (score cards, per-stat source tooltips)
+src/visuals/hqTextures.ts  HQ-only surface sets with emissive maps: deck plates (LED seam, grates), wall panels (lit recess band, hatch, stencils), ceiling tiles (light slots)
+src/home/roomStyle.ts      accent colour + light tint per HQ room (room identity)                             [pure]
 src/ui/SkillTree.tsx       M8: Neural Lattice terminal (SVG radial tree, pan/zoom, allocate, respec);  src/ui/Directory.tsx: level/XP widgets + station directory
 server/migrations/002_progress.sql M8: xp/tree columns, veteran XP, version 7 -> 8
 src/net/teamLedger.ts      TeamLedger (shared co-op ledger mirrored into each player's ledger)
@@ -201,6 +207,15 @@ scripts/e2e-m6.cjs         M6 browser acceptance suite (A-L: plans, enemies, eli
 - Browser co-op section X of `e2e-construction-coop.cjs` needs a test server (`RIFT_TEST=1 RIFT_PORT=8787 npx tsx server/main.ts`) and runs both clients with the render loop stopped: two live software-GL render loops starve Playwright's actionability checks and clicks time out. It passes (13/13, including "no replicated event rejected") and is the real test of the client replay path, along with `e2e-coop-protocol.mjs`.
 
 ## Key design decisions
+
+### HQ + terminal pass (after the fast-pace pass)
+
+- **Comparison model** (`loot/loadoutScore.ts`): `loadoutScore(items)` -> dps (weaponSummary with equipped stats), ehp ((hull + shield) / (1 - mitigation) at wave 1), mobility and tower indices (100 = stock). `swapImpact(equipped, candidate, replaced)` -> per-headline deltas + verdict (only gains = upgrade, only losses = downgrade, mixed: weighted score >= 3% / <= -3%, else sidegrade). Every list that shows items next to the loadout uses it (storage/arena inventory, market stock, engineering previews of equipped items).
+- **InventoryView**: hover previews an item side by side (detail + ComparePanel with the impact banner) without changing the selection; actions only render for the selected item. Search (`matchesQuery`), "upgrades only", "best first" sort, arrow keys + Enter (equip), ignored while typing.
+- **Terminal styling** lives at the end of `style.css` ("terminal redesign"): accent per terminal via `--acc`, verdict colours `--up/--down/--side`.
+- **HQ surfaces**: `HomeBase` builds deck/wall/ceiling materials from `hqTextures` (ORM + emissive). The arena palette is unchanged. Rooms get accent lighting from `roomStyle` (floor perimeter line, corner columns with slits and colliders except in the command deck, cove strips, cable tray with hangers) and tinted room lights; accent materials are one merged mesh each.
+- **Tests**: `tests/loadout-score.test.ts`. Regression after the pass: npm test 342, e2e-m4 39/39, construction G-J 30/30, polish D-E 6/6, progression 18/18, m2 52/54 (C8/C9 fail identically on the pre-pass commit).
+- **Not done yet**: terminal split for `Terminals.tsx` beyond DroneStats; pin-and-compare of several items; weapon-family-specific headline metrics (burst vs sustained); real-GPU look check of the emissive seams.
 
 ### Fast-pace pass (after M8)
 

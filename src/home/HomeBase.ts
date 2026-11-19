@@ -34,6 +34,8 @@ import { calibrationRing, type EconCtx, equipmentExchange, fabricator, moduleBro
 import { captureEnvironment } from '../visuals/envCapture';
 import { Kit } from '../visuals/kit';
 import { createPalette, unlit } from '../visuals/materials';
+import { roomStyle, STYLED_ROOMS } from './roomStyle';
+import { hqCeilingSet, hqDeckSet, type HqSet, hqWallSet } from '../visuals/hqTextures';
 import { StationFocus } from './StationFocus';
 import { AmbientDrones } from './AmbientDrones';
 import { buildNav } from './ambientNav';
@@ -161,30 +163,38 @@ export class HomeBase {
     this.pal = pal;
     this.kit = new Kit(scene);
 
-    // HQ material set: brighter, cleaner interior variants of the shared palette.
-    // Interior composites: panel detail from the shared wall set, but dielectric and
-    // fairly rough so they read as light surfaces without a bright sky to reflect.
-    const composite = (name: string, albedo: [number, number, number], rough: number, coat: number) => {
+    // Clean high-tech interior sets (hqTextures): deck plates with an LED seam, composite wall
+    // panels with lit recess bands, acoustic ceiling tiles with light slots.
+    const deckSet = hqDeckSet(scene, high);
+    const wallSet = hqWallSet(scene, high);
+    const ceilSet = hqCeilingSet(scene, high);
+    const surface = (name: string, set: HqSet, albedo: [number, number, number], bump: number, emissive: number, coat: number) => {
       const m = new PBRMaterial(name, scene);
-      // Keep the broad ceramic faces clean. The shared normal carries the panel joints.
-      m.bumpTexture = pal.panel.bumpTexture;
       m.albedoColor = new Color3(...albedo);
-      m.metallic = 0;
-      m.roughness = rough;
+      m.albedoTexture = set.albedo;
+      m.bumpTexture = set.normal;
+      set.normal.level = bump;
+      m.metallicTexture = set.orm;
+      m.metallic = 1;
+      m.roughness = 1;
+      m.useAmbientOcclusionFromMetallicTextureRed = true;
+      m.useRoughnessFromMetallicTextureGreen = true;
+      m.useMetallnessFromMetallicTextureBlue = true;
+      m.useRoughnessFromMetallicTextureAlpha = false;
+      m.emissiveTexture = set.emissive;
+      m.emissiveColor = new Color3(emissive, emissive, emissive);
       m.usePhysicalLightFalloff = false;
       m.maxSimultaneousLights = 8;
       if (coat > 0) {
         m.clearCoat.isEnabled = true;
         m.clearCoat.intensity = coat;
-        m.clearCoat.roughness = 0.1;
+        m.clearCoat.roughness = 0.12;
       }
       return m;
     };
-    const floor = pal.floor;
-    const wall = composite('hqWall', [0.76, 0.75, 0.67], 0.63, 0.12);
-    const ceiling = composite('hqCeiling', [0.35, 0.37, 0.32], 0.85, 0);
-    ceiling.albedoTexture = null; // plain acoustic panels: keeps the vents for walls/floor
-    ceiling.bumpTexture = null;
+    const floor = surface('hqDeck', deckSet, [0.8, 0.82, 0.83], 0.32, 1.6, 0);
+    const wall = surface('hqWall', wallSet, [0.9, 0.92, 0.92], 0.28, 1.5, 0.1);
+    const ceiling = surface('hqCeiling', ceilSet, [0.62, 0.64, 0.64], 0.25, 1.35, 0);
     const glass = new PBRMaterial('hqGlass', scene);
     glass.albedoColor = new Color3(0.02, 0.06, 0.08);
     glass.metallic = 0;
@@ -229,6 +239,7 @@ export class HomeBase {
       amber: unlit(scene, 'hqAmber', [2.2, 1.0, 0.12]),
       amberDim: unlit(scene, 'hqAmberDim', [0.5, 0.22, 0.03]),
       lamp: unlit(scene, 'hqLamp', [2.15, 1.89, 1.51]),
+      accents: Object.fromEntries(STYLED_ROOMS.map((id) => [id, unlit(scene, `hqAccent_${id}`, roomStyle(id).accent)])),
       plant,
       screenFrame,
     };
@@ -283,12 +294,12 @@ export class HomeBase {
     pendant.specular.copyFrom(pendant.diffuse);
     pendant.intensity = 3.4;
     pendant.range = 18;
-    point('hqLaunch', [0, 6.5, 16.5], [0.65, 0.92, 0.81], 2.7, 18, true);
-    point('hqBay', [-16.5, 4.4, 0], [0.42, 1, 0.76], 2.65, 12);
+    point('hqLaunch', [0, 6.5, 16.5], roomStyle('deploy').light, 2.7, 18, true);
+    point('hqBay', [-16.5, 4.4, 0], roomStyle('config').light, 2.65, 12);
     // Storage + workshop share one light (frees a slot for the player's light budget).
-    point('hqWorks', [17, 4.6, 0], [0.98, 0.86, 0.72], 3.0, 16);
-    point('hqMarket', [30, 5.2, 0], [0.86, 0.94, 1], 2.8, 14);
-    point('hqReclaim', [-27, 5.2, 0], [1, 0.8, 0.55], 2.6, 13, true);
+    point('hqWorks', [17, 4.6, 0], roomStyle('works').light, 3.0, 16);
+    point('hqMarket', [30, 5.2, 0], roomStyle('market').light, 2.8, 14);
+    point('hqReclaim', [-27, 5.2, 0], roomStyle('reclaim').light, 2.6, 13, true);
     // Eight fixed lights plus the player's light budget (12 is the portable per-material maximum).
     for (const m of lit) m.maxSimultaneousLights = 8 + LIMITS.lights;
     this.litMaterials = lit;
