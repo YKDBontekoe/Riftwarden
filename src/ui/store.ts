@@ -170,6 +170,8 @@ export interface HudState {
   weaponName: string;
   heat: number; // 0..1
   overheated: boolean;
+  /** Rail charge / cycle progress 0..1 (0 for other mechanisms): reticle charge arc. */
+  charge: number;
   dashCharges: number;
   dashMax: number;
   dashRecharge: number; // 0..1 progress of next charge
@@ -220,6 +222,7 @@ export const initialHud: HudState = {
   weaponName: '',
   heat: 0,
   overheated: false,
+  charge: 0,
   dashCharges: 2,
   dashMax: 2,
   dashRecharge: 1,

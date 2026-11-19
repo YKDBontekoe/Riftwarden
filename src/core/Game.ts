@@ -2109,6 +2109,7 @@ export class Game {
       weaponName: this.weapon.def.name,
       heat: this.weapon.heat / 100,
       overheated: this.weapon.overheated,
+      charge: this.weapon.def.mechanism === 'charge' || this.weapon.def.mechanism === 'cycle' ? this.weapon.charge : 0,
       dashCharges: this.player.dashCharges,
       dashMax: MOVE.dashCharges,
       dashRecharge: this.player.dashRecharge,

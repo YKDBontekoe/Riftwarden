@@ -8,13 +8,16 @@ export function Crosshair() {
   const build = useHud((s) => s.buildMode);
   const overheated = useHud((s) => s.overheated);
   const heat = useHud((s) => s.heat);
-  const g = Math.round(spread);
+  const charge = useHud((s) => s.charge);
+  // Charging tightens the reticle: the brackets close in as the shot builds.
+  const g = Math.round(spread * (1 - charge * 0.45));
   // Heat arc hugging the right of the reticle.
   const r = 26;
   const arc = Math.PI * 0.5;
   const a0 = -arc / 2;
   const a1 = a0 + arc * Math.max(0.001, heat);
   const p = (a: number) => `${(Math.cos(a) * r).toFixed(2)} ${(Math.sin(a) * r).toFixed(2)}`;
+  const q = (a: number) => `${(-Math.cos(a) * r).toFixed(2)} ${(Math.sin(a) * r).toFixed(2)}`;
   return (
     <div className={`crosshair ${build ? 'build' : ''} ${overheated ? 'hot' : ''}`}>
       <span className="ch" style={{ transform: `translate(-50%, ${-g - 9}px)` }} />
@@ -26,6 +29,14 @@ export function Crosshair() {
         <svg className="heat-arc" viewBox="-40 -40 80 80" width="80" height="80">
           <path d={`M ${p(a0)} A ${r} ${r} 0 0 1 ${p(a0 + arc)}`} className="bg" />
           <path d={`M ${p(a0)} A ${r} ${r} 0 0 1 ${p(a1)}`} className={`fg ${heat > 0.7 ? 'warm' : ''} ${overheated ? 'over' : ''}`} />
+        </svg>
+      )}
+      {!build && charge > 0.02 && (
+        // Charge arc mirrors the heat arc on the left; a full charge pulses the ring.
+        <svg className={`charge-arc ${charge >= 0.999 ? 'full' : ''}`} viewBox="-40 -40 80 80" width="80" height="80" data-testid="charge-arc">
+          <path d={`M ${q(a0)} A ${r} ${r} 0 0 0 ${q(a0 + arc)}`} className="bg" />
+          <path d={`M ${q(a0)} A ${r} ${r} 0 0 0 ${q(a0 + arc * charge)}`} className="fg" />
+          {charge >= 0.999 && <circle r={r - 6} className="ready" />}
         </svg>
       )}
     </div>

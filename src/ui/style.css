@@ -233,6 +233,13 @@ b.v { color: var(--violet); }
 .heat-arc .bg { stroke: rgba(255, 255, 255, 0.12); }
 .heat-arc .fg { stroke: #9ef0ff; filter: drop-shadow(0 0 3px rgba(156, 207, 194, 0.8)); }
 .heat-arc .fg.warm { stroke: var(--amber); filter: drop-shadow(0 0 3px var(--amber)); }
+.charge-arc { position: absolute; left: -40px; top: -40px; overflow: visible; }
+.charge-arc path { fill: none; stroke-width: 2.5; stroke-linecap: butt; }
+.charge-arc .bg { stroke: rgba(255, 255, 255, 0.12); }
+.charge-arc .fg { stroke: #d9b8ff; filter: drop-shadow(0 0 3px rgba(200, 160, 255, 0.85)); }
+.charge-arc.full .fg { stroke: #ffffff; filter: drop-shadow(0 0 5px #d9b8ff); }
+.charge-arc .ready { fill: none; stroke: #e9d8ff; stroke-width: 1.5; opacity: 0; animation: charge-ready 0.45s ease-out infinite; }
+@keyframes charge-ready { from { opacity: 0.9; r: 14; } to { opacity: 0; r: 24; } }
 .heat-arc .fg.over { stroke: var(--red); animation: blink 0.3s infinite; }
 
 .hitmarker { position: fixed; left: 50%; top: 50%; width: 0; height: 0; animation: hm 0.16s ease-out; }

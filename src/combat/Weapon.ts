@@ -10,6 +10,7 @@ import { buildWeaponModel, type WeaponRig } from '../weapons/model';
 import { unlit } from '../visuals/materials';
 import { starSprite } from '../visuals/textures';
 import { HEAT_PACE } from './heat';
+import { shotFeel, yawPattern } from './weaponFeel';
 import type { CombatStats } from './stats';
 
 export interface ShotRequest {
@@ -216,6 +217,16 @@ export class Weapon {
     this.holster = h ? 1 : 0;
   }
 
+  private feelDef: WeaponDef | null = null;
+  private feelCache = shotFeel('plasma', 'auto');
+  private feelFor(d: WeaponDef) {
+    if (this.feelDef !== d) {
+      this.feelDef = d;
+      this.feelCache = shotFeel(d.family, d.mechanism);
+    }
+    return this.feelCache;
+  }
+
   /** Effective range after stats. */
   range(stats: CombatStats): number {
     return this.def.range * stats.rangeMult;
@@ -262,16 +273,22 @@ export class Weapon {
       sfx.play('overheat');
     }
     this.spread = Math.min(d.spreadMax, this.spread + d.spreadPerShot);
-    this.player.recoil += d.recoilPitch * power * stats.spreadMult * (0.8 + Math.random() * 0.4);
+    // Camera: pitch kick from the def, a patterned sideways kick, a lens punch and (heavy weapons) shake.
+    const feel = shotFeel(d.family, d.mechanism, power);
+    const kick = d.recoilPitch * power * stats.spreadMult * (0.85 + Math.random() * 0.3);
+    this.player.recoil += kick;
+    this.player.recoilYaw += kick * feel.yawKick * yawPattern(this.shotsFired);
+    this.player.punch(feel.punchFov, feel.punchRoll * (Math.random() < 0.5 ? -1 : 1));
+    if (feel.trauma > 0) this.player.addTrauma(feel.trauma);
     this.anim.fire(power * (d.family === 'rail' ? 1 : 0.9 + 0.1 * proj));
     // Muzzle flash on the firing barrel.
     this.flashRoot.parent = this.rig.muzzles[muzzleIndex] ?? this.rig.muzzles[0] ?? this.rig.root;
-    this.flashT = d.family === 'rail' ? 0.07 : 0.045;
-    this.flashScale = d.family === 'rail' ? 1.6 + power : 0.8 + Math.random() * 0.5;
+    this.flashT = feel.flashTime;
+    this.flashScale = feel.flashScale[0] + Math.random() * (feel.flashScale[1] - feel.flashScale[0]);
     for (const f of this.flashMeshes) f.setEnabled(true);
     this.flashMeshes[2].rotation.z = Math.random() * Math.PI;
     this.light.position.copyFrom(from);
-    this.light.intensity = d.family === 'rail' ? 6 * power : 3.2;
+    this.light.intensity = feel.light;
     if (d.mechanism === 'pulse') sfx.play('railFire', { pitch: 1.5, volume: 0.7 });
     else if (scatter) {
       sfx.play('shoot', { pitch: 0.62, volume: 1 });
@@ -330,7 +347,9 @@ export class Weapon {
             this.chargeSfx = true;
             sfx.play('railCharge', { pitch: Math.min(2, stats.chargeRateMult / Math.max(0.2, d.chargeTime / 0.8)) });
           }
+          const before = this.charge;
           this.charge = Math.min(1, this.charge + (dt * stats.chargeRateMult) / Math.max(0.05, d.chargeTime));
+          if (before < 1 && this.charge >= 1) sfx.play('chargeReady');
         } else if (!trigger && this.triggerWas && this.charge >= 0.12 && ready) {
           const power = chargeFactor(this.charge);
           this.fireShot(stats, shoot, fx, power, 0.4 + 0.6 * this.charge);
@@ -417,6 +436,9 @@ export class Weapon {
     }
 
     // --- presentation
+    // Recoil recovers slower while the trigger is held (sustained fire climbs a little) and fast after release.
+    const feel = this.feelFor(d);
+    this.player.recoilRecover = trigger && this.sinceShot < 0.25 ? feel.recoverFiring : feel.recoverIdle;
     this.switchT = Math.max(0, this.switchT - dt * 2.8);
     this.anim.update({
       dt,
@@ -424,7 +446,8 @@ export class Weapon {
       lookDy: this.player.lookDy,
       speed: this.player.speed,
       grounded: this.player.grounded,
-      sprinting: this.player.sprinting,
+      // Firing breaks the sprint pose: shots never leave a weapon turned 25 degrees off-axis.
+      sprinting: this.player.sprinting && this.sinceShot > 0.35,
       dashing: this.player.dashing,
       verticalSpeed: this.player.verticalSpeed,
       heat: this.heat / 100,

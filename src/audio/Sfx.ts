@@ -25,6 +25,7 @@ export type SfxName =
   | 'equip'
   | 'bank'
   | 'railCharge'
+  | 'chargeReady'
   | 'railFire'
   | 'vent'
   | 'arc'
@@ -465,7 +466,9 @@ export class Sfx {
         this.osc('sawtooth', 1250 * p * j, 220 * p, 0.09, 0.16 * v, out);
         this.osc('square', 2600 * p * j, 900 * p, 0.04, 0.05 * v, out);
         this.noiseBurst(0.06, 0.22 * v, 5200, 1400, out, 'bandpass', 0.8);
-        this.osc('sine', 140 * p, 50, 0.08, 0.25 * v, out);
+        // Body: a short low thump under the zap so each shot lands with weight.
+        this.osc('sine', 150 * p, 46, 0.11, 0.36 * v, out);
+        this.noiseBurst(0.045, 0.12 * v, 420, 180, out, 'lowpass');
         break;
       case 'hit':
         this.osc('square', 1900 * j, 1500, 0.04, 0.06 * v, out);
@@ -583,6 +586,11 @@ export class Sfx {
           this.osc('square', 620, 620, 0.16, 0.07 * v, out, i * 0.36);
           this.osc('square', 465, 465, 0.16, 0.07 * v, out, i * 0.36 + 0.18);
         }
+        break;
+      case 'chargeReady':
+        // Two-tone ping: the shot is at full power.
+        this.osc('sine', 1760, 1760, 0.07, 0.12 * v, out);
+        this.osc('sine', 2640, 2640, 0.09, 0.1 * v, out, 0.05);
         break;
       case 'charge':
         this.osc('sawtooth', 140 * p, 1200 * p, 1.2 / p, 0.06 * v, out);

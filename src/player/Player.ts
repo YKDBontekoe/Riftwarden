@@ -96,6 +96,14 @@ export class Player {
   yaw = 0;
   pitch = 0;
   recoil = 0;
+  /** Sideways recoil (radians), recovers like `recoil`. */
+  recoilYaw = 0;
+  /** Recoil recovery rate (1/s); the weapon lowers it while the trigger is held. */
+  recoilRecover = 14;
+  /** Lens punch from shots: FOV (radians, narrows) and roll, applied on top of the smoothed values. */
+  private punchFov = 0;
+  private punchRoll = 0;
+  private appliedPunch = 0;
   private hv = new Vector3(); // horizontal velocity
   private vy = 0;
   grounded = false;
@@ -179,6 +187,9 @@ export class Player {
     this.yaw = this.spawnYaw;
     this.pitch = 0;
     this.recoil = 0;
+    this.recoilYaw = 0;
+    this.punchFov = 0;
+    this.punchRoll = 0;
     this.hp = this.maxHp;
     this.shield = this.maxShield;
     this.sinceShieldHit = 99;
@@ -311,6 +322,12 @@ export class Player {
     sfx.play('playerHurt', { volume: Math.min(1, 0.5 + amount / 30) });
   }
 
+  /** Lens punch for a shot: narrows the FOV and rolls a little, both decaying in ~0.1 s. */
+  punch(fov: number, roll: number): void {
+    this.punchFov = Math.min(0.08, this.punchFov + fov);
+    this.punchRoll = Math.max(-0.05, Math.min(0.05, this.punchRoll + roll));
+  }
+
   addTrauma(amount: number): void {
     if (this.reduceMotion) return;
     this.trauma = Math.min(1, this.trauma + amount * this.shakeScale);
@@ -348,7 +365,12 @@ export class Player {
       this.lookDx = 0;
       this.lookDy = 0;
     }
-    this.recoil *= Math.exp(-dt * 14);
+    const rec = Math.exp(-dt * this.recoilRecover);
+    this.recoil *= rec;
+    this.recoilYaw *= rec;
+    const pk = Math.exp(-dt * 18);
+    this.punchFov *= pk;
+    this.punchRoll *= pk;
 
     // --- Health / respawn ---
     if (this.vitalsLocal) this.tickVitals(dt);
@@ -510,7 +532,7 @@ export class Player {
     const sp = sh * 0.035 * (Math.sin(t * 37.1) + Math.sin(t * 23.7 + 1.3) * 0.6);
     const sy = sh * 0.035 * (Math.sin(t * 31.3 + 2.1) + Math.sin(t * 19.9) * 0.6);
     const sr = sh * 0.05 * Math.sin(t * 27.7 + 0.7);
-    this.camera.rotation.set(this.pitch - this.recoil + sp, this.yaw + sy, (this.alive ? this.roll : 0.25) + sr);
+    this.camera.rotation.set(this.pitch - this.recoil + sp, this.yaw + this.recoilYaw + sy, (this.alive ? this.roll : 0.25) + sr + (this.reduceMotion ? 0 : this.punchRoll));
     this.fovKick *= Math.exp(-dt * 8);
     if (this.reduceMotion) {
       this.fovKick = 0;
@@ -520,7 +542,11 @@ export class Player {
     // Sense of speed: carried overspeed widens the view a little more.
     const over = (speed - this.move.sprintSpeed) / Math.max(1, this.move.dashCarrySpeed - this.move.sprintSpeed);
     const speedFov = this.reduceMotion ? 0 : this.move.speedFov * Math.max(0, Math.min(1, over));
-    this.camera.fov += (this.baseFov + this.fovKick + sprintFov + speedFov - this.camera.fov) * (1 - Math.exp(-dt * 14));
+    // The lens punch sits on top of the smoothed FOV: remove last frame's, smooth, add this frame's.
+    const smoothed = this.camera.fov + this.appliedPunch;
+    const next = smoothed + (this.baseFov + this.fovKick + sprintFov + speedFov - smoothed) * (1 - Math.exp(-dt * 14));
+    this.appliedPunch = this.reduceMotion ? 0 : this.punchFov;
+    this.camera.fov = next - this.appliedPunch;
   }
 
   /** Vertical velocity (m/s), for viewmodel jump/landing response. */
