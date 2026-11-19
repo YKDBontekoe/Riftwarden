@@ -8,7 +8,7 @@ import type { Ordnance, Telegraphs } from '../fx/Hostile';
 import type { Player } from '../player/Player';
 import type { Kit } from '../visuals/kit';
 import { FLASH_BUFFER } from '../visuals/hitFlashPlugin';
-import { DEATH_TIME, deathPose, FLYERS, type DeathPose } from './deathAnims';
+import { DEATH_TIME, deathPose, FLYERS, type DeathPose, WRECK_DRAG, wreckKnock } from './deathAnims';
 import type { Palette } from '../visuals/materials';
 import { hasAnyStatus, isBurning, isChilled, isFrozen, isShocked, newStatus, resetStatus, speedFactor, type StatusState } from '../combat/status';
 import { unlit } from '../visuals/materials';
@@ -174,6 +174,12 @@ export class Enemy implements Health {
   spawnedAt = 0;
   /** Recorded so death effects can run without the dead object. */
   displayName = '';
+  /** Where the last hit came from (x/z), for the wreck's knock-back; NaN = unknown. */
+  hitFromX = Number.NaN;
+  hitFromZ = Number.NaN;
+  /** Wreck velocity (m/s) while collapsing. */
+  knockX = 0;
+  knockZ = 0;
 
   constructor(
     readonly def: EnemyDef,
@@ -459,6 +465,10 @@ export class EnemyManager {
   damage(e: Enemy, amount: number, type: DamageType, hitPoint: Vector3, fx: Effects, info: Partial<HitInfo> = {}): DamageResult | null {
     if (!e.alive) return null;
     const hit: HitInfo = { weak: !!info.weak, from: info.from ?? null, point: hitPoint, dot: !!info.dot };
+    if (hit.from) {
+      e.hitFromX = hit.from.x;
+      e.hitFromZ = hit.from.z;
+    }
     if (e.behavior?.damageMod) amount = e.behavior.damageMod(e, amount, hit, this);
     if (e.armor > 0 && !hit.weak && !hit.dot) {
       const absorbed = Math.min(e.armor, amount * ELITE.armorAbsorb);
@@ -538,6 +548,7 @@ export class EnemyManager {
     }
     const burst = () => {
       const [big, debris, pitch] = BLAST[e.kind] ?? [1, 12, 1];
+      e.center(c); // the wreck may have been knocked back since the kill
       fx.explode(c, { scale: detonated ? big * 1.25 : big, debris });
       const a = ctx.panFor(c);
       sfx.play('explosion', { volume: a.volume * (detonated ? 1 : 0.8), pan: a.pan, pitch });
@@ -554,6 +565,17 @@ export class EnemyManager {
       e.mark?.setEnabled(false);
       e.markKind = '';
       this.flash(e, [1, 0.55, 0.2]);
+      // Immediate kill pop (the full burst follows when the wreck is done) and knock-back away from the shooter.
+      const flying = FLYERS.has(e.kind);
+      fx.burst('sparks', c, flying ? 8 : 12, undefined, 0.8);
+      fx.debrisBurst(c, flying ? 2 : 4, 6, 0.55 * e.def.scale);
+      fx.burst('flash', c, 1, undefined, 0.28 * e.def.scale);
+      const kx = e.pos.x - e.hitFromX;
+      const kz = e.pos.z - e.hitFromZ;
+      const kl = Math.hypot(kx, kz);
+      const k = kl > 0.01 ? wreckKnock(e.kind, e.def.scale, flying) / kl : 0;
+      e.knockX = k > 0 ? kx * k : 0;
+      e.knockZ = k > 0 ? kz * k : 0;
       this.wrecks.push({ e, t: 0, dur, finish: () => burst(), spark: 0 });
       return;
     }
@@ -592,6 +614,18 @@ export class EnemyManager {
     const e = w.e;
     const k = w.t / w.dur;
     const pose = deathPose(FLYERS.has(e.kind), k, e.netId || e.gen, DEATH_POSE);
+    if (e.knockX !== 0 || e.knockZ !== 0) {
+      // Keep wrecks inside the arena walls; wrecks already in a gate tunnel just slide (no snap to the wall line).
+      const lim = ctx.layout.half - 1.5;
+      const inside = Math.abs(e.pos.x) <= lim && Math.abs(e.pos.z) <= lim;
+      const nx = e.pos.x + e.knockX * dt;
+      const nz = e.pos.z + e.knockZ * dt;
+      e.pos.x = inside ? Math.max(-lim, Math.min(lim, nx)) : nx;
+      e.pos.z = inside ? Math.max(-lim, Math.min(lim, nz)) : nz;
+      const drag = Math.exp(-dt * WRECK_DRAG);
+      e.knockX *= drag;
+      e.knockZ *= drag;
+    }
     e.root.position.set(e.pos.x, e.pos.y - pose.sink, e.pos.z);
     e.root.rotation.set(pose.pitch, e.yaw, pose.roll);
     this.setFlash(e, pose.flash * 0.8);
@@ -626,6 +660,8 @@ export class EnemyManager {
 
   private release(e: Enemy): void {
     e.alive = false;
+    e.knockX = e.knockZ = 0;
+    e.hitFromX = e.hitFromZ = Number.NaN;
     this.hooks.released?.(e);
     for (const h of e.hitboxes) h.isPickable = !!(h.metadata as EnemyHitboxMeta | null)?.enemy;
     resetStatus(e.status);

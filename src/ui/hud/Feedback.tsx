@@ -85,26 +85,51 @@ export function DamageDirection() {
 
 // ---------------------------------------------------------------- world-anchored UI
 
-/** Floating damage numbers, positioned imperatively each animation frame (no per-frame React renders). */
+/** Hits on one target within this window add up into a single rising number instead of stacking new ones. */
+const MERGE_WINDOW = 0.45;
+const KIND_RANK: Record<HitKind, number> = { shield: 0, hit: 1, crit: 2, kill: 3 };
+
+/**
+ * Floating damage numbers, positioned imperatively each animation frame (no per-frame React renders). Rapid
+ * fire on one enemy merges into one total that pops on every hit and keeps the strongest kind (crit / kill).
+ */
 export function DamageNumbers({ game }: { game: Game }) {
   const host = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const live: Num[] = [];
+    type Live = Num & { total: number; kind: HitKind; pop: number; target?: number; player: boolean };
+    const live: Live[] = [];
     const pool: HTMLDivElement[] = [];
+    const byTarget = new Map<number, Live>();
+    const drop = (n: Live) => {
+      n.el.style.display = 'none';
+      pool.push(n.el);
+      if (n.target !== undefined && byTarget.get(n.target) === n) byTarget.delete(n.target);
+    };
     const off = uiEvents.on('damageNumber', (e) => {
       if (!host.current) return;
-      if (!e.player && e.kind !== 'kill' && Math.random() < 0.5) return; // keep turret noise down
-      if (live.length > 40) {
-        const old = live.shift()!;
-        old.el.style.display = 'none';
-        pool.push(old.el);
+      const merge = e.target !== undefined ? byTarget.get(e.target) : undefined;
+      if (merge && merge.player === e.player && merge.t < MERGE_WINDOW) {
+        merge.total += e.amount;
+        if (KIND_RANK[e.kind] >= KIND_RANK[merge.kind]) merge.kind = e.kind;
+        merge.el.className = `dmg ${merge.kind} ${e.player ? 'own' : 'ally'}`;
+        merge.el.textContent = String(merge.total);
+        merge.x = e.x;
+        merge.y = e.y;
+        merge.z = e.z;
+        merge.t = Math.min(merge.t, 0.12);
+        merge.pop = 1;
+        return;
       }
+      if (!e.player && e.kind !== 'kill' && Math.random() < 0.5) return; // keep turret noise down
+      if (live.length > 40) drop(live.shift()!);
       const el = pool.pop() ?? document.createElement('div');
       el.className = `dmg ${e.kind} ${e.player ? 'own' : 'ally'}`;
       el.textContent = String(e.amount);
       el.style.display = 'block';
       if (!el.parentElement) host.current.appendChild(el);
-      live.push({ el, x: e.x, y: e.y, z: e.z, t: 0, dx: (Math.random() - 0.5) * 40 });
+      const n: Live = { el, x: e.x, y: e.y, z: e.z, t: 0, dx: (Math.random() - 0.5) * 40, total: e.amount, kind: e.kind, pop: 1, target: e.target, player: e.player };
+      live.push(n);
+      if (e.target !== undefined) byTarget.set(e.target, n);
     });
     let raf = 0;
     let last = performance.now();
@@ -114,10 +139,10 @@ export function DamageNumbers({ game }: { game: Game }) {
       for (let i = live.length - 1; i >= 0; i--) {
         const n = live[i];
         n.t += dt;
-        const life = 0.8;
+        n.pop = Math.max(0, n.pop - dt * 9);
+        const life = n.kind === 'kill' ? 0.9 : 0.75;
         if (n.t >= life) {
-          n.el.style.display = 'none';
-          pool.push(n.el);
+          drop(n);
           live.splice(i, 1);
           continue;
         }
@@ -126,9 +151,9 @@ export function DamageNumbers({ game }: { game: Game }) {
           n.el.style.opacity = '0';
           continue;
         }
-        const pop = n.t < 0.1 ? 1 + (0.1 - n.t) * 7 : 1;
+        const scale = 1 + n.pop * n.pop * 0.7;
         n.el.style.opacity = String(Math.min(1, (life - n.t) * 4));
-        n.el.style.transform = `translate(${p.x + n.dx * n.t}px, ${p.y}px) translate(-50%, -50%) scale(${pop})`;
+        n.el.style.transform = `translate(${p.x + n.dx * n.t}px, ${p.y}px) translate(-50%, -50%) scale(${scale})`;
       }
       raf = requestAnimationFrame(tick);
     };
@@ -139,6 +164,33 @@ export function DamageNumbers({ game }: { game: Game }) {
     };
   }, [game]);
   return <div className="dmg-host" ref={host} />;
+}
+
+/** Kill chain counter beside the reticle: grows with every kill inside the chain window, fades when it ends. */
+export function KillChain() {
+  const [st, setSt] = useState<{ n: number; id: number } | null>(null);
+  useEffect(() => {
+    let id = 0;
+    let timer: ReturnType<typeof setTimeout>;
+    const off = uiEvents.on('chain', (n) => {
+      setSt({ n, id: ++id });
+      clearTimeout(timer);
+      timer = setTimeout(() => setSt(null), 2400);
+    });
+    return () => {
+      off();
+      clearTimeout(timer);
+    };
+  }, []);
+  if (!st) return null;
+  const tier = st.n >= 12 ? 'max' : st.n >= 6 ? 'hot' : '';
+  const label = st.n >= 12 ? 'OVERDRIVE' : st.n >= 6 ? 'RAMPAGE' : 'CHAIN';
+  return (
+    <div className={`kill-chain ${tier}`}>
+      <b key={st.id}>×{st.n}</b>
+      <span>{label}</span>
+    </div>
+  );
 }
 
 /** Health/shield bars over recently damaged hostiles. Imperative DOM pool. */

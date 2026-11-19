@@ -312,7 +312,7 @@ export class Director {
       this.bus.emit(mkHit('kill', true));
       this.g.onEnemyKilled(e);
     }
-    if (!r.quiet && !r.dot) this.g.showNumber(r.point, amount, kind, r.source.kind === 'weapon', this.numbers++ < NUMBERS_PER_FRAME);
+    if (!r.quiet && !r.dot) this.g.showNumber(r.point, amount, kind, r.source.kind === 'weapon', this.numbers++ < NUMBERS_PER_FRAME, e.id * 4096 + (e.gen & 4095));
     return { dealt, killed: res.killed, kind };
   }
 

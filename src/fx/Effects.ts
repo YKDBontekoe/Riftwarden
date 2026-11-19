@@ -461,7 +461,8 @@ export class Effects {
     const s = o.scale ?? 1;
     const over = this.particleCount > this.particleBudget;
     const k = over ? 0.4 : this.high ? 1 : 0.65;
-    this.burst('flash', pos, 2, undefined, s);
+    // One star for ordinary wrecks (a pair from big blasts): a pack fight must stay readable through the bloom.
+    this.burst('flash', pos, s >= 1.5 ? 2 : 1, undefined, s * 0.75);
     this.burst('fire', pos, Math.round(13 * s * k), undefined, s);
     this.burst('sparks', pos, Math.round(10 * s * k), undefined, Math.sqrt(s));
     // Molten sparks that rain down, bounce and skid across the arena.

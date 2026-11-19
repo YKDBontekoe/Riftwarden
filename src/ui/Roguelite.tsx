@@ -66,7 +66,11 @@ export function UpgradePanel({ game }: { game: Game }) {
             );
           })}
         </div>
-        {!waiting && <div className="uc-foot">Press <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> or click a card</div>}
+        {!waiting && (
+          <div className="uc-foot">
+            Press <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> to pick and jump straight back in · <kbd>Esc</kbd> frees the cursor to click a card
+          </div>
+        )}
       </div>
     </div>
   );

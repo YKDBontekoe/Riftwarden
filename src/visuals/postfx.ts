@@ -146,6 +146,9 @@ export class PostFx {
     p.onBuildObservable.add(() => { p.imageProcessing.imageProcessingConfiguration = ip; });
   }
 
+  /** 0..1 carried overspeed of the drone (dash, boost): a little radial aberration and vignette for speed. */
+  speed = 0;
+
   /** Brief lens punch (explosions near the player, taking hits). */
   kick(amount: number): void {
     if (this.reduceMotion) return;
@@ -173,9 +176,10 @@ export class PostFx {
     cc.globalSaturation = 10 - 70 * tactical - 20 * hurt;
     cc.globalHue = 220;
     cc.globalDensity = 18 * tactical;
-    p.chromaticAberration.aberrationAmount = 16 * this.aberration + 3 * tactical + 9 * hurt;
+    const speed = this.reduceMotion ? 0 : this.speed;
+    p.chromaticAberration.aberrationAmount = 16 * this.aberration + 3 * tactical + 9 * hurt + 5 * speed;
     ip.animate(this.baseExposure + lightning * 0.05 + this.mood.exposure, this.baseContrast + this.mood.contrast);
-    ip.vignetteWeight = this.baseVignette + this.mood.vignette;
+    ip.vignetteWeight = this.baseVignette + this.mood.vignette + 0.9 * speed;
     p.grain.intensity = this.baseGrain + tactical * 2.5;
   }
 

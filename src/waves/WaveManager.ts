@@ -2,6 +2,7 @@ import type { SpawnEntry, WaveDef } from './waves';
 import { getWave } from './waves';
 import type { WavePhase } from '../ui/store';
 import { NO_SCALING, type WaveScaling } from '../progression/tiers';
+import { PACE } from './pace';
 
 export interface WaveHooks {
   spawn(entry: SpawnEntry, wave: WaveDef): void;
@@ -16,7 +17,7 @@ export const MAX_ACTIVE_ENEMIES = 42;
 
 /**
  * Wave lifecycle: prep (real time, skippable) -> combat (hostile time, spawn schedule)
- * -> cleared (short celebration) -> prep of the next wave. Endless.
+ * -> cleared (short celebration) -> prep of the next wave. Endless. Timings live in `pace.ts`.
  */
 export class WaveManager {
   phase: WavePhase = 'prep';
@@ -104,7 +105,7 @@ export class WaveManager {
         if (this.cursor < spawns.length && spawns[this.cursor].time < this.elapsed - 1) this.elapsed = spawns[this.cursor].time + 1;
         if (this.cursor >= spawns.length && this.hooks.aliveCount() === 0) {
           this.phase = 'cleared';
-          this.timer = 3;
+          this.timer = PACE.cleared;
           this.hooks.onWaveCleared(this.wave);
         }
         break;

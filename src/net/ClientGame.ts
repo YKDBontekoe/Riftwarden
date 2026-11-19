@@ -25,7 +25,7 @@ import { dec, vec } from './wire';
 import { parseEvent, type ReplicatedEvent } from './events';
 import { isFxCall, isOrdnanceCall, isWfxCall, replay } from './replicated';
 import type { ShotOutcome, ShotRequest } from '../combat/Weapon';
-import type { Player } from '../player/Player';
+import { MOVE, type Player } from '../player/Player';
 import type { Kit } from '../visuals/kit';
 import type { Palette } from '../visuals/materials';
 
@@ -505,6 +505,7 @@ export class ClientGame extends Game {
     const flash = this.updateSky(dt);
     this.hurtFx = Math.max(this.player.hurtFlash, this.player.alive ? 0 : 0.8);
     this.mood.update(dt, this.moodInput());
+    this.motionFx();
     this.post.update(dt, k, this.hurtFx, flash);
     this.updateArenaVisuals(dt, hdt);
     if (this.screen === 'defeat') this.defeatT += dt;
@@ -804,9 +805,13 @@ export class ClientGame extends Game {
         } else sfx.play(ev[1] as SfxName, o);
         return;
       }
-      case 'u':
-        (uiEvents.emit as (k: string, v: unknown) => void)(ev[1], dec(ev[2]));
+      case 'u': {
+        const payload = dec(ev[2]);
+        // Personal kill confirmations keep the local (client-predicted) drone's dash topped up, as in single player.
+        if (ev[1] === 'hit' && payload === 'kill') this.player.refundDash(MOVE.killDashRefund);
+        (uiEvents.emit as (k: string, v: unknown) => void)(ev[1], payload);
         return;
+      }
       case 't': {
         const op = ev[1];
         const sid = ev[2];

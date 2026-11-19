@@ -3,6 +3,7 @@ import type { EnemyKind } from '../data/defs';
 import type { GateId } from '../world/layout';
 import { NO_SCALING, type WaveScaling } from '../progression/tiers';
 import type { EliteModId } from '../survival/elites';
+import { PACE, prepTime } from './pace';
 
 export interface SpawnEntry {
   time: number; // seconds after combat starts (hostile time)
@@ -44,7 +45,7 @@ export function expand(groups: Group[], countMult = 1): SpawnEntry[] {
     const count = Math.max(1, Math.round(g.count * countMult));
     // Extra spawns from tier scaling keep the group's duration (tighter interval).
     const interval = count > g.count && g.count > 0 ? (g.interval * g.count) / count : g.interval;
-    for (let i = 0; i < count; i++) out.push({ time: g.start + i * interval, kind: g.kind, gate: g.gate });
+    for (let i = 0; i < count; i++) out.push({ time: (g.start + i * interval) * PACE.spawnTempo, kind: g.kind, gate: g.gate });
   }
   out.sort((a, b) => a.time - b.time);
   return out;
@@ -145,7 +146,7 @@ export function getWave(n: number, scaling: WaveScaling = NO_SCALING): WaveDef {
     hpMult: hpMultiplier(n) * scaling.hpMult,
     damageMult: damageMultiplier(n) * scaling.damageMult,
     speedMult: scaling.speedMult,
-    prepTime: n === 1 ? 30 : 18,
+    prepTime: prepTime(n),
     clearReward: 60 + n * 15,
   };
 }

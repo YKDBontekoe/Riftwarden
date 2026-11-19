@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_SETTINGS, loadSettings, sanitizeSettings } from '../src/core/settings';
 import { MAX_ACTIVE_ENEMIES, WaveManager } from '../src/waves/WaveManager';
 import { getWave } from '../src/waves/waves';
+import { PACE, earlyCallBonus, prepTime } from '../src/waves/pace';
 
 function harness() {
   let alive = 0;
@@ -32,7 +33,7 @@ describe('wave lifecycle', () => {
       h.kill(5);
     }
     expect(h.wm.phase).toBe('cleared');
-    for (let i = 0; i < 60 * 4; i++) h.wm.update(1 / 60, 1 / 60);
+    for (let i = 0; i < 60 * (PACE.cleared + 0.5); i++) h.wm.update(1 / 60, 1 / 60);
     expect(h.wm.phase).toBe('prep');
     expect(h.wm.number).toBe(2);
     expect(h.log).toEqual(['prep1', 'start1', 'clear1', 'prep2']);
@@ -70,7 +71,7 @@ describe('wave lifecycle', () => {
   it('hostile time dilation slows spawning but not prep', () => {
     const h = harness();
     h.wm.reset();
-    h.wm.update(29.9, 0);
+    h.wm.update(PACE.prepFirst - 0.1, 0);
     expect(h.wm.phase).toBe('prep');
     h.wm.update(0.2, 0);
     expect(h.wm.phase).toBe('combat');
@@ -108,5 +109,25 @@ describe('settings persistence', () => {
   it('recovers from corrupt storage', () => {
     localStorage.setItem('riftwarden.settings', '{not json');
     expect(loadSettings()).toEqual(DEFAULT_SETTINGS);
+  });
+});
+
+describe('run tempo', () => {
+  it('keeps dead time short and pays for early calls', () => {
+    expect(prepTime(1)).toBe(PACE.prepFirst);
+    expect(prepTime(7)).toBe(PACE.prepNext);
+    expect(PACE.prepNext).toBeLessThanOrEqual(15);
+    expect(PACE.cleared).toBeLessThan(3);
+    expect(getWave(5).prepTime).toBe(PACE.prepNext);
+    expect(earlyCallBonus(0)).toBe(0);
+    expect(earlyCallBonus(-3)).toBe(0);
+    expect(earlyCallBonus(Number.NaN)).toBe(0);
+    expect(earlyCallBonus(11.7)).toBe(11 * PACE.earlyCallCores);
+  });
+
+  it('compresses the spawn schedule but keeps its order', () => {
+    const w = getWave(2);
+    expect(w.spawns[w.spawns.length - 1].time).toBeLessThan(30);
+    for (let i = 1; i < w.spawns.length; i++) expect(w.spawns[i].time).toBeGreaterThanOrEqual(w.spawns[i - 1].time);
   });
 });

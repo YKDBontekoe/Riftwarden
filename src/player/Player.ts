@@ -13,28 +13,46 @@ import type { Input } from '../core/Input';
 import { PHYS_PLAYER } from '../world/physicsGroups';
 
 const DOWN = new Vector3(0, -1, 0);
-const GRAVITY = new Vector3(0, -26, 0);
+const GRAVITY = new Vector3(0, -30, 0);
 
+/**
+ * Arena movement. Fast and momentum based: dashes and boosts carry their speed (it bleeds off slowly while the
+ * player keeps pushing roughly the same way, `overspeedDecel` on the ground, `airDrag` in the air), so dash ->
+ * jump -> boost chains keep the drone flying. Letting go of the keys still stops quickly (`groundDecel`).
+ */
 export const MOVE = {
-  runSpeed: 15,
-  sprintSpeed: 22,
-  groundAccel: 150,
-  groundDecel: 120,
-  airAccel: 70,
-  jumpVel: 10.8,
-  boostVel: 12.4,
-  boostSpeed: 26,
-  dashSpeed: 44,
-  dashCarrySpeed: 24,
-  dashTime: 0.18,
+  runSpeed: 16.5,
+  sprintSpeed: 24,
+  groundAccel: 175,
+  groundDecel: 130,
+  airAccel: 85,
+  jumpVel: 11.6,
+  boostVel: 13.2,
+  boostSpeed: 28,
+  dashSpeed: 50,
+  dashCarrySpeed: 31,
+  dashTime: 0.17,
   dashCharges: 2,
-  dashRecharge: 1.0,
-  coyote: 0.1,
-  jumpBuffer: 0.11,
+  dashRecharge: 0.85,
+  /** Bleed rate (m/s^2) of speed above the run/sprint target while grounded and pushing along the velocity. */
+  overspeedDecel: 26,
+  /** Same, airborne (steer only, keep the fling). */
+  airDrag: 6,
+  /** Steering rate of carried momentum toward the input direction (1/s), ground / air. */
+  steerGround: 9,
+  steerAir: 5,
+  /** Fraction of a dash charge refunded per kill (aggression keeps the drone mobile). */
+  killDashRefund: 0.3,
+  /** Camera drop during a grounded dash (slide), metres. */
+  slideDip: 0.32,
+  coyote: 0.12,
+  jumpBuffer: 0.12,
   strafeRoll: 0.045,
   sprintFov: 0.09,
   dashFov: 0.16,
   boostFov: 0.07,
+  /** Extra FOV at full carried overspeed (sense of speed). */
+  speedFov: 0.08,
 };
 
 export const HQ_MOVE: typeof MOVE = {
@@ -44,17 +62,22 @@ export const HQ_MOVE: typeof MOVE = {
   groundAccel: 95,
   groundDecel: 85,
   airAccel: 32,
-  jumpVel: 9.6,
-  boostVel: 10.2,
+  jumpVel: 10.2,
+  boostVel: 10.8,
   boostSpeed: 0,
   dashSpeed: 31,
   dashCarrySpeed: 15.5,
   dashTime: 0.16,
   dashRecharge: 1.5,
+  overspeedDecel: 80,
+  airDrag: 24,
+  killDashRefund: 0,
+  slideDip: 0.12,
   strafeRoll: 0.012,
   sprintFov: 0.05,
   dashFov: 0.12,
   boostFov: 0,
+  speedFov: 0,
 };
 
 const CAPSULE_HEIGHT = 1.8;
@@ -87,6 +110,7 @@ export class Player {
   private dashDir = new Vector3();
   sprinting = false;
   private landDip = 0;
+  private slide = 0;
   private bobT = 0;
   private roll = 0;
   private fovKick = 0;
@@ -169,6 +193,7 @@ export class Player {
     this.dashT = 0;
     this.sprinting = false;
     this.landDip = 0;
+    this.slide = 0;
     this.roll = 0;
     this.fovKick = 0;
     this.sinceHurt = 99;
@@ -256,6 +281,9 @@ export class Player {
   }
   /** Number of respawns (co-op: replicas reset their drone when this changes). */
   respawns = 0;
+  /** Kill chain: consecutive kills within a short window (Game.playerKill) and the run time of the last one. */
+  chain = 0;
+  chainAt = -99;
 
   /** M7 replicas: adopt server vitals. */
   setVitals(hp: number, maxHp: number, shield: number, maxShield: number, alive: boolean, respawnT: number): void {
@@ -286,6 +314,18 @@ export class Player {
   addTrauma(amount: number): void {
     if (this.reduceMotion) return;
     this.trauma = Math.min(1, this.trauma + amount * this.shakeScale);
+  }
+
+  /** Refund part of a dash charge (kills). */
+  refundDash(fraction: number): void {
+    const max = this.move.dashCharges;
+    if (!(fraction > 0) || this.dashCharges >= max) return;
+    this.dashRecharge += fraction;
+    while (this.dashRecharge >= 1 && this.dashCharges < max) {
+      this.dashCharges++;
+      this.dashRecharge -= 1;
+    }
+    if (this.dashCharges >= max) this.dashRecharge = 0;
   }
 
   knockback(dir: Vector3, strength: number): void {
@@ -399,13 +439,28 @@ export class Player {
       this.hv.set(this.dashDir.x * speed, 0, this.dashDir.z * speed);
     } else if (!redirected && (this.grounded || wl > 0)) {
       const speed = (this.sprinting ? move.sprintSpeed : move.runSpeed) * moveSpeedMult;
-      const dx = wx * speed - this.hv.x;
-      const dz = wz * speed - this.hv.z;
-      const accel = this.grounded ? (wl > 0 ? move.groundAccel : move.groundDecel) : move.airAccel;
-      const change = Math.hypot(dx, dz);
-      const fraction = change > 0 ? Math.min(1, (accel * dt) / change) : 0;
-      this.hv.x += dx * fraction;
-      this.hv.z += dz * fraction;
+      const cur = Math.hypot(this.hv.x, this.hv.z);
+      const along = cur > 0 ? (this.hv.x * wx + this.hv.z * wz) / cur : 0;
+      if (wl > 0 && cur > speed + 0.25 && along > 0.2) {
+        // Carried momentum (dash, boost, knockback): steer toward the input and bleed the excess slowly.
+        const keep = Math.max(speed, cur - (this.grounded ? move.overspeedDecel : move.airDrag) * dt);
+        const k = 1 - Math.exp(-dt * (this.grounded ? move.steerGround : move.steerAir));
+        let nx = this.hv.x / cur + (wx - this.hv.x / cur) * k;
+        let nz = this.hv.z / cur + (wz - this.hv.z / cur) * k;
+        const nl = Math.hypot(nx, nz) || 1;
+        nx /= nl;
+        nz /= nl;
+        this.hv.x = nx * keep;
+        this.hv.z = nz * keep;
+      } else {
+        const dx = wx * speed - this.hv.x;
+        const dz = wz * speed - this.hv.z;
+        const accel = this.grounded ? (wl > 0 ? move.groundAccel : move.groundDecel) : move.airAccel;
+        const change = Math.hypot(dx, dz);
+        const fraction = change > 0 ? Math.min(1, (accel * dt) / change) : 0;
+        this.hv.x += dx * fraction;
+        this.hv.z += dz * fraction;
+      }
     }
 
     if (this.grounded && this.vy <= 0) {
@@ -442,8 +497,11 @@ export class Player {
     this.bobT += dt * (2 + speed * 0.35);
     const hover = Math.sin(this.bobT * 1.6) * 0.025; // gentle hover drift, not a walk bob
     this.landDip *= Math.exp(-dt * 9);
+    // Grounded dash = slide: the eye drops while it lasts and eases back up as the momentum bleeds.
+    const sliding = this.dashT > 0 && this.grounded;
+    this.slide += ((sliding ? this.move.slideDip : 0) - this.slide) * (1 - Math.exp(-dt * (sliding ? 30 : 9)));
     const deadDrop = this.alive ? 0 : -0.9;
-    this.camera.position.set(p.x, p.y + EYE_OFFSET + hover - this.landDip + deadDrop, p.z);
+    this.camera.position.set(p.x, p.y + EYE_OFFSET + hover - this.landDip - this.slide + deadDrop, p.z);
     const targetRoll = -this.move.strafeRoll * Math.max(-1, Math.min(1, strafe / this.move.runSpeed));
     this.roll += (targetRoll - this.roll) * (1 - Math.exp(-dt * 12));
     this.trauma = Math.max(0, this.trauma - dt * 1.4);
@@ -459,7 +517,10 @@ export class Player {
       this.roll = 0;
     }
     const sprintFov = this.sprinting ? this.move.sprintFov : 0;
-    this.camera.fov += (this.baseFov + this.fovKick + sprintFov - this.camera.fov) * (1 - Math.exp(-dt * 14));
+    // Sense of speed: carried overspeed widens the view a little more.
+    const over = (speed - this.move.sprintSpeed) / Math.max(1, this.move.dashCarrySpeed - this.move.sprintSpeed);
+    const speedFov = this.reduceMotion ? 0 : this.move.speedFov * Math.max(0, Math.min(1, over));
+    this.camera.fov += (this.baseFov + this.fovKick + sprintFov + speedFov - this.camera.fov) * (1 - Math.exp(-dt * 14));
   }
 
   /** Vertical velocity (m/s), for viewmodel jump/landing response. */

@@ -259,12 +259,12 @@ export function WeaponBlock({ item, compact }: { item: ItemInstance; compact?: b
         <div className="id-row">
           <span>Heat / {w.family === 'beam' ? 'tick' : 'shot'} · fire time to overheat</span>
           <b>
-            {fmtNum(w.heatPerShot)}% · {fmtNum(ws.sustain)} s
+            {fmtNum(ws.heat)}% · {fmtNum(ws.sustain)} s
           </b>
         </div>
         <div className="id-row">
           <span>Cooling</span>
-          <b>{fmtNum(w.coolRate)}%/s</b>
+          <b>{fmtNum(ws.cool)}%/s</b>
         </div>
         {w.family === 'rail' && (
           <div className="id-row">

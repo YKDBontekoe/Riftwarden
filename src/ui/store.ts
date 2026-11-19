@@ -284,6 +284,8 @@ export interface DamageNumberEvent {
   amount: number;
   kind: HitKind;
   player: boolean;
+  /** Target key (enemy id + spawn generation): rapid hits on the same target merge into one rising number. */
+  target?: number;
 }
 
 export interface BannerEvent {
@@ -309,6 +311,8 @@ type EventMap = {
   loot: LootEvent;
   /** M6: short tactical warning line (events, bosses, evolutions, milestones). */
   alert: { text: string; tone: 'red' | 'orange' | 'blue' | 'white' };
+  /** Kill chain length (2+), personal. */
+  chain: number;
 };
 
 export interface LootEvent {

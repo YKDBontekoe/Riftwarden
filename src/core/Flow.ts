@@ -25,6 +25,7 @@ import { NetClient } from '../net/NetClient';
 import type { RunStart } from '../net/protocol';
 import type { RunResult } from '../progression/run';
 import { keyRemap, type Settings, saveSettings } from './settings';
+import { FrameClock } from './frameClock';
 import { setRarityPalette } from '../loot/rarity';
 
 /** A loaded location. Exactly one exists at a time. */
@@ -160,10 +161,13 @@ export class Flow {
     }
   }
 
+  /** Smoothed frame delta (jitter filter; hitches still clamp to 1/20 s). */
+  private readonly clock = new FrameClock(1 / 20);
+
   frame(): void {
     const w = this.world;
     if (!w || this.building) return;
-    const dt = Math.min(this.engine.getDeltaTime() / 1000, 1 / 20);
+    const dt = this.clock.next(this.engine.getDeltaTime() / 1000);
     this.coopPresence(dt);
     // While a new scene warms up behind the transit overlay it renders but does not simulate.
     if (!this.busy) w.step(dt, this.engine.getFps());

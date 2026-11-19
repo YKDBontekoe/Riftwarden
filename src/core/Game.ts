@@ -61,6 +61,7 @@ import { createPalette, type Palette } from '../visuals/materials';
 import { buildReactor, type ReactorRig } from '../visuals/models';
 import { arenaDeckWetness } from '../visuals/textures';
 import { WaveManager } from '../waves/WaveManager';
+import { earlyCallBonus } from '../waves/pace';
 import { ARENA, type ArenaLayout, type GateId } from '../world/layout';
 import { ENV_QUERY } from '../world/physicsGroups';
 import { type Impact, Ordnance, Telegraphs } from '../fx/Hostile';
@@ -80,6 +81,8 @@ import { TacticalEnergy, Wallet } from './tactical';
 import { type TutorialHost, TutorialDirector } from './TutorialDirector';
 
 const TMP = new Vector3();
+/** Seconds between kills that keep a kill chain going. */
+const KILL_CHAIN_WINDOW = 2.5;
 /** Sun intensity (directional, range-free). */
 const SUN = 1.52;
 const TMP2 = new Vector3();
@@ -198,6 +201,13 @@ export class Game {
 
   screen: Screen = 'loading';
   protected runTime = 0;
+  /**
+   * Kill feel: a short hitstop dilates hostile time only (the drone keeps full control). Off on the co-op server,
+   * whose hostile clock is shared by every player.
+   */
+  hitstopEnabled = true;
+  protected hitstopT = 0;
+  protected hitstopScale = 1;
   protected kills = 0;
   protected turretsBuilt = 0;
   protected defeatT = 0;
@@ -831,7 +841,7 @@ export class Game {
     this.tactical.deactivate();
     this.setScreen('upgrade');
     this.publishHud(true);
-    this.input.releaseLock();
+    // The mouse stays captured: 1/2/3 picks and drops straight back into the fight (Esc frees the cursor to click).
     sfx.play('bank', { pitch: 1.4, volume: 0.6 });
   }
 
@@ -898,11 +908,16 @@ export class Game {
     await this.resume();
   }
 
-  /** G / early start. Rapid Deployment pays for the preparation time skipped. */
+  /** G / early start. Every skipped second pays a few cores (fast play is rewarded); Rapid Deployment adds more. */
   startWave(): void {
     if (this.waves.phase !== 'prep') return;
     const remaining = Math.max(0, this.waves.timer);
     this.waves.startNow();
+    const bonus = earlyCallBonus(remaining);
+    if (bonus > 0) {
+      this.grantCores(bonus);
+      uiEvents.emit('alert', { text: `EARLY CALL · +${bonus} CORES`, tone: 'blue' });
+    }
     if (remaining > 0.5) this.director.bus.emit({ type: 'earlyStart', chain: this.director.bus.newChain(), source: { kind: 'effect', id: 'earlyStart' }, value: remaining });
   }
 
@@ -999,10 +1014,10 @@ export class Game {
   }
 
   /** Floating damage number with a per-frame budget (kills always show). */
-  showNumber(p: Vector3, amount: number, kind: HitKind, player: boolean, allowed: boolean): void {
+  showNumber(p: Vector3, amount: number, kind: HitKind, player: boolean, allowed: boolean, target?: number): void {
     if (!allowed && kind !== 'kill') return;
     if (player || kind === 'kill' || Vector3.DistanceSquared(p, this.player.position) < 25 * 25) {
-      uiEvents.emit('damageNumber', { x: p.x, y: p.y, z: p.z, amount: Math.round(amount), kind, player });
+      uiEvents.emit('damageNumber', { x: p.x, y: p.y, z: p.z, amount: Math.round(amount), kind, player, target });
     }
   }
 
@@ -1179,7 +1194,9 @@ export class Game {
       sfx.play('tacticalOff');
       sfx.setTactical(false);
     }
-    const hdt = this.screen === 'defeat' ? dt * 0.15 : dt * this.tactical.hostileScale;
+    if (this.hitstopT > 0) this.hitstopT = Math.max(0, this.hitstopT - dt);
+    const stop = this.hitstopT > 0 ? this.hitstopScale : 1;
+    const hdt = this.screen === 'defeat' ? dt * 0.15 : dt * this.tactical.hostileScale * stop;
 
     if (playing) {
       this.runTime += dt;
@@ -1233,6 +1250,7 @@ export class Game {
     const flash = this.updateSky(dt);
     this.hurtFx = Math.max(this.player.hurtFlash, this.player.alive ? 0 : 0.8);
     this.mood.update(dt, this.moodInput());
+    this.motionFx();
     this.post.update(dt, k, this.hurtFx, flash);
 
     this.updateArenaVisuals(dt, hdt);
@@ -1247,6 +1265,16 @@ export class Game {
       this.hudT = 1 / 20;
       this.publishHud();
     }
+  }
+
+  /** Sense of speed: lens punch when a dash starts, a touch of aberration + vignette while momentum is carried. */
+  private wasDashing = false;
+  protected motionFx(): void {
+    const p = this.player;
+    if (p.dashing && !this.wasDashing) this.post.kick(0.22);
+    this.wasDashing = p.dashing;
+    const over = (p.speed - MOVE.sprintSpeed) / (MOVE.dashCarrySpeed - MOVE.sprintSpeed);
+    this.post.speed = p.alive ? Math.max(0, Math.min(1, over)) : 0;
   }
 
   protected updateArenaVisuals(dt: number, hostileDt: number): void {
@@ -1515,14 +1543,38 @@ export class Game {
     if (player && family !== 'arc') this.signatureAfterHit(e, point, roll.amount, roll.crit, res);
     if (player) {
       const kind = res.kind;
+      if (res.killed && family !== 'arc') this.playerKill(e);
       uiEvents.emit('hit', kind);
       // Beam ticks are frequent: lighter per-tick feedback (the beam contact carries the rest).
       const beam = family === 'beam';
       if (kind === 'crit') this.fx.burst('crit', point, beam ? 3 : 10);
       else if (kind === 'hit' && !beam) this.fx.burst('enemySpark', point, 6);
-      if (!beam || kind === 'kill' || kind === 'crit') sfx.play(kind === 'kill' ? 'kill' : kind === 'crit' ? 'crit' : kind === 'shield' ? 'shieldHit' : 'hit');
+      if (kind === 'kill') sfx.play('kill', { pitch: 1 + Math.min(0.45, (this.player.chain - 1) * 0.045) });
+      else if (!beam || kind === 'crit') sfx.play(kind === 'crit' ? 'crit' : kind === 'shield' ? 'shieldHit' : 'hit');
       else sfx.play('hit', { volume: 0.35 });
     }
+  }
+
+  /**
+   * A kill by the current drone's weapon: hitstop (heavier for elites / big chassis), kill chain (kills within
+   * `KILL_CHAIN_WINDOW` s stack) and a dash refund, so aggressive play keeps the drone fast.
+   */
+  protected playerKill(e: Enemy): void {
+    const heavy = e.elite || e.def.role === 'boss' || e.def.role === 'hvt' || e.def.hp >= 150;
+    this.hitstop(heavy ? 0.1 : 0.045, heavy ? 0.04 : 0.2);
+    const p = this.player;
+    p.refundDash(MOVE.killDashRefund * (heavy ? 2 : 1));
+    p.chain = this.runTime - p.chainAt <= KILL_CHAIN_WINDOW ? p.chain + 1 : 1;
+    p.chainAt = this.runTime;
+    if (p.chain >= 2) uiEvents.emit('chain', p.chain);
+    if (heavy) p.addTrauma(0.2);
+  }
+
+  /** Dilate hostile time for `seconds` (overlapping stops keep the longest / strongest). */
+  hitstop(seconds: number, scale: number): void {
+    if (!this.hitstopEnabled || !(seconds > 0)) return;
+    this.hitstopScale = this.hitstopT > 0 ? Math.min(this.hitstopScale, scale) : scale;
+    this.hitstopT = Math.max(this.hitstopT, seconds);
   }
 
   /** M7 Pulse Capacitor: every pulse detonates (60% damage in PULSE_SPLASH m). */

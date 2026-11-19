@@ -18,7 +18,7 @@ import { convertsToSalvage, expiresAfterWave, PICKUP_RANGE, type Pickup } from '
 import { scrapValue } from '../loot/economy';
 import { RunInventory } from '../loot/runInventory';
 import type { ItemInstance } from '../loot/types';
-import { Player } from '../player/Player';
+import { MOVE, Player } from '../player/Player';
 import { SLOT_IDS, type SlotId } from '../progression/items';
 import { type Rewards, RunLedger } from '../progression/run';
 import { isCheckpointWave } from '../progression/tiers';
@@ -123,7 +123,8 @@ export interface ServerHooks {
   extract(): void;
 }
 
-const MAX_SPEED = 46;
+/** Fastest legitimate drone speed (a dash) plus slack for jitter; the 2.5 m per-packet allowance covers the rest. */
+const MAX_SPEED = MOVE.dashSpeed + 4;
 const TOWER_KEYS = new Set(Object.values(STAT_DEFS).filter((d) => d.group === 'tower').map((d) => d.key as string).concat(['coreIncomeMult', 'tacticalRechargeMult']));
 
 /**
@@ -176,6 +177,8 @@ export class ServerGame extends Game {
     }
     box.g = this;
     (this as { rec: Recorder }).rec = rec;
+    // One hostile clock for the whole team: per-kill hitstop would slow the fight for everyone.
+    this.hitstopEnabled = false;
     // Wave clears: per-player loot lifetime and banking after the shared rewards were mirrored.
     const wh = (this.waves as unknown as { hooks: { onWaveCleared(w: { number: number }): void } }).hooks;
     const cleared = wh.onWaveCleared;
