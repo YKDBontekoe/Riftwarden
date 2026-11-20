@@ -1,6 +1,6 @@
 # Riftwarden: project notes for future sessions
 
-Browser FPS + tower-defense roguelite. Current milestone: **M9** (procedural arenas: seeded 170-200 m sectors, nav-grid pathing with tower mazing + breaching, forward rifts, loading screens) on top of M8 and the fast-pace pass (see "Key design decisions"). Read this before changing code.
+Browser FPS + tower-defense roguelite. Current milestone: **M10** (biomes with factions, ground hazards, enemy mutations, faction archetypes) on top of **M9** (procedural arenas: seeded 170-200 m sectors with districts, nav-grid pathing with tower mazing + breaching, forward rifts, loading screens), M8 and the fast-pace pass (see "Key design decisions"). Read this before changing code.
 
 ## Stack
 
@@ -24,6 +24,12 @@ server/profileDatabase.ts  Transactional PostgreSQL persistence, with table defi
 server/profileRows.ts      Maps SaveData to typed relational rows and back
 server/headless.ts         M7: browser stubs (canvas 2D, document, localStorage) so Game runs in Node
 src/world/arenaGen.ts      M9: generateArena(seed) -> ArenaLayout (memoised): perimeter, lane benders, platforms+ramps, blocks, pillars, wall machines, lanes traced on the nav grid, forward rifts, vents, reserved zones; sectorName, arenaStats [pure]
+src/world/biomes.ts        M10: BIOMES (outpost / cryo / foundry: fog, horizon, sun, palette tints, air particles, lane colour, hazard, faction, name words), biomeForSeed, biomeOf, factionMix [pure]
+src/arena/Hazards.ts       M10: frost fields / slag pools (static from the layout, transient slag trails): drone slow + burn, enemy chill/burn; split decay / affectPlayer / affectEnemyList for co-op
+src/enemies/mutations.ts   M10: runtime of the six mutations (regenerating, splitting, shielded, blinking, frostbound, molten); state in Enemy.mut
+src/enemies/factionBehaviors.ts M10: Sapper, Skimmer, Marksman, Burrower behaviours (shared walker/drone/crawler rigs + extra kit parts)
+src/visuals/biomeLook.ts   M10: tintPalette (biome albedo multipliers on the outdoor palette)
+scripts/e2e-m10.cjs        M10 browser suite (A biomes, B hazards, C archetypes, D mutations, E planner factions, V screenshots)
 src/world/districts.ts     M9: district kits in a local frame + orient (quarter turns): maze (backtracker + loops), serpentine, containerYard (staggered), overpass (platforms + bridge + underpass baffles), redoubt, skyway, withWings, barrierX/Z [pure]
 src/world/navgrid.ts       M9: NavGrid: 1 m flow field (Dijkstra from the reactor ring), towers = high cost (not blocked), pathFrom + string pulling   [pure]
 src/enemies/navigation.ts  M9: EnemyNavigator (EnemyManager.nav): ground/air fields, spawn at gate or forward rift, re-plan on field change, breaching  [no Babylon values]
@@ -222,6 +228,16 @@ scripts/e2e-m6.cjs         M6 browser acceptance suite (A-L: plans, enemies, eli
 - Browser co-op section X of `e2e-construction-coop.cjs` needs a test server (`RIFT_TEST=1 RIFT_PORT=8787 npx tsx server/main.ts`) and runs both clients with the render loop stopped: two live software-GL render loops starve Playwright's actionability checks and clicks time out. It passes (13/13, including "no replicated event rejected") and is the real test of the client replay path, along with `e2e-coop-protocol.mjs`.
 
 ## Key design decisions
+
+### M10: biomes, factions, hazards, mutations, faction archetypes
+
+- **Biomes** (`world/biomes.ts`): `biomeForSeed(arenaSeed)` splits sectors evenly between the outpost, the cryo excavation and the molten foundry; `layout.biome` (absent on the classic arena = outpost). Look: `scene.fogDensity`, sun colour/intensity and the palette tint (`tintPalette`) are set by editing existing constructor lines in place (the Game constructor is at its 250-line limit: keep it there); fog colour goes through `moodInput().baseFog` (`moodFor` starts from it); `Atmosphere` reads the biome for the sky horizon, air particles (ash / falling snow / rising embers, rate multiplier) and rain (outpost only); lane lights use `biome.lane`. Sector names use the biome's word pool.
+- **Factions**: `SurvivalPlanner(seed, tier, faction)`; Game passes `biomeOf(layout).faction` only when `layout.biome` is set, so the classic arena keeps its exact roster. `factionMix` multiplies theme weights (`bias`) and adds signature archetypes (`extra`, relative to the mix's average weight); `rollMods(kind, n, rand, {wave, weights})` gates mutations by `MUTATION_WAVE` and weights them (a 0 weight never rolls: Molten never appears in cryo, Frostbound never in the foundry); `eliteRate` scales the elite chance. Rime (cryo): bulwarks/enforcers + burrowers, Frostbound. Crucible (foundry): rushers/artillery + skimmer swarms + marksmen, Molten/Volatile/Splitting. Scrapline (outpost): sappers + marksmen.
+- **Hazards** (`arena/Hazards.ts`): generator plants 7-11 patches (r 3.5-7 m) in open walkable ground away from the plaza, drop point and rifts, reserved for construction. Frost: the drone below 2.6 m moves at x0.65 (`Player.update` speed multiplier), ground enemies gain chill (towers then freeze them). Slag: 12 dps to a low drone, ground enemies ignite (Molten immune). Molten mutants drop transient slag (5 s). Co-op: the server runs `decay` + `affectEnemyList` once and `affectPlayer` per avatar (`as(a, ...)`); transient patches replicate as `['hz', x, z, r, kind, life]` (protocol v7); replicas set `affectEnemies = false` and only slow their own drone.
+- **Mutations** (`survival/elites.ts` defs + `enemies/mutations.ts` runtime, called from `EnemyManager.updateElite`/`kill`): regenerating (4%/s after 2 s without HP loss, not while burning), splitting (two copies at 40% HP via `ctx.summon`; small frames only, excludes volatile), shielded (+45% max HP barrier, excludes armored), blinking (7 m along the path every ~4 s, not while shocked/frozen), frostbound (chill immune in `Director.inflict`, telegraphed 6.5 m frost nova shorting towers), molten (burn immune, slag trail via `ctx.hazard`). Hardware per mutation in `eliteParts.ts` (unlit materials cached per scene; threat pips for all ten modifiers). Prebuild attaches every modifier's hardware to a walker so shaders warm up.
+- **Archetypes** (`enemies/factionBehaviors.ts`): Sapper (walker rig + charge pack; leaves its lane for a tower in sight within 18 m, plants a 2 s fuse, detonates: 460 x dmg to the tower via `ctx.damageTower` -> `TowerWear.breach`, suppression blast; shock/freeze holds the fuse; at the reactor it detonates there), Skimmer (small rusher rig; swoops at the drone within 24 m, pecks 6, peels away, repeats; rams the reactor), Marksman (walker rig + rail barrel; paints the drone with a thickening red laser for 1.6 s, 34 damage, cancelled by 0.35 s without LOS or by shock/freeze), Burrower (crawler rig x0.72; travels buried on the terrain field (`PASS_TOWERS`), `Enemy.hidden` = untargetable + unhittable (`EnemyManager.damage` returns null, towers skip it, hitboxes unpickable), surfaces every ~5.5 s for 3.2 s to fire bolts, and for good within 11 m of its path end to drill the reactor; buried state derives from the replicated `ai.mode`).
+- **Tests**: `tests/m10.test.ts` (biome split, hazards placement/reservation, faction mix, archetype completeness, faction compositions + determinism, mutation exclusions, wave gating, faction weights); `node scripts/e2e-m10.cjs` 24/24.
+- **Not done yet**: biome-specific structure dressing (ice/foundry props) and skyline; burrower wake is a particle puff only; hazards affect only the drone and ground enemies (not towers); mutations are not shown on the co-op team HUD; balance is first-pass.
 
 ### M9: procedural arenas, mazing, loading screens
 
@@ -488,6 +504,7 @@ Goal: high-tempo play (think VOIDBREAKER): fast enemies, little dead time, momen
 - **M7:** 2-4 player co-op with an authoritative server, HQ construction with blueprints, new firing styles/towers/enemies/upgrades/signatures, onboarding, settings v2, spatial audio.
 - **M6 (done):** survival director (budgets, themes, seeded plans), Shielded Enforcer / Artillery Drone / Support Engineer / Vault Courier, four elite modifiers with combinations, four dynamic events, two arena evolutions, Siege Colossus and Overseer Core bosses with dynamic scheduling, tiers IV-V with unlock rules, boss/elite/event/HVT loot (target farming), survival records + milestones (save v6), run summaries, F4 dev lab, shader/pool pre-warming.
 - **M8 (done):** Warden levels (XP banked like loot), per-profile procedural skill tree at the Neural Lattice, currency table + tooltips, station purposes and directory, save v8.
-- **M9 (in progress):** procedural arenas, nav-grid mazing with breachable towers, forward rifts, loading screens.
-- **Next:** M10 biomes (cryo excavation, molten foundry) with factions, enemy mutations and new archetypes; M11 loot (affix pool, uniques, sets, Launcher + Drone Swarm families); deeper keystone rules, team HUD levels, Terminals.tsx split.
+- **M9 (done):** procedural arenas with districts, nav-grid mazing with breachable towers, forward rifts, loading screens.
+- **M10 (done):** biomes with factions and hazards, six mutations, four faction archetypes.
+- **Next:** M11 loot (affix pool, uniques, sets, Launcher + Drone Swarm families); deeper keystone rules, team HUD levels, Terminals.tsx split.
 - Later: combat depth (second tower, turret upgrades, enemy variety, hit flash, audio pass, deep-import bundle split), run upgrades, M4 modular towers, M5 advanced endless (bosses/events), M6 content, M7 co-op evaluation.
