@@ -141,7 +141,7 @@ export class WeaponPreview {
     this.rig = null;
     this.anim = null;
     if (!item?.build) return;
-    this.rig = buildWeaponModel(this.scene, item.build, item.socketed, { name: 'pv', mount: false }, rarity(item.rarity).index);
+    this.rig = buildWeaponModel(this.scene, item.build, item.socketed, { name: 'pv', mount: false, element: item.weapon?.element }, rarity(item.rarity).index);
     this.anim = new WeaponAnimator(this.rig);
     this.builds++;
     const mid = (this.rig.front + this.rig.rear) / 2;

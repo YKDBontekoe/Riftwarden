@@ -130,10 +130,10 @@ function readItems(rows: Relations) {
   }
   for (const raw of rows.profile_weapon_rolls) {
     type Weapon = NonNullable<ItemInstance['weapon']>;
-    const { itemKey, range, accuracy, pierce, chargeTime, beamWidth, rampMax, ...required } = columns<{ itemKey: string } & Weapon>(raw);
+    const { itemKey, range, accuracy, pierce, chargeTime, beamWidth, rampMax, element, ...required } = columns<{ itemKey: string } & Weapon>(raw);
     byKey.get(itemKey)!.weapon = {
       ...required, range: optional(range), accuracy: optional(accuracy), pierce: optional(pierce),
-      chargeTime: optional(chargeTime), beamWidth: optional(beamWidth), rampMax: optional(rampMax),
+      chargeTime: optional(chargeTime), beamWidth: optional(beamWidth), rampMax: optional(rampMax), element: optional(element),
     };
   }
   for (const raw of rows.profile_weapon_builds) {

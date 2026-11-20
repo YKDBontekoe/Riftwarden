@@ -1,6 +1,7 @@
 import { Color3, type Scene, Vector3 } from '@babylonjs/core';
 import { sfx } from '../audio/Sfx';
 import { rollDamage } from '../combat/damage';
+import { elementPayload, procWeight } from '../combat/elements';
 import type { Director } from '../combat/Director';
 import type { CombatStats } from '../combat/stats';
 import { isChilled, speedFactor } from '../combat/status';
@@ -167,7 +168,10 @@ export class PlayerCombat {
     // Arc Conductor: a player hit may jump to the nearest other enemy (no chains of arcs).
     if (player && family !== 'arc' && stats.arcChance > 0 && Math.random() < stats.arcChance) this.arcFrom(e, point, roll.amount * stats.arcDamage);
     const src = family === 'arc' ? { kind: 'effect' as const, id: 'arc_conductor' } : player ? { kind: 'weapon' as const, id: family ?? 'plasma' } : { kind: 'tower' as const, id: 'sentinel', towerId: turret?.id };
-    const res = h.director.deal({ target: e, amount: roll.amount, base, crit: roll.crit, weak: weakpoint, element: 'none', source: src, chain: h.director.bus.newChain(), point, family: family ?? (player ? 'plasma' : 'tower'), from: from ?? (player ? h.player.eye : undefined) });
+    // The weapon's element: its hits carry the element's status (weighted by hits per second).
+    const element = family === 'arc' ? 'none' : player ? h.weapon.def.element : 'kinetic';
+    const apply = player && family !== 'arc' ? elementPayload(element, roll.amount, this.procWeight(), Math.random()) : undefined;
+    const res = h.director.deal({ target: e, amount: roll.amount, base, crit: roll.crit, weak: weakpoint, element, apply, source: src, chain: h.director.bus.newChain(), point, family: family ?? (player ? 'plasma' : 'tower'), from: from ?? (player ? h.player.eye : undefined) });
     if (!player) return;
     if (e.limbsLost !== partsBefore) {
       const lost = LIMB_IDS.find((l) => hasLost(e.limbsLost, l) && !hasLost(partsBefore, l));
@@ -205,10 +209,17 @@ export class PlayerCombat {
     this.h.fx.flashLight(c, heavy ? 5 : 2.8, 0.07, KILL_LIGHT);
   }
 
+  /** Status weight per hit of the weapon in hand (hits per second incl. pellets). */
+  procWeight(): number {
+    const d = this.h.weapon.def;
+    const pellets = Math.max(1, Math.floor(this.h.stats.projectiles || 1));
+    return procWeight(d.fireRate * this.h.stats.fireRateMult * pellets);
+  }
+
   /** Pulse Capacitor: every pulse detonates (60% damage in PULSE_SPLASH m). */
   pulseSplash(point: Vector3, dmg: number, hit: Enemy | null): void {
     const d = this.h.director;
-    d.blast(point, PULSE_SPLASH, dmg * 0.6, 'none', { kind: 'weapon', id: 'beam' }, d.bus.newChain(), { falloff: 0.4, exclude: hit, family: 'splash' });
+    d.blast(point, PULSE_SPLASH, dmg * 0.6, this.h.weapon.def.element, { kind: 'weapon', id: 'beam' }, d.bus.newChain(), { falloff: 0.4, exclude: hit, family: 'splash' });
   }
 
   /** Signatures that react to a landed hit. */

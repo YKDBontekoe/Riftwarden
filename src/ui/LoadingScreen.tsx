@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
+import { FACTION_AFFINITY } from '../combat/elements';
+import { ElementTag } from './ElementTag';
 import { arenaStats } from '../world/arenaGen';
 import { biomeOf } from '../world/biomes';
 import type { ArenaLayout } from '../world/layout';
@@ -84,6 +86,7 @@ function SectorCard({ s }: { s: NonNullable<TransitInfo['sector']> }) {
             HOSTILE FACTION · {biomeOf(s.layout).faction.name.toUpperCase()}
           </em>
           <span>{biomeOf(s.layout).faction.blurb}</span>
+          <AffinityRow faction={biomeOf(s.layout).faction.id} />
         </div>
       )}
       <div className="ls-stats">
@@ -173,6 +176,20 @@ function RecoveryArt() {
         <circle cx="0" cy="0" r="3" />
         <path className="rot" d="M -30 0 A 30 30 0 0 1 30 0" />
       </svg>
+    </div>
+  );
+}
+
+/** Faction element row: what to bring (weak) and what to leave home (resisted). */
+export function AffinityRow({ faction }: { faction: string }) {
+  const row = FACTION_AFFINITY[faction];
+  if (!row) return null;
+  return (
+    <div className="aff-row" data-testid="ls-affinity">
+      <span className="aff-label">WEAK</span>
+      {row.weak.map((e) => <ElementTag key={e} element={e} long />)}
+      <span className="aff-label" style={{ marginLeft: 8 }}>RESISTS</span>
+      {row.resist.map((e) => <ElementTag key={e} element={e} long />)}
     </div>
   );
 }

@@ -48,12 +48,12 @@ export interface DamageResult {
   killed: boolean;
 }
 
-/** Shields absorb first. Energy damage is 50% more effective against shields. */
-export function applyDamage(h: Health, amount: number, type: DamageType = 'energy'): DamageResult {
+/** Shields absorb first. Energy damage is 50% more effective against shields; `pierce` (void) skips them. */
+export function applyDamage(h: Health, amount: number, type: DamageType = 'energy', pierce = false): DamageResult {
   const res: DamageResult = { toShield: 0, toHp: 0, shieldBroken: false, killed: false };
   if (h.hp <= 0 || amount <= 0) return res;
   let remaining = amount;
-  if (h.shield > 0) {
+  if (h.shield > 0 && !pierce) {
     const shieldMult = type === 'energy' ? 1.5 : 1;
     const effective = remaining * shieldMult;
     const absorbed = Math.min(h.shield, effective);

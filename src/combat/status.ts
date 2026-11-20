@@ -15,6 +15,9 @@ import type { Element } from './events';
  *   thermal shock  - thermal hit on a target with chill >= 50 (or frozen): burst + removes chill.
  *   overload       - electric hit on a burning target: removes burn, thermal explosion.
  *   superconduct   - electric hit on a target with chill >= 40: -40 chill, +2 chain jumps, shock burst.
+ *
+ *  Corroded (corrosive) - stacking DoT (MAX_CORRODE stacks, CORRODE_TIME s, ticks with the burn clock) that
+ *                        shreds armour: +CORRODE_SHRED damage taken per stack (in `vulnerability`).
  */
 export const MAX_BURN_STACKS = 5;
 export const BURN_TICK = 0.5;
@@ -27,10 +30,13 @@ export const CHILL_DECAY_DELAY = 2.5;
 export const CHILL_DECAY = 18;
 export const FREEZE_TIME = 1.5;
 export const FREEZE_IMMUNE = 5;
+export const MAX_CORRODE = 6;
+export const CORRODE_TIME = 5;
+export const CORRODE_SHRED = 0.05;
 export const REACTION_CD: Record<ReactionKind, number> = { thermalShock: 1.5, overload: 2, superconduct: 2.5 };
 
 export type ReactionKind = 'thermalShock' | 'overload' | 'superconduct';
-export type StatusKind = 'burn' | 'shock' | 'chill' | 'freeze';
+export type StatusKind = 'burn' | 'shock' | 'chill' | 'freeze' | 'corrode';
 
 export interface StatusState {
   burnT: number;
@@ -44,10 +50,14 @@ export interface StatusState {
   chillDelay: number;
   frozenT: number;
   immuneT: number;
+  corrodeT: number;
+  corrodeStacks: number;
+  corrodeDps: number;
+  corrodeTickT: number;
   cd: Record<ReactionKind, number>;
 }
 
-export const newStatus = (): StatusState => ({ burnT: 0, burnStacks: 0, burnDps: 0, burnTickT: 0, shockT: 0, disruptT: 0, disruptCd: 0, chill: 0, chillDelay: 0, frozenT: 0, immuneT: 0, cd: { thermalShock: 0, overload: 0, superconduct: 0 } });
+export const newStatus = (): StatusState => ({ burnT: 0, burnStacks: 0, burnDps: 0, burnTickT: 0, shockT: 0, disruptT: 0, disruptCd: 0, chill: 0, chillDelay: 0, frozenT: 0, immuneT: 0, corrodeT: 0, corrodeStacks: 0, corrodeDps: 0, corrodeTickT: 0, cd: { thermalShock: 0, overload: 0, superconduct: 0 } });
 
 export function resetStatus(s: StatusState): void {
   Object.assign(s, newStatus());
@@ -57,7 +67,22 @@ export const isBurning = (s: StatusState) => s.burnStacks > 0 && s.burnT > 0;
 export const isShocked = (s: StatusState) => s.shockT > 0;
 export const isFrozen = (s: StatusState) => s.frozenT > 0;
 export const isChilled = (s: StatusState, min = 1) => s.frozenT > 0 || s.chill >= min;
-export const hasAnyStatus = (s: StatusState) => isBurning(s) || s.shockT > 0 || s.chill > 0 || s.frozenT > 0;
+export const isCorroded = (s: StatusState) => s.corrodeStacks > 0 && s.corrodeT > 0;
+export const hasAnyStatus = (s: StatusState) => isBurning(s) || s.shockT > 0 || s.chill > 0 || s.frozenT > 0 || isCorroded(s);
+
+/** Applies corrosion: +1 stack (cap), refreshes duration; the strongest per-stack dps wins. */
+export function applyCorrode(s: StatusState, dps: number, duration = CORRODE_TIME): { stacks: number; fresh: boolean } {
+  if (!(dps > 0) || !Number.isFinite(dps)) return { stacks: s.corrodeStacks, fresh: false };
+  const fresh = !isCorroded(s);
+  if (fresh) {
+    s.corrodeStacks = 0;
+    s.corrodeTickT = BURN_TICK;
+  }
+  s.corrodeStacks = Math.min(MAX_CORRODE, s.corrodeStacks + 1);
+  s.corrodeDps = fresh ? dps : Math.max(s.corrodeDps, dps);
+  s.corrodeT = Math.max(s.corrodeT, duration);
+  return { stacks: s.corrodeStacks, fresh };
+}
 
 /** Applies burn: +1 stack (cap), refreshes duration; the strongest per-stack dps wins. */
 export function applyBurn(s: StatusState, dps: number, duration = BURN_TIME): { stacks: number; fresh: boolean } {
@@ -110,11 +135,13 @@ export function speedFactor(s: StatusState): number {
 
 /** Damage-taken multiplier from statuses (chilled targets are vulnerable). */
 export function vulnerability(s: StatusState): number {
-  return s.frozenT > 0 ? 1.25 : 1 + s.chill * 0.0015;
+  const shred = s.corrodeT > 0 ? 1 + s.corrodeStacks * CORRODE_SHRED : 1;
+  return (s.frozenT > 0 ? 1.25 : 1 + s.chill * 0.0015) * shred;
 }
 
 export interface TickHooks {
   burn(damage: number, stacks: number): void;
+  corrode?(damage: number, stacks: number): void;
   expire(kind: StatusKind): void;
 }
 
@@ -136,6 +163,20 @@ export function tickStatus(s: StatusState, dt: number, hooks: TickHooks): void {
       s.burnDps = 0;
       s.burnT = 0;
       hooks.expire('burn');
+    }
+  }
+  if (s.corrodeStacks > 0) {
+    s.corrodeT -= dt;
+    s.corrodeTickT -= dt;
+    for (let guard = 0; s.corrodeTickT <= 0 && s.corrodeStacks > 0 && guard < 4; guard++) {
+      s.corrodeTickT += BURN_TICK;
+      hooks.corrode?.(s.corrodeDps * s.corrodeStacks * BURN_TICK, s.corrodeStacks);
+    }
+    if (s.corrodeStacks > 0 && s.corrodeT <= 0) {
+      s.corrodeStacks = 0;
+      s.corrodeDps = 0;
+      s.corrodeT = 0;
+      hooks.expire('corrode');
     }
   }
   if (s.shockT > 0) {

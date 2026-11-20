@@ -6,6 +6,7 @@ import { type BaseDef, baseDef, BASES, basesFor } from './bases';
 import { type RarityDef, type RarityId, rarity } from './rarity';
 import type { Category, ItemInstance, RolledAffix, RolledStat, WeaponRoll } from './types';
 import { buildEffects, rollBuild } from '../weapons/build';
+import { rollElement } from '../combat/elements';
 
 /**
  * Centralised, deterministic item generation.
@@ -172,6 +173,8 @@ export function generateItem(spec: GenSpec): ItemInstance {
     weapon.fireRate = Math.round(weapon.fireRate * 100) / 100;
     weapon.heatPerShot = Math.round(weapon.heatPerShot * 100) / 100;
     weapon.coolRate = Math.round(weapon.coolRate * 10) / 10;
+    // Element: its own stream (other rolls of a seed are unchanged); starter-grade kit is kinetic.
+    weapon.element = fixed === undefined ? rollElement(w.family, r.index, mulberry32((spec.seed ^ 0x2c1b3c6d) >>> 0)) : 'kinetic';
   }
 
   // Affixes.

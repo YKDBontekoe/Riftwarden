@@ -1,3 +1,4 @@
+import { isDamageElement } from '../../combat/elements';
 import { SURVEY_DESK } from '../../home/layout';
 import { furnitureOccupied, coreCell, connectedFloors, edgeCells, cellKey, emptyStructure, inBounds, isMovableStation, parseCell, type StationPose, type Structure } from '../../home/build/model';
 import { pieceDef } from '../../home/build/catalog';
@@ -188,6 +189,7 @@ export function sanitizeItem(v: unknown, repairs: string[] = [], nested = false,
       opt('chargeTime', 0.05, 10);
       opt('beamWidth', 0, 5);
       opt('rampMax', 1, 10);
+      if (isDamageElement(w.element)) item.weapon.element = w.element;
     }
     const family: WeaponFamily = base?.weapon?.family ?? 'plasma';
     const b = sanitizeBuild(r.build, defId, family, item.sockets);

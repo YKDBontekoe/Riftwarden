@@ -1,3 +1,4 @@
+import { sectorAffinity } from '../combat/elements';
 import {
   Color3,
   Color4,
@@ -987,10 +988,10 @@ export class Game {
   }
 
   /** Floating damage number with a per-frame budget (kills always show). */
-  showNumber(p: Vector3, amount: number, kind: HitKind, player: boolean, allowed: boolean, target?: number): void {
+  showNumber(p: Vector3, amount: number, kind: HitKind, player: boolean, allowed: boolean, target?: number, el?: string, aff?: -1 | 0 | 1): void {
     if (!allowed && kind !== 'kill') return;
     if (player || kind === 'kill' || Vector3.DistanceSquared(p, this.player.position) < 25 * 25) {
-      uiEvents.emit('damageNumber', { x: p.x, y: p.y, z: p.z, amount: Math.round(amount), kind, player, target });
+      uiEvents.emit('damageNumber', { x: p.x, y: p.y, z: p.z, amount: Math.round(amount), kind, player, target, el, aff });
     }
   }
 
@@ -1446,12 +1447,14 @@ export class Game {
   }
 
   /** HUD row for the holstered weapon. */
-  protected holsterHud(): { name: string; heat: number; overheated: boolean; secondary: boolean } | null {
+  protected holsterHud(): { name: string; heat: number; overheated: boolean; secondary: boolean; element: string; aff: -1 | 0 | 1 } | null {
     const ws = this.weaponSlots;
     const item = ws.hasSecondary ? ws.item(ws.inactive) : null;
     if (!item) return null;
     const p = ws.parkedHeat;
-    return { name: weaponDefFor(item)?.name ?? item.name, heat: p.heat / 100, overheated: p.overheated, secondary: ws.inactive === 'weapon2' };
+    const def = weaponDefFor(item);
+    const element = def?.element ?? 'kinetic';
+    return { name: def?.name ?? item.name, heat: p.heat / 100, overheated: p.overheated, secondary: ws.inactive === 'weapon2', element, aff: sectorAffinity(element, this.director.faction) };
   }
 
   /** Swap to the other carried weapon (or to `slot`). Out of build mode only. */
@@ -2019,6 +2022,8 @@ export class Game {
       respawnIn: this.player.alive ? 0 : this.player.respawnT,
       cores: this.wallet.cores,
       weaponName: this.weapon.def.name,
+      weaponElement: this.weapon.def.element,
+      weaponAff: sectorAffinity(this.weapon.def.element, this.director.faction),
       holster: this.holsterHud(),
       abilities: this.abilities.hud(),
       moves: this.movement.hud(),

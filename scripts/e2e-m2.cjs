@@ -4,6 +4,8 @@
 // Runs in ?test mode: fixed-step simulation, low graphics preset, no real pointer lock.
 // Screenshots go to $E2E_OUT (default: OS temp dir). Exit code 0 = all checks passed.
 const H = require('./lib/harness.cjs');
+/** combat/heat.ts DAMAGE_PACE: player damage tempo applied at fire time (stored rolls stay). */
+const DAMAGE_PACE = 1.9;
 const { OUT, check, S, ev } = H;
 const waitFor = (p, fn, arg, t = 90000) => H.waitFor(p, fn, arg, t);
 const boot = (p, reload = false) => H.boot(p, { reload, skipUpgrades: true });
@@ -217,10 +219,10 @@ const savedItems = (p) => p.evaluate(() => JSON.parse(JSON.stringify(window.__ri
   const c1 = await p.evaluate((uid) => window.__rift.game.equip(uid), dmgWeapon.uid);
   const withDmg = await fire();
   const dmgAffix = dmgWeapon.affixes.find((a) => a.id === 'dmg').value;
-  check('C1 equipping a weapon with +damage changes real shot damage', c1 && Math.abs(withDmg.damage - dmgWeapon.weapon.damage * (1 + dmgAffix)) < 1e-6 && withDmg.damage > base.damage, `${base.damage} -> ${withDmg.damage} (affix +${(dmgAffix * 100).toFixed(1)}%)`);
+  check('C1 equipping a weapon with +damage changes real shot damage', c1 && Math.abs(withDmg.damage - dmgWeapon.weapon.damage * (1 + dmgAffix) * DAMAGE_PACE) < 1e-6 && withDmg.damage > base.damage, `${base.damage} -> ${withDmg.damage} (affix +${(dmgAffix * 100).toFixed(1)}%)`);
   await p.evaluate((uid) => window.__rift.game.equip(uid), plainWeapon.uid);
   const plain = await fire();
-  check('C2 replacing it removes the old bonus', plain.mult === 1 && Math.abs(plain.damage - plainWeapon.weapon.damage) < 1e-6, `mult ${plain.mult}, dmg ${plain.damage}`);
+  check('C2 replacing it removes the old bonus', plain.mult === 1 && Math.abs(plain.damage - plainWeapon.weapon.damage * DAMAGE_PACE) < 1e-6, `mult ${plain.mult}, dmg ${plain.damage}`);
   const cool = () =>
     p.evaluate(() => {
       const R = window.__rift;

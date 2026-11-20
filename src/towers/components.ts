@@ -1,4 +1,5 @@
 import type { Element } from '../combat/events';
+import type { DamageElement } from '../combat/elements';
 
 /**
  * M5 modular towers (pure). A tower = Base + Weapon module + Power core + Modifier.
@@ -76,6 +77,10 @@ export interface CoreDef extends PartCommon {
   burnFrac: number;
   /** Chill added to every hit of non-cryo weapons. */
   chillHit: number;
+  /** Fraction of hit damage applied as corrode dps (0 = none). */
+  corrodeFrac?: number;
+  /** Element the core gives ballistic / missile weapons (arc and cryo keep their own). */
+  element?: DamageElement;
   color: [number, number, number];
 }
 
@@ -101,11 +106,11 @@ export const BASES: Readonly<Record<string, BaseDef>> = {
 };
 
 export const WEAPONS: Readonly<Record<string, WeaponModDef>> = {
-  autocannon: { id: 'autocannon', name: 'Autocannon', blurb: 'Ballistic Turret: accurate rapid single-target fire.', cost: 40, archetype: 'ballistic', element: 'none', damage: 15, fireRate: 3.2, range: 22, targets: 0, chain: 0, chainFalloff: 1, critChance: 0.05, chill: 0, shock: false },
-  marksman: { id: 'marksman', name: 'Marksman Rail', blurb: 'Ballistic Turret: slow, heavy, long-range shots with high crit chance.', cost: 70, archetype: 'ballistic', element: 'none', damage: 54, fireRate: 0.9, range: 31, targets: 0, chain: 0, chainFalloff: 1, critChance: 0.18, chill: 0, shock: false, tech: { credits: 200, components: 0, wave: 2 } },
+  autocannon: { id: 'autocannon', name: 'Autocannon', blurb: 'Ballistic Turret: accurate rapid single-target fire.', cost: 40, archetype: 'ballistic', element: 'kinetic', damage: 15, fireRate: 3.2, range: 22, targets: 0, chain: 0, chainFalloff: 1, critChance: 0.05, chill: 0, shock: false },
+  marksman: { id: 'marksman', name: 'Marksman Rail', blurb: 'Ballistic Turret: slow, heavy, long-range shots with high crit chance.', cost: 70, archetype: 'ballistic', element: 'kinetic', damage: 54, fireRate: 0.9, range: 31, targets: 0, chain: 0, chainFalloff: 1, critChance: 0.18, chill: 0, shock: false, tech: { credits: 200, components: 0, wave: 2 } },
   chain_emitter: { id: 'chain_emitter', name: 'Chain Emitter', blurb: 'Arc Tower: electrical bolt that jumps between enemies and shocks them.', cost: 70, archetype: 'arc', element: 'electric', damage: 11, fireRate: 1.5, range: 18, targets: 0, chain: 3, chainFalloff: 0.72, critChance: 0.05, chill: 0, shock: true, tech: { credits: 300, components: 0, wave: 3 } },
   // ---- M7
-  missile_battery: { id: 'missile_battery', name: 'Missile Battery', blurb: 'Siege launcher: slow salvos of four homing missiles with blast damage. Prioritises elites and bosses; huge range.', cost: 90, archetype: 'missile', element: 'none', damage: 20, fireRate: 0.45, range: 38, targets: 0, chain: 0, chainFalloff: 1, critChance: 0.08, chill: 0, shock: false, tech: { credits: 450, components: 3, wave: 8 } },
+  missile_battery: { id: 'missile_battery', name: 'Missile Battery', blurb: 'Siege launcher: slow salvos of four homing missiles with blast damage. Prioritises elites and bosses; huge range.', cost: 90, archetype: 'missile', element: 'kinetic', damage: 20, fireRate: 0.45, range: 38, targets: 0, chain: 0, chainFalloff: 1, critChance: 0.08, chill: 0, shock: false, tech: { credits: 450, components: 3, wave: 8 } },
   support_amp: { id: 'support_amp', name: 'Support Amplifier', blurb: 'No weapon. Towers in its field gain +25% damage and +20% fire rate; machines in it take +10% damage from every source.', cost: 75, archetype: 'support', element: 'none', damage: 0.25, fireRate: 0.33, range: 11, targets: 0, chain: 0, chainFalloff: 1, critChance: 0, chill: 0, shock: false, tech: { credits: 400, components: 2, wave: 6 } },
   frost_projector: { id: 'frost_projector', name: 'Cryogenic Field Projector', blurb: 'Field emitter: pulses chill into every enemy in range. Slows, freezes, enables reactions.', cost: 80, archetype: 'cryo', element: 'cryo', damage: 3, fireRate: 1.2, range: 14, targets: 0, chain: 0, chainFalloff: 1, critChance: 0, chill: 20, shock: false, tech: { credits: 400, components: 0, wave: 5 } },
 };
@@ -114,8 +119,10 @@ export const CORES: Readonly<Record<string, CoreDef>> = {
   standard_core: { id: 'standard_core', name: 'Standard Core', blurb: 'Stable reference core.', cost: 0, archetypes: ALL, damageMult: 1, fireRateMult: 1, rangeMult: 1, elementalMult: 1, burnFrac: 0, chillHit: 0, color: [0.2, 1.4, 1.8] },
   overcharged: { id: 'overcharged', name: 'Overcharged Core', blurb: '+30% fire rate at -10% damage per shot.', cost: 60, archetypes: HIT, damageMult: 0.9, fireRateMult: 1.3, rangeMult: 1, elementalMult: 1, burnFrac: 0, chillHit: 0, color: [2.4, 1.6, 0.3], tech: { credits: 350, components: 3, wave: 7 } },
   capacitor: { id: 'capacitor', name: 'Capacitor Core', blurb: '+25% damage, -15% fire rate (amplifiers: +25% boost).', cost: 60, archetypes: ALL, damageMult: 1.25, fireRateMult: 0.85, rangeMult: 1, elementalMult: 1, burnFrac: 0, chillHit: 0, color: [0.5, 1.2, 2.6], tech: { credits: 200, components: 0, wave: 4 } },
-  thermal_core: { id: 'thermal_core', name: 'Thermal Core', blurb: 'Hits ignite enemies (30% of the hit per second, 4 s).', cost: 70, archetypes: HIT, damageMult: 1, fireRateMult: 1, rangeMult: 1, elementalMult: 1, burnFrac: 0.3, chillHit: 0, color: [2.6, 0.9, 0.15], tech: { credits: 300, components: 2, wave: 5 } },
+  thermal_core: { id: 'thermal_core', name: 'Thermal Core', blurb: 'Hits ignite enemies (30% of the hit per second, 4 s).', cost: 70, archetypes: HIT, damageMult: 1, fireRateMult: 1, rangeMult: 1, elementalMult: 1, burnFrac: 0.3, chillHit: 0, element: 'thermal', color: [2.6, 0.9, 0.15], tech: { credits: 300, components: 2, wave: 5 } },
   cryo_core: { id: 'cryo_core', name: 'Cryo Core', blurb: 'Hits add chill; cryo fields +40% chill and +10% range.', cost: 70, archetypes: DAMAGE, damageMult: 1, fireRateMult: 1, rangeMult: 1.1, elementalMult: 1.4, burnFrac: 0, chillHit: 9, color: [1.2, 2.0, 2.6], tech: { credits: 300, components: 2, wave: 5 } },
+  corrosive_core: { id: 'corrosive_core', name: 'Corrosive Core', blurb: 'Corrosive rounds: hits corrode (15% of the hit per second per stack, armour shred).', cost: 70, archetypes: HIT, damageMult: 1, fireRateMult: 1, rangeMult: 1, elementalMult: 1, burnFrac: 0, chillHit: 0, corrodeFrac: 0.15, element: 'corrosive', color: [1.1, 2.6, 0.3], tech: { credits: 350, components: 2, wave: 6 } },
+  void_core: { id: 'void_core', name: 'Void Core', blurb: 'Void rounds pierce shields and energy barriers. -5% damage.', cost: 80, archetypes: HIT, damageMult: 0.95, fireRateMult: 1, rangeMult: 1, elementalMult: 1, burnFrac: 0, chillHit: 0, element: 'void', color: [2.0, 0.45, 3.2], tech: { credits: 450, components: 3, wave: 7 } },
 };
 
 export const MODIFIERS: Readonly<Record<string, ModifierDef>> = {
@@ -230,6 +237,7 @@ export interface TowerStats {
   splash: number;
   chill: number;
   burnFrac: number;
+  corrodeFrac: number;
   shock: boolean;
   /** dps against a single target (diagnostics/UI). */
   dps: number;
@@ -251,7 +259,8 @@ export function composeTower(cfg: TowerConfig, level: number, run: TowerRunInput
   const arc = w.archetype === 'arc';
   const ballistic = w.archetype === 'ballistic';
   const missile = w.archetype === 'missile';
-  const element: Element = w.element !== 'none' ? w.element : c.burnFrac > 0 && ballistic ? 'thermal' : 'none';
+  // Ballistic / missile weapons fire the core's element (kinetic by default); arc and cryo keep their own.
+  const element: Element = c.element && (ballistic || missile) ? c.element : w.element;
   const chain = arc ? w.chain + m.chain + run.extraChain + (run.empowered ? EMPOWER_CHAIN : 0) : 0;
   const targets = ballistic ? w.targets + m.targets + run.extraTargets : missile ? 4 + m.targets + run.extraTargets : 0;
   const chill = w.archetype === 'cryo' ? w.chill * c.elementalMult * m.chillMult : c.chillHit;
@@ -270,6 +279,7 @@ export function composeTower(cfg: TowerConfig, level: number, run: TowerRunInput
     splash: missile ? 3.4 * (m.splash > 0 ? 1.6 : 1) : m.splash,
     chill,
     burnFrac: c.burnFrac + run.burnFrac,
+    corrodeFrac: c.corrodeFrac ?? 0,
     shock: w.shock,
     dps: 0,
   };
