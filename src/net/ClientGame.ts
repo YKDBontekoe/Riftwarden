@@ -32,6 +32,7 @@ import { parseEvent, type ReplicatedEvent } from './events';
 import { isFxCall, isOrdnanceCall, isWfxCall, replay } from './replicated';
 import type { ShotOutcome, ShotRequest } from '../combat/Weapon';
 import { MOVE, type Player } from '../player/Player';
+import { poundBlast } from '../player/movement';
 import type { Kit } from '../visuals/kit';
 import type { Palette } from '../visuals/materials';
 
@@ -277,6 +278,12 @@ export class ClientGame extends Game {
     return true;
   }
 
+  /** The server applies the blast (its effects come back as replicated fx); the local drone only feels it. */
+  override groundPound(at: Vector3, fall: number): void {
+    this.player.addTrauma(poundBlast(fall).shake);
+    void this.request({ a: 'pound', p: [at.x, at.y, at.z], f: fall });
+  }
+
   override chargeUltimate(): void {
     // The server owns ultimate charge for every warden.
   }
@@ -455,6 +462,7 @@ export class ClientGame extends Game {
       this.player.dashedThisFrame = false;
       this.dashFlag = true;
     }
+    this.movement.update();
     if (this.construction.active) {
       this.construction.update(this.player, this.wallet.cores, this.turrets.turrets, this.stats);
       if (controls && input.mousePressed(0)) this.tryPlace();

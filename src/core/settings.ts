@@ -41,6 +41,8 @@ export const ACTIONS: readonly { id: string; label: string; def: string }[] = [
   { id: 'right', label: 'Strafe right', def: 'KeyD' },
   { id: 'jump', label: 'Jump / boost', def: 'Space' },
   { id: 'dash', label: 'Dash / sprint', def: 'ShiftLeft' },
+  { id: 'slide', label: 'Slide / ground pound', def: 'ControlLeft' },
+  { id: 'grapple', label: 'Grapple (also middle mouse)', def: 'KeyR' },
   { id: 'use', label: 'Use / pick up', def: 'KeyE' },
   { id: 'build', label: 'Build tower', def: 'KeyB' },
   { id: 'swap', label: 'Swap weapon', def: 'KeyZ' },

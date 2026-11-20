@@ -6,7 +6,7 @@
  * rewards, online profiles); clients send intents (movement state, shot claims, actions) which
  * the server validates. Messages are validated structurally here before any game code sees them.
  */
-export const PROTOCOL_VERSION = 9;
+export const PROTOCOL_VERSION = 10;
 export const MAX_PLAYERS = 4;
 export const MAX_MESSAGE_BYTES = 64 * 1024;
 /** Authoritative simulation and snapshot rates (Hz). */
@@ -38,6 +38,8 @@ export type ActMsg =
   | { a: 'ability'; slot: 'ability' | 'ability2' | 'ultimate'; o: V3; d: V3 }
   /** Put the primary ('weapon') or secondary ('weapon2') weapon in hand. */
   | { a: 'swap'; slot: 'weapon' | 'weapon2' }
+  /** A ground pound landed at `p` after a fall of `f` metres (the server checks position + cooldown, applies the blast). */
+  | { a: 'pound'; p: V3; f: number }
   /** Test servers only (RIFT_TEST=1): drive the run quickly through the real pipelines. */
   | { a: 'test'; op: 'killAll' | 'jump' | 'boss' | 'clear' | 'reactor'; n?: number };
 
@@ -189,6 +191,8 @@ function validAct(o: Record<string, unknown>): boolean {
       return isStr(o.uid, 120);
     case 'swap':
       return o.slot === 'weapon' || o.slot === 'weapon2';
+    case 'pound':
+      return isV3(o.p) && isNum(o.f, 1000);
     case 'ability':
       return (o.slot === 'ability' || o.slot === 'ability2' || o.slot === 'ultimate') && isV3(o.o) && isV3(o.d);
     case 'test':

@@ -3,6 +3,8 @@ import {
   type CharacterSurfaceInfo,
   FreeCamera,
   PhysicsCharacterController,
+  type PhysicsEngineV2,
+  PhysicsRaycastResult,
   type Scene,
   Vector3,
 } from '@babylonjs/core';
@@ -10,7 +12,9 @@ import { sfx } from '../audio/Sfx';
 import { ECONOMY } from '../data/defs';
 import { BASE_STATS, type CombatStats, maxHull, mitigation } from '../combat/stats';
 import type { Input } from '../core/Input';
-import { PHYS_PLAYER } from '../world/physicsGroups';
+import { ENV_QUERY, PHYS_PLAYER } from '../world/physicsGroups';
+import { type KitBody, MoveKit, type ProbeHit } from './MoveKit';
+import { KIT } from './movement';
 
 const DOWN = new Vector3(0, -1, 0);
 const GRAVITY = new Vector3(0, -30, 0);
@@ -53,6 +57,8 @@ export const MOVE = {
   boostFov: 0.07,
   /** Extra FOV at full carried overspeed (sense of speed). */
   speedFov: 0.08,
+  /** Slide, wall-run, grapple and ground pound (`MoveKit`): arena only. */
+  advanced: true,
 };
 
 export const HQ_MOVE: typeof MOVE = {
@@ -78,6 +84,7 @@ export const HQ_MOVE: typeof MOVE = {
   dashFov: 0.12,
   boostFov: 0,
   speedFov: 0,
+  advanced: false,
 };
 
 const CAPSULE_HEIGHT = 1.8;
@@ -89,7 +96,7 @@ const EYE_OFFSET = 0.55;
  * PhysicsCharacterController; this class only decides the desired velocity, which
  * keeps the feel snappy (high accel, fast stop, short dash) and frame-rate independent.
  */
-export class Player {
+export class Player implements KitBody {
   readonly camera: FreeCamera;
   readonly controller: PhysicsCharacterController;
   private support: CharacterSurfaceInfo;
@@ -104,15 +111,16 @@ export class Player {
   private punchFov = 0;
   private punchRoll = 0;
   private appliedPunch = 0;
-  private hv = new Vector3(); // horizontal velocity
-  private vy = 0;
+  /** Horizontal velocity (KitBody). */
+  readonly hv = new Vector3();
+  vy = 0;
   grounded = false;
   private coyoteT = 0;
   private jumpBufferT = 0;
-  private airBoost = true;
+  airBoost = true;
   dashCharges: number;
   dashRecharge = 0;
-  private dashT = 0;
+  dashT = 0;
   /** Set when a dash starts (consumed by the game to emit the dash event). */
   dashedThisFrame = false;
   private dashDir = new Vector3();
@@ -148,6 +156,11 @@ export class Player {
   hurtFlash = 0;
 
   private readonly tmp = new Vector3();
+  readonly capsuleRadius = CAPSULE_RADIUS;
+  /** Slide / wall-run / grapple / ground pound (arena drone only: `move.advanced`). */
+  readonly kit: MoveKit;
+  private readonly ray = new PhysicsRaycastResult();
+  private readonly flatNormal = new Vector3(0, 1, 0);
   private readonly spawn: Vector3;
   private readonly spawnYaw: number;
 
@@ -166,6 +179,31 @@ export class Player {
     this.support = this.controller.checkSupport(1 / 60, DOWN);
     this.yaw = spawn.yaw;
     this.dashCharges = move.dashCharges;
+    this.kit = new MoveKit(this);
+  }
+
+  /** Ground normal under the drone (up when airborne). */
+  get groundNormal(): Vector3 {
+    return this.support.supportedState === CharacterSupportedState.SUPPORTED ? this.support.averageSurfaceNormal : this.flatNormal;
+  }
+
+  /** First static-level hit on a -> b (Havok, ignores the drone). */
+  probe(a: Vector3, b: Vector3): ProbeHit | null {
+    const physics = this.camera.getScene().getPhysicsEngine() as PhysicsEngineV2 | null;
+    if (!physics) return null;
+    physics.raycastToRef(a, b, this.ray, ENV_QUERY);
+    return this.ray.hasHit ? { point: this.ray.hitPointWorld.clone(), normal: this.ray.hitNormalWorld.clone() } : null;
+  }
+
+  /** Grapple along the view (arena). */
+  grapple(): 'hook' | 'miss' | 'cooldown' | 'release' | 'off' {
+    if (!this.move.advanced || !this.alive) return 'off';
+    return this.kit.fireGrapple();
+  }
+
+  /** Current advanced-movement state ('' = regular movement). */
+  get moveState(): string {
+    return this.kit.state;
   }
 
   get position(): Vector3 {
@@ -210,6 +248,7 @@ export class Player {
     this.sinceHurt = 99;
     this.hurtFlash = 0;
     this.trauma = 0;
+    this.kit.reset();
   }
 
   /** Called for every hit taken; `from` is the damage source position when known. */
@@ -265,6 +304,7 @@ export class Player {
       this.hv.setAll(0);
       this.dashT = 0;
       this.jumpBufferT = 0;
+      this.kit.cancel();
     }
   }
 
@@ -305,6 +345,7 @@ export class Player {
     if (this.alive && !alive) {
       this.hv.setAll(0);
       this.dashT = 0;
+      this.kit.cancel();
     }
     this.alive = alive;
     this.respawnT = respawnT;
@@ -404,6 +445,8 @@ export class Player {
       this.airBoost = true;
       if (!wasGrounded && this.vy < -6) this.landDip = Math.min(0.22, -this.vy * 0.012);
     } else this.coyoteT -= dt;
+    const kit = move.advanced ? this.kit : null;
+    kit?.tick(dt, this.grounded);
 
     // Dash charges
     const shiftHeld = input.isDown('ShiftLeft') || input.isDown('ShiftRight');
@@ -416,10 +459,16 @@ export class Player {
       }
     }
     // A second jump can redirect the drone mid-dash. With no input, keep its heading.
-    const jumpPressed = active && input.pressed('Space');
+    let jumpPressed = active && input.pressed('Space');
     this.jumpBufferT = active ? Math.max(0, this.jumpBufferT - dt) : 0;
+    if (kit) {
+      const ctrlPressed = input.pressed('ControlLeft') || input.pressed('ControlRight');
+      const ctrlHeld = input.isDown('ControlLeft') || input.isDown('ControlRight');
+      if (kit.input(active, this.grounded, ctrlPressed, ctrlHeld, jumpPressed, wx, wz, moveSpeedMult)) jumpPressed = false;
+      if (kit.state === 'grapple' || kit.state === 'wall') this.jumpBufferT = 0;
+    }
     let redirected = false;
-    if (jumpPressed || this.jumpBufferT > 0) {
+    if ((jumpPressed || this.jumpBufferT > 0) && !(kit && (kit.state === 'grapple' || kit.state === 'wall' || kit.state === 'pound'))) {
       if (this.coyoteT > 0) {
         this.vy = move.jumpVel;
         this.coyoteT = 0;
@@ -443,7 +492,8 @@ export class Player {
       }
     }
 
-    if (active && shiftPressed && this.dashCharges > 0) {
+    if (active && shiftPressed && this.dashCharges > 0 && kit?.state !== 'pound') {
+      kit?.cancel();
       this.dashCharges--;
       this.dashedThisFrame = true;
       this.dashT = move.dashTime;
@@ -454,7 +504,9 @@ export class Player {
     }
     this.sprinting = active && shiftHeld && fz > 0 && this.dashT <= 0;
     const dashDt = Math.min(dt, this.dashT);
-    if (dashDt > 0) {
+    if (kit?.velocity(dt, wx, wz, moveSpeedMult)) {
+      // Slide / wall-run / grapple / pound own the velocity this frame.
+    } else if (dashDt > 0) {
       this.dashT -= dashDt;
       // Blend the last partial frame into carry speed so a low frame rate cannot extend the dash.
       const speed = move.dashCarrySpeed + (move.dashSpeed - move.dashCarrySpeed) * (dashDt / dt);
@@ -485,7 +537,9 @@ export class Player {
       }
     }
 
-    if (this.grounded && this.vy <= 0) {
+    if (kit?.vertical(dt)) {
+      // set by the kit
+    } else if (this.grounded && this.vy <= 0) {
       this.vy = -2; // keep snapped to the ground on slopes/ramps
     } else {
       if (dashDt > 0) this.vy = Math.max(0, this.vy);
@@ -504,6 +558,7 @@ export class Player {
       if (speed > move.dashCarrySpeed) this.hv.scaleInPlace(move.dashCarrySpeed / speed);
     }
     if (this.vy > 0 && v.y < this.vy - 0.5) this.vy = v.y; // bonked a ceiling
+    if (kit?.landed) this.landDip = Math.min(0.5, 0.25 + kit.landed.fall * 0.02);
     if (this.grounded) this.vy = Math.min(this.vy, 0);
 
     // Safety: never fall out of the world
@@ -520,11 +575,13 @@ export class Player {
     const hover = Math.sin(this.bobT * 1.6) * 0.025; // gentle hover drift, not a walk bob
     this.landDip *= Math.exp(-dt * 9);
     // Grounded dash = slide: the eye drops while it lasts and eases back up as the momentum bleeds.
-    const sliding = this.dashT > 0 && this.grounded;
-    this.slide += ((sliding ? this.move.slideDip : 0) - this.slide) * (1 - Math.exp(-dt * (sliding ? 30 : 9)));
+    const kitSlide = this.kit.state === 'slide';
+    const sliding = (this.dashT > 0 && this.grounded) || kitSlide;
+    const dip = kitSlide ? KIT.slideDip : this.move.slideDip;
+    this.slide += ((sliding ? dip : 0) - this.slide) * (1 - Math.exp(-dt * (sliding ? 30 : 9)));
     const deadDrop = this.alive ? 0 : -0.9;
     this.camera.position.set(p.x, p.y + EYE_OFFSET + hover - this.landDip - this.slide + deadDrop, p.z);
-    const targetRoll = -this.move.strafeRoll * Math.max(-1, Math.min(1, strafe / this.move.runSpeed));
+    const targetRoll = -this.move.strafeRoll * Math.max(-1, Math.min(1, strafe / this.move.runSpeed)) + this.kit.roll() * (kitSlide ? 0 : 1);
     this.roll += (targetRoll - this.roll) * (1 - Math.exp(-dt * 12));
     this.trauma = Math.max(0, this.trauma - dt * 1.4);
     const sh = this.trauma * this.trauma;
@@ -538,7 +595,7 @@ export class Player {
       this.fovKick = 0;
       this.roll = 0;
     }
-    const sprintFov = this.sprinting ? this.move.sprintFov : 0;
+    const sprintFov = this.sprinting ? this.move.sprintFov : kitSlide || this.kit.state === 'grapple' ? KIT.slideFov : 0;
     // Sense of speed: carried overspeed widens the view a little more.
     const over = (speed - this.move.sprintSpeed) / Math.max(1, this.move.dashCarrySpeed - this.move.sprintSpeed);
     const speedFov = this.reduceMotion ? 0 : this.move.speedFov * Math.max(0, Math.min(1, over));

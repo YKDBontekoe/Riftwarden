@@ -33,6 +33,7 @@ import type { ActMsg, InputMsg, ShotClaim } from './protocol';
 import { capturePresentation, enterRecorder, patchGlobals, Recorder, withRecorder } from './recorder';
 export { Recorder, type NetEvent } from './recorder';
 import { arr, enc } from './wire';
+import { KIT } from '../player/movement';
 
 export interface ServerPlayerInit {
   id: string;
@@ -70,6 +71,8 @@ export class Avatar {
   lastSeq = -1;
   lastT = 0;
   readonly lastPos = new Vector3();
+  /** Server clock of the last accepted ground pound. */
+  lastPound = -99;
   /** Shot budget (token bucket refilled at the weapon's rate). */
   budget = 4;
   heat = 0;
@@ -689,6 +692,16 @@ export class ServerGame extends Game {
           a.lastPos.copyFrom(a.player.position);
           this.rec.push(['mv', arr(a.player.position)], a.id);
         }
+        return null;
+      }
+      case 'pound': {
+        if (!a.player.alive) return 'Not in play';
+        if (this.clock - a.lastPound < KIT.poundCooldown * 0.8) return 'Ground pound recharging';
+        const at = new Vector3(m.p[0], m.p[1], m.p[2]);
+        if (Vector3.Distance(at, a.lastPos) > 4) return 'Too far from the drone';
+        a.lastPound = this.clock;
+        // The fall is the client's claim: clamp it to the arena's height range.
+        this.as(a, () => this.movement.blast(at, Math.max(0, Math.min(20, m.f)), a.player));
         return null;
       }
       case 'equip':

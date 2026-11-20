@@ -144,6 +144,12 @@ export class Flow {
     this.input = new Input(canvas);
     applyGlobalSettings(settings, this.input);
     this.profile = new Profile();
+    // Ctrl slides: Ctrl+W (close tab) cannot be intercepted outside fullscreen keyboard lock, so a run asks first.
+    window.addEventListener('beforeunload', (e) => {
+      if (!this.arena || this.input.forceCapture) return;
+      e.preventDefault();
+      e.returnValue = '';
+    });
   }
 
   get world(): World | null {

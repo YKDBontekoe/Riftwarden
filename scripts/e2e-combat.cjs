@@ -240,6 +240,148 @@ async function deploy(p) {
       await ev(p, () => window.__rift.flow.abandonRun());
       await H.waitFor(p, () => window.__rift.state().location === 'home' && !window.__rift.state().busy);
     }
+    if (want('D')) {
+      // Movement kit: slide (L-Ctrl on the ground), ground pound (L-Ctrl in the air), grapple (R), wall-run.
+      await deploy(p);
+      const d1 = await ev(p, () => {
+        const R = window.__rift;
+        const g = R.game;
+        const pl = g.player;
+        R.teleport(0, -10);
+        R.look(Math.PI, 0);
+        R.advance(0.3);
+        const i = g.input;
+        const standEye = pl.eye.y - pl.position.y;
+        i.simulateKey('KeyW', true);
+        R.advance(0.4);
+        const run = pl.speed;
+        i.simulateKey('ControlLeft', true);
+        R.advance(1 / 60);
+        const state = pl.moveState;
+        R.advance(0.25);
+        const slideSpeed = pl.speed;
+        const slideEye = pl.eye.y - pl.position.y;
+        const hud = g.movement.hud().state;
+        i.simulateKey('ControlLeft', false);
+        R.advance(2 / 60);
+        const after = pl.moveState;
+        i.simulateKey('KeyW', false);
+        R.advance(0.3);
+        return { run, state, slideSpeed, standEye, slideEye, hud, after };
+      });
+      check('D1 L-Ctrl at a run slides: faster than the run, eye drops, release ends it', d1.state === 'slide' && d1.slideSpeed > d1.run + 4 && d1.slideEye < d1.standEye - 0.25 && d1.hud === 'slide' && d1.after === '', JSON.stringify(d1));
+
+      const d2 = await ev(p, () => {
+        const R = window.__rift;
+        const g = R.game;
+        const pl = g.player;
+        R.teleport(0, -10, 9);
+        R.advance(0.25);
+        const e = R.dev.spawn('walker');
+        const pp = pl.position;
+        const place = () => { e.pos.set(pp.x + 2.5, 0, pp.z); e.root.position.copyFrom(e.pos); e.shotT = 99; };
+        place();
+        const hp = e.hp;
+        const i = g.input;
+        i.simulateKey('ControlLeft', true);
+        R.advance(1 / 60);
+        i.simulateKey('ControlLeft', false);
+        const state = pl.moveState;
+        const vy = pl.verticalSpeed;
+        let k = 0;
+        for (; k < 90 && g.movement.pounds === 0; k++) { place(); R.advance(1 / 60); }
+        return { state, vy, frames: k, pounds: g.movement.pounds, last: g.movement.lastPound && { r: g.movement.lastPound.radius, hit: g.movement.lastPound.hit }, hp, after: e.alive ? e.hp : 0, cd: g.movement.hud().pound };
+      });
+      check('D2 L-Ctrl in the air ground-pounds: fast drop, blast on landing hurts a walker, cooldown starts', d2.state === 'pound' && d2.vy < -30 && d2.pounds === 1 && d2.last && d2.last.hit >= 1 && d2.after < d2.hp && d2.cd > 0, JSON.stringify(d2));
+
+      // Find the north perimeter wall (classic arena) for the grapple and the wall-run.
+      const d3 = await ev(p, () => {
+        const R = window.__rift;
+        const g = R.game;
+        const pl = g.player;
+        const H = g.layout.half;
+        // A spot with a clear 20-30 m line north to the wall.
+        R.look(0, -0.05);
+        for (const x of [-H + 8, -H + 14, -H + 20, -H + 26, -H + 32]) {
+          R.teleport(x, H - 26);
+          R.advance(0.2);
+          const f = pl.forward(new R.V3());
+          const hit = pl.probe(pl.eye.clone(), pl.eye.add(f.scale(40)));
+          if (hit && Math.abs(hit.point.z - H) < 1) break;
+        }
+        const start = R.V3.Distance(pl.position, new R.V3(pl.position.x, pl.position.y, H));
+        g.input.simulateKey('KeyR', true);
+        R.advance(1 / 60);
+        g.input.simulateKey('KeyR', false);
+        const state = pl.moveState;
+        const anchorZ = pl.kit.anchor.z;
+        const rope = g.scene.getMeshByName('grappleLine')?.isEnabled() ?? false;
+        R.advance(0.6);
+        const mid = H - pl.position.z;
+        for (let k = 0; k < 120 && pl.moveState === 'grapple'; k++) R.advance(1 / 60);
+        return { start, state, anchorZ, H, rope, mid, end: pl.moveState, cd: g.movement.hud().grapple };
+      });
+      check('D3 R grapples the wall ahead and reels the drone in, then cools down', d3.state === 'grapple' && Math.abs(d3.anchorZ - d3.H) < 1.5 && d3.rope && d3.mid < d3.start - 12 && d3.end === '' && d3.cd > 0, JSON.stringify(d3));
+
+      const d4 = await ev(p, () => {
+        const R = window.__rift;
+        const g = R.game;
+        const pl = g.player;
+        const H = g.layout.half;
+        R.teleport(-H + 8, H - 1.0, 3);
+        R.look(Math.PI / 2, 0); // facing +x, wall on the left (north = +z)
+        R.advance(1 / 60);
+        pl.hv.set(18, 0, 0);
+        pl.vy = 0;
+        const i = g.input;
+        i.simulateKey('KeyW', true);
+        let k = 0;
+        for (; k < 30 && pl.moveState !== 'wall'; k++) { R.advance(1 / 60); }
+        const state = pl.moveState;
+        const y0 = pl.position.y;
+        R.advance(0.5);
+        const still = pl.moveState;
+        const drop = y0 - pl.position.y;
+        const speed = pl.speed;
+        const roll = pl.camera.rotation.z;
+        i.simulateKey('Space', true);
+        R.advance(1 / 60);
+        i.simulateKey('Space', false);
+        R.advance(3 / 60);
+        const after = { state: pl.moveState, vz: pl.hv.z, vy: pl.verticalSpeed };
+        i.simulateKey('KeyW', false);
+        R.advance(1);
+        return { frames: k, state, still, drop, speed, roll, after };
+      });
+      check('D4 airborne along a wall: wall-run holds height and speed, leans the camera; jump kicks off the wall', d4.state === 'wall' && d4.still === 'wall' && d4.drop < 1.5 && d4.speed > 18 && Math.abs(d4.roll) > 0.05 && d4.after.state === '' && d4.after.vz < -5 && d4.after.vy > 4, JSON.stringify(d4));
+
+      const d6 = await ev(p, () => {
+        const R = window.__rift;
+        const g = R.game;
+        const pl = g.player;
+        const H = g.layout.half;
+        // Flung over the north wall from above its top: the containment ring keeps the drone in.
+        R.teleport(-H + 20, H - 3, 12);
+        R.advance(1 / 60);
+        let maxZ = -1e9;
+        for (let k = 0; k < 60; k++) { pl.hv.set(0, 0, 30); pl.vy = 6; R.advance(1 / 60); maxZ = Math.max(maxZ, pl.position.z); }
+        R.advance(1.5);
+        // Rays still pass it: the grapple hooks the real wall, not the invisible ring above it.
+        R.teleport(-H + 20, H - 20);
+        R.look(0, -0.45);
+        R.advance(0.2);
+        const f = pl.forward(new R.V3());
+        const hit = pl.probe(pl.eye.clone(), pl.eye.add(f.scale(46)));
+        return { H, maxZ, z: pl.position.z, y: pl.position.y, rayHit: hit && hit.point.z, rayY: hit && hit.point.y };
+      });
+      check('D6 the drone cannot leave over the perimeter walls; rays ignore the containment', d6.maxZ < d6.H && d6.z < d6.H && d6.rayHit === null, JSON.stringify(d6));
+      await ev(p, () => window.__rift.advance(1 / 60));
+      await H.shot(p, 'combat_movement_hud', { frames: 2 });
+      const chips = await p.$$eval('.mv-chip', (els) => els.map((e) => e.textContent));
+      check('D5 HUD shows grapple and pound chips with their keys', chips.length === 2 && /GRAPPLE/.test(chips[0]) && /R/.test(chips[0]) && /POUND/.test(chips[1]) && /CTRL/.test(chips[1]), JSON.stringify(chips));
+      await ev(p, () => window.__rift.flow.abandonRun());
+      await H.waitFor(p, () => window.__rift.state().location === 'home' && !window.__rift.state().busy);
+    }
     const bad = errs.filter((e) => !/Error compiling effect/.test(e));
     check('Z no page/console errors', bad.length === 0, bad.slice(0, 3).join(' | '));
   } catch (e) {

@@ -28,6 +28,7 @@ import { DevTools } from '../arena/DevTools';
 import { type CombatHost, PlayerCombat } from '../arena/PlayerCombat';
 import { type WeaponSlot, WeaponSlots, type WeaponSlotsHost } from '../arena/WeaponSlots';
 import { Abilities, type AbilityHost } from '../arena/Abilities';
+import { Movement, type MovementHost } from '../arena/Movement';
 import type { AbilitySlot } from '../abilities/defs';
 import { type LootHost, LootPickups } from '../arena/LootPickups';
 import { type TowerEdit, type TowerHost, TowerControl } from '../arena/TowerControl';
@@ -219,6 +220,8 @@ export class Game {
   readonly weaponSlots = new WeaponSlots(this.weaponSlotsHost());
   /** Ability I/II and the ultimate (the co-op server keeps one per avatar and swaps it in with `as`). */
   abilities = new Abilities(this.abilityHost());
+  /** Slide / wall-run / grapple / ground pound: grapple input, pound blasts, grapple line. */
+  readonly movement = new Movement(this.movementHost());
   protected kills = 0;
   protected turretsBuilt = 0;
   protected defeatT = 0;
@@ -1175,6 +1178,7 @@ export class Game {
       this.player.dashedThisFrame = false;
       this.director.bus.emit({ type: 'dash', chain: this.director.bus.newChain(), source: { kind: 'weapon', id: 'dash' }, value: 1 });
     }
+    this.movement.update();
 
     // ---- building
     if (this.construction.active) {
@@ -1393,6 +1397,27 @@ export class Game {
       get stats() { return g.stats; }, // prettier-ignore
       canAct: () => this.screen === 'playing' && !this.construction.active && this.player.alive,
     };
+  }
+
+  private movementHost(): MovementHost {
+    const g = this;
+    return {
+      get scene() { return g.scene; }, // prettier-ignore
+      get player() { return g.player; }, // prettier-ignore
+      get director() { return g.director; }, // prettier-ignore
+      get fx() { return g.fx; }, // prettier-ignore
+      get input() { return g.input; }, // prettier-ignore
+      get stats() { return g.stats; }, // prettier-ignore
+      get attackerScale() { return g.attackerScale; }, // prettier-ignore
+      canAct: () => this.screen === 'playing' && this.input.captured && !this.construction.active && this.player.alive,
+      grappleKeyFree: () => !this.towers.inspected,
+      pound: (at, fall) => this.groundPound(at, fall),
+    };
+  }
+
+  /** A ground pound landed (co-op clients forward it to the server instead). */
+  groundPound(at: Vector3, fall: number): void {
+    this.movement.blast(at, fall);
   }
 
   /** HUD row for the holstered weapon. */
@@ -1961,6 +1986,7 @@ export class Game {
       weaponName: this.weapon.def.name,
       holster: this.holsterHud(),
       abilities: this.abilities.hud(),
+      moves: this.movement.hud(),
       heat: this.weapon.heat / 100,
       overheated: this.weapon.overheated,
       charge: this.weapon.def.mechanism === 'charge' || this.weapon.def.mechanism === 'cycle' ? this.weapon.charge : 0,
