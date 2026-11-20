@@ -37,9 +37,9 @@ function collectErrors(p, errs = (p.errs = []), max = 300) {
 }
 
 /** Navigate to the app in ?test mode (or reload) and wait for the menu; stops the render loop unless `keepLoop`. */
-async function boot(p, { reload = false, skipUpgrades = false, keepLoop = false } = {}) {
+async function boot(p, { reload = false, skipUpgrades = false, keepLoop = false, query = '' } = {}) {
   if (reload) await p.reload();
-  else await p.goto(URL + '?test');
+  else await p.goto(URL + '?test' + query);
   await p.waitForFunction(() => window.__rift && window.__rift.state().screen === 'menu', null, { timeout: 180000 });
   if (!keepLoop) await p.evaluate(() => window.__rift.stopLoop());
   if (skipUpgrades) await p.evaluate(() => { window.__rift.flow.skipUpgrades = true; });
@@ -47,9 +47,9 @@ async function boot(p, { reload = false, skipUpgrades = false, keepLoop = false 
 
 /**
  * Launch Chromium (SwiftShader) with one context + page and boot the app.
- * opts: viewport, init (localStorage entries seeded once per tab), storageState, skipUpgrades, gc (expose gc for leak checks).
+ * opts: viewport, query (extra URL params, e.g. '&map'), init (localStorage entries seeded once per tab), storageState, skipUpgrades, gc (expose gc for leak checks).
  */
-async function launch({ viewport = { width: 1280, height: 720 }, init = null, storageState, skipUpgrades = false, gc = false } = {}) {
+async function launch({ viewport = { width: 1280, height: 720 }, init = null, storageState, skipUpgrades = false, gc = false, query = '' } = {}) {
   const b = await chromium.launch({ args: gc ? [...GL_ARGS, '--js-flags=--expose-gc'] : GL_ARGS });
   const ctx = await b.newContext({ viewport, storageState });
   if (!storageState) {
@@ -64,7 +64,7 @@ async function launch({ viewport = { width: 1280, height: 720 }, init = null, st
   if (skipUpgrades) await ctx.addInitScript(() => { window.__skipUpgrades = true; });
   const p = await ctx.newPage();
   const errs = collectErrors(p, []);
-  await boot(p, { skipUpgrades });
+  await boot(p, { skipUpgrades, query });
   return { b, ctx, p, errs };
 }
 

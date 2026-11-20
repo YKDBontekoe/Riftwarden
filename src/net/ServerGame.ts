@@ -35,6 +35,7 @@ import type { ActMsg, InputMsg, ShotClaim } from './protocol';
 import { capturePresentation, enterRecorder, patchGlobals, Recorder, withRecorder } from './recorder';
 export { Recorder, type NetEvent } from './recorder';
 import { arr, enc } from './wire';
+import { resolveMapVote, voteComplete } from './mapVote';
 import { KIT } from '../player/movement';
 
 export interface ServerPlayerInit {
@@ -45,6 +46,10 @@ export interface ServerPlayerInit {
   ledger: RunLedger;
   /** The player's skill tree (personal stats; tower stats are shared 1/n like tower gear). */
   tree?: { seed: number; allocated: readonly string[] };
+  /** Run map: the run loadout carried from the previous node (uids). */
+  restore?: Record<string, string | null>;
+  /** Run map: ultimate charge carried from the previous node. */
+  ult?: number;
 }
 
 interface ServerPickup {
@@ -84,6 +89,8 @@ export class Avatar {
   speed = 0;
   pitch = 0;
   vote: boolean | null = null;
+  /** Run map vote: a node id or 'home' (null = not voted). */
+  mapVote: string | null = null;
   readonly pickups = new Map<number, ServerPickup>();
   kills = 0;
   damage = 0;
@@ -132,8 +139,16 @@ export interface ServerHooks {
   bank(playerId: string, wave: number, rewards: Rewards, bosses: number): Promise<boolean>;
   /** Reactor destroyed. */
   defeat(): void;
-  /** Unanimous extraction vote at a checkpoint. */
+  /** Unanimous extraction vote at a checkpoint (or a map vote nobody spent on a node). */
   extract(): void;
+  /** Run map: the team travels to `node`; `home` wardens extract on their own. */
+  travel?(node: string, home: string[]): void;
+  /** Run map: an act boss fell. */
+  actCleared?(act: number): void;
+  /** Run map: nodes the team can travel to now. */
+  reachable?(): string[];
+  /** Run map: the lobby host (breaks vote ties). */
+  hostId?(): string | null;
 }
 
 /** Fastest legitimate drone speed (a dash) plus slack for jitter; the 2.5 m per-packet allowance covers the rest. */
@@ -183,7 +198,7 @@ export class ServerGame extends Game {
         ...cfg,
         loadout: players[0].loadout,
         run: team,
-        hooks: { bank: () => true, checkpoint: () => {}, defeat: () => box.g?.serverDefeat() },
+        hooks: { bank: () => true, checkpoint: () => {}, defeat: () => box.g?.serverDefeat(), actCleared: (n) => box.g?.sh.actCleared?.(n) },
       });
     } finally {
       enterRecorder(prev);
@@ -232,6 +247,7 @@ export class ServerGame extends Game {
 
   addAvatar(p: ServerPlayerInit): Avatar {
     const a = new Avatar(p.id, p.name, p.slot, this, p.loadout, p.ledger);
+    if (p.restore) a.inventory.adoptLoadout(p.restore);
     if (p.tree) {
       a.treeMods = treeModifiers(p.tree.seed, p.tree.allocated);
       p.ledger.xpMult = treeRules(p.tree.seed, p.tree.allocated).xpMult;
@@ -257,6 +273,7 @@ export class ServerGame extends Game {
       owner: a.id,
       canAct: () => a.active && a.player.alive,
     });
+    if (p.ult) a.abilities.ult = p.ult;
     this.avatars.push(a);
     this.rebuildStats();
     return a;
@@ -362,7 +379,7 @@ export class ServerGame extends Game {
       super.rebuildStats();
       return;
     }
-    const shared = [...this.modifiers, ...this.director.build.modifiers(), ...this.director.buffModifiers(null)];
+    const shared = [...this.modifiers, ...this.director.build.modifiers(), ...this.director.buffModifiers(null), ...(this.node?.mods() ?? [])];
     const live = this.avatars.filter((a) => !a.left);
     const n = Math.max(1, live.length);
     // Towers are shared: each player's tower gear contributes 1/n (a full team of tower builds = one full build).
@@ -668,6 +685,7 @@ export class ServerGame extends Game {
         if (this.banking) return 'The checkpoint is being saved';
         if (this.offer) return 'Choose the team upgrade first';
         if (this.voteOpen) return 'The checkpoint vote is still open';
+        if (this.node?.complete) return 'This node is secured: vote on the run map';
         this.startWave();
         return null;
       case 'collect': {
@@ -691,7 +709,12 @@ export class ServerGame extends Game {
         this.applyTeamUpgrade(m.pick, a.name);
         return null;
       }
+      case 'mapVote':
+        return this.mapVoteAct(a, m.choice);
+      case 'station':
+        return this.stationAct(a, m.station, m.opt);
       case 'vote':
+        if (this.node) return 'Vote on the run map';
         if (!this.voteOpen) return 'No vote open';
         a.vote = m.home;
         this.rec.push(['u', 'alert', { text: `${a.name.toUpperCase()} VOTES ${m.home ? 'RETURN TO HQ' : 'CONTINUE'}`, tone: 'white' }]);
@@ -750,6 +773,71 @@ export class ServerGame extends Game {
     }
   }
 
+  // ------------------------------------------------------------------ run map (co-op)
+
+  /** A node station gives an item to the warden using it. */
+  protected override nodeGrant(item: ItemInstance): boolean {
+    const a = this.rec.owner ? this.avatar(this.rec.owner) : undefined;
+    if (!a || !a.inventory.collect(item)) return false;
+    a.inventoryDirty = true;
+    return true;
+  }
+
+  /** Headless: the map is a team vote (opened by the server), panels are client UI. */
+  protected override nodeOpenMap(): void {}
+  protected override nodeOpenPanel(): void {}
+
+  /** Map vote opens once the node is secured (no guardians, offer or banking pending). Hubs: from the start. */
+  private openMapVote(): void {
+    const n = this.node;
+    if (!n || this.voteOpen || this.banking || this.offer || this.upgradeDue || !n.complete || n.guardiansActive || !this.team.atCheckpoint) return;
+    this.voteOpen = true;
+    // Combat nodes give the team a minute; hubs wait for the first vote (players are shopping).
+    this.voteDeadline = n.combat ? this.clock + 60 : Infinity;
+    for (const a of this.avatars) a.mapVote = null;
+    this.rec.push(['vote', 2]);
+  }
+
+  protected mapVoteAct(a: Avatar, choice: string): string | null {
+    if (!this.node || !this.voteOpen) return 'No map vote open';
+    const reach = this.sh.reachable?.() ?? [];
+    if (choice !== 'home' && !reach.includes(choice)) return 'That node is not reachable';
+    a.mapVote = choice;
+    if (this.voteDeadline === Infinity) this.voteDeadline = this.clock + 45;
+    this.rec.push(['u', 'alert', { text: `${a.name.toUpperCase()} VOTES ${choice === 'home' ? 'EXTRACT' : 'TRAVEL'}`, tone: 'white' }]);
+    this.checkMapVote(false);
+    return null;
+  }
+
+  private checkMapVote(timeout: boolean): void {
+    if (!this.voteOpen || !this.node || this.node.guardiansActive) return;
+    const live = this.avatars.filter((a) => a.active);
+    const votes = new Map(live.map((a) => [a.id, a.mapVote] as [string, string | null]));
+    if (!timeout && !voteComplete(votes, live.map((a) => a.id))) return;
+    const r = resolveMapVote(votes, this.sh.reachable?.() ?? [], this.sh.hostId?.() ?? null);
+    this.voteOpen = false;
+    this.rec.push(['vote', 0, r.travel ? 0 : 1]);
+    if (r.travel) this.sh.travel?.(r.travel, r.home);
+    else this.sh.extract();
+  }
+
+  protected stationAct(a: Avatar, station: string, opt: string): string | null {
+    const n = this.node;
+    if (!n) return 'No station here';
+    if (!['merchant', 'forge', 'rest', 'event', 'vault'].includes(station) || station !== n.node.kind) return 'No such station on this node';
+    if (!a.player.alive) return 'Drone destroyed';
+    n.panelStation = station as 'merchant';
+    const why = n.act(opt);
+    a.inventoryDirty = true;
+    return why;
+  }
+
+  /** Run map vote state for snapshots: open, seconds left, votes per warden. */
+  private mapVoteNet(): unknown {
+    if (!this.node) return 0;
+    return [this.voteOpen ? 1 : 0, Number.isFinite(this.voteDeadline) ? Math.round(Math.max(0, this.voteDeadline - this.clock)) : -1, this.avatars.filter((a) => !a.left).map((a) => [a.id, a.mapVote ?? ''])];
+  }
+
   // ------------------------------------------------------------------ team upgrades + checkpoint vote
 
   /** Between waves: one shared offer, the choice rotates between connected players (30 s, then auto). */
@@ -778,6 +866,7 @@ export class ServerGame extends Game {
   }
 
   private openVoteIfCheckpoint(): void {
+    if (this.node) return this.openMapVote();
     if (this.banking || this.voteOpen || !this.checkpointOpen || !this.team.atCheckpoint) return;
     this.voteOpen = true;
     this.voteDeadline = this.clock + 45;
@@ -787,6 +876,7 @@ export class ServerGame extends Game {
 
   /** Unanimous "return home" among connected players extracts; any "continue" (or the timeout) continues. */
   private checkVote(): void {
+    if (this.node) return this.checkMapVote(false);
     const live = this.avatars.filter((a) => a.active);
     if (!live.length) return;
     if (live.some((a) => a.vote === false)) return this.closeVote(false);
@@ -846,7 +936,14 @@ export class ServerGame extends Game {
     }
     // Offers / votes hold the preparation countdown (never the combat).
     if (this.offer && this.clock > this.offerDeadline) this.applyTeamUpgrade(this.offer[0].id, 'Auto-select');
-    if (this.voteOpen && this.clock > this.voteDeadline) this.closeVote(false);
+    if (this.voteOpen && this.clock > this.voteDeadline) {
+      if (this.node) this.checkMapVote(true);
+      else this.closeVote(false);
+    }
+    if (this.node) {
+      this.node.update(dt, hdt, false, false);
+      if (!this.voteOpen) this.openMapVote();
+    }
     const hold = this.waves.phase === 'prep' && (!!this.offer || this.voteOpen || !!this.banking);
     if (!hold) this.waves.update(dt, hdt);
     this.hostileT += hdt;
@@ -1001,6 +1098,8 @@ export class ServerGame extends Game {
       cp: [this.checkpointOpen ? 1 : 0, this.team.atCheckpoint ? 1 : 0, this.voteOpen ? 1 : 0, Math.round(Math.max(0, this.voteDeadline - this.clock))],
       of: this.offer ? [this.offer.map((u) => u.id), this.offerChooser, Math.round(Math.max(0, this.offerDeadline - this.clock))] : 0,
       ups: this.director.build.total,
+      nd: this.node ? this.node.netState() : 0,
+      mv: this.mapVoteNet(),
       ht: Math.round(this.hostileT * 100) / 100,
     };
   }

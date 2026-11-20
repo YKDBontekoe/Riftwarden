@@ -84,6 +84,15 @@ export interface RunResult {
   survival?: SurvivalStats;
   /** M6: personal records broken by this run (labels), filled when recorded. */
   records?: string[];
+  /** Run map: act reached, nodes completed, act bosses defeated, compact path. */
+  map?: MapSummary;
+}
+
+export interface MapSummary {
+  act: number;
+  nodes: number;
+  actsCleared: number;
+  path: string[];
 }
 
 export interface ItemBrief {
@@ -116,6 +125,10 @@ export class RunLedger {
   xpMult = 1;
   /** XP already moved into the unsecured/secured pools. */
   private xpAccounted = 0;
+  /** Run map summary (map-mode runs; kept current by the session flow). */
+  map: MapSummary | null = null;
+  /** Items secured before a resume (the items themselves are in the save). */
+  private securedBefore = 0;
 
   constructor(
     readonly id: string,
@@ -229,6 +242,61 @@ export class RunLedger {
     return moved;
   }
 
+  /**
+   * Map nodes: after the node's checkpoint, anything collected since (hub rewards, late pickups) is banked
+   * when the run leaves the node. Only while at a checkpoint. Returns the moved rewards or null.
+   */
+  bankNode(): Rewards | null {
+    if (!this.atCheckpoint) return null;
+    this.accrueXp();
+    const moved = this.unsecured;
+    this.unsecured = emptyRewards();
+    this.secured.salvage += moved.salvage;
+    this.secured.credits += moved.credits;
+    this.secured.components += moved.components;
+    this.secured.shards += moved.shards;
+    this.secured.xp += moved.xp;
+    this.secured.items.push(...moved.items);
+    return moved;
+  }
+
+  /** Counters a resumed run continues from (no items: secured items live in the save). */
+  exportState(): Record<string, unknown> {
+    const { items: _items, ...secured } = this.secured;
+    void _items;
+    return {
+      duration: this.duration, kills: this.kills, wave: this.wave, wavesCleared: this.wavesCleared, checkpoints: this.checkpoints,
+      lastBankedWave: this.lastBankedWave, secured, securedItems: this.secured.items.length + this.securedBefore,
+      survival: structuredClone(this.survival), itemsCollected: this.itemsCollected, itemsDiscarded: this.itemsDiscarded, xpAccounted: this.xpAccounted,
+    };
+  }
+
+  /** Continue from exported counters (resume after the tab was closed). Untrusted input: numbers are clamped. */
+  restore(raw: Record<string, unknown>): void {
+    const n = (v: unknown, hi = 1e15) => (typeof v === 'number' && Number.isFinite(v) ? Math.max(0, Math.min(hi, v)) : 0);
+    this.duration = n(raw.duration);
+    this.kills = Math.floor(n(raw.kills));
+    this.wave = Math.max(1, Math.floor(n(raw.wave, 1e6)));
+    this.wavesCleared = Math.floor(n(raw.wavesCleared, 1e6));
+    this.checkpoints = Math.floor(n(raw.checkpoints, 1e6));
+    this.lastBankedWave = Math.floor(n(raw.lastBankedWave, 1e6));
+    const s = (raw.secured && typeof raw.secured === 'object' ? raw.secured : {}) as Record<string, unknown>;
+    this.secured = { salvage: n(s.salvage), credits: n(s.credits), components: n(s.components), shards: n(s.shards), xp: n(s.xp), items: [] };
+    this.securedBefore = Math.floor(n(raw.securedItems, 1e6));
+    const sv = (raw.survival && typeof raw.survival === 'object' ? raw.survival : {}) as Record<string, unknown>;
+    const base = emptySurvival();
+    for (const k of Object.keys(base) as (keyof SurvivalStats)[]) {
+      const v = sv[k];
+      if (Array.isArray(base[k])) (base as unknown as Record<string, unknown>)[k] = Array.isArray(v) ? v.filter((x) => typeof x === 'string').slice(0, 200) : [];
+      else if (typeof base[k] === 'boolean') (base as unknown as Record<string, unknown>)[k] = v === true;
+      else (base as unknown as Record<string, unknown>)[k] = n(v);
+    }
+    this.survival = base;
+    this.itemsCollected = Math.floor(n(raw.itemsCollected));
+    this.itemsDiscarded = Math.floor(n(raw.itemsDiscarded));
+    this.xpAccounted = Math.floor(n(raw.xpAccounted));
+  }
+
   /** Can the player extract to HQ right now (a checkpoint was just banked)? */
   get atCheckpoint(): boolean {
     return !this.ended && this.lastBankedWave > 0 && this.lastBankedWave === this.wavesCleared;
@@ -249,7 +317,7 @@ export class RunLedger {
       duration: this.duration,
       salvageSecured: this.secured.salvage,
       salvageLost: this.unsecured.salvage,
-      itemsSecured: this.secured.items.length,
+      itemsSecured: this.secured.items.length + this.securedBefore,
       itemsLost: this.unsecured.items.length,
       creditsSecured: this.secured.credits,
       creditsLost: this.unsecured.credits,
@@ -266,6 +334,7 @@ export class RunLedger {
       endedAt: now,
       itemsCollected: this.itemsCollected,
       survival: { ...this.survival, bosses: [...this.survival.bosses], events: [...this.survival.events], milestones: [...this.survival.milestones] },
+      ...(this.map ? { map: { ...this.map, path: [...this.map.path] } } : {}),
     };
     // Unsecured rewards are gone for good.
     this.unsecured = emptyRewards();

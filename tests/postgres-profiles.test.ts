@@ -1,3 +1,4 @@
+import { emptyCarry } from '../src/runmap/carry';
 import { randomBytes } from 'node:crypto';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -65,19 +66,27 @@ describe.skipIf(!testUrl)('PostgreSQL profiles', () => {
     data.tutorial.done.push('test');
     data.towers.unlocked.push('core:test');
     data.economy.tx.push('a', 'b');
-    beginRun(data, 'previous-run', 1);
+    // A map run: its interrupted history entry carries the path, the records the map fields.
+    beginRun(data, 'previous-run', 1, Date.now(), { mapSeed: 99 });
     bankRewards(data, 'previous-run', 5, { salvage: 5, items: [] });
+    data.activeRun!.map!.path = ['a1r0c0'];
+    data.activeRun!.map!.cleared = 1;
     resolveInterruptedRun(data);
     data.market.equipment[0].sold = true;
     data.market.modules[0].featured = false;
-    beginRun(data, 'active-run', 1);
+    beginRun(data, 'active-run', 1, Date.now(), { mapSeed: 7 });
     bankRewards(data, 'active-run', 5, { salvage: 3, items: [] });
+    data.activeRun!.map!.carry = { ...emptyCarry(), wave: 5, cores: 420, curses: ['famine'] };
+    data.activeRun!.map!.next = 'a1r1c0';
 
     await db.save([{ id: 'rich-profile', revision: null, data }]);
     const loaded = await db.load('rich-profile');
     expect(loaded?.revision).toBe(0);
     expect(json(loaded?.data)).toEqual(json(data));
     expect(loaded?.data.resources.shards).toBe(37);
+    expect(loaded?.data.activeRun?.map?.carry?.cores).toBe(420);
+    expect(loaded?.data.history[0].path).toEqual(['1C']);
+    expect(loaded?.data.records['1'].bestNodes).toBe(1);
     expect(loaded?.data.items.find((i) => i.uid === 'unique-choir')?.uniqueId).toBe('crucible_choir');
     expect(loaded?.data.items.find((i) => i.uid === 'unique-choir')?.weapon?.drones).toBe(unique.weapon!.drones);
     expect(loaded?.data.items.find((i) => i.uid === 'ascended-rail')?.rarity).toBe('ascended');

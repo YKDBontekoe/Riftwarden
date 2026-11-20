@@ -1,3 +1,4 @@
+import { NodeCard } from './RunMap';
 import { useEffect, useMemo, useState } from 'react';
 import { FACTION_AFFINITY } from '../combat/elements';
 import { ElementTag } from './ElementTag';
@@ -79,6 +80,7 @@ function SectorCard({ s }: { s: NonNullable<TransitInfo['sector']> }) {
         <span className="ls-tier">TIER {s.tier} · {s.tierName}</span>
       </div>
       <div className="ls-name">{s.name}</div>
+      {s.node && <NodeCard b={s.node} />}
       {s.layout.biome && (
         <div className={`ls-biome b-${s.layout.biome}`} data-testid="ls-biome">
           <b>{biomeOf(s.layout).name}</b>

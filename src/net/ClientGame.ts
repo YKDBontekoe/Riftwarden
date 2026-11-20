@@ -1,3 +1,7 @@
+import type { NodeNet } from '../arena/RunNode';
+import type { RunMapView } from '../runmap/view';
+import { reachable } from '../runmap/map';
+import { towerRefund } from '../runmap/carry';
 import { traceShot } from '../arena/shotTrace';
 import { hasLost, LIMB_IDS } from '../enemies/limbs';
 import { detachLimb } from '../enemies/limbRuntime';
@@ -346,6 +350,64 @@ export class ClientGame extends Game {
     this.sendingUpgrade = true;
     void this.request({ a: 'upgrade', pick: id }).finally(() => { this.sendingUpgrade = false; });
     return true;
+  }
+
+  /** Run map vote: a node id, or 'home' to extract. */
+  mapVote(choice: string): void {
+    void this.request({ a: 'mapVote', choice }).then(() => this.publishMapView());
+  }
+
+  /** Run map path/progress as the server reported it at the start of this node. */
+  mapInfo: { path: string[]; cleared: number; acts: number } = { path: [], cleared: 0, acts: 0 };
+  private mapVotes: [string, string][] = [];
+  private mapVoteLeft = -1;
+
+  protected override get nodeReplica(): boolean {
+    return true;
+  }
+
+  protected override nodeStation(station: string, opt: string): void {
+    void this.request({ a: 'station', station, opt }).then((ok) => ok && sfx.play('equip', { pitch: 1.2 }));
+  }
+
+  protected override nodeOpenMap(): void {
+    if (!this.voteOpen) return void uiEvents.emit('alert', { text: 'SECURE THE NODE FIRST', tone: 'orange' });
+    this.openCheckpoint();
+  }
+
+  override openCheckpoint(): void {
+    if (!this.node) return super.openCheckpoint();
+    if (!this.voteOpen || this.screen === 'defeat') return;
+    this.checkpointOpen = true;
+    super.openCheckpoint();
+    this.publishMapView();
+  }
+
+  /** The team map vote as the map screen shows it. */
+  private publishMapView(): void {
+    const n = this.node;
+    if (!n) return;
+    const seed = n.setup.mapSeed;
+    const names = new Map<string, string>([[this.you, this.myName || 'You'], ...[...this.remotes.values()].map((r) => [r.id, r.name] as [string, string])]);
+    const view: RunMapView = {
+      seed,
+      act: n.node.act,
+      current: n.node.id,
+      path: this.mapInfo.path,
+      reachable: reachable(seed, n.node.id).map((x) => x.id),
+      cleared: this.mapInfo.cleared + (n.complete ? 1 : 0),
+      actsCleared: this.mapInfo.acts,
+      cores: this.wallet.cores,
+      refund: towerRefund(this.turrets.turrets.filter((t) => !t.temporary)),
+      leftBehind: this.loot.count,
+      curses: [...n.carry.curses],
+      blessings: [...n.carry.blessings],
+      lastWave: n.combat ? n.to : n.from - 1,
+      coop: true,
+      votes: this.mapVotes.map(([id, v]) => ({ name: names.get(id) ?? id.slice(0, 6), vote: v || null, you: id === this.you, host: false })),
+      voteLeft: Math.max(0, this.mapVoteLeft),
+    };
+    hudStore.set({ runMap: view });
   }
 
   vote(home: boolean): void {
@@ -711,11 +773,18 @@ export class ClientGame extends Game {
     this.svHud = dec(s.sv) as ReturnType<Game['survival']['hud']>;
     this.bossData = s.boss;
     const cp = s.cp as number[];
+    if (s.nd && this.node) this.node.applyNet(s.nd as NodeNet);
+    if (Array.isArray(s.mv)) {
+      const mv = s.mv as [number, number, [string, string][]];
+      this.mapVotes = mv[2];
+      this.mapVoteLeft = mv[1];
+      if (this.screen === 'runmap') this.publishMapView();
+    }
     this.checkpointOpen = !!cp[0];
     const voteWas = this.voteOpen;
     this.voteOpen = !!cp[2];
     this.voteLeft = cp[3];
-    if (voteWas && !this.voteOpen && this.screen === 'checkpoint') this.setScreen('paused');
+    if (voteWas && !this.voteOpen && (this.screen === 'checkpoint' || this.screen === 'runmap')) this.setScreen('paused');
     const of = s.of as 0 | [string[], string | null, number];
     if (of) {
       const ids = of[0].join();
@@ -958,10 +1027,12 @@ export class ClientGame extends Game {
         if (ev[1]) {
           this.voteOpen = true;
           this.myVote = null;
-          this.openCheckpoint();
+          // Map votes: combat nodes open the map at once; hub visits wait for the exit rift (or H).
+          if (ev[1] !== 2 || this.node?.combat) this.openCheckpoint();
+          else uiEvents.emit('alert', { text: 'MAP VOTE OPEN · USE THE EXIT RIFT OR H', tone: 'blue' });
         } else {
           this.voteOpen = false;
-          if (this.screen === 'checkpoint') void this.continueRun();
+          if (this.screen === 'checkpoint' || this.screen === 'runmap') void this.continueRun();
         }
         return;
       case 'bank': {

@@ -120,6 +120,19 @@ export interface WavePlan {
   forced: boolean;
 }
 
+/**
+ * Run map: the waves of the current node. In map mode bosses appear only where a node puts them (the
+ * segment's last wave), the segment may force one event, and wave clear cores follow the node's income.
+ */
+export interface Segment {
+  from: number;
+  to: number;
+  boss: BossId | null;
+  event: EventId | null;
+  /** Wave clear core multiplier. */
+  cores: number;
+}
+
 export interface Forced {
   event?: EventId | null;
   boss?: BossId | null;
@@ -177,6 +190,16 @@ export class SurvivalPlanner {
   private forced = new Map<number, Forced>();
   /** Debug: evolutions activated out of schedule (wave -> id). */
   private extraEvo = new Map<number, EvolutionId>();
+  /** Run map mode: bosses only from node segments (null = classic endless scheduling). */
+  private segment: Segment | null = null;
+  private mapMode = false;
+
+  /** Enter run-map mode for a node's waves (clears memoised plans so history is recomputed under map rules). */
+  setSegment(seg: Segment): void {
+    this.mapMode = true;
+    this.segment = { ...seg };
+    this.plans.length = 0;
+  }
 
   constructor(
     readonly seed: number,
@@ -245,7 +268,9 @@ export class SurvivalPlanner {
     const minGap = Math.max(4, 7 - Math.floor(n / 25));
     const maxGap = minGap + 4;
     let bossId: BossId | null = null;
+    const seg = this.segment && n >= this.segment.from && n <= this.segment.to ? this.segment : null;
     if (f?.boss !== undefined) bossId = f.boss;
+    else if (this.mapMode) bossId = seg && n === seg.to ? seg.boss : null;
     else if (n >= t.bossFirstWave && !evolution && since >= minGap) {
       const p = Math.min(1, (since - minGap + 1) / (maxGap - minGap + 1));
       if (r() < p || n === t.bossFirstWave + 2 && lastBoss === 0) {
@@ -262,6 +287,7 @@ export class SurvivalPlanner {
     // ---- event (never on boss waves, never two waves in a row, per-event repeat gap)
     let event: EventId | null = null;
     if (f?.event !== undefined) event = f.event;
+    else if (seg?.event && !boss && n === Math.min(seg.to - 1, seg.from + 2)) event = seg.event;
     else if (!boss && n >= 4) {
       const lastEvent = findLastIndex(prev, (p) => !!p.event);
       const gapOk = lastEvent < 0 || n - (lastEvent + 1) >= 2;
@@ -300,7 +326,7 @@ export class SurvivalPlanner {
     const t = this.tier;
     const hp = hpMultiplier(n) * t.hpMult;
     const dmg = damageMultiplier(n) * t.damageMult;
-    const base = { number: n, hpMult: hp, damageMult: dmg, speedMult: t.speedMult, prepTime: prepTime(n), clearReward: 60 + Math.min(n, 2000) * 15, plan };
+    const base = { number: n, hpMult: hp, damageMult: dmg, speedMult: t.speedMult, prepTime: prepTime(n), clearReward: Math.round((60 + Math.min(n, 2000) * 15) * (this.segment && n >= this.segment.from && n <= this.segment.to ? this.segment.cores : 1)), plan };
     if (n <= HAND_WAVES.length && !plan.event && !plan.boss) return { ...base, spawns: expand(HAND_WAVES[n - 1], t.countMult) };
     const r = mulberry32(h32(this.seed >>> 0, n, 0xc0de));
     return { ...base, spawns: composeSpawns(n, plan, t, r, this.faction) };

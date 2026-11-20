@@ -7,6 +7,7 @@ import { SurvivalHud } from './SurvivalHud';
 import { Banner, CenterPanel, Cores, Hint, Overlays, Perf, PlayerPanel, Respawn, RunPanel, TopCenter, WeaponPanel } from './hud/Panels';
 import { Crosshair, DamageDirection, DamageNumbers, HealthBars, Hitmarker, KillChain, KillPulse } from './hud/Feedback';
 import { Radar } from './hud/Radar';
+import { NodeChip } from './RunMap';
 export { Banner, Perf } from './hud/Panels';
 
 export function Hud({ game }: { game: Game }) {
@@ -31,6 +32,7 @@ export function Hud({ game }: { game: Game }) {
       </aside>
       <TopCenter />
       <SurvivalHud />
+      <NodeChip />
       <aside className="hud-rail hud-starboard">
         <Cores />
         <RunPanel />

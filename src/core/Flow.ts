@@ -13,11 +13,18 @@ import { RunLedger, type RunOutcome } from '../progression/run';
 import * as TX from '../economy/transactions';
 import type { SaveData } from '../progression/save';
 import { equipFromStorage, uninstallModule } from '../progression/save';
-import { applyLoadout, bankRewards, beginRun, deployBlocker, equippedItem, recordRun, selectTier } from '../progression/save';
-import { getTier, THREAT_TIERS } from '../progression/tiers';
+import { applyLoadout, bankRewards, beginRun, deployBlocker, equippedItem, itemByUid, recordRun, resolveInterruptedRun, selectTier } from '../progression/save';
+import { fitsSlot } from '../progression/items';
+import { MapSession } from './mapSession';
+import { findNode, type MapNode, mapSeedFor } from '../runmap/map';
+import { NODE_KINDS } from '../runmap/defs';
+import { newMapState, resumable } from '../runmap/state';
+import { type RunCarry, sanitizeCarry } from '../runmap/carry';
+import { nodeBrief } from '../runmap/brief';
+import { getTier, THREAT_TIERS, type ThreatTier } from '../progression/tiers';
 import { hudStore, type Location, uiEvents } from '../ui/store';
 import type { DevTools } from '../arena/DevTools';
-import { Game } from './Game';
+import { type ArenaConfig, Game } from './Game';
 import { SurvivalPlanner } from '../survival/plan';
 import { tutorialActive } from '../progression/tutorial';
 import { Input } from './Input';
@@ -236,8 +243,8 @@ export class Flow {
 
   // ------------------------------------------------------------------ runs
 
-  /** Start a fresh run on the selected tier. Callable from HQ or after a defeat. */
-  async deploy(tierId = this.profile.save.threat.selected): Promise<boolean> {
+  /** Start a fresh run on the selected tier. Callable from HQ or after a defeat. Map runs may name an entry node. */
+  async deploy(tierId = this.profile.save.threat.selected, entryNode?: string): Promise<boolean> {
     if (this.busy || (this.run && !this.run.ended)) return false;
     // Online profiles deploy through the co-op lobby only (the server owns their progression).
     if (this.profile.online) return false;
@@ -251,20 +258,63 @@ export class Flow {
     // Request pointer lock inside the click gesture; the canvas keeps it across scenes.
     void this.input.requestLock();
     const tier = getTier(tierId);
-    const runId = newUid('run');
+    const runId = this.pendingRunId ?? newUid('run');
+    this.pendingRunId = null;
+    const mapSeed = this.mapMode ? Flow.mapSeedOf(runId) : 0;
     this.profile.mutate((d) => {
       if (!this.devNext) selectTier(d, tierId);
-      beginRun(d, runId, tierId);
+      beginRun(d, runId, tierId, Date.now(), { mapSeed });
     });
+    const run = new RunLedger(runId, tierId, Date.now());
+    this.run = run;
+    if (this.devNext) run.survival.dev = true;
+    if (mapSeed) {
+      this.map = new MapSession(this.profile, run, structuredClone(this.profile.save.activeRun!.map!), loadout);
+      await this.playNode(this.map.entry(entryNode), null);
+      return true;
+    }
+    this.map = null;
     const layout = Flow.layoutFor(this.arenaSeedFor(runId));
-    await this.transition(`DEPLOYING · THREAT TIER ${tier.roman}`, `${layout.name ?? 'Sector 07 reactor'} · ${tier.name}`, () => {
-      const run = new RunLedger(runId, tierId, Date.now());
-      this.run = run;
+    await this.launchArena(`DEPLOYING · THREAT TIER ${tier.roman}`, `${layout.name ?? 'Sector 07 reactor'} · ${tier.name}`, layout, tier, { loadout });
+    return true;
+  }
+
+  /** Map seed of a run id (the HQ previews it before deploying). */
+  static mapSeedOf(runId: string): number {
+    return mapSeedFor(hashRunSeed(runId));
+  }
+
+  /** Map seed the next deployment will use (HQ preview). */
+  mapSeedPreview(): number {
+    return Flow.mapSeedOf(this.previewRunId());
+  }
+
+  /** Co-op map screen: vote for a node (or 'home' to extract). */
+  mapVote(choice: string): void {
+    if (this.arena instanceof ClientGame) this.arena.mapVote(choice);
+  }
+
+  /** Run id the next deployment will use (so the HQ can preview its map). Map runs only. */
+  previewRunId(): string {
+    return (this.pendingRunId ??= newUid('run'));
+  }
+  private pendingRunId: string | null = null;
+  /** Co-op run map (what the replica knows about the team's path). */
+  coopMap: { seed: number; path: string[]; cleared: number; acts: number } | null = null;
+  /** Run map session of the current solo run (null = classic endless run). */
+  map: MapSession | null = null;
+  /** Solo runs use the branching run map (?test defaults to the classic endless flow; ?map opts in). */
+  mapMode = true;
+
+  /** Build one arena for the current run ledger (classic runs and every map node). */
+  private async launchArena(title: string, sub: string, layout: ArenaLayout, tier: ThreatTier, extra: Partial<ArenaConfig> & Pick<ArenaConfig, 'loadout'>, players?: number): Promise<void> {
+    const run = this.run!;
+    const save = this.profile.save;
+    await this.transition(title, sub, () => {
       this.renderQuality = this.settings.quality;
       this.resize();
       this.arena = new Game(this.engine, this.canvas, this.havok, this.settings, this.input, {
         tier,
-        loadout,
         run,
         seed: this.nextUpgradeSeed ?? undefined,
         towerTech: [...save.towers.unlocked],
@@ -278,16 +328,83 @@ export class Flow {
           bank: (wave, rewards) => !run.survival.dev && this.profile.mutate((d) => bankRewards(d, run.id, wave, rewards, { bosses: run.survival.bossesKilled })) && this.profile.lastWriteOk,
           checkpoint: () => {},
           defeat: () => this.endRun('defeat'),
+          mapOpened: () => this.publishMap(),
+          actCleared: () => this.map?.actCleared(),
         },
+        ...extra,
       });
       this.arena.devTools = this.devTools;
       this.arena.skipUpgrades = this.skipUpgrades || !!(globalThis as { __skipUpgrades?: boolean }).__skipUpgrades;
-      if (this.devNext) run.survival.dev = true;
       this.location = 'arena';
       return this.arena.scene;
-    }, { kind: 'arena', sector: { name: layout.name ?? 'Sector 07 Reactor', code: layout.code ?? 'CLASSIC', layout, tier: tier.roman, tierName: tier.name } });
+    }, { kind: 'arena', sector: { name: layout.name ?? 'Sector 07 Reactor', code: layout.code ?? 'CLASSIC', layout, tier: tier.roman, tierName: tier.name, players, node: extra.node ? nodeBrief(extra.node.node, run.wavesCleared) : undefined } });
     this.arena!.start();
+  }
+
+  /** Enter a map node: a fresh arena for its sector with the carried run state. */
+  private async playNode(node: MapNode, carry: RunCarry | null): Promise<void> {
+    const map = this.map!;
+    const run = this.run!;
+    const base = getTier(run.tier);
+    const { tier, setup } = map.configFor(node, carry, base);
+    map.entered(node);
+    const layout = Flow.layoutFor(this.arenaMode === 'classic' ? 0 : node.seed);
+    const kind = NODE_KINDS[node.kind];
+    const save = this.profile.save;
+    const tech = [...new Set([...save.towers.unlocked, ...(carry?.runTech ?? [])])];
+    const title = `ACT ${node.act} · ${node.actBoss ? 'ACT BOSS' : kind.name.toUpperCase()} · TIER ${base.roman}`;
+    await this.launchArena(title, `${layout.name ?? 'Sector 07 reactor'} · ${kind.blurb}`, layout, tier, { loadout: map.carried, node: setup, towerTech: tech });
+  }
+
+  /** Map screen: travel to a reachable node (banks what the current node still holds, then swaps arenas). */
+  async travel(nodeId: string): Promise<boolean> {
+    const a = this.arena;
+    const map = this.map;
+    if (this.busy || !a || !map || !a.canReturnHome || this.coopRun) return false;
+    const next = map.reachable().find((n) => n.id === nodeId);
+    if (!next) return false;
+    sfx.play('ui');
+    void this.input.requestLock();
+    const carry = map.leave(a, next.id);
+    await this.playNode(next, carry);
     return true;
+  }
+
+  /** Resume a run closed after a completed node: the chosen next node starts over with the stored carry. */
+  async resumeRun(): Promise<boolean> {
+    if (this.busy || this.profile.online || (this.run && !this.run.ended)) return false;
+    const a = this.profile.save.activeRun;
+    const m = a?.map;
+    if (!a || !m || !resumable(m) || deployBlocker(this.profile.save)) return false;
+    const next = findNode(m.seed, m.next!);
+    if (!next) return false;
+    sfx.init();
+    sfx.play('ui');
+    void this.input.requestLock();
+    const run = new RunLedger(a.id, a.tier, a.startedAt);
+    if (m.ledger) run.restore(m.ledger);
+    this.run = run;
+    const save = this.profile.save;
+    // Run gear banked into the save is now profile-owned: it deploys as carried gear.
+    const loadout = Object.fromEntries(SLOT_IDS.map((slot) => {
+      const uid = m.carry!.loadout[slot];
+      const it = (uid && itemByUid(save, uid)) || equippedItem(save, slot);
+      return [slot, it && fitsSlot(it, slot) ? structuredClone(it) : null];
+    }));
+    this.map = new MapSession(this.profile, run, structuredClone(m), loadout, a.nodeBank ?? 0);
+    await this.playNode(next, m.carry);
+    return true;
+  }
+
+  /** End a suspended (resumable) run from the HQ: recorded as interrupted, banked rewards stay. */
+  endSuspendedRun(): boolean {
+    if (this.run && !this.run.ended) return false;
+    return !!this.profile.mutate((d) => resolveInterruptedRun(d) !== null);
+  }
+
+  /** Publish the map screen's view of the current run. */
+  publishMap(): void {
+    if (this.map) hudStore.set({ runMap: this.map.view(this.arena) });
   }
 
   /** Record the current run exactly once and publish its result. */
@@ -321,9 +438,12 @@ export class Flow {
   /** Checkpoint extraction: secured rewards are already in the save. */
   async returnHome(): Promise<boolean> {
     const a = this.arena;
-    if (this.busy || !a || !a.canReturnHome) return false;
+    if (this.busy || !a || !a.canReturnHome || this.coopRun) return false;
     sfx.play('ui');
+    // Map runs bank what the node still holds and count it before extracting.
+    this.map?.leave(a, null);
     this.endRun('returned');
+    this.map = null;
     await this.toHome('summary');
     return true;
   }
@@ -337,6 +457,7 @@ export class Flow {
     }
     if (this.busy || !this.arena || !this.run || this.run.ended) return false;
     this.endRun('abandoned');
+    this.map = null;
     await this.toHome('summary');
     return true;
   }
@@ -354,6 +475,7 @@ export class Flow {
   /** Defeat screen shortcut: fresh run on the same tier. */
   async redeploy(): Promise<boolean> {
     if (this.busy || !this.run?.ended) return false;
+    this.map = null;
     return this.deploy(this.run.tier);
   }
 
@@ -490,6 +612,11 @@ export class Flow {
     const me = run.players.find((p) => p.id === run.you);
     const net = this.net!;
     const layout = Flow.layoutFor(run.arena ?? 0);
+    // Run map: the node this arena plays (the server sends the carry it was entered with).
+    const mapNode = run.node ? findNode(run.node.map, run.node.id) : null;
+    const carry = run.node?.carry ? sanitizeCarry(run.node.carry) : null;
+    const nodeCfg = mapNode && run.node ? new MapSession(this.profile, new RunLedger(run.runId, run.tier, 0), { ...newMapState(run.node.map), current: run.node.id }, {}).configFor(mapNode, carry, tier) : null;
+    if (nodeCfg) this.coopMap = { seed: run.node!.map, path: [...run.node!.path], cleared: run.node!.cleared, acts: run.node!.acts };
     await this.transition(`CO-OP DEPLOYMENT · THREAT TIER ${tier.roman}`, `${run.players.length} wardens · ${layout.name ?? 'Sector 07 reactor'}`, () => {
       const ledger = new RunLedger(run.runId, run.tier, Date.now());
       this.run = ledger;
@@ -504,6 +631,7 @@ export class Flow {
         {
           tier,
           loadout: run.loadout as never,
+          ...(nodeCfg ? { tier: nodeCfg.tier, node: nodeCfg.setup } : {}),
           run: ledger,
           seed: run.seed,
           layout,
@@ -518,11 +646,12 @@ export class Flow {
         { send: (m) => net.send(m), act: (a) => net.act(a), get rtt() { return net.rtt; } },
       );
       g.myName = me?.name ?? 'You';
+      if (run.node) g.mapInfo = { path: [...run.node.path], cleared: run.node.cleared, acts: run.node.acts };
       Object.defineProperty(g, 'devTools', { value: false });
       this.arena = g;
       this.location = 'arena';
       return g.scene;
-    }, { kind: 'arena', sector: { name: layout.name ?? 'Sector 07 Reactor', code: layout.code ?? 'CLASSIC', layout, tier: tier.roman, tierName: tier.name, players: run.players.length } });
+    }, { kind: 'arena', sector: { name: layout.name ?? 'Sector 07 Reactor', code: layout.code ?? 'CLASSIC', layout, tier: tier.roman, tierName: tier.name, players: run.players.length, node: mapNode ? nodeBrief(mapNode, carry?.wave ?? 0) : undefined } });
     const g = this.arena as ClientGame;
     g.start();
     g.onEvents(this.netQueue.events);

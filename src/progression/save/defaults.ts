@@ -10,9 +10,9 @@ export const DEFAULT_FACILITIES = ['command', 'deployment', 'configuration', 'st
 
 export const emptyLoadout = (): Record<SlotId, string | null> => Object.fromEntries(SLOT_IDS.map((s) => [s, null])) as Record<SlotId, string | null>;
 
-export const emptyRecord = (): TierRecord => ({ bestWave: 0, bestKills: 0, runs: 0, checkpoints: 0, salvageSecured: 0, longestRun: 0, lastPlayedAt: 0, highestWave: 0, bossesDefeated: 0, elitesDefeated: 0, bestBossesRun: 0, bestPlayerDamage: 0, bestTowerDamage: 0, deaths: 0, itemsBanked: 0 });
+export const emptyRecord = (): TierRecord => ({ bestWave: 0, bestKills: 0, runs: 0, checkpoints: 0, salvageSecured: 0, longestRun: 0, lastPlayedAt: 0, highestWave: 0, bossesDefeated: 0, elitesDefeated: 0, bestBossesRun: 0, bestPlayerDamage: 0, bestTowerDamage: 0, deaths: 0, itemsBanked: 0, deepestAct: 0, bestNodes: 0, actsCleared: 0 });
 
-const emptyTotals = (): SaveData['totals'] => ({ runs: 0, returned: 0, defeated: 0, abandoned: 0, interrupted: 0, kills: 0, salvageSecured: 0, itemsSecured: 0, itemsLost: 0, itemsScrapped: 0, bestRarity: -1, bossesDefeated: 0, elitesDefeated: 0, deaths: 0, playerDamage: 0, towerDamage: 0, reactorDamage: 0, devRuns: 0 });
+const emptyTotals = (): SaveData['totals'] => ({ runs: 0, returned: 0, defeated: 0, abandoned: 0, interrupted: 0, kills: 0, salvageSecured: 0, itemsSecured: 0, itemsLost: 0, itemsScrapped: 0, bestRarity: -1, bossesDefeated: 0, elitesDefeated: 0, deaths: 0, playerDamage: 0, towerDamage: 0, reactorDamage: 0, devRuns: 0, nodesCleared: 0, actsCleared: 0 });
 
 export const defaultPresets = (): LoadoutPreset[] => Array.from({ length: PRESET_COUNT }, (_, i) => ({ name: `CONFIG ${String.fromCharCode(65 + i)}`, slots: emptyLoadout() }));
 

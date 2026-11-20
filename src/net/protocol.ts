@@ -6,7 +6,7 @@
  * rewards, online profiles); clients send intents (movement state, shot claims, actions) which
  * the server validates. Messages are validated structurally here before any game code sees them.
  */
-export const PROTOCOL_VERSION = 10;
+export const PROTOCOL_VERSION = 11;
 export const MAX_PLAYERS = 4;
 export const MAX_MESSAGE_BYTES = 64 * 1024;
 /** Authoritative simulation and snapshot rates (Hz). */
@@ -31,6 +31,8 @@ export type ActMsg =
   | { a: 'collect'; pickup: number }
   | { a: 'upgrade'; pick: string }
   | { a: 'vote'; home: boolean }
+  | { a: 'mapVote'; choice: string }
+  | { a: 'station'; station: string; opt: string }
   | { a: 'equip'; uid: string; slot?: string }
   | { a: 'unequip'; slot: string }
   | { a: 'discard'; uid: string }
@@ -144,6 +146,8 @@ export interface RunStart {
   milestones: string[];
   /** Present when rejoining an operation in progress. */
   rejoin: boolean;
+  /** Run map: the node this arena plays (map seed, path so far, the carry it was entered with). */
+  node?: { id: string; map: number; path: string[]; cleared: number; acts: number; carry: unknown } | null;
 }
 
 // ------------------------------------------------------------------ validation
@@ -183,6 +187,10 @@ function validAct(o: Record<string, unknown>): boolean {
       return isStr(o.pick, 48);
     case 'vote':
       return isBool(o.home);
+    case 'mapVote':
+      return isStr(o.choice, 24);
+    case 'station':
+      return isStr(o.station, 16) && isStr(o.opt, 32);
     case 'equip':
       return isStr(o.uid, 120) && (o.slot === undefined || isStr(o.slot, 24));
     case 'unequip':

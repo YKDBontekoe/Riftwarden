@@ -1,3 +1,4 @@
+import { sanitizeMapState } from '../../runmap/state';
 import { isDamageElement } from '../../combat/elements';
 import { SURVEY_DESK } from '../../home/layout';
 import { furnitureOccupied, coreCell, connectedFloors, edgeCells, cellKey, emptyStructure, inBounds, isMovableStation, parseCell, type StationPose, type Structure } from '../../home/build/model';
@@ -46,6 +47,9 @@ function sanitizeRecord(v: unknown): TierRecord {
     bestTowerDamage: num(r.bestTowerDamage, 0, 0, 1e300),
     deaths: int(r.deaths, 0),
     itemsBanked: int(r.itemsBanked, 0),
+    deepestAct: int(r.deepestAct, 0),
+    bestNodes: int(r.bestNodes, 0),
+    actsCleared: int(r.actsCleared, 0),
   };
 }
 
@@ -266,6 +270,8 @@ function sanitizeHistory(v: unknown): RunHistoryEntry | null {
     milestones: arr(r.milestones).filter((x): x is string => typeof x === 'string').slice(0, 32),
     records: arr(r.records).filter((x): x is string => typeof x === 'string').slice(0, 16),
     dev: r.dev === true,
+    // Run map fields only on map-mode runs (older entries serialize unchanged).
+    ...(typeof r.act === 'number' && r.act > 0 ? { act: int(r.act, 1, 1), nodes: int(r.nodes, 0), path: arr(r.path).filter((x): x is string => typeof x === 'string').slice(0, 120).map((x) => x.slice(0, 8)) } : {}),
   };
 }
 
@@ -481,6 +487,11 @@ export function sanitizeSave(raw: unknown, now = Date.now()): { data: SaveData; 
       creditsSecured: int(ar.creditsSecured, 0),
       componentsSecured: int(ar.componentsSecured, 0),
     };
+    const map = sanitizeMapState(ar.map);
+    if (map) {
+      data.activeRun.map = map;
+      data.activeRun.nodeBank = int(ar.nodeBank, 0);
+    }
   }
 
   const base = obj(r.base);

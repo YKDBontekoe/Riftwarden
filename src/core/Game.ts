@@ -42,7 +42,7 @@ import { createSunShadows } from '../arena/shadows';
 import { CORE_BEHAVIORS } from '../enemies/coreBehaviors';
 import { DROP_SOURCES, type DropSourceId } from '../loot/drops';
 import { equipmentModifiers, weaponDefFor } from '../loot/equipment';
-import { flatScale, hashSeed } from '../loot/generate';
+import { flatScale, generateItem, hashSeed } from '../loot/generate';
 import { convertsToSalvage, LootField, type Pickup } from '../loot/LootField';
 import { rarity } from '../loot/rarity';
 import { scrapValue } from '../loot/economy';
@@ -66,7 +66,7 @@ import { Kit } from '../visuals/kit';
 import { createPalette, type Palette } from '../visuals/materials';
 import { buildReactor, type ReactorRig } from '../visuals/models';
 import { WaveManager } from '../waves/WaveManager';
-import type { WaveDef } from '../waves/waves';
+import type { SpawnEntry, WaveDef } from '../waves/waves';
 import { earlyCallBonus } from '../waves/pace';
 import { ARENA, type ArenaLayout, type GateId } from '../world/layout';
 import { EnemyNavigator } from '../enemies/navigation';
@@ -75,6 +75,7 @@ import { Hazards } from '../arena/Hazards';
 import { biomeOf } from '../world/biomes';
 import { tintPalette } from '../visuals/biomeLook';
 import { ENV_QUERY } from '../world/physicsGroups';
+import { type NodeHost, type NodeSetup, RunNode } from '../arena/RunNode';
 import { type Impact, Ordnance, Telegraphs } from '../fx/Hostile';
 import { M6_BEHAVIORS } from '../enemies/behaviors';
 import { JAMMER_CRAWLER_BEHAVIORS } from '../enemies/jammerCrawlerBehaviors';
@@ -105,6 +106,10 @@ export interface ArenaHooks {
   checkpoint(): void;
   /** Reactor destroyed. */
   defeat(): void;
+  /** Run map: the map screen opened (the flow publishes the map view). */
+  mapOpened?(): void;
+  /** Run map: an act boss fell. */
+  actCleared?(act: number): void;
 }
 
 export interface ArenaConfig {
@@ -125,6 +130,8 @@ export interface ArenaConfig {
   tree?: { seed: number; allocated: readonly string[] };
   /** Arena layout for this run (procedural from the run seed); defaults to the classic hand-built arena. */
   layout?: ArenaLayout;
+  /** Run map node this arena plays (absent = classic endless run with checkpoint choices). */
+  node?: NodeSetup;
 }
 
 /**
@@ -246,6 +253,8 @@ export class Game {
 
   /** Return-home window: open from checkpoint prep until the next wave starts. */
   checkpointOpen = false;
+  /** Run map node (segment, hub stations, carry); null on classic endless runs. */
+  node: RunNode | null = null;
 
   // ---- M6 survival
   /** Resolves once every M6 shader (enemy/boss/telegraph/ordnance/arena-machinery) is compiled. */
@@ -385,8 +394,11 @@ export class Game {
     this.loot = new LootField(scene, this.kit, this.pal);
     this.loot.onLand = (p) => this.pickups.landed(p);
     this.inventory = new RunInventory(cfg.loadout, cfg.run);
-    this.lootRand = mulberry32(hashSeed(cfg.run.id));
-    this.shardRand = mulberry32((hashSeed(cfg.run.id) ^ 0x51ed27a3) >>> 0);
+    if (cfg.node?.carry) this.inventory.adoptLoadout(cfg.node.carry.loadout);
+    // Every map node rolls its own loot stream (a new arena must not replay the previous node's drops).
+    const nodeSalt = cfg.node?.node.seed ?? 0;
+    this.lootRand = mulberry32((hashSeed(cfg.run.id) ^ nodeSalt) >>> 0);
+    this.shardRand = mulberry32((hashSeed(cfg.run.id) ^ 0x51ed27a3 ^ nodeSalt) >>> 0);
     this.towerTech = new Set([...STARTER_TECH, ...(cfg.towerTech ?? [])]);
     this.applyTree(cfg.tree);
     this.director = new Director(this, cfg.seed ?? hashRunSeed(cfg.run.id));
@@ -429,17 +441,7 @@ export class Game {
     };
 
     this.waves = new WaveManager({
-      spawn: (s, w) => {
-        let hp = w.hpMult * (s.hpMult ?? 1);
-        let dmg = w.damageMult;
-        if (s.tag === 'boss') {
-          const b = bossMults(s.encounter ?? 1, cfg.tier);
-          hp *= b.hp;
-          dmg *= b.damage;
-        }
-        // The gate (or the forward rift the enemy came out of) flares.
-        this.arenaVisuals.gateSpawned(s.gate, this.enemies.spawn(s.kind, s.gate, this.layout, hp, dmg, w.speedMult, { mods: s.mods, tag: s.tag, encounter: s.encounter, ctx: this.enemyCtx }).path[0]);
-      },
+      spawn: (s, w) => this.spawnEntry(s, w),
       aliveCount: () => this.enemies.count,
       onWaveStart: (w) => this.waveStarted(w),
       onWaveCleared: (w) => this.waveCleared(w),
@@ -491,6 +493,97 @@ export class Game {
         if (this.screen !== 'playing' && this.screen !== 'defeat') this.setScreen('playing');
       },
     });
+    if (cfg.node) this.node = new RunNode(this.nodeHost(), cfg.node, this.nodeReplica);
+  }
+
+  /** Spawn one wave entry (waves, vault guardians, ambushes). */
+  protected spawnEntry(s: SpawnEntry, w: WaveDef): void {
+    let hp = w.hpMult * (s.hpMult ?? 1);
+    let dmg = w.damageMult;
+    if (s.tag === 'boss') {
+      const b = bossMults(s.encounter ?? 1, this.cfg.tier);
+      hp *= b.hp;
+      dmg *= b.damage;
+    }
+    // The gate (or the forward rift the enemy came out of) flares.
+    this.arenaVisuals.gateSpawned(s.gate, this.enemies.spawn(s.kind, s.gate, this.layout, hp, dmg, w.speedMult, { mods: s.mods, tag: s.tag, encounter: s.encounter, ctx: this.enemyCtx }).path[0]);
+  }
+
+  /** Co-op replicas show the node; the server plays it. */
+  protected get nodeReplica(): boolean {
+    return false;
+  }
+
+  /** A node station hands an item to the player (co-op server: the acting avatar). */
+  protected nodeGrant(item: ItemInstance): boolean {
+    if (!this.inventory.collect(item)) return false;
+    this.inventoryVersion++;
+    return true;
+  }
+
+  /** A node asks for the run map (exit rift); the co-op server opens a vote instead. */
+  protected nodeOpenMap(): void {
+    this.checkpointOpen = true;
+    this.openCheckpoint();
+  }
+
+  /** A node opened a station panel (local UI). */
+  protected nodeOpenPanel(): void {
+    this.setBuildMode(false);
+    this.tactical.deactivate();
+    this.setScreen('station');
+    this.input.releaseLock();
+  }
+
+  /** Co-op replica: a station action goes to the server. */
+  protected nodeStation(_station: string, _opt: string): void {}
+
+  /** Narrow host for the run-map node (see arena/RunNode). */
+  protected nodeHost(): NodeHost {
+    const g = this;
+    return {
+      get scene() { return g.scene; }, // prettier-ignore
+      get kit() { return g.kit; }, // prettier-ignore
+      get pal() { return g.pal; }, // prettier-ignore
+      get layout() { return g.layout; }, // prettier-ignore
+      get waves() { return g.waves; }, // prettier-ignore
+      get planner() { return g.planner; }, // prettier-ignore
+      get run() { return g.cfg.run; }, // prettier-ignore
+      get build() { return g.director.build; }, // prettier-ignore
+      get lootLevelBonus() { return g.cfg.tier.lootLevelBonus; }, // prettier-ignore
+      get cores() { return g.wallet.cores; }, // prettier-ignore
+      set cores(v: number) { g.wallet.cores = Math.max(0, Math.floor(v)); }, // prettier-ignore
+      get reactorHp() { return g.reactorHp; }, // prettier-ignore
+      set reactorHp(v: number) { g.reactorHp = v; }, // prettier-ignore
+      reactorMax: ECONOMY.reactorMaxHp,
+      get ult() { return g.abilities.ult; }, // prettier-ignore
+      set ult(v: number) { g.abilities.ult = v; }, // prettier-ignore
+      get lootCounter() { return g.lootCounter; }, // prettier-ignore
+      set lootCounter(v: number) { g.lootCounter = v; }, // prettier-ignore
+      get dropChanceMult() { return g.dropChanceMult; }, // prettier-ignore
+      set dropChanceMult(v: number) { g.dropChanceMult = v; }, // prettier-ignore
+      get dealt() { return g.director.dealt; }, // prettier-ignore
+      playerEye: () => g.player.camera.position,
+      playerDir: () => g.player.camera.getDirection(Vector3.Forward()),
+      playerPos: () => g.player.position,
+      towers: () => g.turrets.turrets.filter((t) => !t.temporary).map((t) => ({ paid: t.paid, wrecked: t.wrecked })),
+      loadout: () => ({ ...g.inventory.loadout }),
+      pickupsLeft: () => g.loot.count,
+      rebuildStats: () => g.rebuildStats(),
+      rebuildEffects: () => g.director.rebuildEffects(),
+      spawnEntry: (s, w) => g.spawnEntry(s, w),
+      enemiesAlive: () => g.enemies.count,
+      dropFrom: (src, at) => void g.dropFrom(src, at),
+      makeItem: (o, level) => generateItem({ uid: `${g.cfg.run.id}.m${o.seed.toString(36)}`, seed: o.seed, level, rarity: o.rarity, category: o.category, source: g.cfg.run.id }),
+      sendStation: (st, opt) => g.nodeStation(st, opt),
+      grantItem: (item) => g.nodeGrant(item),
+      openUpgrade: () => g.openUpgrade(),
+      openMap: () => g.nodeOpenMap(),
+      openPanel: () => g.nodeOpenPanel(),
+      screenPlaying: () => g.screen === 'playing',
+      tacticalRefill: () => (g.tactical.energy = TacticalEnergy.MAX),
+      actCleared: (act) => g.cfg.hooks.actCleared?.(act),
+    };
   }
 
   // ---------------------------------------------------------------- wave lifecycle
@@ -551,17 +644,20 @@ export class Game {
       } else if (this.cfg.run.survival.dev) uiEvents.emit('banner', { title: 'CHECKPOINT · DEVELOPMENT SESSION', sub: 'Development tools were used this run: nothing is banked to HQ', tone: 'white' });
       else uiEvents.emit('banner', { title: 'CHECKPOINT · SAVE FAILED', sub: 'Rewards are held by the run but could not be written to storage yet', tone: 'red' });
     } else uiEvents.emit('banner', { title: `WAVE ${w.number} CLEARED`, sub: `+${w.clearReward} cores · +${salvage} salvage · +${credits} cr · reactor repaired`, tone: 'cyan' });
+    this.node?.waveCleared(w.number);
   }
 
   protected prepStarted(w: WaveDef): void {
     this.arenaVisuals.prepareWave(w.spawns.map((entry) => entry.gate));
     this.survival.prep(w);
     this.cfg.run.waveReached(w.number);
-    if (w.number > 1 && this.cfg.run.atCheckpoint) this.checkpointOpen = true;
+    // Run map: the map (not the checkpoint panel) opens once the node's segment is complete.
+    if (this.node) this.checkpointOpen = this.node.complete;
+    else if (w.number > 1 && this.cfg.run.atCheckpoint) this.checkpointOpen = true;
     // Mandatory upgrade choice first (the prep countdown is frozen while it is open), then the checkpoint choice.
     if (this.skipUpgrades) this.upgradeDue = false;
     if (this.upgradeDue && w.number > 1) this.openUpgrade();
-    else if (this.checkpointOpen) this.openCheckpoint();
+    else if (this.checkpointOpen && (!this.node || this.node.mapDue)) this.openCheckpoint();
   }
 
   // ---------------------------------------------------------------- M7 onboarding
@@ -683,7 +779,7 @@ export class Game {
    */
   rebuildStats(): void {
     this.gearEffects = gearUniques(this.inventory.equippedItems(this.weaponSlots.inactive));
-    const mods = [...equipmentModifiers(this.inventory.equippedItems(this.weaponSlots.inactive)), ...this.treeMods, ...this.modifiers, ...this.director.build.modifiers(), ...this.director.buffModifiers()];
+    const mods = [...equipmentModifiers(this.inventory.equippedItems(this.weaponSlots.inactive)), ...this.treeMods, ...this.modifiers, ...this.director.build.modifiers(), ...this.director.buffModifiers(), ...(this.node?.mods() ?? [])];
     Object.assign(this.stats, computeStats(mods));
     this.player.applyStats(this.stats, this.attackerScale);
     this.tactical.rechargeMult = this.stats.tacticalRechargeMult;
@@ -864,7 +960,7 @@ export class Game {
   }
 
   protected async afterUpgrade(): Promise<void> {
-    if (this.checkpointOpen && this.cfg.run.atCheckpoint) {
+    if (this.checkpointOpen && this.cfg.run.atCheckpoint && (!this.node || this.node.mapDue)) {
       this.openCheckpoint();
       return;
     }
@@ -1029,20 +1125,27 @@ export class Game {
     if (!this.checkpointOpen || this.screen === 'defeat') return;
     this.setBuildMode(false);
     this.tactical.deactivate();
-    this.setScreen('checkpoint');
+    if (this.node) {
+      this.node.mapDue = false;
+      this.cfg.hooks.mapOpened?.();
+    }
+    this.setScreen(this.node ? 'runmap' : 'checkpoint');
     this.publishHud(true);
     this.input.releaseLock();
   }
 
   /** Continue survival from the checkpoint (return option stays available during prep). */
   async continueRun(): Promise<void> {
-    if (this.screen !== 'checkpoint') return;
+    if (this.screen !== 'checkpoint' && this.screen !== 'runmap' && this.screen !== 'station') return;
+    const was = this.screen;
     sfx.play('ui');
+    if (this.node) this.node.panelStation = null;
     await this.resume();
-    if (this.screen === 'checkpoint') this.setScreen('paused');
+    if (this.screen === was) this.setScreen('paused');
   }
 
   get canReturnHome(): boolean {
+    if (this.node) return this.node.complete && !this.node.guardiansActive && this.cfg.run.atCheckpoint && this.waves.phase === 'prep' && this.screen !== 'defeat';
     return this.checkpointOpen && this.cfg.run.atCheckpoint && this.waves.phase === 'prep' && this.screen !== 'defeat';
   }
 
@@ -1054,6 +1157,7 @@ export class Game {
     this.disposed = true;
     this.input.onLockChange = () => {};
     this.director.bus.reset();
+    this.node?.dispose();
     sfx.setTactical(false);
     sfx.beamLoop(false);
     this.scene.dispose();
@@ -1095,6 +1199,7 @@ export class Game {
     this.construction.setActive(false);
     this.weapon.setHolstered(false);
     this.waves.reset();
+    this.node?.begin();
     sfx.setTactical(false);
     this.publishHud(true);
   }
@@ -1154,7 +1259,10 @@ export class Game {
       // F repairs the tower under the crosshair on mazing arenas; otherwise it fires ability II.
       if (input.pressed('KeyF') && !(this.towers.inspected && this.layout.mazing)) this.useAbility('ability2');
       if (input.pressed('KeyT') && this.waves.phase === 'combat') this.useAbility('ultimate');
-      if (input.pressed('KeyH') && this.canReturnHome) this.openCheckpoint();
+      if (input.pressed('KeyH') && this.canReturnHome) {
+        this.checkpointOpen = true;
+        this.openCheckpoint();
+      }
       if (input.pressed('KeyI') || input.pressed('Tab')) {
         this.openInventory();
         return;
@@ -1215,6 +1323,7 @@ export class Game {
     this.updateInspect(dt, controls);
     this.updateLootTarget(controls);
     this.loot.update(dt);
+    this.node?.update(dt, hdt, controls, controls && !this.lootTarget && input.pressed('KeyE'));
 
     // ---- simulation (hostile time)
     if (this.screen === 'playing') this.waves.update(dt, hdt);
@@ -1324,6 +1433,11 @@ export class Game {
 
   protected setBuildMode(on: boolean): void {
     if (on === this.construction.active) return;
+    if (on && this.node?.noTowers) {
+      uiEvents.emit('alert', { text: 'NULL FIELD · NO TOWER CONSTRUCTION ON THIS NODE', tone: 'orange' });
+      sfx.play('buildDeny');
+      return;
+    }
     this.construction.setActive(on);
     this.weapon.setHolstered(on);
     sfx.play('ui');
@@ -1824,8 +1938,8 @@ export class Game {
   /** Copy measured damage totals into the run ledger (before the run is finalized/recorded). */
   syncStats(): void {
     const sv = this.cfg.run.survival;
-    sv.playerDamage = this.director.dealt.player;
-    sv.towerDamage = this.director.dealt.tower;
+    sv.playerDamage = this.director.dealt.player + (this.node?.dealtBefore.player ?? 0);
+    sv.towerDamage = this.director.dealt.tower + (this.node?.dealtBefore.tower ?? 0);
   }
 
   /** Automation hook: same path as enemy attacks. */
@@ -2066,6 +2180,7 @@ export class Game {
         ? this.perfHud()
         : null,
       m6: this.survival.hud(),
+      node: this.node?.hud() ?? null,
     });
     void force;
   }

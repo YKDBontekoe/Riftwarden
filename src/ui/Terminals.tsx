@@ -1,3 +1,4 @@
+import { DeployMapPanel, ResumeCard } from './DeployMap';
 import { useMemo, useState } from 'react';
 import { sfx } from '../audio/Sfx';
 import { fmtNum, formatModifier, STAT_DEFS } from '../combat/stats';
@@ -41,10 +42,11 @@ export function DeployTerminal({ flow, close }: { flow: Flow; close: () => void 
   const weapon = equippedItem(save, 'weapon');
   const blocker = deployBlocker(save);
   const gearCount = SLOTS.filter((s) => save.loadout[s.id]).length;
+  const [entry, setEntry] = useState<string | null>(null);
   const deploy = () => {
     if (busy) return;
     setBusy(true);
-    void flow.deploy(selected.id).then((ok) => {
+    void flow.deploy(selected.id, entry ?? undefined).then((ok) => {
       if (!ok) setBusy(false);
     });
   };
@@ -65,8 +67,9 @@ export function DeployTerminal({ flow, close }: { flow: Flow; close: () => void 
       ) : (
       <div className="deploy-grid">
         <div className="arena-card">
-          <div className="operation-heading"><h2>Reactor yard</h2><span>Sector 07</span></div>
-          <FacilityPlan />
+          <ResumeCard flow={flow} save={save} />
+          {flow.mapMode ? <DeployMapPanel flow={flow} save={save} entry={entry} onEntry={setEntry} /> : <><div className="operation-heading"><h2>Reactor yard</h2><span>Sector 07</span></div>
+          <FacilityPlan /></>}
           <p>Hold the reactor. Build along the marked approaches and bank your haul every {CHECKPOINT_INTERVAL} waves.</p>
           <details className="field-notes">
             <summary>Survival rules</summary>
