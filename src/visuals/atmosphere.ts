@@ -334,6 +334,8 @@ export class Atmosphere {
 
   private buildSkyline(): void {
     const cut = new TransformNode('quarryCut', this.scene);
+    // Pushed out with larger arenas, but kept inside the sky dome (radius 300, follows the camera).
+    const k = Math.min(1.35, Math.max(1, (this.layout.half + 30) / 74));
     // Surveyed cuts sit beyond the retaining walls. The low northern saddle frames the magnet.
     for (const [x, z, yaw, length, height, depth] of [
       [42, 84, 1.92, 142, 118, 93], [69, 73, 1.44, 116, 154, 100],
@@ -341,7 +343,7 @@ export class Atmosphere {
       [72, -43, -0.82, 102, 67, 83], [-85, 30, -0.41, 132, 108, 99],
       [-78, -33, 0.75, 119, 88, 85], [-32, -93, 1.21, 149, 76, 95],
       [23, -104, 1.75, 140, 97, 120],
-    ]) placeScan(cut, 'rock', [x * 1.35, -9, z * 1.35], yaw, [length * 1.1, height * 0.8, depth]);
+    ]) placeScan(cut, 'rock', [x * 1.35 * k, -9, z * 1.35 * k], yaw, [length * 1.1 * k, height * 0.8 * Math.sqrt(k), depth * k]);
   }
 
   private buildLamps(): void {
@@ -408,7 +410,8 @@ export class Atmosphere {
       sp.rotation.y = yaw + Math.PI;
       splashes.push(sp);
     };
-    for (let c = -36; c <= 36; c += 12) {
+    const reach = Math.floor((H - 8) / 12) * 12;
+    for (let c = -reach; c <= reach; c += 12) {
       if (Math.abs(c) > 8) {
         place(c, -H, 0, 1);
         place(c, H, 0, -1);

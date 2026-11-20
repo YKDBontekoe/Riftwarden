@@ -1,3 +1,4 @@
+import { LoadingScreen } from './LoadingScreen';
 import { BoundKey } from './hud/widgets';
 import { CoopPanel, urlJoinCode } from './Coop';
 import { SettingsPanel } from './SettingsPanel';
@@ -61,7 +62,7 @@ export function App({ getFlow }: Props) {
       {screen === 'defeat' && flow && <DefeatScreen flow={flow} />}
       {screen === 'summary' && flow && <SummaryScreen flow={flow} />}
       {screen === 'construct' && flow && home && <ConstructionPanel key={`cons${flow.transitions}`} flow={flow} />}
-      {screen === 'transit' && <Transit />}
+      {screen === 'transit' && <LoadingScreen />}
     </>
   );
 }
@@ -75,25 +76,6 @@ function Loading() {
           <i />
         </div>
         <div className="load-text">Initializing headquarters systems…</div>
-      </div>
-    </div>
-  );
-}
-
-function Transit() {
-  const t = useHud((s) => s.transit);
-  return (
-    <div className="screen transit">
-      <div className="transit-box">
-        <div className="transit-ring">
-          <i />
-          <i />
-        </div>
-        <div className="transit-title">{t?.title ?? 'TRANSFERRING'}</div>
-        <div className="transit-sub">{t?.sub ?? ''}</div>
-        <div className="load-bar">
-          <i />
-        </div>
       </div>
     </div>
   );

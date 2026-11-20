@@ -63,6 +63,8 @@ import { arenaDeckWetness } from '../visuals/textures';
 import { WaveManager } from '../waves/WaveManager';
 import { earlyCallBonus } from '../waves/pace';
 import { ARENA, type ArenaLayout, type GateId } from '../world/layout';
+import { EnemyNavigator } from '../enemies/navigation';
+import { TowerWear } from '../arena/TowerWear';
 import { ENV_QUERY } from '../world/physicsGroups';
 import { type Impact, Ordnance, Telegraphs } from '../fx/Hostile';
 import { M6_BEHAVIORS } from '../enemies/behaviors';
@@ -117,6 +119,8 @@ export interface ArenaConfig {
   tutorial?: TutorialHost;
   /** Warden skill tree (seed + allocated nodes), snapshotted at deployment. */
   tree?: { seed: number; allocated: readonly string[] };
+  /** Arena layout for this run (procedural from the run seed); defaults to the classic hand-built arena. */
+  layout?: ArenaLayout;
 }
 
 /**
@@ -236,7 +240,12 @@ export class Game {
   readonly survival: SurvivalRuntime;
   /** Development lab actions (F4 panel / `__rift.dev`); every action taints the run. */
   readonly dev: DevTools;
-  readonly layout: ArenaLayout = ARENA;
+  /** This run's arena (procedural from the run seed, or the classic hand-built arena). */
+  get layout(): ArenaLayout {
+    return this.cfg.layout ?? ARENA;
+  }
+  /** Tower durability (breaches, wrecks, repairs) on mazing arenas. */
+  readonly wear: TowerWear;
   /** Hostile time since the run started (enemy animation phase). */
   protected hostileT = 0;
   protected playerWasAlive = true;
@@ -269,7 +278,7 @@ export class Game {
     this.kit = new Kit(scene);
 
     // Alpine horizon, haze, lamps and embers. PBR ambient comes from the captured environment.
-    this.atmosphere = new Atmosphere(scene, this.pal, ARENA);
+    this.atmosphere = new Atmosphere(scene, this.pal, this.layout);
     this.atmosphere.setQuality(high);
     scene.fogMode = Scene.FOGMODE_EXP2;
     scene.fogDensity = 0.0042;
@@ -289,14 +298,14 @@ export class Game {
     this.reactorLight.range = 30;
 
     // Arena
-    const arena = new ArenaBuilder(scene, this.pal, ARENA);
+    const arena = new ArenaBuilder(scene, this.pal, this.layout);
     arena.build();
     this.atmosphere.lightYard(arena.meshes);
     this.arenaVisuals = arena;
     this.atmosphere.adoptPortals();
     this.reactor = buildReactor(scene, this.pal, high);
 
-    this.player = new Player(scene, ARENA.playerSpawn);
+    this.player = new Player(scene, this.layout.playerSpawn);
     scene.activeCamera = this.player.camera;
     const weaponDef = weaponDefFor(cfg.loadout.weapon);
     if (!weaponDef) throw new Error('deployment requires an equipped weapon');
@@ -306,7 +315,7 @@ export class Game {
     Object.assign(this.post, { baseContrast: 1.22, baseExposure: 1.08 }); // arena grade: punchier than the HQ
     this.mood = new MoodDirector(scene, this.moon, this.post);
 
-    this.fx = new Effects(scene, this.kit, this.pal, ARENA, high);
+    this.fx = new Effects(scene, this.kit, this.pal, this.layout, high);
     this.wfx = new WeaponFx(scene);
     this.wfx.setColor(this.weapon.rig.energyBase);
     this.fx.onShake = (pos, strength) => {
@@ -321,10 +330,11 @@ export class Game {
     const sg = createSunShadows(moon, settings.shadows ?? (high ? 'high' : 'low'), high, [...arena.shadowCasters, ...reactorCasters]);
     if (sg) this.kit.shadowSink = (m) => sg.addShadowCaster(m);
     this.enemies = new EnemyManager(scene, this.kit, this.pal);
+    this.wear = this.setupMazing();
     for (const [kind, b] of Object.entries({ ...CORE_BEHAVIORS, ...M6_BEHAVIORS, ...JAMMER_CRAWLER_BEHAVIORS, ...BOSS_BEHAVIORS })) if (b) this.enemies.register(kind as EnemyKind, b as Behavior);
     this.tele = new Telegraphs(scene);
     this.ordnance = new Ordnance(scene, this.tele);
-    this.dynamics = new ArenaDynamics(scene, this.pal, ARENA, {
+    this.dynamics = new ArenaDynamics(scene, this.pal, this.layout, {
       playerPos: () => this.player.position,
       movePlayer: (to) => {
         this.player.controller.setPosition(to);
@@ -352,7 +362,7 @@ export class Game {
     this.planner = new SurvivalPlanner(((cfg.seed ?? hashRunSeed(cfg.run.id)) >>> 0) ^ 0x6d2b79f5, cfg.tier);
     this.survival = new SurvivalRuntime(this);
     this.turrets = new TurretManager(scene, this.kit, this.pal);
-    this.construction = new Construction(scene, (cfg, u) => this.turrets.build(cfg, 1, u), this.pal, ARENA);
+    this.construction = new Construction(scene, (cfg, u) => this.turrets.build(cfg, 1, u), this.pal, this.layout);
     this.loot = new LootField(scene, this.kit, this.pal);
     this.loot.onLand = (p) => this.onLootLanded(p);
     this.inventory = new RunInventory(cfg.loadout, cfg.run);
@@ -368,7 +378,7 @@ export class Game {
     this.enemyCtx = {
       player: this.player,
       effects: this.fx,
-      layout: ARENA,
+      layout: this.layout,
       damageReactor: (a, at) => this.damageReactor(a, at),
       los: (a, b) => this.los(a, b),
       panFor: (p) => this.panFor(p),
@@ -405,8 +415,8 @@ export class Game {
           hp *= b.hp;
           dmg *= b.damage;
         }
-        this.enemies.spawn(s.kind, s.gate, ARENA, hp, dmg, w.speedMult, { mods: s.mods, tag: s.tag, encounter: s.encounter, ctx: this.enemyCtx });
-        this.arenaVisuals.gateSpawned(s.gate);
+        // The gate (or the forward rift the enemy came out of) flares.
+        this.arenaVisuals.gateSpawned(s.gate, this.enemies.spawn(s.kind, s.gate, this.layout, hp, dmg, w.speedMult, { mods: s.mods, tag: s.tag, encounter: s.encounter, ctx: this.enemyCtx }).path[0]);
       },
       aliveCount: () => this.enemies.count,
       onWaveStart: (w) => {
@@ -496,9 +506,9 @@ export class Game {
       const e = sfx.emitter(k, x, y, z, g, ref);
       if (e) this.emitters.push(e);
     };
-    em('reactor', ARENA.reactor.x, 3, ARENA.reactor.z, 1, 6);
+    em('reactor', this.layout.reactor.x, 3, this.layout.reactor.z, 1, 6);
     for (const gate of ['north', 'east', 'west'] as const) {
-      const p = ARENA.routes[gate].points[0];
+      const p = this.layout.routes[gate].points[0];
       em('machine', p.x, 2, p.z, 0.8, 5);
     }
     if (cfg.tutorial) this.tut = new TutorialDirector('arena', cfg.tutorial, { available: (id) => this.tutAvailable(id), complete: (id, t) => this.tutComplete(id, t) });
@@ -1254,6 +1264,7 @@ export class Game {
     this.motionFx();
     this.post.update(dt, k, this.hurtFx, flash);
 
+    this.wear.tick(this.waves.phase, this.towerHpScale());
     this.updateArenaVisuals(dt, hdt);
 
     if (this.screen === 'defeat') {
@@ -1342,7 +1353,9 @@ export class Game {
       sfx.play('buildDeny');
       return;
     }
-    this.turrets.add(c.point, this.player.yaw, this.turretCtx, this.buildConfig).paid = cost;
+    const built = this.turrets.add(c.point, this.player.yaw, this.turretCtx, this.buildConfig);
+    built.paid = cost;
+    built.rescaleHp(this.towerHpScale());
     this.turretsBuilt++;
     this.bumpStats();
     this.fx.burst('build', c.point.add(new Vector3(0, 0.5, 0)), 40);
@@ -1364,10 +1377,15 @@ export class Game {
     if (t !== this.inspected) this.recycleT = 0;
     this.inspected = t;
     this.construction.showInspect(t);
+    if (t && controls && this.input.pressed('KeyF') && this.layout.mazing) {
+      const why = this.wear.repair(t);
+      if (why) this.towerFail(why);
+      else this.towerNote = { text: `${t.name} repaired`, t: 2.5 };
+    }
     if (t && this.input.isDown('KeyX')) {
       this.recycleT += dt / 0.6;
       if (this.recycleT >= 1) {
-        const refund = Math.round(t.paid * t.refundRatio);
+        const refund = t.recycleValue;
         this.wallet.earn(refund);
         uiEvents.emit('coresGained', refund);
         this.fx.burst('build', t.head, 30);
@@ -1715,7 +1733,7 @@ export class Game {
       drones: drones.map((d) => ({ alive: d.alive, pos: d.position })),
       clearShot: (i) => this.los(lift, drones[i].eye),
       towers: this.turrets.turrets,
-      reactor: ARENA.reactor,
+      reactor: this.layout.reactor,
     });
     for (const h of plan.droneHits) this.hurtPlayer(h.amount, center, drones[h.index]);
     if (plan.reactorDamage > 0) this.damageReactor(plan.reactorDamage, center);
@@ -1761,7 +1779,8 @@ export class Game {
       // Join the lane whose path passes closest to the summon point.
       let best = Infinity;
       for (const g of this.survival.plan?.gates ?? ['north', 'east', 'west']) {
-        const p = ARENA.routes[g].points[2];
+        const pts = this.layout.routes[g].points;
+        const p = pts[Math.min(2, pts.length - 1)];
         const d = (p.x - at.x) ** 2 + (p.z - at.z) ** 2;
         if (d < best) {
           best = d;
@@ -1769,7 +1788,7 @@ export class Game {
         }
       }
     }
-    const e = this.enemies.spawn(kind, gate, ARENA, w.hpMult, w.damageMult, w.speedMult, { mods: o.mods, tag: 'summon', ctx: this.enemyCtx });
+    const e = this.enemies.spawn(kind, gate, this.layout, w.hpMult, w.damageMult, w.speedMult, { mods: o.mods, tag: 'summon', ctx: this.enemyCtx });
     // Start at the summon point, heading for the nearest waypoint of that lane.
     let seg = 1;
     let bd = Infinity;
@@ -1782,6 +1801,7 @@ export class Game {
     }
     e.pos.set(at.x, 0, at.z);
     e.seg = seg;
+    e.navV = -1; // procedural arenas: re-plan from the summon point
     e.motion?.reset(e.pos, e.yaw);
     this.fx.burst('build', e.center(), 20);
     return e;
@@ -1834,10 +1854,42 @@ export class Game {
     return out;
   }
 
-  /** Towers recompose their numbers (arena state changed their fire-rate boost). */
+  /** Towers recompose their numbers (arena state changed their fire-rate boost); the tower set may have changed. */
   bumpStats(): void {
     this.statsVersion++;
     this.turretCtx.statsVersion = this.statsVersion;
+    this.enemies.nav?.sync();
+  }
+
+  /** Tower max-HP scale: follows the hostile damage multiplier of the current wave (sqrt: towers stay relevant). */
+  towerHpScale(): number {
+    const m = this.waves?.wave?.damageMult ?? 1;
+    return Math.sqrt(Math.max(1, m));
+  }
+
+  /** Procedural arenas: nav-grid pathing for enemies and breachable towers. */
+  protected setupMazing(): TowerWear {
+    // Getters: the tower manager and effects are created after the enemy manager.
+    const game = this;
+    const wear = new TowerWear({
+      get towers() {
+        return game.turrets.turrets;
+      },
+      get fx() {
+        return game.fx;
+      },
+      spend: (n) => this.wallet.spend(n),
+      alert: (text, tone) => uiEvents.emit('alert', { text, tone }),
+      changed: () => this.bumpStats(),
+      editReason: () => this.towerEditReason(),
+    });
+    if (this.layout.mazing) {
+      this.enemies.nav = new EnemyNavigator(this.layout, {
+        towers: () => this.turrets.turrets.map((t) => ({ id: t.id, x: t.pos.x, z: t.pos.z, radius: t.radius, blocking: t.blocking })),
+        breach: (id, dmg, by) => this.wear.breach(id, dmg, by),
+      });
+    }
+    return wear;
   }
 
   towerFireBoost(t: Turret): number {
@@ -2121,7 +2173,7 @@ export class Game {
       buildMessage: c.message,
       buildCost: configCost(this.buildConfig, this.stats.buildCostMult),
       m5: this.towerHud(),
-      inspect: t ? { name: t.name, kills: t.kills, damage: Math.round(t.damageDealt), refund: Math.round(t.paid * t.refundRatio), recycle: this.recycleT, card: this.towerInfo(t), edit: this.towerEditReason() } : null,
+      inspect: t ? { name: t.name, kills: t.kills, damage: Math.round(t.damageDealt), refund: t.recycleValue, recycle: this.recycleT, card: this.towerInfo(t), edit: this.towerEditReason(), hp: this.layout.mazing ? { hp: Math.round(t.hp), max: t.maxHp, wrecked: t.wrecked, repair: t.repairCost } : null } : null,
       hint,
       spread: 6 + this.weapon.spread * 900,
       perf: this.perfOn

@@ -21,9 +21,12 @@ async function boot(): Promise<void> {
 
   const params = new URLSearchParams(location.search);
   flow.devTools = params.has('dev') || params.has('test');
+  if (params.has('classic')) flow.arenaMode = 'classic';
   if (params.has('test')) {
     // Automation mode: no real pointer lock required.
     flow.input.forceCapture = true;
+    // Legacy acceptance suites measure the hand-built arena; ?procedural opts into generated sectors.
+    flow.arenaMode = params.has('procedural') ? 'procedural' : 'classic';
     (window as unknown as { __rift: unknown }).__rift = flow.debugApi();
   }
 

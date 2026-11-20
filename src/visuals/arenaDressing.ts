@@ -291,8 +291,12 @@ export class ArenaDressing {
   private outside(): void {
     const P = this.P;
     const H = this.L.half;
+    // Larger (procedural) arenas push the far industry out with the walls.
+    const k = Math.max(1, (H + 30) / 74);
     // Tall cooling structures are visible above different edges of the yard.
-    for (const [x, z, radius, height] of [[-70, 103, 14, 53], [-96, 124, 12, 44], [110, 63, 10, 38], [50, -126, 16, 55]]) {
+    for (const [x0, z0, radius, height] of [[-70, 103, 14, 53], [-96, 124, 12, 44], [110, 63, 10, 38], [50, -126, 16, 55]]) {
+      const x = x0 * k;
+      const z = z0 * k;
       const tower = new Mesh('coolingTower', this.h.scene);
       smoothLatheData([
         [radius, -8], [radius, 2], [radius * 0.93, height * 0.27], [radius * 0.72, height * 0.60],
@@ -307,7 +311,9 @@ export class ArenaDressing {
       }
     }
     // Refinery stacks with banded rings and red aviation lights.
-    for (const [x, z, d, h] of [[-78, 58, 7, 34], [-66, 72, 4.5, 26], [84, 66, 8, 38], [92, -48, 6, 30], [-88, -64, 7, 32], [70, -80, 4, 22]]) {
+    for (const [x0, z0, d, h] of [[-78, 58, 7, 34], [-66, 72, 4.5, 26], [84, 66, 8, 38], [92, -48, 6, 30], [-88, -64, 7, 32], [70, -80, 4, 22]]) {
+      const x = x0 * k;
+      const z = z0 * k;
       this.pipe('y', 0, h, x, z, d, P.graphite);
       for (let y = 6; y < h - 2; y += 7) this.pipe('y', y, y + 0.6, x, z, d + 0.4, P.metal);
       this.pipe('y', h, h + 0.5, x, z, d + 0.6, P.metal);
@@ -355,10 +361,12 @@ export class ArenaDressing {
         else this.h.box(c + Math.sign(c) * 3.8 - 0.4, 0, t - 0.4, c + Math.sign(c) * 8.4 + 0.4, 9.3, t + 0.4, P.graphite, null);
       }
     };
-    line(false, H + 2, -42, 42);
-    line(true, -H - 2, -42, 42);
+    line(false, H + 2, -H + 2, H - 2);
+    line(true, -H - 2, -H + 2, H - 2);
     // Lattice masts with cross-arms and a beacon.
-    for (const [x, z] of [[-62, 18], [64, 24], [-58, -30], [30, -66], [-24, 68]]) {
+    for (const [x0, z0] of [[-62, 18], [64, 24], [-58, -30], [30, -66], [-24, 68]]) {
+      const x = x0 * k;
+      const z = z0 * k;
       for (const [dx, dz] of [[-0.6, -0.6], [0.6, -0.6], [-0.6, 0.6], [0.6, 0.6]]) this.pipe('y', 0, 28, x + dx, z + dz, 0.16, P.metal);
       for (let y = 4; y < 28; y += 4) this.cbox(x, y, z, 0.7, 0.06, 0.7, P.graphite);
       this.cbox(x, 24, z, 3.2, 0.12, 0.12, P.graphite);

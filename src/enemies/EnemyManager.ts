@@ -16,6 +16,7 @@ import type { DroneRig, WalkerRig } from '../visuals/models';
 import { buildEliteParts, buildThreatMark, type EliteParts, type ThreatMark } from '../visuals/eliteParts';
 import { ELITE, type EliteModId, eliteName, validMods } from '../survival/elites';
 import type { ArenaLayout, GateId, Vec2 } from '../world/layout';
+import type { EnemyNavigator } from './navigation';
 import { WalkerMotion } from './walkerMotion';
 
 export interface EnemyContext {
@@ -125,6 +126,13 @@ export class Enemy implements Health {
   flinch = 0;
   stuckT = 0;
   bestDist = Infinity;
+  /** Gate whose wave this enemy belongs to (lane identity even when it came out of a forward rift). */
+  gate: GateId = 'north';
+  /** Navigation field version the current path was planned on (procedural arenas). */
+  navV = -1;
+  /** Breaching: tower being hit and time to the next hit. */
+  breachId = 0;
+  breachT = 0;
   damageMult = 1;
   speedMult = 1;
   /** Remaining path length to the reactor: lower = more dangerous (turret priority). */
@@ -263,6 +271,8 @@ export class EnemyManager {
   elitesKilled = 0;
   /** M7: lifecycle observers (replication). */
   hooks: EnemyHooks = {};
+  /** Procedural arenas: nav-grid pathing, forward rifts and tower breaching (null = classic fixed lanes). */
+  nav: EnemyNavigator | null = null;
 
   constructor(scene: Scene, readonly kit: Kit, readonly P: Palette) {
     this.markMats = {
@@ -403,7 +413,16 @@ export class EnemyManager {
     this.applyMods(e, o.mods ?? []);
     // Offset lane so groups spread out instead of single-file (heavies and bosses stay central).
     const lateral = (Math.random() * 2 - 1) * (def.role === 'boss' ? 0 : def.radius > 1 ? 0.6 : 1.3);
-    e.path = offsetPath(layout.routes[gate].points, lateral);
+    e.gate = gate;
+    e.breachId = 0;
+    if (this.nav) {
+      const from = this.nav.spawnPoint(gate, def.role);
+      e.path = offsetPath(this.nav.pathFrom(kind, from, gate), lateral);
+      e.navV = this.nav.grid(kind).version;
+    } else {
+      e.path = offsetPath(layout.routes[gate].points, lateral);
+      e.navV = -1;
+    }
     const start = e.path[0];
     const dir = { x: e.path[1].x - start.x, z: e.path[1].z - start.z };
     const back = def.role === 'boss' ? 0 : Math.random() * 2;
@@ -714,6 +733,11 @@ export class EnemyManager {
     const dz = target.z - e.pos.z;
     const dist = Math.hypot(dx, dz);
     const step = speed * hdt;
+    if (this.nav && dist > 1e-4 && this.nav.blocked(e, e.pos.x + (dx / dist) * Math.min(step + 0.3, dist), e.pos.z + (dz / dist) * Math.min(step + 0.3, dist), hdt)) {
+      e.yaw = turnTowards(e.yaw, Math.atan2(dx, dz), hdt * turnRate);
+      e.stuckT = 0;
+      return false;
+    }
     if (dist <= step + 0.05) {
       e.pos.x = target.x;
       e.pos.z = target.z;
@@ -797,6 +821,7 @@ export class EnemyManager {
       this.aiMs = performance.now() - t0;
       return;
     }
+    this.nav?.tick(dt);
     // Separation (n is small; O(n^2) is cheaper than a spatial structure here). Bosses are immovable.
     const list = this.active;
     for (let i = 0; i < list.length; i++) {
@@ -840,6 +865,7 @@ export class EnemyManager {
       if (e.elite) this.updateElite(e, hdt, ctx);
       if (e.threat) this.animateThreat(e, ctx.time);
       if (!e.alive) continue;
+      if (this.nav && this.nav.refresh(e)) e.remaining = pathLength(e.path, e.seg, e.pos);
 
       e.behavior.update(e, hdt, ctx, this);
     }

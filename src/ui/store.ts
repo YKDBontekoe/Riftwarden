@@ -1,3 +1,4 @@
+import type { ArenaLayout } from '../world/layout';
 import { DEFAULT_SETTINGS, type Settings } from '../core/settings';
 import { useSyncExternalStore } from 'react';
 import type { RunResult } from '../progression/run';
@@ -53,6 +54,18 @@ export interface TowerCard {
   damage: number;
 }
 
+/** Loading screen (scene swap) content. */
+export interface TransitInfo {
+  title: string;
+  sub: string;
+  /** What is loading: drives the loading-screen art. */
+  kind?: 'arena' | 'hq' | 'visit';
+  /** Current loading stage (0 = charting, 1 = building, 2 = compiling, 3 = ready). */
+  stage?: number;
+  /** Procedural sector being deployed to (map preview + stats). */
+  sector?: { name: string; code: string; layout: ArenaLayout; tier: string; tierName: string; players?: number } | null;
+}
+
 export interface InspectInfo {
   name: string;
   kills: number;
@@ -62,6 +75,8 @@ export interface InspectInfo {
   card?: TowerCard;
   /** Why tower edits are unavailable right now (null = allowed). */
   edit?: string | null;
+  /** Durability on mazing arenas (null on the classic arena). */
+  hp?: { hp: number; max: number; wrecked: boolean; repair: number } | null;
 }
 
 export interface M5Hud {
@@ -144,7 +159,7 @@ export interface HudState {
   terminal: TerminalId | null;
   prompt: PromptInfo | null;
   area: string;
-  transit: { title: string; sub: string } | null;
+  transit: TransitInfo | null;
   run: RunHud | null;
   /** Result of the run that just ended (summary / defeat screens). */
   lastRun: RunResult | null;

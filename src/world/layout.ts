@@ -56,6 +56,22 @@ export interface ArenaLayout {
   barriers: Box[];
   /** M6: plasma vents opened by evolution B: on the lanes, erupt periodically. */
   vents: { x: number; z: number; r: number }[];
+  /** Procedural arenas: generator seed (absent = the hand-built classic arena). */
+  seed?: number;
+  /** Procedural arenas: display name and short sector code (loading screen, HUD). */
+  name?: string;
+  code?: string;
+  /** Towers may stand on lanes; ground enemies path on a nav grid and breach blocking towers. */
+  mazing?: boolean;
+  /** Forward rifts: spawn points inside the arena, grouped by the gate whose waves they carry. */
+  rifts?: Rift[];
+}
+
+/** A forward rift: a spawn point inside the arena that carries part of a gate's waves (keeps first contact fast). */
+export interface Rift {
+  gate: GateId;
+  x: number;
+  z: number;
 }
 
 const HALF = 44;
@@ -81,13 +97,15 @@ function rotBox(rot: Rot, x0: number, z0: number, x1: number, z1: number, y0: nu
   };
 }
 
-function buildLayout(): ArenaLayout {
-  const boxes: Box[] = [];
-  const ramps: Ramp[] = [];
 
-  // Outer perimeter with gate openings on N, E, W. South wall is solid.
+/**
+ * Perimeter walls with the four gate openings and their tunnels (shared by the classic and generated arenas,
+ * so gate frames, mist, lights and dressing always line up with the walls).
+ */
+export function perimeterBoxes(H: number): Box[] {
+  const boxes: Box[] = [];
   const g = GATE_HALF;
-  const H = HALF;
+  // Outer perimeter with gate openings on N, E, W. South wall is solid.
   // South wall (two halves around the sealed south gate)
   boxes.push({ min: [-H - WALL_T, 0, -H - WALL_T], max: [-g, WALL_H, -H], kind: 'wall' });
   boxes.push({ min: [g, 0, -H - WALL_T], max: [H + WALL_T, WALL_H, -H], kind: 'wall' });
@@ -106,9 +124,25 @@ function buildLayout(): ArenaLayout {
     boxes.push(rotBox(rot, -g - WALL_T, H, -g, H + TUNNEL_LEN, 0, WALL_H, 'gate'));
     boxes.push(rotBox(rot, g, H, g + WALL_T, H + TUNNEL_LEN, 0, WALL_H, 'gate'));
     boxes.push(rotBox(rot, -g - WALL_T, H + TUNNEL_LEN, g + WALL_T, H + TUNNEL_LEN + WALL_T, 0, WALL_H, 'gate'));
-    // Partition block that bends the lane (not on the south side: the deck behind the drone's spawn stays open).
-    if (rot !== rotS) boxes.push(rotBox(rot, -7, 21, 3, 27, 0, 4.5, 'block'));
   }
+
+  return boxes;
+}
+
+/** Sealed blast door filling the south gate opening. */
+export function southDoorBox(H: number): Box {
+  return { min: [-GATE_HALF, 0, -H - WALL_T], max: [GATE_HALF, WALL_H, -H], kind: 'gate' };
+}
+
+export const LAYOUT_CONST = { WALL_T, WALL_H, GATE_HALF, TUNNEL_LEN };
+
+function buildLayout(): ArenaLayout {
+  const H = HALF;
+  const boxes: Box[] = [];
+  const ramps: Ramp[] = [];
+
+  boxes.push(...perimeterBoxes(HALF));
+  for (const rot of [rotN, rotE, rotW]) boxes.push(rotBox(rot, -7, 21, 3, 27, 0, 4.5, 'block'));
 
   // Elevated defensive platforms. South pair (h=3) and north pair (h=4).
   boxes.push({ min: [-32, 0, -36], max: [-17, 3, -24], kind: 'platform' });
@@ -165,7 +199,7 @@ function buildLayout(): ArenaLayout {
     playerSpawn: { x: -3.8, z: -20, yaw: 0.30 },
     laneHalfWidth: 2.8,
     initialGates: ['north', 'east', 'west'],
-    southDoor: { min: [-g, 0, -H - WALL_T], max: [g, WALL_H, -H], kind: 'gate' },
+    southDoor: southDoorBox(H),
     reserved,
     barriers,
     vents: [

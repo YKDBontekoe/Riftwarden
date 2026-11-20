@@ -14,6 +14,7 @@ import {
   Vector3,
 } from '@babylonjs/core';
 import type { ArenaLayout, Box, GateId, Ramp } from '../world/layout';
+import { RiftAnchors } from './riftAnchors';
 import { PHYS_ENV } from '../world/physicsGroups';
 import { type Palette, unlit } from './materials';
 import { boxProjectUVs } from './uv';
@@ -85,18 +86,24 @@ export class ArenaBuilder {
     this.physicsShape.addChild(new PhysicsShapeBox(Vector3.Zero(), Quaternion.Identity(), extents, this.scene), center, rot);
   }
 
+  /** Forward rift anchors (procedural arenas only). */
+  rifts: RiftAnchors | null = null;
+  private riftT = 0;
+
   build(): void {
+    if (this.layout.rifts?.length) this.rifts = new RiftAnchors(this.scene, this.layout.rifts);
     const L = this.layout;
     const P = this.pal;
 
     // Floor
-    const ground = MeshBuilder.CreateGround('ground', { width: 120, height: 120 }, this.scene);
+    const span = Math.max(120, (L.half + 16) * 2);
+    const ground = MeshBuilder.CreateGround('ground', { width: span, height: span }, this.scene);
     ground.material = P.floor;
     ground.receiveShadows = true;
     ground.metadata = { surface: 'floor' };
     ground.freezeWorldMatrix();
     this.meshes.push(ground);
-    this.collider(new Vector3(0, -0.5, 0), new Vector3(120, 1, 120));
+    this.collider(new Vector3(0, -0.5, 0), new Vector3(span, 1, span));
 
     for (const b of L.boxes) {
       if (b.kind === 'reactor') continue; // reactor has its own model; collider below
@@ -108,7 +115,8 @@ export class ArenaBuilder {
     // Reactor collider (slightly inside the visual)
     this.collider(new Vector3(0, L.reactor.height / 2, 0), new Vector3(5.2, L.reactor.height, 5.2));
     // Invisible ceiling-height caps above gate tunnels so the player cannot leave via the tunnels
-    for (const g of [[0, 50.5, 9, 13], [50.5, 0, 13, 9], [-50.5, 0, 13, 9], [0, -50.5, 9, 13]]) {
+    const cap = L.half + 6.5;
+    for (const g of [[0, cap, 9, 13], [cap, 0, 13, 9], [-cap, 0, 13, 9], [0, -cap, 9, 13]]) {
       this.collider(new Vector3(g[0], 4, g[1]), new Vector3(g[2], 8, g[3]));
     }
 
@@ -126,9 +134,10 @@ export class ArenaBuilder {
       if (b.kind === 'machine') decals.floor(0, (b.min[0] + b.max[0]) * 0.5, (b.min[2] + b.max[2]) * 0.5, 11, 9, 0.6);
     }
     for (const route of Object.values(L.routes)) {
-      const p = route.points[2];
+      const pts = route.points;
+      const p = pts[Math.min(2, pts.length - 1)];
       decals.floor(2, p.x, p.z, 5.7, 4.6, Math.atan2(p.x, p.z));
-      const q = route.points[3];
+      const q = pts[Math.min(3, pts.length - 1)];
       decals.floor(1, q.x, q.z, 7.4, 5.1, Math.atan2(q.x, q.z) + 0.55);
     }
     decals.finish();
@@ -278,7 +287,12 @@ export class ArenaBuilder {
     this.armed = new Set(gates);
   }
 
-  gateSpawned(gate: GateId): void {
+  gateSpawned(gate: GateId, at?: { x: number; z: number }): void {
+    // Forward-rift spawns flare their anchor instead of the gate.
+    if (at && this.rifts && Math.max(Math.abs(at.x), Math.abs(at.z)) < this.layout.half - 2) {
+      this.rifts.spawned(at.x, at.z);
+      return;
+    }
     const visual = this.gates.get(gate);
     if (visual) visual.flash = 1;
   }
@@ -297,6 +311,8 @@ export class ArenaBuilder {
   }
 
   update(dt: number, hostileDt: number, warning: number): void {
+    this.riftT += dt;
+    this.rifts?.update(dt, this.riftT);
     for (const [id, gate] of this.gates) {
       const target = this.sealed.has(id) ? 0.02 : this.armed.has(id) ? 0.13 + 0.87 * warning : 0.12;
       gate.charge += (target - gate.charge) * (1 - Math.exp(-dt * 4));

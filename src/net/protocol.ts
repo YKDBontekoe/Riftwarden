@@ -6,7 +6,7 @@
  * rewards, online profiles); clients send intents (movement state, shot claims, actions) which
  * the server validates. Messages are validated structurally here before any game code sees them.
  */
-export const PROTOCOL_VERSION = 5;
+export const PROTOCOL_VERSION = 6;
 export const MAX_PLAYERS = 4;
 export const MAX_MESSAGE_BYTES = 64 * 1024;
 /** Authoritative simulation and snapshot rates (Hz). */
@@ -24,6 +24,7 @@ export type V3 = [number, number, number];
 export type ActMsg =
   | { a: 'place'; cfg: { base: string; weapon: string; core: string; modifier: string }; p: V3; yaw: number }
   | { a: 'recycle'; tower: number }
+  | { a: 'repair'; tower: number }
   | { a: 'modify'; tower: number; what: 'level' | 'weapon' | 'core' | 'modifier'; part?: string }
   | { a: 'tactical' }
   | { a: 'startWave' }
@@ -128,6 +129,8 @@ export interface RunStart {
   runId: string;
   tier: number;
   seed: number;
+  /** Procedural arena seed (0 = the classic arena). Server and clients generate the same layout from it. */
+  arena: number;
   you: string;
   players: { id: string; name: string; slot: number }[];
   loadout: unknown;
@@ -161,6 +164,7 @@ function validAct(o: Record<string, unknown>): boolean {
       return !!c && typeof c === 'object' && isStr(c.base, 32) && isStr(c.weapon, 32) && isStr(c.core, 32) && isStr(c.modifier, 32) && isV3(o.p) && isNum(o.yaw, 100);
     }
     case 'recycle':
+    case 'repair':
       return isInt(o.tower);
     case 'modify':
       return isInt(o.tower) && (o.what === 'level' || o.what === 'weapon' || o.what === 'core' || o.what === 'modifier') && (o.part === undefined || isStr(o.part, 32));

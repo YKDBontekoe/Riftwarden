@@ -1523,3 +1523,88 @@ button.inv-slot { position: relative; }
 .ic-sub { display: flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
 .ic-sub .impact-chips i { padding: 1px 4px; font-size: 9.5px; }
 .eng-col .ic-main b, .mk-list-col .ic-main b { white-space: normal; line-height: 1.2; }
+
+/* ------------------------------------------------------------------ loading screen (scene swaps) */
+.screen.transit.load-screen { display: block; overflow: hidden; background: radial-gradient(ellipse at 68% 48%, rgba(10, 34, 44, 0.98), #020508 72%); }
+.load-arena.load-screen { background: radial-gradient(ellipse at 68% 48%, rgba(38, 20, 10, 0.95), rgba(6, 18, 26, 0.98) 45%, #020407 78%); }
+.ls-grid { position: absolute; inset: -40px; background-image: linear-gradient(rgba(169, 221, 209, 0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(169, 221, 209, 0.05) 1px, transparent 1px); background-size: 40px 40px; animation: lsdrift 9s linear infinite; will-change: transform; }
+.ls-sweep { position: absolute; left: 0; right: 0; height: 30vh; top: -30vh; background: linear-gradient(180deg, transparent, rgba(169, 221, 209, 0.06), transparent); animation: lsscan 3.6s linear infinite; will-change: transform; pointer-events: none; }
+@keyframes lsdrift { to { transform: translate(40px, 40px); } }
+@keyframes lsscan { to { transform: translateY(160vh); } }
+.ls-body { position: absolute; inset: 0; width: 100%; height: 100%; display: grid; grid-template-columns: minmax(300px, 440px) minmax(0, 1fr); gap: clamp(20px, 4vw, 64px); align-items: center; padding: clamp(16px, 5vw, 72px); box-sizing: border-box; }
+.ls-side { display: grid; gap: 12px; align-content: center; min-width: 0; }
+.ls-side .transit-title { text-align: left; font-size: clamp(20px, 2.6vw, 30px); letter-spacing: 0.18em; line-height: 1.15; }
+.ls-side .transit-sub { letter-spacing: 0.14em; }
+.ls-kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.34em; color: var(--amber); display: flex; align-items: center; gap: 10px; }
+.ls-kicker::before { content: ''; width: 26px; height: 2px; background: var(--amber); box-shadow: 0 0 8px var(--amber); }
+.ls-card { margin-top: 6px; padding: 14px 16px 12px; background: rgba(4, 12, 18, 0.62); border: 1px solid var(--line); clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, var(--cut) 100%, 0 calc(100% - var(--cut))); animation: lsrise 0.45s ease-out both; }
+@keyframes lsrise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.ls-card-head { display: flex; justify-content: space-between; gap: 10px; font-family: var(--mono); font-size: 11px; letter-spacing: 0.16em; color: var(--muted); }
+.ls-code { color: var(--cyan); }
+.ls-tier { color: var(--orange); }
+.ls-name { font-family: var(--display); font-weight: 700; font-size: clamp(18px, 2vw, 24px); letter-spacing: 0.08em; margin: 6px 0 10px; text-transform: uppercase; }
+.ls-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 12px; }
+.ls-stats div { display: grid; gap: 2px; }
+.ls-stats b { font-family: var(--mono); font-size: 16px; color: var(--white); }
+.ls-stats span { font-family: var(--mono); font-size: 9px; letter-spacing: 0.18em; color: var(--faint); }
+.ls-note { margin-top: 10px; font-size: 12px; color: var(--amber); }
+.ls-stages { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 6px; font-family: var(--mono); font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; }
+.ls-stages li { display: flex; align-items: center; gap: 10px; color: var(--faint); transition: color 0.2s; }
+.ls-stages li i { width: 9px; height: 9px; border: 1px solid currentColor; transform: rotate(45deg); flex: none; }
+.ls-stages li.done { color: var(--cyan); }
+.ls-stages li.done i { background: var(--cyan); box-shadow: 0 0 6px var(--cyan); }
+.ls-stages li.now { color: var(--white); }
+.ls-stages li.now i { border-color: var(--amber); animation: spin 1.4s linear infinite; }
+.ls-bar { height: 4px; margin-top: 4px; }
+.ls-bar b { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(169, 221, 209, 0.25), var(--cyan)); transform-origin: left; transition: transform 0.5s ease-out; }
+.ls-tip { display: flex; gap: 10px; align-items: baseline; margin-top: 6px; min-height: 3.2em; font-size: 13px; line-height: 1.45; color: var(--muted); }
+.ls-tip em { font-style: normal; font-family: var(--mono); font-size: 10px; letter-spacing: 0.2em; color: var(--amber); border: 1px solid var(--amber-dim); padding: 1px 5px; flex: none; }
+.ls-tip span { animation: fadein 0.5s ease-out; }
+.ls-map { position: relative; display: block; min-width: 0; width: 100%; }
+.ls-mapframe { position: relative; width: min(100%, 52vw, 76vh); aspect-ratio: 1; margin: 0 auto; }
+.ls-mapframe::before { content: ''; position: absolute; inset: -10px; border: 1px solid var(--line); clip-path: polygon(0 0, 28px 0, 28px 1px, calc(100% - 28px) 1px, calc(100% - 28px) 0, 100% 0, 100% 100%, 0 100%); opacity: 0.8; }
+.lm { width: 100%; height: 100%; display: block; overflow: visible; filter: drop-shadow(0 0 14px rgba(169, 221, 209, 0.08)); }
+.lm-floor { fill: rgba(16, 32, 40, 0.55); stroke: rgba(169, 221, 209, 0.5); stroke-width: 0.6; }
+.lm-grid line { stroke: rgba(169, 221, 209, 0.06); stroke-width: 0.25; }
+.lm rect[class^='lm-']:not(.lm-floor):not(.lm-ramp) { animation: lmin 0.6s ease-out both; }
+@keyframes lmin { from { opacity: 0; } to { opacity: 1; } }
+.lm-wall, .lm-gate { fill: rgba(169, 221, 209, 0.55); }
+.lm-platform { fill: rgba(120, 170, 190, 0.32); stroke: rgba(169, 221, 209, 0.55); stroke-width: 0.35; }
+.lm-block { fill: rgba(200, 214, 210, 0.42); }
+.lm-machine { fill: rgba(237, 178, 130, 0.35); }
+.lm-ramp { fill: rgba(169, 221, 209, 0.12); stroke: rgba(169, 221, 209, 0.35); stroke-width: 0.25; stroke-dasharray: 1 1; }
+.lm-lane { fill: none; stroke: var(--orange); stroke-width: 1.1; stroke-dasharray: 3 2; stroke-linejoin: round; opacity: 0.85; animation: lmflow 1.4s linear infinite; }
+.lm-lane.sealed { stroke: rgba(228, 232, 222, 0.3); animation: none; }
+@keyframes lmflow { to { stroke-dashoffset: -10; } }
+.lm-rift circle { fill: rgba(255, 146, 104, 0.12); stroke: var(--orange); stroke-width: 0.6; animation: lmpulse 1.6s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+.lm-rift circle.core { fill: var(--orange); stroke: none; animation: none; }
+@keyframes lmpulse { 50% { transform: scale(1.35); opacity: 0.5; } }
+.lm-reactor { fill: var(--cyan); filter: drop-shadow(0 0 3px var(--cyan)); }
+.lm-reactor-ring { fill: none; stroke: var(--cyan); stroke-width: 0.5; stroke-dasharray: 2 1.5; }
+.lm-spawn { fill: var(--white); }
+.ls-radar { position: absolute; inset: 0; border-radius: 50%; background: conic-gradient(from 0deg, rgba(169, 221, 209, 0.16), transparent 22%); mask: radial-gradient(circle, #000 68%, transparent 70%); animation: spin 4s linear infinite; will-change: transform; pointer-events: none; mix-blend-mode: screen; }
+.ls-legend { position: absolute; left: 0; right: 0; bottom: -30px; display: flex; flex-wrap: wrap; gap: 6px 16px; justify-content: center; font-family: var(--mono); font-size: 10px; letter-spacing: 0.14em; color: var(--faint); }
+.ls-legend span::before { content: ''; display: inline-block; width: 10px; height: 3px; margin-right: 6px; vertical-align: middle; }
+.ls-legend .k-lane::before { background: var(--orange); }
+.ls-legend .k-rift::before { width: 7px; height: 7px; border-radius: 50%; border: 1px solid var(--orange); }
+.ls-legend .k-core::before { width: 7px; height: 7px; border-radius: 50%; background: var(--cyan); }
+.ls-legend .k-spawn::before { width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-bottom: 7px solid var(--white); }
+.ls-recovery { position: relative; width: min(70vh, 100%); aspect-ratio: 1; display: grid; place-items: center; margin: 0 auto; }
+.ls-recovery i { position: absolute; border: 1px solid var(--cyan-dim); border-radius: 50%; animation: lsring 3s ease-out infinite; will-change: transform, opacity; }
+.ls-recovery i { inset: 20%; }
+.ls-recovery i:nth-child(2) { animation-delay: 1s; }
+.ls-recovery i:nth-child(3) { animation-delay: 2s; }
+@keyframes lsring { from { transform: scale(0.4); opacity: 0.9; } to { transform: scale(1.3); opacity: 0; } }
+.ls-recovery svg { width: 40%; fill: none; stroke: var(--cyan); stroke-width: 1.2; filter: drop-shadow(0 0 6px var(--cyan)); animation: lsbob 2.4s ease-in-out infinite; }
+.ls-recovery svg circle { fill: var(--amber); stroke: none; }
+.ls-recovery svg .rot { stroke: var(--amber); stroke-dasharray: 4 3; transform-origin: 0 0; animation: spin 2.2s linear infinite; }
+@keyframes lsbob { 50% { transform: translateY(-6px); } }
+@media (max-width: 820px) {
+  .ls-body { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); align-content: start; overflow-y: auto; }
+  .ls-map { max-height: 48vh; }
+  .ls-mapframe { width: min(100%, 46vh); }
+  .ls-legend { position: static; margin-top: 8px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ls-grid, .ls-sweep, .ls-radar, .lm-lane, .lm-rift circle, .ls-recovery i, .ls-recovery svg { animation: none; }
+}

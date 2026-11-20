@@ -1,6 +1,6 @@
 # Riftwarden: project notes for future sessions
 
-Browser FPS + tower-defense roguelite. Current milestone: **M8** (Warden progression: levels, procedural skill tree, clearer terminals & currencies) plus a **fast-pace pass** (see "Key design decisions"). Read this before changing code.
+Browser FPS + tower-defense roguelite. Current milestone: **M9** (procedural arenas: seeded 170-200 m sectors, nav-grid pathing with tower mazing + breaching, forward rifts, loading screens) on top of M8 and the fast-pace pass (see "Key design decisions"). Read this before changing code.
 
 ## Stack
 
@@ -23,6 +23,14 @@ server/profiles.ts         Online profile cache, derived guest IDs, committed pr
 server/profileDatabase.ts  Transactional PostgreSQL persistence, with table definitions in server/migrations
 server/profileRows.ts      Maps SaveData to typed relational rows and back
 server/headless.ts         M7: browser stubs (canvas 2D, document, localStorage) so Game runs in Node
+src/world/arenaGen.ts      M9: generateArena(seed) -> ArenaLayout (memoised): perimeter, lane benders, platforms+ramps, blocks, pillars, wall machines, lanes traced on the nav grid, forward rifts, vents, reserved zones; sectorName, arenaStats [pure]
+src/world/navgrid.ts       M9: NavGrid: 1 m flow field (Dijkstra from the reactor ring), towers = high cost (not blocked), pathFrom + string pulling   [pure]
+src/enemies/navigation.ts  M9: EnemyNavigator (EnemyManager.nav): ground/air fields, spawn at gate or forward rift, re-plan on field change, breaching  [no Babylon values]
+src/towers/durability.ts   M9: tower max HP / repair cost / wreck refund rules                                  [pure]
+src/arena/TowerWear.ts     M9: breach hits, wrecks, repairs (F), wave-clear mending (narrow host, no Game import)
+src/visuals/riftAnchors.ts M9: forward rift anchors (scorch pad, ring, additive tear; flare on spawn)
+src/ui/LoadingScreen.tsx   M9: scene-swap loading screen (sector briefing + SVG map, stages, tips; HQ recovery art); src/ui/loadingTips.ts [pure]
+scripts/e2e-arenas.cjs     M9: browser suite (A loading screen, B generated arena, C rifts + re-planning, D breach/wreck/repair, E HQ screen + determinism, V screenshots)
 src/waves/pace.ts          Run tempo: prep / clear timings, spawn schedule compression, early-call core bonus      [pure]
 src/combat/heat.ts         Global heat tempo applied at fire time (and in weaponSummary) on top of stored item heat   [pure]
 src/core/frameClock.ts     Frame pacing filter (jitter -> steady dt, time debt repaid, hitches clamped)              [pure]
@@ -213,6 +221,18 @@ scripts/e2e-m6.cjs         M6 browser acceptance suite (A-L: plans, enemies, eli
 - Browser co-op section X of `e2e-construction-coop.cjs` needs a test server (`RIFT_TEST=1 RIFT_PORT=8787 npx tsx server/main.ts`) and runs both clients with the render loop stopped: two live software-GL render loops starve Playwright's actionability checks and clicks time out. It passes (13/13, including "no replicated event rejected") and is the real test of the client replay path, along with `e2e-coop-protocol.mjs`.
 
 ## Key design decisions
+
+### M9: procedural arenas, mazing, loading screens
+
+- **One layout per run.** `ArenaConfig.layout` (default: the classic `ARENA`); `Game.layout` is a getter on it and every arena system (builder, dressing, floor, atmosphere, dynamics, placement, effects, radar, dev tools, server/client) reads it. Solo: `Flow.arenaSeedFor(runId)` = `hash(run id) ^ 0x2545f491` (independent of the upgrade/planner seed), `flow.nextArenaSeed` forces one. Co-op: `CoopSim.arenaSeed` -> `RunStart.arena` (protocol v6); both sides call the memoised pure `generateArena(seed)`. `arena: 0` / `flow.arenaMode = 'classic'` = hand-built arena. **`?test` defaults to classic** (legacy suites measure its geometry; `?test&procedural` opts in); test servers too unless `RIFT_ARENA=procedural`.
+- **Generator** (`world/arenaGen.ts`): half 84-100 m, gates stay at the wall midpoints (shared `perimeterBoxes`/`southDoorBox`, so gate frames, mist, lights, tunnels and dressing line up). Keep-outs: reactor plaza (19 m), drop point, gate mouths. Order: 1-2 lane benders per gate (partition walls across the straight approach, staggered), 5-8 platforms with one ramp (x or z axis), 12-19 blocks, 16-27 pillars, 4-8 wall machines (south wall along x, east/west along z: the builder dresses those faces), rejection-sampled with 4.2 m walkable gaps. Lanes (`routes`) are traced on the terrain-only nav grid, vents sit halfway along them, 2 forward rifts per gate sector 34-62 m out. Reserved: bulkheads, gate mouths, rift pads, vents. Tests: `tests/arena-gen.test.ts` (determinism, size, reachability of gates/rifts/spawn, lanes off solids, plaza clear, re-plan speed).
+- **Navigation** (`world/navgrid.ts`): 1 m cells over the arena + tunnels, solids inflated by 1.5 m (perimeter, boxes, bulkheads, ramps). Towers add cost (45 per metre) instead of blocking, so a sealed maze still yields a path through the cheapest tower. One Dijkstra from the reactor ring (radius 7) per change (~30 ms at 200 m); `pathFrom` descends the field and string-pulls with segments that avoid solids **and** tower cells. `version` bumps on every change.
+- **Enemies** (`enemies/navigation.ts`, plugged in as `EnemyManager.nav`, null on the classic arena and on co-op replicas): ground kinds use the tower-aware field, flyers (`FLYERS`: rusher, jammer, artillery, courier, overseer, pylon) the terrain field. Spawns: 55% from one of the gate's forward rifts (bosses/HVTs always through the gate), path from the spawn point; `Enemy.gate` keeps the lane identity (server `laneOf`). Per frame (real time) `sync()` re-reads tower footprints every 0.25 s (`bumpStats` syncs at once); an enemy whose `navV` differs re-plans from its position. `follow()` asks `nav.blocked(e, next)`: a live tower ahead stops the walker, which hits it every `max(0.7, attackInterval)` s for `(8 + reactorDamage x 4) x damageMult` (bosses x4). Summons set `navV = -1` to re-plan from the summon point.
+- **Tower durability** (`towers/durability.ts`, `arena/TowerWear.ts`): standard 420 / bastion 720 / spire 330 HP, +25%/level, x sqrt(wave damage mult) (rescaled at build and on wave clear, keeping the HP fraction). 0 HP = **wreck**: no firing, no blocking (nav re-plans), slumped/dark rig. Repair (F, same phase rule as refits; `act repair` in co-op) costs 40% of paid x missing fraction (wreck x1.25); wreck recycle refunds 40% of the normal refund; intact towers mend 25% on every wave clear. HUD: structure bar + repair cost in the inspect panel; radar greys wrecks. Snapshot tower rows carry hp/max/wrecked (indices 8-10).
+- **Placement on mazing arenas** skips the lane rule (`blocks-route`); reserved zones still apply.
+- **Scale fixes**: floor/collider span and tunnel caps follow `half`; outside industry, masts and quarry rocks scale by `max(1, (half+30)/74)` (rocks capped at 1.35 to stay inside the camera-following 300 m sky dome); sconces and pipelines run the full wall length; radar range = half + 13 with rift rings.
+- **Loading screen** (`ui/LoadingScreen.tsx`): `Flow.transition(title, sub, build, info)` publishes `transit {kind, stage, sector}`: stage 0 charting -> 1 building (painted before the synchronous build) -> 2 compiling shaders -> 3 ready. Arena kind shows the sector card (code, name, tier, span/structures/plateaus/rifts/gates) and an SVG map of the generated layout (structures by kind, ramps, animated lanes, pulsing rifts, reactor, drop point, radar sweep); HQ/visit kinds show recovery art. Tips rotate every 4.2 s. Real deployments hold the briefing for at least 1.4 s (not with `forceCapture`). Animations are transform/opacity (compositor) so they keep moving while the scene build blocks the main thread. `__rift.previewLoading(seed, stage)` shows it without loading (screenshots).
+- **Not done yet**: player-built wall pieces; lane lights show the unobstructed route (not the live maze path); biome palettes/factions (M10); chunked culling/LOD for the larger arena (measure on a real GPU first); co-op clients do not show breach sparks between snapshots.
 
 ### HQ + terminal pass (after the fast-pace pass)
 
@@ -465,5 +485,6 @@ Goal: high-tempo play (think VOIDBREAKER): fast enemies, little dead time, momen
 - **M7:** 2-4 player co-op with an authoritative server, HQ construction with blueprints, new firing styles/towers/enemies/upgrades/signatures, onboarding, settings v2, spatial audio.
 - **M6 (done):** survival director (budgets, themes, seeded plans), Shielded Enforcer / Artillery Drone / Support Engineer / Vault Courier, four elite modifiers with combinations, four dynamic events, two arena evolutions, Siege Colossus and Overseer Core bosses with dynamic scheduling, tiers IV-V with unlock rules, boss/elite/event/HVT loot (target farming), survival records + milestones (save v6), run summaries, F4 dev lab, shader/pool pre-warming.
 - **M8 (done):** Warden levels (XP banked like loot), per-profile procedural skill tree at the Neural Lattice, currency table + tooltips, station purposes and directory, save v8.
-- **Next:** deeper keystone rules, team HUD levels, Terminals.tsx split, rift depth (post-Tier V endgame directives).
+- **M9 (in progress):** procedural arenas, nav-grid mazing with breachable towers, forward rifts, loading screens.
+- **Next:** M10 biomes (cryo excavation, molten foundry) with factions, enemy mutations and new archetypes; M11 loot (affix pool, uniques, sets, Launcher + Drone Swarm families); deeper keystone rules, team HUD levels, Terminals.tsx split.
 - Later: combat depth (second tower, turret upgrades, enemy variety, hit flash, audio pass, deep-import bundle split), run upgrades, M4 modular towers, M5 advanced endless (bosses/events), M6 content, M7 co-op evaluation.
