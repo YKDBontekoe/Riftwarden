@@ -28,6 +28,8 @@ import { DevTools } from '../arena/DevTools';
 import { type CombatHost, PlayerCombat } from '../arena/PlayerCombat';
 import { type WeaponSlot, WeaponSlots, type WeaponSlotsHost } from '../arena/WeaponSlots';
 import { Abilities, type AbilityHost } from '../arena/Abilities';
+import { Movement, type MovementHost } from '../arena/Movement';
+import { type DeployHost, Deployables } from '../arena/Deployables';
 import type { AbilitySlot } from '../abilities/defs';
 import { type LootHost, LootPickups } from '../arena/LootPickups';
 import { type TowerEdit, type TowerHost, TowerControl } from '../arena/TowerControl';
@@ -219,6 +221,10 @@ export class Game {
   readonly weaponSlots = new WeaponSlots(this.weaponSlotsHost());
   /** Ability I/II and the ultimate (the co-op server keeps one per avatar and swaps it in with `as`). */
   abilities = new Abilities(this.abilityHost());
+  /** Shield walls, the holo decoy and mini-sentries placed by abilities (shared world objects). */
+  readonly deployables = new Deployables(this.deployHost());
+  /** Slide / wall-run / grapple / ground pound: grapple input, pound blasts, grapple line. */
+  readonly movement = new Movement(this.movementHost());
   protected kills = 0;
   protected turretsBuilt = 0;
   protected defeatT = 0;
@@ -394,7 +400,10 @@ export class Game {
       towers: this.turrets.turrets,
       tele: this.tele,
       ordnance: this.ordnance,
-      hurtPlayer: (a, from) => this.hurtPlayer(a, from),
+      hurtPlayer: (a, from) => this.hurtPlayer(a, from, this.enemyCtx.player),
+      focus: (e) => {
+        this.enemyCtx.player = this.deployables.decoyFor(e.pos) ?? this.player;
+      },
       hostileBlast: (c, r, o) => this.hostileBlast(c, r, o),
       summon: (kind, at, o) => this.summon(kind, at, o),
       alert: (text, tone) => uiEvents.emit('alert', { text, tone }),
@@ -813,7 +822,8 @@ export class Game {
 
   get offerContext(): OfferContext {
     const ts = this.turrets.turrets;
-    return { wave: this.waves.number, family: this.weapon.def.family, towers: ts.length, towerArchetypes: [...new Set(ts.map((t) => t.archetype))] };
+    const abilities = (['ability', 'ability2', 'ultimate'] as const).filter((s) => this.abilities.def(s)).length;
+    return { wave: this.waves.number, family: this.weapon.def.family, towers: ts.length, towerArchetypes: [...new Set(ts.map((t) => t.archetype))], abilities };
   }
 
   /** Mandatory three-choice selection between waves. Freezes the simulation (and the prep countdown) until chosen. */
@@ -1045,6 +1055,7 @@ export class Game {
   protected newRun(): void {
     this.weaponSlots.reset();
     this.abilities.reset();
+    this.deployables.reset();
     this.enemies.clear();
     this.turrets.clear();
     this.fx.reset();
@@ -1130,7 +1141,7 @@ export class Game {
         this.setBuildMode(false);
         this.swapWeapon('weapon');
       }
-      if (input.pressed('KeyZ')) this.swapWeapon();
+      if (input.pressed('KeyZ') || (input.wheel !== 0 && !this.construction.active)) this.swapWeapon();
       if (this.construction.active && input.mousePressed(2)) this.setBuildMode(false);
       else if (input.mousePressed(2)) this.useAbility('ability');
       // F repairs the tower under the crosshair on mazing arenas; otherwise it fires ability II.
@@ -1175,6 +1186,7 @@ export class Game {
       this.player.dashedThisFrame = false;
       this.director.bus.emit({ type: 'dash', chain: this.director.bus.newChain(), source: { kind: 'weapon', id: 'dash' }, value: 1 });
     }
+    this.movement.update();
 
     // ---- building
     if (this.construction.active) {
@@ -1186,6 +1198,7 @@ export class Game {
     const trigger = controls && input.mouse(0) && !this.construction.active;
     this.weaponSlots.update(dt);
     this.abilities.update(dt);
+    this.deployables.update(dt);
     this.weapon.update(dt, trigger, this.stats, this.shoot, this.weaponFx);
     if (this.weapon.overheated && !this.wasOverheated) this.director.bus.emit({ type: 'overheat', chain: this.director.bus.newChain(), source: { kind: 'weapon', id: 'heat' }, value: 1 });
     this.wasOverheated = this.weapon.overheated;
@@ -1200,6 +1213,8 @@ export class Game {
     if (this.screen === 'playing') this.waves.update(dt, hdt);
     this.hostileT += hdt;
     this.enemies.update(hdt, this.enemyCtx, dt);
+    // The holo decoy may have borrowed the enemies' target for a frame.
+    if (this.enemyCtx.player !== this.player && this.deployables.isDecoy(this.enemyCtx.player)) this.enemyCtx.player = this.player;
     this.ordnance.update(hdt, this.ordnanceCtx, this.hostileT);
     this.tele.update(hdt);
     this.dynamics.update(dt, hdt);
@@ -1391,8 +1406,43 @@ export class Game {
       get weapon() { return g.weapon; }, // prettier-ignore
       get inventory() { return g.inventory; }, // prettier-ignore
       get stats() { return g.stats; }, // prettier-ignore
+      get deployables() { return g.deployables; }, // prettier-ignore
       canAct: () => this.screen === 'playing' && !this.construction.active && this.player.alive,
     };
+  }
+
+  protected deployHost(): DeployHost {
+    const g = this;
+    return {
+      get scene() { return g.scene; }, // prettier-ignore
+      get kit() { return g.kit; }, // prettier-ignore
+      get pal() { return g.pal; }, // prettier-ignore
+      get fx() { return g.fx; }, // prettier-ignore
+      get turrets() { return g.turrets; }, // prettier-ignore
+      get turretCtx() { return g.turretCtx; }, // prettier-ignore
+      probe: (a, b) => this.player.probe(a, b)?.point ?? null,
+    };
+  }
+
+  private movementHost(): MovementHost {
+    const g = this;
+    return {
+      get scene() { return g.scene; }, // prettier-ignore
+      get player() { return g.player; }, // prettier-ignore
+      get director() { return g.director; }, // prettier-ignore
+      get fx() { return g.fx; }, // prettier-ignore
+      get input() { return g.input; }, // prettier-ignore
+      get stats() { return g.stats; }, // prettier-ignore
+      get attackerScale() { return g.attackerScale; }, // prettier-ignore
+      canAct: () => this.screen === 'playing' && this.input.captured && !this.construction.active && this.player.alive,
+      grappleKeyFree: () => !this.towers.inspected,
+      pound: (at, fall) => this.groundPound(at, fall),
+    };
+  }
+
+  /** A ground pound landed (co-op clients forward it to the server instead). */
+  groundPound(at: Vector3, fall: number): void {
+    this.movement.blast(at, fall);
   }
 
   /** HUD row for the holstered weapon. */
@@ -1467,6 +1517,10 @@ export class Game {
 
   /** Every hostile hit on the drone goes through here. */
   hurtPlayer(amount: number, from: Vector3, target: Player = this.player): void {
+    if (this.deployables.isDecoy(target)) {
+      this.deployables.hurtDecoy(amount);
+      return;
+    }
     if (!target.alive || !(amount > 0) || !Number.isFinite(amount)) return;
     target.damage(amount, from);
   }
@@ -1810,6 +1864,12 @@ export class Game {
           continue outer;
         }
       }
+      if (p.damage > 0 && this.deployables.decoyHitBy(p.pos, next)) {
+        this.deployables.hurtDecoy(p.damage);
+        this.fx.burst('zap', next, 6);
+        this.fx.killProjectile(p);
+        continue;
+      }
       if (physics) {
         physics.raycastToRef(p.pos, next, this.physResult, ENV_QUERY);
         if (this.physResult.hasHit) {
@@ -1961,6 +2021,7 @@ export class Game {
       weaponName: this.weapon.def.name,
       holster: this.holsterHud(),
       abilities: this.abilities.hud(),
+      moves: this.movement.hud(),
       heat: this.weapon.heat / 100,
       overheated: this.weapon.overheated,
       charge: this.weapon.def.mechanism === 'charge' || this.weapon.def.mechanism === 'cycle' ? this.weapon.charge : 0,

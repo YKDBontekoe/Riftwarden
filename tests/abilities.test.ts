@@ -180,3 +180,42 @@ describe('ability runtime', () => {
     expect(director.blast).not.toHaveBeenCalled();
   });
 });
+
+describe('deployables and ability modifiers', () => {
+  it('every deployable kind has a base, a positive cooldown and finite power', async () => {
+    const { ABILITIES, DEPLOYABLE_KINDS, abilityPower, deployDistance } = await import('../src/abilities/defs');
+    const { BASES } = await import('../src/loot/bases');
+    const { BASE_STATS } = await import('../src/combat/stats');
+    for (const k of DEPLOYABLE_KINDS) {
+      expect(BASES.some((b) => b.ability === k)).toBe(true);
+      expect(ABILITIES[k].cooldown).toBeGreaterThan(0);
+      for (const rarity of ['common', 'legendary'] as const) {
+        const p = abilityPower(ABILITIES[k], { level: 40, rarity }, BASE_STATS);
+        expect(Number.isFinite(p) && p > 0).toBe(true);
+      }
+    }
+    // Durations do not grow with item level (wall, sentry); the decoy's hit points do.
+    expect(abilityPower(ABILITIES.wall, { level: 1, rarity: 'rare' }, BASE_STATS)).toBe(abilityPower(ABILITIES.wall, { level: 90, rarity: 'rare' }, BASE_STATS));
+    expect(abilityPower(ABILITIES.decoy, { level: 90, rarity: 'rare' }, BASE_STATS)).toBeGreaterThan(abilityPower(ABILITIES.decoy, { level: 1, rarity: 'rare' }, BASE_STATS));
+    // Placement: full range in the open, short of a wall, never at the drone's feet.
+    expect(deployDistance(16, null)).toBe(16);
+    expect(deployDistance(16, 6)).toBeCloseTo(5.2);
+    expect(deployDistance(16, 0.5)).toBe(1.5);
+  });
+
+  it('ability run upgrades are offered only with an ability equipped', async () => {
+    const { RunBuild, UPGRADES } = await import('../src/roguelite/upgrades');
+    const ids = new Set(UPGRADES.filter((u) => u.needs?.abilities).map((u) => u.id));
+    expect(ids.size).toBeGreaterThanOrEqual(3);
+    const seen = (abilities: number) => {
+      const found = new Set<string>();
+      for (let s = 1; s < 60; s++) {
+        const b = new RunBuild(s);
+        for (let i = 0; i < 4; i++) for (const u of b.roll({ wave: 6, family: 'plasma', towers: 2, towerArchetypes: ['ballistic'], abilities }, i)) found.add(u.id);
+      }
+      return [...found].filter((id) => ids.has(id));
+    };
+    expect(seen(0)).toHaveLength(0);
+    expect(seen(2).length).toBeGreaterThan(0);
+  });
+});

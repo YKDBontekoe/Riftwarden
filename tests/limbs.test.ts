@@ -12,10 +12,10 @@ import { ARENA } from '../src/world/layout';
 
 describe('limb rules', () => {
   it('a hit goes to the nearest intact part within reach', () => {
-    expect(limbForHit({ cannon: 0.3, arm: 0.2, head: 2 }, 0)).toBe('arm');
-    expect(limbForHit({ cannon: 0.3, arm: 0.2, head: 2 }, bit('arm'))).toBe('cannon');
-    expect(limbForHit({ cannon: 5, arm: 5, head: 5 }, 0)).toBeNull();
-    expect(limbForHit({ cannon: Number.NaN, arm: 9, head: 0.1 }, 0)).toBe('head');
+    expect(limbForHit({ cannon: 0.3, arm: 0.2, head: 2, leg: 9 }, 0)).toBe('arm');
+    expect(limbForHit({ cannon: 0.3, arm: 0.2, head: 2, leg: 9 }, bit('arm'))).toBe('cannon');
+    expect(limbForHit({ cannon: 5, arm: 5, head: 5, leg: 9 }, 0)).toBeNull();
+    expect(limbForHit({ cannon: Number.NaN, arm: 9, head: 0.1, leg: 9 }, 0)).toBe('head');
   });
 
   it('a part breaks at its share of max hull, never on the killing blow', () => {
@@ -118,5 +118,15 @@ describe('walker parts in the enemy pipeline', () => {
     for (let i = 0; i < 15; i++) mgr.damage(e, e.maxHp * 0.05, 'energy', feet, fx);
     expect(e.limbsLost).toBe(0);
     mgr.despawn(e);
+  });
+});
+
+describe('legs', () => {
+  it('the right leg is a fourth part: hits near it count for it, and losing it slows the frame to a crawl', async () => {
+    const { LIMB_EFFECT, LIMB_IDS } = await import('../src/enemies/limbs');
+    expect(LIMB_IDS).toContain('leg');
+    expect(limbForHit({ cannon: 2, arm: 2, head: 2, leg: 0.4 }, 0)).toBe('leg');
+    expect(limbForHit({ cannon: 2, arm: 2, head: 2, leg: 0.4 }, bit('leg'))).toBeNull();
+    expect(LIMB_EFFECT.leglessSpeed).toBeLessThan(0.6);
   });
 });

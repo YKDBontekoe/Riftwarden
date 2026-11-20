@@ -88,7 +88,7 @@ function AlertFeed() {
     let id = 0;
     const recent = new Map<string, number>();
     const timers = new Set<ReturnType<typeof setTimeout>>();
-    const off = uiEvents.on('alert', (a) => {
+    const show = (a: { text: string; tone: Alert['tone'] }) => {
       const now = performance.now();
       if (now - (recent.get(a.text) ?? -1e9) < 2500) return;
       recent.set(a.text, now);
@@ -99,9 +99,12 @@ function AlertFeed() {
         setList((l) => l.filter((x) => x.id !== item.id));
       }, 3800);
       timers.add(t);
-    });
+    };
+    const off = uiEvents.on('alert', show);
+    const offNotice = uiEvents.on('notice', show);
     return () => {
       off();
+      offNotice();
       for (const t of timers) clearTimeout(t);
     };
   }, []);

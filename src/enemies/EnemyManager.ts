@@ -162,8 +162,8 @@ export class Enemy implements Health {
   /** performance.now() of the last damage taken (drives the HUD health bar). */
   lastHit = 0;
   readonly hitboxes: Mesh[] = [];
-  /** Shoot-off parts (walker frames): hull damage soaked per part (cannon, arm, head) and the lost-part mask. */
-  limbDmg = [0, 0, 0];
+  /** Shoot-off parts (walker frames): hull damage soaked per part (cannon, arm, head, leg) and the lost-part mask. */
+  limbDmg = [0, 0, 0, 0];
   limbsLost = 0;
   /** M5 elemental statuses (reset on spawn and release, so nothing outlives the enemy). */
   readonly status: StatusState = newStatus();
@@ -231,7 +231,7 @@ export class Enemy implements Health {
   }
   /** Movement multiplier from tier/wave, elites, buffs and boosts (statuses are applied separately). */
   get moveMult(): number {
-    return this.speedMult * (this.has('accelerated') ? ELITE.speed : 1) * (this.buffT > 0 ? 1.25 : 1) * (this.boostT > 0 ? ELITE.boostMult : 1) * (hasLost(this.limbsLost, 'head') ? LIMB_EFFECT.headlessSpeed : 1);
+    return this.speedMult * (this.has('accelerated') ? ELITE.speed : 1) * (this.buffT > 0 ? 1.25 : 1) * (this.boostT > 0 ? ELITE.boostMult : 1) * (hasLost(this.limbsLost, 'head') ? LIMB_EFFECT.headlessSpeed : 1) * (hasLost(this.limbsLost, 'leg') ? LIMB_EFFECT.leglessSpeed : 1);
   }
   /** Attack recovery multiplier (> 1 = faster). */
   get rateMult(): number {
@@ -516,7 +516,7 @@ export class EnemyManager {
     const heavy = e.def.role === 'boss' ? 0.08 : e.def.radius > 1.1 ? 0.5 : 1;
     e.flinch = Math.min(1, e.flinch + (res.toHp > 0 ? 0.5 : 0.2) * heavy);
     if (!hit.dot) this.react(e, hit.from ? hit.from.x : hitPoint.x, hit.from ? hit.from.z : hitPoint.z, (res.toHp + res.toShield) / Math.max(1, e.maxHp + e.maxShield));
-    const lost = e.walker && !hit.dot ? hitLimb(e, hitPoint, res.toHp, !res.killed) : null;
+    const lost = e.walker && !hit.dot ? hitLimb(e, hitPoint, res.toHp, !res.killed, fx) : null;
     if (lost) detachLimb(e, lost, fx);
     e.shieldRegenT = 4;
     e.lastHit = performance.now();

@@ -1,4 +1,5 @@
 import type { AbilityHudRow } from '../abilities/defs';
+import type { MoveHud } from '../arena/Movement';
 import type { ArenaLayout } from '../world/layout';
 import { DEFAULT_SETTINGS, type Settings } from '../core/settings';
 import { useSyncExternalStore } from 'react';
@@ -188,6 +189,8 @@ export interface HudState {
   holster: { name: string; heat: number; overheated: boolean; secondary: boolean } | null;
   /** Ability I/II cooldowns and the ultimate charge (arena). */
   abilities: AbilityHudRow[];
+  /** Movement kit: current state, grapple / pound cooldowns (seconds). */
+  moves: MoveHud;
   heat: number; // 0..1
   overheated: boolean;
   /** Rail charge / cycle progress 0..1 (0 for other mechanisms): reticle charge arc. */
@@ -242,6 +245,7 @@ export const initialHud: HudState = {
   weaponName: '',
   holster: null,
   abilities: [],
+  moves: { state: '', grapple: 0, grappleMax: 1, pound: 0, poundMax: 1 },
   heat: 0,
   overheated: false,
   charge: 0,
@@ -336,10 +340,12 @@ type EventMap = {
   loot: LootEvent;
   /** M6: short tactical warning line (events, bosses, evolutions, milestones). */
   alert: { text: string; tone: 'red' | 'orange' | 'blue' | 'white' };
+  /** Same as `alert`, but personal: co-op only sends it to the warden it concerns (ULTIMATE READY, ...). */
+  notice: { text: string; tone: 'red' | 'orange' | 'blue' | 'white' };
   /** Kill chain length (2+), personal. */
   chain: number;
   /** The player's hit knocked a part off a walker frame (cannon / arm / head), personal. */
-  limb: 'cannon' | 'arm' | 'head';
+  limb: 'cannon' | 'arm' | 'head' | 'leg';
 };
 
 export interface LootEvent {

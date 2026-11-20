@@ -10,7 +10,7 @@ import { buildWeaponModel, type WeaponRig } from '../weapons/model';
 import { unlit } from '../visuals/materials';
 import { starSprite } from '../visuals/textures';
 import { MuzzleHeat } from '../fx/MuzzleHeat';
-import { HEAT_PACE, type HeatState } from './heat';
+import { DAMAGE_PACE, HEAT_PACE, type HeatState } from './heat';
 import { shotFeel, yawPattern } from './weaponFeel';
 import type { CombatStats } from './stats';
 
@@ -286,7 +286,7 @@ export class Weapon {
     const scatter = d.mechanism === 'scatter';
     const proj = d.family === 'beam' ? 1 : scatter ? SCATTER_PELLETS + 2 * Math.max(0, Math.floor(stats.projectiles) - 1) : Math.max(1, Math.floor(stats.projectiles));
     const thermal = 1 + stats.heatDamage * (this.heat / 100);
-    const dmg = d.damage * stats.weaponDamageMult * power * thermal;
+    const dmg = d.damage * DAMAGE_PACE * stats.weaponDamageMult * power * thermal;
     const muzzleIndex = this.anim.muzzleIndex;
     const from = this.muzzleWorld(this.tmpPos, muzzleIndex).clone();
     const origin = this.player.camera.position.clone();
@@ -410,7 +410,7 @@ export class Weapon {
             const rampTime = d.rampTime / stats.chargeRateMult;
             this.ramp = 1 + (d.rampMax - 1) * Math.min(1, this.rampT / Math.max(0.05, rampTime));
             const dir = this.aimDir(stats);
-            const out = normalize(shoot({ origin: this.player.camera.position.clone(), dir, range: this.range(stats), damage: d.damage * stats.weaponDamageMult * thermal * this.ramp, family: 'beam', pierce: 0, width: d.beamWidth }));
+            const out = normalize(shoot({ origin: this.player.camera.position.clone(), dir, range: this.range(stats), damage: d.damage * DAMAGE_PACE * stats.weaponDamageMult * thermal * this.ramp, family: 'beam', pierce: 0, width: d.beamWidth }));
             if (out.enemyId !== null && out.enemyId === this.rampTarget) this.rampT += tick;
             else this.rampT = 0;
             this.rampTarget = out.enemyId;

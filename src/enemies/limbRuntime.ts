@@ -13,15 +13,15 @@ export interface LimbBody {
 }
 
 const TMP = new Vector3();
-const DIST: Record<LimbId, number> = { cannon: 0, arm: 0, head: 0 };
+const DIST: Record<LimbId, number> = { cannon: 0, arm: 0, head: 0, leg: 0 };
 const SOCKET_FLASH = new Color3(1.6, 0.9, 0.35);
 
 export function limbNode(rig: WalkerRig, l: LimbId): TransformNode {
-  return l === 'cannon' ? rig.cannon : l === 'arm' ? rig.armL : rig.head;
+  return l === 'cannon' ? rig.cannon : l === 'arm' ? rig.armL : l === 'head' ? rig.head : rig.thighR;
 }
 
 /** Assign a hull hit to the nearest part; returns the part that came off now (or null). */
-export function hitLimb(e: LimbBody, point: Vector3, toHp: number, survives: boolean): LimbId | null {
+export function hitLimb(e: LimbBody, point: Vector3, toHp: number, survives: boolean, fxOil: Effects | null = null): LimbId | null {
   const rig = e.walker;
   if (!rig || !(toHp > 0)) return null;
   const scale = Math.abs(rig.hips.parent ? (rig.hips.parent as TransformNode).scaling.x : 1) || 1;
@@ -32,6 +32,8 @@ export function hitLimb(e: LimbBody, point: Vector3, toHp: number, survives: boo
   }
   const l = limbForHit(DIST, e.limbsLost);
   if (!l) return null;
+  // A hit on a part spits hydraulic oil from it.
+  if (fxOil) fxOil.burst('oil', point, 3, undefined, 0.8);
   const i = LIMB_IDS.indexOf(l);
   const r = limbDamage(e.limbDmg[i], toHp, l, e.maxHp, survives);
   e.limbDmg[i] = r.total;
@@ -53,6 +55,7 @@ export function detachLimb(e: LimbBody, l: LimbId, fx: Effects): void {
   node.setEnabled(false);
   fx.burst('sparks', at, 22, undefined, 1.1);
   fx.burst('smoke', at, 2, undefined, 0.7);
+  fx.burst('oil', at, 16, undefined, 1.2);
   fx.debrisBurst(at, 4, 5, 0.7);
   fx.flashLight(at, 2.4, 0.16, SOCKET_FLASH);
   sfx.play('shieldHit', { pitch: l === 'head' ? 0.75 : 0.55, volume: 0.9 });
@@ -60,7 +63,7 @@ export function detachLimb(e: LimbBody, l: LimbId, fx: Effects): void {
 
 /** Re-attach every part (pooled enemies are reused). */
 export function restoreLimbs(e: LimbBody): void {
-  e.limbDmg = [0, 0, 0];
+  e.limbDmg = [0, 0, 0, 0];
   if (!e.limbsLost || !e.walker) {
     e.limbsLost = 0;
     return;

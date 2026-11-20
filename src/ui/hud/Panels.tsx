@@ -203,6 +203,26 @@ export function PlayerPanel() {
           ))}
         </div>
       </div>
+      <MoveRow />
+    </div>
+  );
+}
+
+/** Grapple and ground pound cooldowns (slide and wall-run have no cooldown worth showing). */
+function MoveRow() {
+  const m = useHud((s) => s.moves);
+  const chip = (label: string, action: string, cd: number, max: number, on: boolean) => (
+    <span className={`mv-chip ${on ? 'active' : cd > 0 ? 'cooling' : 'ready'}`}>
+      <BoundKey action={action} /> {label}
+      <i style={{ transform: `scaleX(${max > 0 ? Math.max(0, Math.min(1, 1 - cd / max)) : 1})` }} />
+    </span>
+  );
+  return (
+    <div className="move-row">
+      {chip('GRAPPLE', 'grapple', m.grapple, m.grappleMax, m.state === 'grapple')}
+      {chip('POUND', 'slide', m.pound, m.poundMax, m.state === 'pound')}
+      {m.state === 'slide' && <b className="mv-state">SLIDE</b>}
+      {m.state === 'wall' && <b className="mv-state">WALL-RUN</b>}
     </div>
   );
 }

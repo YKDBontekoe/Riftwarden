@@ -43,7 +43,7 @@ export function Crosshair() {
   );
 }
 
-const LIMB_LABEL = { cannon: 'CANNON SHEARED · DISARMED', arm: 'ARM SEVERED', head: 'SENSOR HEAD OFF · BLINDED' } as const;
+const LIMB_LABEL = { cannon: 'CANNON SHEARED · DISARMED', arm: 'ARM SEVERED', head: 'SENSOR HEAD OFF · BLINDED', leg: 'LEG SHOT OFF · CRAWLING' } as const;
 
 export function Hitmarker() {
   const [state, setState] = useState<{ kind: HitKind | 'limb'; id: number; label?: string } | null>(null);
@@ -83,6 +83,14 @@ export function Hitmarker() {
       {state.kind === 'limb' && <em className="limb-label">{state.label}</em>}
     </div>
   );
+}
+
+/** Kill flash: a brief warm pulse at the screen edges on every player kill (off with reduced motion via CSS). */
+export function KillPulse() {
+  const [id, setId] = useState(0);
+  useEffect(() => uiEvents.on('hit', (kind) => kind === 'kill' && setId((n) => n + 1)), []);
+  if (!id) return null;
+  return <div key={id} className="kill-pulse" />;
 }
 
 /** Red arcs around the reticle pointing toward whatever just hit the player. */

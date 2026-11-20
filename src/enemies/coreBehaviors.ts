@@ -105,6 +105,7 @@ export function animateCore(e: Enemy, hdt: number, ppos: Vector3, fx: Effects): 
     w.head.rotation.y = clampAngle(look, 0.7);
     const charge = e.chargeT > 0 ? 1 - e.chargeT / SHOT_CHARGE : 0;
     const aimPitch = e.state === 'attack' ? 0.10 : Math.max(-0.15, Math.min(0.22, (e.pos.y + 1.9 - ppos.y) / Math.max(2, Math.hypot(dx, dz))));
+    e.motion!.crawl = hasLost(e.limbsLost, 'leg');
     const planted = e.motion!.pose(e.pos, e.yaw, hdt * (e.boostT > 0 ? 1.6 : 1), e.state === 'move', charge, e.flinch, aimPitch);
     const d2 = dx * dx + dz * dz;
     if (planted && d2 < 18 * 18) fx.burst('puff', planted, e.kind === 'bulwark' ? 3 : 1, undefined, 0.6);

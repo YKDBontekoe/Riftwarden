@@ -86,6 +86,10 @@ export class Turret {
   hurtT = 0;
   /** Max HP scale (follows the wave's hostile damage multiplier). */
   hpScale = 1;
+  /** Mini-Sentry ability: free, short-lived, never blocks lanes, cannot be refitted/recycled/repaired. */
+  temporary = false;
+  /** Seconds left for a temporary tower. */
+  expiresT = 0;
 
   /** Apply damage; returns true when this hit wrecked the tower. */
   damage(amount: number): boolean {
@@ -125,7 +129,7 @@ export class Turret {
     if (!this.wrecked) this.hp = Math.min(this.maxHp, this.hp + this.maxHp * share);
   }
   get blocking(): boolean {
-    return !this.wrecked && !this.building;
+    return !this.wrecked && !this.building && !this.temporary;
   }
 
   disable(seconds: number): void {

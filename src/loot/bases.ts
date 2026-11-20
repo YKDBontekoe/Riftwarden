@@ -328,6 +328,9 @@ export const BASES: readonly BaseDef[] = [
   { id: 'arc_pulse', category: 'ability', name: 'Arc Pulse', blurb: 'Instant electric pulse around the drone: shocks everything near, triple damage to shields.', weight: 8, implicit: [], ability: 'emp', icon: 'gem' },
   { id: 'blink_drive', category: 'ability', name: 'Blink Drive', blurb: 'Instant jump along your aim (up to 10 m, stops at walls), keeps your momentum.', weight: 7, implicit: [], ability: 'blink', icon: 'gem' },
   { id: 'aegis_cell', category: 'ability', name: 'Aegis Cell', blurb: 'Instant overshield and 50% damage resistance for 4 s.', weight: 7, implicit: [], ability: 'aegis', icon: 'gem' },
+  { id: 'shield_wall', category: 'ability', name: 'Shield Wall', blurb: 'Projects a 6 m energy barrier where you aim: blocks enemy fire and line of sight for 6 s; your shots pass through.', weight: 7, implicit: [], ability: 'wall', icon: 'gem' },
+  { id: 'holo_decoy', category: 'ability', name: 'Holo Decoy', blurb: 'Drops a holographic drone that draws the fire of every machine within 24 m until it is destroyed (7 s).', weight: 6, implicit: [], ability: 'decoy', icon: 'gem' },
+  { id: 'mini_sentry', category: 'ability', name: 'Mini-Sentry', blurb: 'Deploys a free Sentinel turret where you aim for 12 s. It does not block lanes and cannot be refitted.', weight: 6, implicit: [], ability: 'sentry', icon: 'gem' },
   { id: 'orbital_lance', category: 'ultimate', name: 'Orbital Lance', blurb: 'Marks the aim point; 1.2 s later a lance from orbit erases everything in the zone.', weight: 10, implicit: [], ability: 'orbital', icon: 'core' },
   { id: 'overdrive_core', category: 'ultimate', name: 'Overdrive Core', blurb: 'For a few seconds: +60% fire rate, no weapon heat, +20% movement speed.', weight: 8, implicit: [], ability: 'overdrive', icon: 'core' },
   // ---------------------------------------------------------------- weapon upgrade modules (M3)

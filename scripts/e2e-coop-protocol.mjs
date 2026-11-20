@@ -215,6 +215,11 @@ async function profileRows(id) {
       check('F5 swapping to the weapon in hand is accepted as a no-op', sw1.ok, JSON.stringify(sw1));
       const ab = await A.act({ a: 'ability', slot: 'ultimate', o: [0, 2, 0], d: [0, 0, 1] });
       check('F6 an ability act without an equipped ability is refused by the server', !ab.ok && /no ability/i.test(ab.reason ?? ''), JSON.stringify(ab));
+      const me = A.me();
+      const far = await A.act({ a: 'pound', p: [me[1] + 30, me[2], me[3]], f: 5 });
+      const pd = await A.act({ a: 'pound', p: [me[1], me[2], me[3]], f: 5 });
+      const again = await A.act({ a: 'pound', p: [me[1], me[2], me[3]], f: 5 });
+      check('F7 ground pound: accepted at the drone, refused far from it and while recharging', !far.ok && pd.ok && !again.ok && /recharg/i.test(again.reason ?? ''), JSON.stringify([far, pd, again]));
       // Combat: the heartbeat fires real shot claims; clear wave 1.
       const w1 = A.snap.w[0];
       await A.act({ a: 'startWave' });

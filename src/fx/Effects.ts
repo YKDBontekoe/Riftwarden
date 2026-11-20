@@ -22,6 +22,7 @@ import { Fragments } from './Fragments';
 import { Smolder } from './Smolder';
 import { type ExplosionStyle, styleMix } from './explosionStyles';
 import { type Palette, unlit } from '../visuals/materials';
+import { Thrown } from './Thrown';
 import { flareSprite, plumeSprite, ringSprite, scorchSprite, SMOKE_CELL, SMOKE_FRAMES, sparkSprite, starSprite } from '../visuals/textures';
 
 export type BurstKind =
@@ -42,7 +43,8 @@ export type BurstKind =
   | 'frost'
   | 'mist'
   | 'plasma'
-  | 'shards';
+  | 'shards'
+  | 'oil';
 
 
 type TexKey = 'flare' | 'fire' | 'smoke' | 'spark' | 'star';
@@ -125,6 +127,14 @@ const BURSTS: Record<BurstKind, BurstConfig> = {
     minSize: 1, maxSize: 1, minLife: 0.18, maxLife: 0.45, minPower: 3, maxPower: 9, gravity: 0, blend: ADD, spread: 1, drag: 5, spin: 2, emitRadius: 0.25,
   },
   // Ice shards: pale stretched slivers that arc down hard.
+  // Hydraulic oil: dark droplets that arc down hard (hits on machine frames, torn-off parts). Same smoke texture
+  // path as the puff (standard-blend sprites only rendered reliably through it).
+  oil: {
+    tex: 'smoke', capacity: 160,
+    colors: [[0, c4(0.09, 0.07, 0.05, 0.95)], [0.7, c4(0.06, 0.05, 0.04, 0.85)], [1, c4(0.05, 0.04, 0.03, 0)]],
+    sizes: [[0, 0.09], [0.4, 0.16], [1, 0.1]],
+    minSize: 1, maxSize: 1, minLife: 0.45, maxLife: 0.9, minPower: 3, maxPower: 8, gravity: -16, blend: STD, spread: 0.45, drag: 0.6, spin: 1,
+  },
   shards: { tex: 'spark', capacity: 160, colors: [[0, c4(2.6, 3.4, 4, 1)], [0.6, c4(1.2, 2, 2.8, 0.9)], [1, c4(0.4, 0.8, 1.3, 0)]], minSize: 0.06, maxSize: 0.12, minLife: 0.4, maxLife: 0.9, minPower: 6, maxPower: 15, gravity: -20, blend: ADD, spread: 1, stretch: 4, drag: 0.6 },
 
 };
@@ -331,7 +341,9 @@ export class Effects {
   private world: CollisionBoxes;
   private hotSparks: BounceSparks;
 
+  private readonly thrownFx: Thrown;
   constructor(private scene: Scene, kit: Kit, P: Palette, layout: ArenaLayout, private high: boolean) {
+    this.thrownFx = new Thrown(scene);
     this.particleBudget = high ? 1800 : 1050;
     const tex: Record<TexKey, DynamicTexture> = {
       flare: flareSprite(scene),
@@ -347,7 +359,7 @@ export class Effects {
     this.fragments.cap = high ? 72 : 44;
     this.smolder = new Smolder(scene, tex);
 
-    const poolSizes: Record<BurstKind, number> = { spark: 10, crit: 6, enemySpark: 8, impact: 10, explosion: 6, smoke: 8, shield: 5, build: 3, flash: 6, fire: 8, sparks: 8, embers: 6, puff: 8, mist: 5, zap: 8, frost: 6, plasma: 5, shards: 4 };
+    const poolSizes: Record<BurstKind, number> = { spark: 10, crit: 6, enemySpark: 8, impact: 10, explosion: 6, smoke: 8, shield: 5, build: 3, flash: 6, fire: 8, sparks: 8, embers: 6, puff: 8, mist: 5, zap: 8, frost: 6, plasma: 5, shards: 4, oil: 6 };
     for (const k of Object.keys(BURSTS) as BurstKind[]) this.bursts.set(k, new BurstPool(scene, tex[BURSTS[k].tex], BURSTS[k], poolSizes[k]));
 
     const root = kit.node('fxRoot', null);
@@ -676,8 +688,17 @@ export class Effects {
     p.mesh.setEnabled(false);
   }
 
+  /** Visual of a thrown ability charge (replicated; the thrower's logic ends it with `thrownEnd`). */
+  thrown(pos: Vector3, vel: Vector3, life: number, cold: boolean): void {
+    this.thrownFx.spawn(pos, vel, life, cold);
+  }
+  thrownEnd(at: Vector3): void {
+    this.thrownFx.end(at);
+  }
+
   /** dt = real time. Projectiles are hostile and integrated by the game with hostile time. */
   update(dt: number): void {
+    this.thrownFx.update(dt);
     for (let i = this.secondaries.length - 1; i >= 0; i--) {
       const b = this.secondaries[i];
       b.t -= dt;
@@ -767,6 +788,7 @@ export class Effects {
   }
 
   reset(): void {
+    this.thrownFx.reset();
     for (const t of this.tracers)
       for (const tr of t.pool) {
         tr.life = 0;

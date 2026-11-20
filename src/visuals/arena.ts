@@ -16,7 +16,7 @@ import {
 import type { ArenaLayout, Box, GateId, Ramp } from '../world/layout';
 import { RiftAnchors } from './riftAnchors';
 import { biomeOf } from '../world/biomes';
-import { PHYS_ENV } from '../world/physicsGroups';
+import { PHYS_BOUND, PHYS_ENV } from '../world/physicsGroups';
 import { type Palette, unlit } from './materials';
 import { boxProjectUVs } from './uv';
 import { createBeveledBox } from './bevel';
@@ -155,6 +155,32 @@ export class ArenaBuilder {
     const body = new PhysicsBody(node, PhysicsMotionType.STATIC, false, this.scene);
     this.physicsShape.filterMembershipMask = PHYS_ENV;
     body.shape = this.physicsShape;
+    this.buildContainment();
+  }
+
+  /**
+   * The grapple and wall jumps can climb past the 9 m perimeter walls: an invisible ring from just below their top
+   * to well above any reachable height keeps the drone inside. Own filter group, so rays pass through it.
+   */
+  private buildContainment(): void {
+    const H = this.layout.half;
+    const T = 2;
+    const y0 = 8;
+    const y1 = 90;
+    const span = 2 * (H + T);
+    const shape = new PhysicsShapeContainer(this.scene);
+    const add = (cx: number, cz: number, ex: number, ez: number): void => {
+      const box = new PhysicsShapeBox(Vector3.Zero(), Quaternion.Identity(), new Vector3(ex, y1 - y0, ez), this.scene);
+      box.filterMembershipMask = PHYS_BOUND;
+      shape.addChild(box, new Vector3(cx, (y0 + y1) / 2, cz), Quaternion.Identity());
+    };
+    add(0, H + T / 2, span, T);
+    add(0, -H - T / 2, span, T);
+    add(H + T / 2, 0, T, span);
+    add(-H - T / 2, 0, T, span);
+    shape.filterMembershipMask = PHYS_BOUND;
+    const body = new PhysicsBody(new TransformNode('arenaContainment', this.scene), PhysicsMotionType.STATIC, false, this.scene);
+    body.shape = shape;
   }
 
   /** Thin concrete wall (mazes, chicanes, the bastion ring, pylons): kick plate, cap, ribs and a dim marker line. */

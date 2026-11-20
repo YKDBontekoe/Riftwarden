@@ -24,7 +24,7 @@ Answers from the owner, recorded so every session builds toward the same game. W
 - **Two weapons, any family in either slot, instant swap**, heat tracked per weapon (swapping lets the other cool).
 - **Abilities: 2 free slots + 1 ultimate.** Types: grenades/throwables, deployables (shield wall, decoy, mini-turret, pylon), movement, ultimates (orbital strike, overdrive, ...). Small abilities run on **cooldowns**; the **ultimate charges from damage dealt**.
 - Where abilities come from: a **mix**: the base ability is a loot item (rarity, affixes); the skill tree and run upgrades add modifiers.
-- **Movement additions**: slide (needs a free key), grapple, wall-run, ground pound.
+- **Movement additions**: slide (needs a free key), grapple, wall-run, ground pound. *(Done: slide + pound on L-Ctrl, grapple on R / middle mouse, wall-run automatic.)*
 - **Target TTK ~0.3 s** for a basic walker with a matched weapon (Doom-like trash).
 - **Hit feedback is the top complaint.** Strengthen every layer: enemy reaction (stagger), meatier audio and crit dings, hitmarkers/crit pops/kill flashes, sparks/oil sprays. **Robots lose parts when shot** (limbs/armour detach and change behaviour, e.g. a legless walker crawls).
 

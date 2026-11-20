@@ -471,20 +471,32 @@ export class Sfx {
         this.noiseBurst(0.045, 0.12 * v, 420, 180, out, 'lowpass');
         break;
       case 'hit':
-        this.osc('square', 1900 * j, 1500, 0.04, 0.06 * v, out);
+        // Tick + metal slap + a short low thump so hits land in the body, not only in the treble.
+        this.osc('square', 1900 * j, 1500, 0.04, 0.05 * v, out);
         this.noiseBurst(0.05, 0.12 * v, 3000, 1500, out, 'highpass');
+        this.noiseBurst(0.06, 0.1 * v, 1400 * j, 500, out, 'bandpass', 2.5);
+        this.osc('sine', 170 * j, 70, 0.07, 0.16 * v, out);
         break;
       case 'crit':
         this.osc('triangle', 2400, 3200, 0.09, 0.14 * v, out);
         this.osc('sine', 3600, 3600, 0.07, 0.07 * v, out, 0.02);
+        // Ringing armour + a harder thump.
+        this.osc('triangle', 1250 * j, 1180, 0.22, 0.06 * v, out, 0.01);
+        this.noiseBurst(0.07, 0.16 * v, 2200, 700, out, 'bandpass', 3);
+        this.osc('sine', 140, 50, 0.1, 0.22 * v, out);
         break;
       case 'shieldHit':
         this.osc('sine', 900 * j, 1300, 0.08, 0.1 * v, out);
         this.noiseBurst(0.08, 0.1 * v, 6000, 3000, out, 'bandpass', 3);
         break;
       case 'kill':
-        this.osc('square', 520, 120, 0.18, 0.14 * v, out);
-        this.osc('sine', 1800, 2400, 0.08, 0.08 * v, out);
+        this.osc('square', 520 * p, 120, 0.18, 0.12 * v, out);
+        this.osc('sine', 1800 * p, 2400 * p, 0.08, 0.08 * v, out);
+        // Crunch: a low boom, a torn-metal noise sweep and a late rattle of parts.
+        this.osc('sine', 110, 38, 0.28, 0.32 * v, out);
+        this.noiseBurst(0.22, 0.2 * v, 3200, 300, out, 'lowpass', 0.9);
+        this.noiseBurst(0.05, 0.08 * v, 5000, 2200, out, 'highpass', 1, 0.09);
+        this.noiseBurst(0.05, 0.06 * v, 5000, 2200, out, 'highpass', 1, 0.17);
         break;
       case 'turretShot':
         this.osc('square', 900 * j, 300, 0.07, 0.07 * v, out);

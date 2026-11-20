@@ -240,6 +240,307 @@ async function deploy(p) {
       await ev(p, () => window.__rift.flow.abandonRun());
       await H.waitFor(p, () => window.__rift.state().location === 'home' && !window.__rift.state().busy);
     }
+    if (want('D')) {
+      // Movement kit: slide (L-Ctrl on the ground), ground pound (L-Ctrl in the air), grapple (R), wall-run.
+      await deploy(p);
+      const d1 = await ev(p, () => {
+        const R = window.__rift;
+        const g = R.game;
+        const pl = g.player;
+        R.teleport(0, -10);
+        R.look(Math.PI, 0);
+        R.advance(0.3);
+        const i = g.input;
+        const standEye = pl.eye.y - pl.position.y;
+        i.simulateKey('KeyW', true);
+        R.advance(0.4);
+        const run = pl.speed;
+        i.simulateKey('ControlLeft', true);
+        R.advance(1 / 60);
+        const state = pl.moveState;
+        R.advance(0.25);
+        const slideSpeed = pl.speed;
+        const slideEye = pl.eye.y - pl.position.y;
+        const hud = g.movement.hud().state;
+        i.simulateKey('ControlLeft', false);
+        R.advance(2 / 60);
+        const after = pl.moveState;
+        i.simulateKey('KeyW', false);
+        R.advance(0.3);
+        return { run, state, slideSpeed, standEye, slideEye, hud, after };
+      });
+      check('D1 L-Ctrl at a run slides: faster than the run, eye drops, release ends it', d1.state === 'slide' && d1.slideSpeed > d1.run + 4 && d1.slideEye < d1.standEye - 0.25 && d1.hud === 'slide' && d1.after === '', JSON.stringify(d1));
+
+      const d2 = await ev(p, () => {
+        const R = window.__rift;
+        const g = R.game;
+        const pl = g.player;
+        R.teleport(0, -10, 9);
+        R.advance(0.25);
+        const e = R.dev.spawn('walker');
+        const pp = pl.position;
+        const place = () => { e.pos.set(pp.x + 2.5, 0, pp.z); e.root.position.copyFrom(e.pos); e.shotT = 99; };
+        place();
+        const hp = e.hp;
+        const i = g.input;
+        i.simulateKey('ControlLeft', true);
+        R.advance(1 / 60);
+        i.simulateKey('ControlLeft', false);
+        const state = pl.moveState;
+        const vy = pl.verticalSpeed;
+        let k = 0;
+        for (; k < 90 && g.movement.pounds === 0; k++) { place(); R.advance(1 / 60); }
+        return { state, vy, frames: k, pounds: g.movement.pounds, last: g.movement.lastPound && { r: g.movement.lastPound.radius, hit: g.movement.lastPound.hit }, hp, after: e.alive ? e.hp : 0, cd: g.movement.hud().pound };
+      });
+      check('D2 L-Ctrl in the air ground-pounds: fast drop, blast on landing hurts a walker, cooldown starts', d2.state === 'pound' && d2.vy < -30 && d2.pounds === 1 && d2.last && d2.last.hit >= 1 && d2.after < d2.hp && d2.cd > 0, JSON.stringify(d2));
+
+      // Find the north perimeter wall (classic arena) for the grapple and the wall-run.
+      const d3 = await ev(p, () => {
+        const R = window.__rift;
+        const g = R.game;
+        const pl = g.player;
+        const H = g.layout.half;
+        // A spot with a clear 20-30 m line north to the wall.
+        R.look(0, -0.05);
+        for (const x of [-H + 8, -H + 14, -H + 20, -H + 26, -H + 32]) {
+          R.teleport(x, H - 26);
+          R.advance(0.2);
+          const f = pl.forward(new R.V3());
+          const hit = pl.probe(pl.eye.clone(), pl.eye.add(f.scale(40)));
+          if (hit && Math.abs(hit.point.z - H) < 1) break;
+        }
+        const start = R.V3.Distance(pl.position, new R.V3(pl.position.x, pl.position.y, H));
+        g.input.simulateKey('KeyR', true);
+        R.advance(1 / 60);
+        g.input.simulateKey('KeyR', false);
+        const state = pl.moveState;
+        const anchorZ = pl.kit.anchor.z;
+        const rope = g.scene.getMeshByName('grappleLine')?.isEnabled() ?? false;
+        R.advance(0.6);
+        const mid = H - pl.position.z;
+        for (let k = 0; k < 120 && pl.moveState === 'grapple'; k++) R.advance(1 / 60);
+        return { start, state, anchorZ, H, rope, mid, end: pl.moveState, cd: g.movement.hud().grapple };
+      });
+      check('D3 R grapples the wall ahead and reels the drone in, then cools down', d3.state === 'grapple' && Math.abs(d3.anchorZ - d3.H) < 1.5 && d3.rope && d3.mid < d3.start - 12 && d3.end === '' && d3.cd > 0, JSON.stringify(d3));
+
+      const d4 = await ev(p, () => {
+        const R = window.__rift;
+        const g = R.game;
+        const pl = g.player;
+        const H = g.layout.half;
+        R.teleport(-H + 8, H - 1.0, 3);
+        R.look(Math.PI / 2, 0); // facing +x, wall on the left (north = +z)
+        R.advance(1 / 60);
+        pl.hv.set(18, 0, 0);
+        pl.vy = 0;
+        const i = g.input;
+        i.simulateKey('KeyW', true);
+        let k = 0;
+        for (; k < 30 && pl.moveState !== 'wall'; k++) { R.advance(1 / 60); }
+        const state = pl.moveState;
+        const y0 = pl.position.y;
+        R.advance(0.5);
+        const still = pl.moveState;
+        const drop = y0 - pl.position.y;
+        const speed = pl.speed;
+        const roll = pl.camera.rotation.z;
+        i.simulateKey('Space', true);
+        R.advance(1 / 60);
+        i.simulateKey('Space', false);
+        R.advance(3 / 60);
+        const after = { state: pl.moveState, vz: pl.hv.z, vy: pl.verticalSpeed };
+        i.simulateKey('KeyW', false);
+        R.advance(1);
+        return { frames: k, state, still, drop, speed, roll, after };
+      });
+      check('D4 airborne along a wall: wall-run holds height and speed, leans the camera; jump kicks off the wall', d4.state === 'wall' && d4.still === 'wall' && d4.drop < 1.5 && d4.speed > 18 && Math.abs(d4.roll) > 0.05 && d4.after.state === '' && d4.after.vz < -5 && d4.after.vy > 4, JSON.stringify(d4));
+
+      const d6 = await ev(p, () => {
+        const R = window.__rift;
+        const g = R.game;
+        const pl = g.player;
+        const H = g.layout.half;
+        // Flung over the north wall from above its top: the containment ring keeps the drone in.
+        R.teleport(-H + 20, H - 3, 12);
+        R.advance(1 / 60);
+        let maxZ = -1e9;
+        for (let k = 0; k < 60; k++) { pl.hv.set(0, 0, 30); pl.vy = 6; R.advance(1 / 60); maxZ = Math.max(maxZ, pl.position.z); }
+        R.advance(1.5);
+        // Rays still pass it: the grapple hooks the real wall, not the invisible ring above it.
+        R.teleport(-H + 20, H - 20);
+        R.look(0, -0.45);
+        R.advance(0.2);
+        const f = pl.forward(new R.V3());
+        const hit = pl.probe(pl.eye.clone(), pl.eye.add(f.scale(46)));
+        return { H, maxZ, z: pl.position.z, y: pl.position.y, rayHit: hit && hit.point.z, rayY: hit && hit.point.y };
+      });
+      check('D6 the drone cannot leave over the perimeter walls; rays ignore the containment', d6.maxZ < d6.H && d6.z < d6.H && d6.rayHit === null, JSON.stringify(d6));
+      await ev(p, () => window.__rift.advance(1 / 60));
+      await H.shot(p, 'combat_movement_hud', { frames: 2 });
+      const chips = await p.$$eval('.mv-chip', (els) => els.map((e) => e.textContent));
+      check('D5 HUD shows grapple and pound chips with their keys', chips.length === 2 && /GRAPPLE/.test(chips[0]) && /R/.test(chips[0]) && /POUND/.test(chips[1]) && /CTRL/.test(chips[1]), JSON.stringify(chips));
+      await ev(p, () => window.__rift.flow.abandonRun());
+      await H.waitFor(p, () => window.__rift.state().location === 'home' && !window.__rift.state().busy);
+    }
+    if (want('E')) {
+      // TTK, hit feedback (leg / crawl, oil, kill pulse), wheel swap.
+      await ev(p, () => {
+        const R = window.__rift;
+        const rail = R.makeItem({ seed: 78, rarity: 'rare', baseId: 'rail_lancer', level: 5 });
+        R.profile.mutate((d) => { d.items.push(rail); d.loadout.weapon2 = rail.uid; return true; });
+      });
+      await deploy(p);
+      const e1 = await ev(p, () => {
+        const R = window.__rift;
+        const g = R.game;
+        const pp = g.player.position;
+        R.look(Math.atan2(-pp.x, -pp.z), 0);
+        R.advance(1 / 60);
+        const fwd = g.player.forward(new R.V3());
+        const e = R.dev.spawn('walker');
+        const place = () => { e.pos.set(pp.x + fwd.x * 9, 0, pp.z + fwd.z * 9); e.root.position.copyFrom(e.pos); e.shotT = 99; };
+        place();
+        R.advance(1 / 60);
+        const c = e.center(new R.V3());
+        const eye = g.player.eye;
+        R.look(Math.atan2(c.x - eye.x, c.z - eye.z), -Math.atan2(c.y - 0.15 - eye.y, Math.hypot(c.x - eye.x, c.z - eye.z)));
+        const shots0 = g.weapon.shotsFired;
+        const i = g.input;
+        i.simulateMouse(0, true);
+        let k = 0;
+        for (; k < 120 && e.alive; k++) { place(); R.advance(1 / 60); }
+        i.simulateMouse(0, false);
+        R.advance(0.1);
+        return { seconds: k / 60, shots: g.weapon.shotsFired - shots0, dead: !e.alive, family: g.weapon.def.family };
+      });
+      check('E1 TTK: the starter repeater drops a basic walker in about 0.3 s', e1.dead && e1.family === 'plasma' && e1.seconds <= 0.45 && e1.shots <= 5, JSON.stringify(e1));
+      await H.ev(p, () => window.__rift.render(1));
+      await new Promise((r) => setTimeout(r, 150));
+      const pulse = await p.$('.kill-pulse');
+      check('E2 a player kill flashes the screen edges (kill pulse)', !!pulse, '');
+
+      const e3 = await ev(p, () => {
+        const R = window.__rift;
+        const g = R.game;
+        const e = R.dev.spawn('walker');
+        const pp = g.player.position;
+        e.pos.set(pp.x + 6, 0, pp.z + 6);
+        e.root.position.copyFrom(e.pos);
+        R.advance(1 / 60);
+        const before = e.moveMult;
+        const leg = e.walker.thighR;
+        leg.computeWorldMatrix(true);
+        const at = leg.getAbsolutePosition().clone();
+        // Particles only spawn while rendering: count the oil bursts requested instead.
+        let oil = 0;
+        const oil0 = 0;
+        const burst = g.fx.burst.bind(g.fx);
+        g.fx.burst = (kind, ...rest) => { if (kind === 'oil') oil += rest[1]; return burst(kind, ...rest); };
+        g.damageEnemy('player', e, e.maxHp * 0.36, at, false);
+        R.advance(1 / 60);
+        g.fx.burst = burst;
+        const lost = e.limbsLost;
+        const hipsY = () => e.walker.hips.position.y;
+        R.advance(0.4);
+        return { alive: e.alive, lost, legBit: 8, before, after: e.moveMult, crawl: e.motion.crawl, hips: hipsY(), oil0, oil };
+      });
+      check('E3 shooting the right leg off makes the walker crawl (slow, low) and sprays oil', e3.alive && (e3.lost & e3.legBit) !== 0 && e3.after < e3.before * 0.6 && e3.crawl && e3.hips < 1 && e3.oil > e3.oil0, JSON.stringify(e3));
+
+      const e4 = await ev(p, () => {
+        const R = window.__rift;
+        const g = R.game;
+        const a = g.weaponSlots.active;
+        g.input.simulateWheel(1);
+        R.advance(1 / 60);
+        const b = g.weaponSlots.active;
+        g.input.simulateWheel(-1);
+        R.advance(1 / 60);
+        return { a, b, c: g.weaponSlots.active };
+      });
+      check('E4 the mouse wheel swaps between the two weapons', e4.a === 'weapon' && e4.b === 'weapon2' && e4.c === 'weapon', JSON.stringify(e4));
+      await ev(p, () => window.__rift.flow.abandonRun());
+      await H.waitFor(p, () => window.__rift.state().location === 'home' && !window.__rift.state().busy);
+    }
+    if (want('F')) {
+      // Deployables: shield wall (RMB) blocks fire and line of sight, decoy (F) draws fire, mini-sentry is temporary.
+      await ev(p, () => {
+        const R = window.__rift;
+        const wall = R.makeItem({ seed: 94, rarity: 'rare', baseId: 'shield_wall', level: 5 });
+        const decoy = R.makeItem({ seed: 95, rarity: 'rare', baseId: 'holo_decoy', level: 5 });
+        R.profile.mutate((d) => { d.items.push(wall, decoy); d.loadout.ability = wall.uid; d.loadout.ability2 = decoy.uid; return true; });
+      });
+      await deploy(p);
+      const f1 = await ev(p, () => {
+        const R = window.__rift;
+        const g = R.game;
+        R.teleport(0, -16);
+        R.look(Math.PI, 0.1);
+        R.advance(0.2);
+        const i = g.input;
+        i.simulateMouse(2, true);
+        R.advance(1 / 60);
+        i.simulateMouse(2, false);
+        R.advance(1 / 60);
+        const fwd = g.player.forward(new R.V3());
+        const eye = g.player.eye.clone();
+        const far = eye.add(new R.V3(fwd.x, 0, fwd.z).normalize().scale(24));
+        const losBlocked = !g.los(eye, far);
+        // An enemy bolt fired at the drone from behind the wall dies on it.
+        const hp = g.player.hp + g.player.shield;
+        const from = far.clone();
+        from.y = eye.y;
+        g.fx.spawnProjectile(from, eye.subtract(from).normalize().scale(28), 40);
+        R.advance(1.2);
+        return { walls: g.deployables.wallCount, losBlocked, hpBefore: hp, hpAfter: g.player.hp + g.player.shield, cd: g.abilities.cd.ability };
+      });
+      check('F1 RMB raises a shield wall: it blocks enemy line of sight and enemy bolts', f1.walls === 1 && f1.losBlocked && f1.hpAfter >= f1.hpBefore && f1.cd > 0, JSON.stringify(f1));
+      await H.shot(p, 'combat_shield_wall', { frames: 2 });
+
+      const f2 = await ev(p, () => {
+        const R = window.__rift;
+        const g = R.game;
+        R.advance(7);
+        const gone = g.deployables.wallCount === 0;
+        R.teleport(0, -16);
+        R.look(Math.PI / 2, 0.1);
+        R.advance(0.2);
+        g.input.simulateKey('KeyF', true);
+        R.advance(1 / 60);
+        g.input.simulateKey('KeyF', false);
+        R.advance(1 / 60);
+        const d = g.deployables;
+        const hp0 = d.decoyHp;
+        const e = R.dev.spawn('walker');
+        const pp = g.player.position;
+        // A walker 14 m from the decoy, on the far side from the drone.
+        const dec = d.decoyFor(pp.add(new R.V3(14, 0, 0)));
+        e.pos.set(pp.x + 22, 0, pp.z - 6);
+        e.root.position.copyFrom(e.pos);
+        e.shotT = 0.1;
+        const hpP = g.player.hp + g.player.shield;
+        let k = 0;
+        for (; k < 300 && d.decoyHp >= hp0; k++) { e.pos.set(pp.x + 22, 0, pp.z - 6); e.root.position.copyFrom(e.pos); R.advance(1 / 60); }
+        return { gone, decoy: !!dec, hp0, hp: d.decoyHp, frames: k, playerUntouched: g.player.hp + g.player.shield >= hpP, cd: g.abilities.cd.ability2 };
+      });
+      check('F2 the wall expires; F drops a holo decoy that machines nearby shoot instead of the drone', f2.gone && f2.decoy && f2.hp < f2.hp0 && f2.playerUntouched && f2.cd > 0, JSON.stringify(f2));
+
+      const f3 = await ev(p, () => {
+        const R = window.__rift;
+        const g = R.game;
+        const n0 = g.turrets.turrets.length;
+        const eye = g.player.eye.clone();
+        g.deployables.deploy('sentry', eye, g.player.forward(new R.V3()), 2, 0, g.player.yaw);
+        const t = g.turrets.turrets[g.turrets.turrets.length - 1];
+        R.advance(1.2);
+        const inspectable = g.towers.inspected === t;
+        const mid = { n: g.turrets.turrets.length, temporary: t.temporary, blocking: t.blocking, refund: t.recycleValue };
+        R.advance(1.5);
+        return { n0, mid, inspectable, end: g.turrets.turrets.length };
+      });
+      check('F3 a mini-sentry is a free temporary tower: not blocking, not inspectable, gone when it expires', f3.mid.n === f3.n0 + 1 && f3.mid.temporary && !f3.mid.blocking && !f3.inspectable && f3.mid.refund === 0 && f3.end === f3.n0, JSON.stringify(f3));
+      await ev(p, () => window.__rift.flow.abandonRun());
+      await H.waitFor(p, () => window.__rift.state().location === 'home' && !window.__rift.state().busy);
+    }
     const bad = errs.filter((e) => !/Error compiling effect/.test(e));
     check('Z no page/console errors', bad.length === 0, bad.slice(0, 3).join(' | '));
   } catch (e) {

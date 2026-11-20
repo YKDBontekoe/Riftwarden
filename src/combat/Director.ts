@@ -1,6 +1,7 @@
 import { Color3, Vector3 } from '@babylonjs/core';
 import { sfx } from '../audio/Sfx';
 import type { Enemy } from '../enemies/EnemyManager';
+import { DAMAGE_PACE } from './heat';
 import { RunBuild, UP, upgradeDef } from '../roguelite/upgrades';
 import { MAX_TOWER_LEVEL, type TowerRunInput } from '../towers/components';
 import type { Game } from '../core/Game';
@@ -66,6 +67,8 @@ interface Buff {
   stacks: number;
   mods: (stacks: number) => StatModifier[];
   max: number;
+  /** Co-op: personal buff of one avatar (only their stat block gets it). */
+  owner?: string;
 }
 
 const DMG_TYPE: Record<Element, DamageType> = { none: 'energy', electric: 'energy', thermal: 'explosive', cryo: 'kinetic' };
@@ -146,19 +149,23 @@ export class Director {
     return true;
   }
 
-  buffModifiers(): StatModifier[] {
+  /**
+   * Buff modifiers. No argument = every buff (single player). `null` = team buffs only; an avatar id = only that
+   * avatar's personal buffs (co-op stat blocks add them on top of the team buffs).
+   */
+  buffModifiers(owner?: string | null): StatModifier[] {
     const out: StatModifier[] = [];
-    for (const b of this.buffs) out.push(...b.mods(b.stacks).map((m) => ({ ...m, source: `buff:${b.id}` })));
+    for (const b of this.buffs) if (owner === undefined || (owner === null ? !b.owner : b.owner === owner)) out.push(...b.mods(b.stacks).map((m) => ({ ...m, source: `buff:${b.id}` })));
     return out;
   }
 
-  addBuff(id: string, name: string, dur: number, mods: (stacks: number) => StatModifier[], max = 1): void {
+  addBuff(id: string, name: string, dur: number, mods: (stacks: number) => StatModifier[], max = 1, owner?: string): void {
     let b = this.buffs.find((x) => x.id === id);
     if (b) {
       b.stacks = Math.min(max, b.stacks + 1);
       b.t = dur;
     } else {
-      b = { id, name, t: dur, dur, stacks: 1, mods, max };
+      b = { id, name, t: dur, dur, stacks: 1, mods, max, owner };
       this.buffs.push(b);
     }
     this.g.rebuildStats();
@@ -166,7 +173,7 @@ export class Director {
 
   /** Weapon damage per hit with current stats (scale for effects). */
   weaponBase(): number {
-    return this.g.weapon.def.damage * this.g.stats.weaponDamageMult;
+    return this.g.weapon.def.damage * DAMAGE_PACE * this.g.stats.weaponDamageMult;
   }
 
   towerInput(t: Turret): TowerRunInput {

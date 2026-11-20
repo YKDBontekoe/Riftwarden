@@ -47,6 +47,9 @@ export interface CombatHost {
   damageEnemy(source: 'player' | 'turret', e: Enemy, base: number, point: Vector3, weak: boolean, turret?: Turret, family?: WeaponFamily | 'arc', from?: Vector3): void;
 }
 
+const KILL_AT = new Vector3();
+const KILL_LIGHT = new Color3(1.6, 1.5, 1.35);
+
 export type DamageSource = 'player' | 'turret';
 
 /**
@@ -196,6 +199,10 @@ export class PlayerCombat {
     p.chainAt = this.h.runTime;
     if (p.chain >= 2) uiEvents.emit('chain', p.chain);
     if (heavy) p.addTrauma(0.2);
+    // Kill flash: a white star and a short light where the machine dies.
+    const c = e.center(KILL_AT);
+    this.h.fx.burst('flash', c, 1, undefined, heavy ? 0.7 : 0.45);
+    this.h.fx.flashLight(c, heavy ? 5 : 2.8, 0.07, KILL_LIGHT);
   }
 
   /** Pulse Capacitor: every pulse detonates (60% damage in PULSE_SPLASH m). */
