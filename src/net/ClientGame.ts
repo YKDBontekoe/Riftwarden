@@ -436,7 +436,7 @@ export class ClientGame extends Game {
         this.setBuildMode(false);
         this.swapWeapon('weapon');
       }
-      if (input.pressed('KeyZ')) this.swapWeapon();
+      if (input.pressed('KeyZ') || (input.wheel !== 0 && !this.construction.active)) this.swapWeapon();
       if (this.construction.active && input.mousePressed(2)) this.setBuildMode(false);
       else if (input.mousePressed(2)) this.useAbility('ability');
       if (input.pressed('KeyF') && !(this.towers.inspected && this.layout.mazing)) this.useAbility('ability2');
@@ -455,6 +455,7 @@ export class ClientGame extends Game {
     const hdt = dt * this.tactical.hostileScale;
     this.runTime += dt;
     this.abilities.update(dt);
+    this.deployables.update(dt);
     this.hazards?.decay(hdt, this.hostileT);
     this.hazards?.affectPlayer(0);
     this.player.update(dt, input, this.stats.moveSpeedMult * (this.hazards?.playerSpeed ?? 1), controls);
@@ -882,6 +883,20 @@ export class ClientGame extends Game {
       case 'hz':
         this.hazards?.add(ev[1], ev[2], ev[3], ev[4], ev[5]);
         break;
+      case 'dp': {
+        const [, kind, at, yaw, seconds, size] = ev;
+        if (kind === 'wall') this.deployables.wall(vec(at), yaw, seconds, size);
+        else if (kind === 'decoy') this.deployables.decoy(vec(at), 0, size, true);
+        else {
+          // The server removes the sentry ('T-'); locally it only must not be inspected or refitted.
+          const t = this.towerById.get(size);
+          if (t) {
+            t.temporary = true;
+            t.expiresT = seconds;
+          }
+        }
+        return;
+      }
       case 'T-': {
         const t = this.towerById.get(ev[1]);
         if (!t) return;

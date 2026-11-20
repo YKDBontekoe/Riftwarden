@@ -84,7 +84,7 @@ export class TowerControl {
       cam.getDirectionToRef(Vector3.Forward(), this.ray.direction);
       const hit = h.scene.pickWithRay(this.ray, (m) => (!!m.metadata?.turret || !!m.metadata?.surface) && m.isEnabled());
       const meta = hit?.pickedMesh?.metadata as TurretHitboxMeta | undefined;
-      if (meta?.turret && !meta.turret.building) t = meta.turret;
+      if (meta?.turret && !meta.turret.building && !meta.turret.temporary) t = meta.turret;
     }
     if (t !== this.inspected) this.recycleT = 0;
     this.inspected = t;

@@ -31,6 +31,8 @@ export type ReplicatedEvent =
   | readonly ['T+', number, TowerConfig, V3, number, string, string]
   | readonly ['T-', number]
   | readonly ['Tc', number, TowerConfig, number]
+  // deployables: kind, ground point, yaw, seconds, wall half-width / decoy radius / sentry tower id
+  | readonly ['dp', 'wall' | 'decoy' | 'sentry', V3, number, number, number]
   // loot
   | readonly ['L+', number, ItemInstance, V3, V3, number]
   | readonly ['L-', number, Flag]
@@ -76,6 +78,7 @@ const SHAPES: { [K in EventTag]: { fields: Check[]; optional?: number } } = {
   'T+': { fields: [num, obj, v3, num, str, str] },
   'T-': { fields: [num] },
   Tc: { fields: [num, obj, num] },
+  dp: { fields: [(v: unknown) => v === 'wall' || v === 'decoy' || v === 'sentry', v3, num, num, num] },
   'L+': { fields: [num, obj, v3, v3, num] },
   'L-': { fields: [num, flag] },
   up: { fields: [str, str] },

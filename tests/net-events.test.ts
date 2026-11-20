@@ -26,6 +26,7 @@ const SAMPLES: Record<string, unknown[]> = {
   'T+': ['T+', 1, CFG, V, 0.2, 'Alpha', ''],
   'T-': ['T-', 1],
   Tc: ['Tc', 1, CFG, 2],
+  dp: ['dp', 'wall', [1, 0, 2], 0.5, 6, 3],
   'L+': ['L+', 3, { uid: 'a.1' }, V, V, 4],
   'L-': ['L-', 3, 1],
   up: ['up', 'w_vent', 'Alpha'],

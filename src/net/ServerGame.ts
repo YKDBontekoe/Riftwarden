@@ -4,6 +4,7 @@ import { SCATTER_PELLETS } from '../combat/Weapon';
 import { type Engine, Vector3 } from '@babylonjs/core';
 import { sfx } from '../audio/Sfx';
 import { mulberry32 } from '../combat/damage';
+import { DAMAGE_PACE } from '../combat/heat';
 import { BASE_STATS, type CombatStats, computeStats, STAT_DEFS, type StatModifier } from '../combat/stats';
 import { type ArenaConfig, Game } from '../core/Game';
 import type { Input } from '../core/Input';
@@ -211,6 +212,14 @@ export class ServerGame extends Game {
       released: (e) => this.rec.push(['er', e.id]),
     };
     this.enemyCtx.focus = (e) => this.focus(e);
+    // Deployables are shared world objects: replicate them (sentries as towers that the server removes).
+    this.deployables.onPlaced = (kind, at, yaw, seconds, size) => this.rec.push(['dp', kind, arr(at), Math.round(yaw * 1000) / 1000, seconds, size]);
+    this.deployables.onSentry = (t, added) => {
+      if (!added) return this.rec.push(['T-', t.id]);
+      const a = this.rec.owner ? this.avatar(this.rec.owner) : undefined;
+      this.rec.push(['T+', t.id, t.config, arr(t.pos), Math.round(t.yaw * 1000) / 1000, a?.id ?? '', a?.name ?? '']);
+      this.rec.push(['dp', 'sentry', arr(t.pos), 0, t.expiresT, t.id]);
+    };
     capturePresentation(this, this.rec);
     // Headless: nothing renders, so world matrices of the static level are computed once here (picking needs them).
     for (const m of this.scene.meshes) m.computeWorldMatrix(true);
@@ -241,6 +250,8 @@ export class ServerGame extends Game {
       get weapon() { return g.weapon; }, // prettier-ignore
       inventory: a.inventory,
       get stats() { return a.stats; }, // prettier-ignore
+      get deployables() { return g.deployables; }, // prettier-ignore
+      owner: a.id,
       canAct: () => a.active && a.player.alive,
     });
     this.avatars.push(a);
@@ -326,11 +337,12 @@ export class ServerGame extends Game {
       }
     }
     const body = tgt?.player ?? this.player;
-    this.enemyCtx.player = body;
+    this.enemyCtx.player = this.deployables.decoyFor(e.pos) ?? body;
     (this as { player: Player }).player = body;
   }
 
   override hurtPlayer(amount: number, from: Vector3, target: Player = this.player): void {
+    if (this.deployables.isDecoy(target)) return super.hurtPlayer(amount, from, target);
     const a = this.avatars.find((x) => x.player === target);
     if (!a || !a.active) return;
     this.rec.quiet(() => super.hurtPlayer(amount, from, target));
@@ -343,7 +355,7 @@ export class ServerGame extends Game {
       super.rebuildStats();
       return;
     }
-    const shared = [...this.modifiers, ...this.director.build.modifiers(), ...this.director.buffModifiers()];
+    const shared = [...this.modifiers, ...this.director.build.modifiers(), ...this.director.buffModifiers(null)];
     const live = this.avatars.filter((a) => !a.left);
     const n = Math.max(1, live.length);
     // Towers are shared: each player's tower gear contributes 1/n (a full team of tower builds = one full build).
@@ -357,7 +369,7 @@ export class ServerGame extends Game {
     Object.assign(this.stats, computeStats([...towerGear, ...shared]));
     for (const a of this.avatars) {
       if (a.activeWeapon === 'weapon2' && !weaponDefFor(a.inventory.equipped('weapon2'))) a.activeWeapon = 'weapon';
-      a.stats = computeStats([...equipmentModifiers(a.inventory.equippedItems(otherSlot(a.activeWeapon))), ...a.treeMods, ...shared]);
+      a.stats = computeStats([...equipmentModifiers(a.inventory.equippedItems(otherSlot(a.activeWeapon))), ...a.treeMods, ...shared, ...this.director.buffModifiers(a.id)]);
       a.player.applyStats(a.stats, this.attackerScale);
       a.weaponDef = weaponDefFor(a.inventory.equipped(a.activeWeapon)) ?? a.weaponDef;
     }
@@ -490,7 +502,7 @@ export class ServerGame extends Game {
     const range = def.range * st.rangeMult;
     const thermal = 1 + st.heatDamage * Math.max(0, Math.min(1, s.h));
     const power = def.family === 'rail' ? Math.max(0.3, Math.min(1, s.pw)) : 1;
-    let dmg = def.damage * st.weaponDamageMult * power * thermal;
+    let dmg = def.damage * DAMAGE_PACE * st.weaponDamageMult * power * thermal;
     const maxHits = def.family === 'rail' ? 1 + def.pierce + Math.floor(st.pierce) : def.family === 'beam' ? 1 : 1 + Math.floor(st.pierce);
     this.as(a, () => {
       this.director.bus.emit({ type: 'fire', chain: this.director.bus.newChain(), source: { kind: 'weapon', id: def.family }, value: 1 });
@@ -605,6 +617,7 @@ export class ServerGame extends Game {
       case 'recycle': {
         const t = this.turrets.byId(m.tower);
         if (!t) return 'Tower no longer exists';
+        if (t.temporary) return 'Mini-sentries cannot be changed';
         if (Vector3.Distance(t.pos, a.player.position) > 34) return 'Too far away';
         const refund = t.recycleValue;
         this.wallet.earn(refund);
@@ -620,12 +633,14 @@ export class ServerGame extends Game {
       case 'repair': {
         const t = this.turrets.byId(m.tower);
         if (!t) return 'Tower no longer exists';
+        if (t.temporary) return 'Mini-sentries cannot be changed';
         if (Vector3.Distance(t.pos, a.player.position) > 34) return 'Too far away';
         return this.wear.repair(t);
       }
       case 'modify': {
         const t = this.turrets.byId(m.tower);
         if (!t) return 'Tower no longer exists';
+        if (t.temporary) return 'Mini-sentries cannot be changed';
         const r = this.modifyTower(t, m.what, m.part);
         if (!r.ok) return r.reason;
         this.rec.push(['Tc', t.id, t.config, t.level]);
@@ -732,7 +747,8 @@ export class ServerGame extends Game {
   /** Between waves: one shared offer, the choice rotates between connected players (30 s, then auto). */
   override openUpgrade(): void {
     this.upgradeDue = false;
-    const offer = this.director.build.nextOffer(this.offerContext);
+    // Team offer: per-player ability loadouts differ, so ability upgrades stay eligible (abilities unknown).
+    const offer = this.director.build.nextOffer({ ...this.offerContext, abilities: undefined });
     if (!offer.length) return this.openVoteIfCheckpoint();
     this.offer = offer;
     const live = this.avatars.filter((a) => a.active);

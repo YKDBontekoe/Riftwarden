@@ -103,7 +103,7 @@ const CONTROLS = [
   [<kbd>WALL</kbd>, 'Run along a wall in the air · jump kicks off it'],
   [<BoundKey action="use" />, 'Use terminal or pick up loot'],
   [<><BoundKey action="inventory" /><kbd>TAB</kbd></>, 'Drone cargo'],
-  [<><BoundKey action="swap" /><kbd>1</kbd></>, 'Swap to the other weapon · 1 primary (the holstered one cools)'],
+  [<><BoundKey action="swap" /><kbd>1</kbd></>, 'Swap to the other weapon (or mouse wheel) · 1 primary (the holstered one cools)'],
   [<kbd>RMB</kbd>, 'Ability I (equip ability items in the ABILITY slots)'],
   [<BoundKey action="repair" />, 'Ability II · repairs the tower under the crosshair on mazing arenas'],
   [<kbd>T</kbd>, 'Ultimate during a wave (charges from the damage you deal) · tower panel in preparation'],

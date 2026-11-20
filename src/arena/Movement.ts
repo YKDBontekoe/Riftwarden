@@ -60,7 +60,7 @@ export class Movement {
     kit.powerMult = this.h.stats.abilityPowerMult;
     if (this.h.canAct() && (input.mousePressed(1) || (input.pressed('KeyR') && this.h.grappleKeyFree()))) {
       const r = player.grapple();
-      if (r === 'miss') uiEvents.emit('alert', { text: 'NO GRAPPLE POINT', tone: 'white' });
+      if (r === 'miss') uiEvents.emit('notice', { text: 'NO GRAPPLE POINT', tone: 'white' });
     }
     if (kit.landed) {
       const l: PoundLanding = kit.landed;

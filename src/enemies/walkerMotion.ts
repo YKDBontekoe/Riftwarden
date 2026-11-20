@@ -31,6 +31,7 @@ export class WalkerMotion {
   constructor(private rig: WalkerRig, private scale: number) {}
 
   reset(position: Vector3, yaw: number): void {
+    this.crawlT = 0;
     this.previous.copyFrom(position);
     this.yaw = yaw;
     this.lean = 0;
@@ -47,6 +48,10 @@ export class WalkerMotion {
   }
 
   /** Returns a planted foot this frame, for contact effects. */
+  /** One leg shot off: the frame drops low, pitches forward and leans onto the lost side. */
+  crawl = false;
+  private crawlT = 0;
+
   pose(position: Vector3, yaw: number, dt: number, moving: boolean, charge: number, flinch: number, aimPitch: number): Vector3 | null {
     const { hips, torso, cannon, barrel, muzzleGlow } = this.rig;
     const sin = Math.sin(yaw);
@@ -102,6 +107,14 @@ export class WalkerMotion {
     hips.position.y = 1.31 + Math.max(liftL, liftR) * 0.045 - brace * 0.055;
     torso.rotation.z = (liftL - liftR) * 0.065 + this.lean;
     torso.rotation.x = 0.06 + brace * 0.14 - recoil * 0.13 - flinch * 0.32;
+    this.crawlT += ((this.crawl ? 1 : 0) - this.crawlT) * Math.min(1, dt * 7);
+    if (this.crawlT > 0.001) {
+      const c = this.crawlT;
+      const drag = moving ? Math.sin(performance.now() * 0.009) * 0.06 : 0;
+      hips.position.y -= c * (0.62 + drag);
+      torso.rotation.x += c * (0.5 + drag);
+      torso.rotation.z += c * 0.28;
+    }
     cannon.rotation.x = aimPitch + brace * 0.12 - recoil * 0.19;
     barrel.position.z = -recoil * 0.28 - brace * 0.065;
     muzzleGlow.scaling.setAll(0.30 + brace * 0.37 + recoil * 0.18);

@@ -340,10 +340,12 @@ type EventMap = {
   loot: LootEvent;
   /** M6: short tactical warning line (events, bosses, evolutions, milestones). */
   alert: { text: string; tone: 'red' | 'orange' | 'blue' | 'white' };
+  /** Same as `alert`, but personal: co-op only sends it to the warden it concerns (ULTIMATE READY, ...). */
+  notice: { text: string; tone: 'red' | 'orange' | 'blue' | 'white' };
   /** Kill chain length (2+), personal. */
   chain: number;
   /** The player's hit knocked a part off a walker frame (cannon / arm / head), personal. */
-  limb: 'cannon' | 'arm' | 'head';
+  limb: 'cannon' | 'arm' | 'head' | 'leg';
 };
 
 export interface LootEvent {

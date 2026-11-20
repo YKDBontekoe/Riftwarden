@@ -10,7 +10,9 @@ import { flatScale } from '../loot/generate';
 import { rarity } from '../loot/rarity';
 import type { ItemInstance } from '../loot/types';
 
-export type AbilityKind = 'frag' | 'cryo' | 'emp' | 'blink' | 'aegis' | 'orbital' | 'overdrive';
+export type AbilityKind = 'frag' | 'cryo' | 'emp' | 'blink' | 'aegis' | 'wall' | 'decoy' | 'sentry' | 'orbital' | 'overdrive';
+/** Abilities that place something in the world (arena/Deployables). */
+export const DEPLOYABLE_KINDS: readonly AbilityKind[] = ['wall', 'decoy', 'sentry'];
 export type AbilitySlot = 'ability' | 'ability2' | 'ultimate';
 export const ABILITY_SLOTS: readonly AbilitySlot[] = ['ability', 'ability2', 'ultimate'];
 
@@ -37,6 +39,9 @@ export const ABILITIES: Record<AbilityKind, AbilityDef> = {
   emp: { kind: 'emp', name: 'Arc Pulse', category: 'ability', cooldown: 12, charge: 0, power: 34, radius: 7, blurb: 'Instant electric pulse around the drone: shocks everything near, triple damage to shields.' },
   blink: { kind: 'blink', name: 'Blink Drive', category: 'ability', cooldown: 5, charge: 0, power: 10, radius: 0, blurb: 'Instant jump along your aim (up to 10 m, stops at walls), keeps your momentum.' },
   aegis: { kind: 'aegis', name: 'Aegis Cell', category: 'ability', cooldown: 16, charge: 0, power: 60, radius: 0, blurb: 'Instant overshield and 50% damage resistance for 4 s.' },
+  wall: { kind: 'wall', name: 'Shield Wall', category: 'ability', cooldown: 14, charge: 0, power: 6, radius: 3, blurb: 'Projects a 6 m energy barrier where you aim: blocks enemy fire and line of sight for 6 s; your shots pass through.' },
+  decoy: { kind: 'decoy', name: 'Holo Decoy', category: 'ability', cooldown: 15, charge: 0, power: 160, radius: 24, blurb: 'Drops a holographic drone that draws the fire of every machine within 24 m until it is destroyed (7 s).' },
+  sentry: { kind: 'sentry', name: 'Mini-Sentry', category: 'ability', cooldown: 20, charge: 0, power: 12, radius: 0, blurb: 'Deploys a free Sentinel turret where you aim for 12 s. It does not block lanes and cannot be refitted.' },
   orbital: { kind: 'orbital', name: 'Orbital Lance', category: 'ultimate', cooldown: 0, charge: 1400, power: 420, radius: 9, blurb: 'Marks the aim point; 1.2 s later a lance from orbit erases everything in the zone.' },
   overdrive: { kind: 'overdrive', name: 'Overdrive Core', category: 'ultimate', cooldown: 0, charge: 1200, power: 8, radius: 0, blurb: 'For a few seconds: +60% fire rate, no weapon heat, +20% movement speed.' },
 };
@@ -62,6 +67,27 @@ export const OVERDRIVE = { fireRate: 0.6, move: 0.2 } as const;
 export const BLINK_MARGIN = 0.9;
 /** Grenade throw: speed (m/s), upward boost, gravity, fuse (s). */
 export const THROW = { speed: 24, lift: 5, gravity: 26, fuse: 1.6 } as const;
+/** Deployables: furthest placement along the aim (m), wall height, decoy lifetime (s). */
+export const DEPLOY = { range: 16, wallHeight: 3.4, decoySeconds: 7 } as const;
+
+/**
+ * Deployable strength. Wall and sentry: seconds (rarity x sqrt(power), like overdrive: a level-scaled duration would
+ * grow without bound). Decoy: hit points (level-scaled like flat stats).
+ */
+export function deployPower(def: AbilityDef, item: Pick<ItemInstance, 'level' | 'rarity'>, stats: Pick<CombatStats, 'abilityPowerMult'>): number {
+  if (def.kind === 'decoy') return def.power * itemFactor(item) * stats.abilityPowerMult;
+  return def.power * rarity(item.rarity).baseMult * Math.sqrt(stats.abilityPowerMult);
+}
+
+/**
+ * Where a deployable lands: `range` along the aim, or just short of the first level hit (`hitAt`, metres), never
+ * closer than 1.5 m. Returns the distance along the aim; the caller drops the point to the ground.
+ */
+export function deployDistance(range: number, hitAt: number | null): number {
+  const d = hitAt === null ? range : Math.min(range, hitAt - 0.8);
+  return Math.max(1.5, d);
+}
+
 /** Orbital Lance delay between the mark and the strike (s). */
 export const ORBITAL_DELAY = 1.2;
 
@@ -75,6 +101,7 @@ export function abilityPower(def: AbilityDef, item: Pick<ItemInstance, 'level' |
   // Overdrive's power is a duration: it grows with rarity only (level would make it permanent).
   if (def.kind === 'overdrive') return def.power * rarity(item.rarity).baseMult * Math.sqrt(stats.abilityPowerMult);
   if (def.kind === 'blink') return def.power;
+  if (def.kind === 'wall' || def.kind === 'decoy' || def.kind === 'sentry') return deployPower(def, item, stats);
   return def.power * itemFactor(item) * stats.abilityPowerMult;
 }
 

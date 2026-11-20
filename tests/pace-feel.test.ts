@@ -60,3 +60,17 @@ describe('fast-paced tuning', () => {
     expect(s.sustain).toBeGreaterThan(2);
   });
 });
+
+describe('TTK pass', () => {
+  it('the starter repeater kills a basic walker in about 0.3 s (3 bolts) and every family stays fast', async () => {
+    const { DAMAGE_PACE } = await import('../src/combat/heat');
+    const { RAILGUN, BEAM_EMITTER } = await import('../src/data/defs');
+    const hp = ENEMIES.walker.hp;
+    const shots = Math.ceil(hp / (PLASMA_REPEATER.damage * DAMAGE_PACE));
+    expect(shots).toBeLessThanOrEqual(3);
+    expect((shots - 1) / PLASMA_REPEATER.fireRate).toBeLessThanOrEqual(0.3);
+    // A full rail charge one-shots a walker; the beam (no ramp) needs well under a second.
+    expect(RAILGUN.damage * DAMAGE_PACE).toBeGreaterThanOrEqual(hp);
+    expect(hp / (BEAM_EMITTER.damage * DAMAGE_PACE * BEAM_EMITTER.fireRate)).toBeLessThan(0.5);
+  });
+});

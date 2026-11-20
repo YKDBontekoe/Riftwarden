@@ -1,5 +1,5 @@
 import { BASE_STATS, type CombatStats, computeStats, formatModifier, formatStat, fmtNum, type StatKey, STAT_DEFS, type StatModifier, STAT_KEYS, type StatOp } from '../combat/stats';
-import { HEAT_PACE } from '../combat/heat';
+import { DAMAGE_PACE, HEAT_PACE } from '../combat/heat';
 import type { WeaponDef } from '../data/defs';
 import { buildMechanism, FAMILIES } from '../weapons/build';
 import { installedModules } from '../weapons/modules';
@@ -125,7 +125,7 @@ export function weaponSummary(w: WeaponDef, stats: CombatStats = BASE_STATS) {
   const heat = (w.heatPerShot * HEAT_PACE.gain) / stats.heatEfficiency;
   const rate = w.fireRate * stats.fireRateMult;
   const proj = w.family === 'beam' ? 1 : w.mechanism === 'scatter' ? 7 + 2 * Math.max(0, Math.floor(stats.projectiles) - 1) : Math.floor(stats.projectiles);
-  const dmg = w.damage * stats.weaponDamageMult;
+  const dmg = w.damage * DAMAGE_PACE * stats.weaponDamageMult;
   const critFactor = 1 + stats.critChance * (stats.critMultiplier - 1);
   const chargeTime = w.chargeTime / stats.chargeRateMult;
   let cycle = 1 / rate;

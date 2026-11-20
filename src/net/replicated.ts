@@ -4,7 +4,7 @@ import type { Effects } from '../fx/Effects';
 import type { Ordnance, Telegraphs } from '../fx/Hostile';
 import type { WeaponFx } from '../fx/WeaponFx';
 
-export const FX_CALLS = ['burst', 'explode', 'impact', 'ring', 'tracer', 'flashLight', 'debrisBurst', 'shieldRipple'] as const satisfies readonly (keyof Effects)[];
+export const FX_CALLS = ['burst', 'explode', 'impact', 'ring', 'tracer', 'flashLight', 'debrisBurst', 'shieldRipple', 'thrown', 'thrownEnd'] as const satisfies readonly (keyof Effects)[];
 export const WFX_CALLS = ['arc'] as const satisfies readonly (keyof WeaponFx)[];
 export const ORDNANCE_CALLS = ['lob', 'orb', 'missile'] as const satisfies readonly (keyof Ordnance)[];
 /** Telegraph calls that create something (the server streams the id back so later edits can address it). */

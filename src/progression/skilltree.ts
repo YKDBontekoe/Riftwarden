@@ -97,6 +97,9 @@ const TEMPLATES: Record<Branch, Template[]> = {
     T('dashRechargeMult', 'pct', 0.05, 'Vector Thrusters'),
     T('moveSpeedMult', 'pct', 0.02, 'Light Chassis', 0.8),
     T('elementalPower', 'pct', 0.04, 'Elemental Resonance'),
+    T('abilityPowerMult', 'pct', 0.04, 'Payload Tuning', 0.8),
+    T('abilityCooldownMult', 'pct', -0.03, 'Quick Recharge', 0.8),
+    T('ultChargeMult', 'pct', 0.05, 'Ultimate Relay', 0.6),
   ],
 };
 

@@ -256,6 +256,9 @@ b.v { color: var(--violet); }
 .hitmarker.limb { animation: hmk 0.32s ease-out; }
 .hitmarker .limb-label { position: absolute; top: 26px; left: 0; transform: translateX(-50%); white-space: nowrap; font-style: normal; font-family: var(--display); font-size: 11px; font-weight: 700; letter-spacing: 0.16em; color: #ffb36b; text-shadow: 0 0 6px rgba(255, 120, 30, 0.7), 0 1px 2px #000; animation: limbLabel 0.62s ease-out forwards; }
 @keyframes limbLabel { 0% { opacity: 0; transform: translate(-50%, 4px); } 15% { opacity: 1; transform: translate(-50%, 0); } 70% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -3px); } }
+.kill-pulse { position: fixed; inset: 0; pointer-events: none; z-index: 3; background: radial-gradient(ellipse at center, transparent 55%, rgba(255, 196, 140, 0.16) 100%); animation: killpulse 0.22s ease-out forwards; }
+@keyframes killpulse { from { opacity: 1; } to { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .kill-pulse { display: none; } }
 .kill-ring { position: absolute; left: -16px; top: -16px; width: 32px; height: 32px; border: 2px solid var(--red); border-radius: 50%; animation: killring 0.32s ease-out forwards; }
 @keyframes hm { from { transform: scale(1.5); } to { transform: scale(1); } }
 @keyframes hmk { from { transform: scale(1.9) rotate(12deg); } to { transform: scale(1); } }

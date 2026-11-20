@@ -1,11 +1,11 @@
 /**
  * Shoot-off parts: walker-frame robots (walker, bulwark, sapper, marksman) lose their cannon arm, blade arm or
- * sensor head once a part has soaked enough hull damage. Hits are assigned to the nearest part within its reach;
+ * sensor head or right leg once a part has soaked enough hull damage. Hits are assigned to the nearest part within its reach;
  * a lost part changes behaviour (no cannon = no shots at the drone, no head = blinded and staggering).
  * Pure (no Babylon values): the manager measures distances, these rules decide.
  */
-export type LimbId = 'cannon' | 'arm' | 'head';
-export const LIMB_IDS: readonly LimbId[] = ['cannon', 'arm', 'head'];
+export type LimbId = 'cannon' | 'arm' | 'head' | 'leg';
+export const LIMB_IDS: readonly LimbId[] = ['cannon', 'arm', 'head', 'leg'];
 
 export interface LimbDef {
   /** Share of max hull a part soaks before it comes off. */
@@ -18,6 +18,8 @@ export const LIMBS: Record<LimbId, LimbDef> = {
   cannon: { share: 0.3, reach: 0.75 },
   arm: { share: 0.26, reach: 0.65 },
   head: { share: 0.28, reach: 0.5 },
+  /** Right leg (hip joint node; the reach covers the thigh down to the knee). */
+  leg: { share: 0.32, reach: 0.7 },
 };
 
 /** Behaviour after losing parts. */
@@ -28,6 +30,8 @@ export const LIMB_EFFECT = {
   headlessVulnerability: 1.15,
   /** A walker without its cannon still hits the reactor, but weakly (it rams / claws it). */
   disarmedReactor: 0.5,
+  /** One leg gone: the frame drops and crawls. */
+  leglessSpeed: 0.45,
 } as const;
 
 export const bit = (l: LimbId): number => 1 << LIMB_IDS.indexOf(l);

@@ -5,6 +5,9 @@ export class Input {
   private releasedSet = new Set<string>();
   mouseDx = 0;
   mouseDy = 0;
+  /** Wheel steps this frame (+1 per notch down, -1 up), only while captured. */
+  wheel = 0;
+  private wheelAcc = 0;
   private buttons = [false, false, false];
   private buttonsPressed = [false, false, false];
   locked = false;
@@ -58,6 +61,20 @@ export class Input {
       if (e.button <= 2) this.buttons[e.button] = false;
     });
     document.addEventListener('contextmenu', (e) => e.preventDefault());
+    document.addEventListener(
+      'wheel',
+      (e) => {
+        if (!this.locked) return;
+        // Trackpads send many small deltas: accumulate to whole notches (~100 px each).
+        this.wheelAcc += e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY;
+        const steps = Math.trunc(this.wheelAcc / 90);
+        if (steps !== 0) {
+          this.wheel += Math.sign(steps);
+          this.wheelAcc = 0;
+        }
+      },
+      { passive: true },
+    );
     document.addEventListener('pointerlockchange', () => {
       this.locked = document.pointerLockElement === this.canvas;
       if (!this.locked) {
@@ -161,6 +178,9 @@ export class Input {
       this.down.add(code);
     } else if (this.down.delete(code)) this.releasedSet.add(code);
   }
+  simulateWheel(steps: number): void {
+    this.wheel += steps;
+  }
   simulateMouse(button: number, isDown: boolean): void {
     this.buttons[button] = isDown;
     if (isDown) this.buttonsPressed[button] = true;
@@ -173,6 +193,7 @@ export class Input {
     this.buttonsPressed[0] = this.buttonsPressed[1] = this.buttonsPressed[2] = false;
     this.mouseDx = 0;
     this.mouseDy = 0;
+    this.wheel = 0;
   }
 
   clear(): void {

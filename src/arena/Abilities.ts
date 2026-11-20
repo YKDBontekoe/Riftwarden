@@ -1,4 +1,4 @@
-import { Color3, type Mesh, MeshBuilder, type PBRMaterial, type PhysicsEngineV2, PhysicsRaycastResult, Ray, type Scene, Vector3 } from '@babylonjs/core';
+import { Color3, type PhysicsEngineV2, PhysicsRaycastResult, Ray, type Scene, Vector3 } from '@babylonjs/core';
 import {
   ABILITIES,
   type AbilityDef,
@@ -19,6 +19,7 @@ import {
 import { sfx } from '../audio/Sfx';
 import type { Director } from '../combat/Director';
 import type { CombatStats } from '../combat/stats';
+import type { Deployables } from './Deployables';
 import type { Weapon } from '../combat/Weapon';
 import type { EnemyManager } from '../enemies/EnemyManager';
 import type { Effects } from '../fx/Effects';
@@ -28,7 +29,6 @@ import type { RunInventory } from '../loot/runInventory';
 import type { ItemInstance } from '../loot/types';
 import type { Player } from '../player/Player';
 import { uiEvents } from '../ui/store';
-import { unlit } from '../visuals/materials';
 import { ENV_QUERY } from '../world/physicsGroups';
 
 /** What abilities need from the arena (no Game import). */
@@ -42,6 +42,10 @@ export interface AbilityHost {
   readonly weapon: Weapon;
   readonly inventory: RunInventory;
   readonly stats: CombatStats;
+  /** Co-op server: the avatar id, so Aegis / Overdrive buff only their owner (null = single player). */
+  readonly owner?: string;
+  /** Shield wall / decoy / mini-sentry placement (shared world objects). */
+  readonly deployables: Deployables;
   /** Abilities work only while the drone is in play (not in build mode, menus, defeat). */
   canAct(): boolean;
 }
@@ -54,7 +58,6 @@ interface Charge {
   fuse: number;
   power: number;
   radius: number;
-  mesh: Mesh;
 }
 
 interface Strike {
@@ -86,9 +89,7 @@ export class Abilities {
   /** Uses this run (automation/tests). */
   used = 0;
   private charges: Charge[] = [];
-  private free: Mesh[] = [];
   private strikes: Strike[] = [];
-  private mat: PBRMaterial | null = null;
   private ray = new PhysicsRaycastResult();
   private pickRay = new Ray(Vector3.Zero(), Vector3.Forward(), 140);
 
@@ -111,7 +112,6 @@ export class Abilities {
     this.ult = 0;
     this.overdriveT = 0;
     this.aegisT = 0;
-    for (const c of this.charges) this.release(c);
     this.charges.length = 0;
     this.strikes.length = 0;
   }
@@ -126,7 +126,7 @@ export class Abilities {
     this.ult = Math.min(1, this.ult + ultGain(damage, ultChargeNeeded(d, item), this.h.stats));
     if (before < 1 && this.ult >= 1) {
       sfx.play('chargeReady', { pitch: 0.7 });
-      uiEvents.emit('alert', { text: `${d.name.toUpperCase()} READY`, tone: 'blue' });
+      uiEvents.emit('notice', { text: `${d.name.toUpperCase()} READY`, tone: 'blue' });
     }
   }
 
@@ -165,6 +165,11 @@ export class Abilities {
         break;
       case 'aegis':
         this.aegis(power);
+        break;
+      case 'wall':
+      case 'decoy':
+      case 'sentry':
+        this.h.deployables.deploy(d.kind, eye, aim, power, radius, this.h.player.yaw);
         break;
       case 'orbital':
         this.mark(eye, aim, power, radius);
@@ -220,12 +225,11 @@ export class Abilities {
   // ---------------------------------------------------------------- abilities
 
   private throwCharge(d: AbilityDef, eye: Vector3, aim: Vector3, power: number, radius: number): void {
-    const mesh = this.free.pop() ?? this.newMesh();
-    mesh.setEnabled(true);
     const pos = eye.add(aim.scale(0.7));
-    mesh.position.copyFrom(pos);
     const vel = aim.scale(THROW.speed).addInPlace(UP.scale(THROW.lift));
-    this.charges.push({ def: d, pos, vel, fuse: THROW.fuse, power, radius, mesh });
+    this.charges.push({ def: d, pos, vel, fuse: THROW.fuse, power, radius });
+    // The visual rides in the replicated fx stream so co-op clients see the charge fly.
+    this.h.fx.thrown(pos, vel, THROW.fuse + 0.2, d.kind === 'cryo');
     sfx.play('dash', { pitch: 1.6, volume: 0.5 });
   }
 
@@ -242,10 +246,9 @@ export class Abilities {
         burst = true;
       }
       if (!burst) for (const e of this.h.enemies.active) if (e.alive && !e.hidden && Vector3.DistanceSquared(e.center(TO), c.pos) < (e.def.bodyR * e.def.scale + 0.4) ** 2) burst = true;
-      c.mesh.position.copyFrom(c.pos);
       if (burst) {
+        this.h.fx.thrownEnd(c.pos);
         this.detonate(c);
-        this.release(c);
         this.charges.splice(i, 1);
       }
     }
@@ -296,10 +299,10 @@ export class Abilities {
 
   private aegis(power: number): void {
     this.aegisT = AEGIS.seconds;
-    this.h.director.addBuff('ability:aegis', 'Aegis', AEGIS.seconds, () => [
+    this.h.director.addBuff(`ability:aegis${this.h.owner ?? ''}`, 'Aegis', AEGIS.seconds, () => [
       { stat: 'shieldCapacity', op: 'add', value: power },
       { stat: 'damageResist', op: 'add', value: AEGIS.resist },
-    ]);
+    ], 1, this.h.owner);
     const p = this.h.player;
     p.shield = p.maxShield;
     this.h.fx.ring(p.position.add(new Vector3(0, 0.2, 0)), 3, 0.4, new Color3(0.5, 1.4, 3), true);
@@ -309,10 +312,10 @@ export class Abilities {
 
   private overdrive(seconds: number): void {
     this.overdriveT = seconds;
-    this.h.director.addBuff('ult:overdrive', 'Overdrive', seconds, () => [
+    this.h.director.addBuff(`ult:overdrive${this.h.owner ?? ''}`, 'Overdrive', seconds, () => [
       { stat: 'fireRateMult', op: 'pct', value: OVERDRIVE.fireRate },
       { stat: 'moveSpeedMult', op: 'pct', value: OVERDRIVE.move },
-    ]);
+    ], 1, this.h.owner);
     const p = this.h.player;
     this.h.fx.ring(p.position.add(new Vector3(0, 0.2, 0)), 5, 0.5, new Color3(3, 1.2, 0.4), true);
     uiEvents.emit('banner', { title: 'OVERDRIVE', sub: `${seconds.toFixed(1)} s · fire rate +60% · no heat`, tone: 'orange' });
@@ -344,6 +347,8 @@ export class Abilities {
       const { director: dir, fx } = this.h;
       dir.blast(s.at.add(new Vector3(0, 1, 0)), s.radius, s.power, 'none', { kind: 'effect', id: 'ability:orbital' }, dir.bus.newChain(), { falloff: 0.3 });
       this.h.wfx.rail(s.at.add(new Vector3(0, 60, 0)), s.at, 1);
+      // Replicated beam core (the rail trail above is local presentation only).
+      this.h.fx.tracer(s.at.add(new Vector3(0, 60, 0)), s.at, 0, 0.9, 0.35);
       fx.explode(s.at, { scale: s.radius / 3.2, style: 'heavy', debris: 10 });
       fx.flashLight(s.at.add(new Vector3(0, 3, 0)), 14, 0.5, new Color3(2.4, 1, 3));
       this.strikes.splice(i, 1);
@@ -365,16 +370,4 @@ export class Abilities {
     return hit ? Vector3.Distance(from, hit) : null;
   }
 
-  private newMesh(): Mesh {
-    const m = MeshBuilder.CreateSphere('abilityCharge', { diameter: 0.32, segments: 8 }, this.h.scene);
-    this.mat ??= unlit(this.h.scene, 'abilityChargeMat', [3.2, 1.6, 0.5]);
-    m.material = this.mat;
-    m.isPickable = false;
-    return m;
-  }
-
-  private release(c: Charge): void {
-    c.mesh.setEnabled(false);
-    this.free.push(c.mesh);
-  }
 }

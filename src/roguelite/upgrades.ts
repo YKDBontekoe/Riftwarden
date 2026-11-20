@@ -68,7 +68,7 @@ export interface UpgradeDef {
   /** StatModifiers applied once per stack. */
   stats?: readonly StatModifier[];
   /** Requirements (all must hold). */
-  needs?: { towers?: boolean; notFamily?: readonly WeaponFamily[]; anyTag?: readonly string[]; towerArch?: readonly Archetype[] };
+  needs?: { towers?: boolean; abilities?: boolean; notFamily?: readonly WeaponFamily[]; anyTag?: readonly string[]; towerArch?: readonly Archetype[] };
   /** Functional description at stack count n (what the upgrade does once taken). */
   text(n: number): string;
   /** Synergy note shown on the card. */
@@ -102,6 +102,10 @@ export const UPGRADES: readonly UpgradeDef[] = [
   { id: 'm_vector', name: 'Vector Thrusters', rarity: 'common', category: 'mobility', tags: ['mobility'], icon: '⇧', maxStacks: 3, stats: [m('moveSpeedMult', 'pct', 0.08), m('dashRechargeMult', 'pct', 0.15)], text: (n) => `+8% hover speed and +15% dash recharge per stack (total +${pct(0.08 * n)} / +${pct(0.15 * n)}).` },
   { id: 'm_surge', name: 'Adrenal Surge', rarity: 'rare', category: 'mobility', tags: ['mobility', 'rate', 'kill'], icon: '⚑', maxStacks: 3, text: (n) => `Kills grant ${UP.surge.dur} s of +${pct(UP.surge.move(n))} movement speed and +${pct(UP.surge.rate(n))} fire rate (refreshes).` },
   { id: 'm_shockdash', name: 'Shockwave Dash', rarity: 'epic', category: 'mobility', tags: ['mobility', 'electric', 'dash'], icon: '≋', maxStacks: 1, text: () => `Dashing releases an electric shockwave: ${UP.shockdash.radius} m radius, ${UP.shockdash.dmg}x weapon damage, shocks enemies.` },
+  // ---- abilities (need an equipped ability or ultimate)
+  { id: 'a_payload', name: 'Overcharged Payloads', rarity: 'common', category: 'mobility', tags: ['ability'], icon: '✸', maxStacks: 3, needs: { abilities: true }, stats: [m('abilityPowerMult', 'pct', 0.2)], text: (n) => `+20% ability power per stack (total +${pct(0.2 * n)}): blast damage, shield, decoy durability, sentry and wall duration.` },
+  { id: 'a_cycle', name: 'Rapid Cycling', rarity: 'common', category: 'mobility', tags: ['ability'], icon: '↻', maxStacks: 3, needs: { abilities: true }, stats: [m('abilityCooldownMult', 'pct', -0.15)], text: (n) => `-15% ability cooldowns per stack (total -${pct(1 - Math.pow(0.85, n))}).` },
+  { id: 'a_uplink', name: 'Ultimate Uplink', rarity: 'rare', category: 'mobility', tags: ['ability', 'damage'], icon: '⟰', maxStacks: 2, needs: { abilities: true }, stats: [m('ultChargeMult', 'pct', 0.3), m('abilityRadiusMult', 'pct', 0.1)], text: (n) => `+30% ultimate charge from damage and +10% ability radius per stack (total +${pct(0.3 * n)} / +${pct(0.1 * n)}).` },
   // ---- tower
   { id: 't_servo', name: 'Servo Tuning', rarity: 'common', category: 'tower', tags: ['tower', 'rate'], icon: '⚙', maxStacks: 4, needs: { towers: true }, stats: [m('turretFireRateMult', 'pct', 0.15)], text: (n) => `+15% tower fire rate per stack (total +${pct(0.15 * n)}).` },
   { id: 't_amps', name: 'Damage Amplifier', rarity: 'common', category: 'tower', tags: ['tower', 'damage'], icon: '⬆', maxStacks: 4, needs: { towers: true }, stats: [m('turretDamageMult', 'pct', 0.15)], text: (n) => `+15% tower damage per stack (total +${pct(0.15 * n)}).` },
@@ -149,6 +153,8 @@ export interface OfferContext {
   family: WeaponFamily;
   towers: number;
   towerArchetypes: readonly Archetype[];
+  /** Equipped ability / ultimate slots (undefined = unknown: ability upgrades stay eligible). */
+  abilities?: number;
 }
 
 /** The run's upgrade selection (stack counts + pick history). */
@@ -198,6 +204,7 @@ export class RunBuild {
     const n = u.needs;
     if (!n) return true;
     if (n.towers && ctx.towers <= 0) return false;
+    if (n.abilities && (ctx.abilities ?? 1) <= 0) return false;
     if (n.notFamily?.includes(ctx.family)) return false;
     const tagOk = n.anyTag ? this.hasAnyTag(n.anyTag) : undefined;
     const archOk = n.towerArch ? n.towerArch.some((a) => ctx.towerArchetypes.includes(a)) : undefined;

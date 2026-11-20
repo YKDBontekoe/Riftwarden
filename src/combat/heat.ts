@@ -14,6 +14,13 @@ export const HEAT_PACE = {
   lockout: 1,
 } as const;
 
+/**
+ * Global player weapon damage tempo (TTK pass), applied at fire time like `HEAT_PACE` so stored items keep their
+ * rolls: a matched weapon kills a basic walker in ~0.3 s (starter repeater: 3 bolts). Towers are not affected,
+ * so the player stays the main source of kills (FPS first).
+ */
+export const DAMAGE_PACE = 1.9;
+
 /** Heat carried by a weapon that is not in hand. */
 export interface HeatState {
   heat: number;
