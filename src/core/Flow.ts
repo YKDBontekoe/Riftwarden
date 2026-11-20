@@ -684,7 +684,7 @@ export class Flow {
         const a = flow.arena;
         if (!a) return null;
         const item = generateItem({
-          uid: `${a.cfg.run.id}.dbg${randomU32() % 1_000_000_000}`,
+          uid: `${a.cfg.run.id}.dbg${randomU32()}`,
           seed: o.seed ?? randomU32(),
           level: o.level ?? a.waves.number + a.cfg.tier.lootLevelBonus,
           rarity: o.rarity ?? 'rare',
@@ -698,11 +698,11 @@ export class Flow {
       },
       /** Generate an item without placing it (tests search seeds for specific affixes). */
       makeItem: (o: { seed: number; rarity?: RarityId; category?: Category; baseId?: string; level?: number; fixedRoll?: number }) =>
-        generateItem({ uid: `dbg_${o.seed}_${randomU32() % 1_000_000_000}`, seed: o.seed, level: o.level ?? 5, rarity: o.rarity ?? 'rare', category: o.category, baseId: o.baseId, source: flow.arena?.cfg.run.id ?? 'debug', fixedRoll: o.fixedRoll }),
+        generateItem({ uid: `dbg_${o.seed}_${randomU32()}`, seed: o.seed, level: o.level ?? 5, rarity: o.rarity ?? 'rare', category: o.category, baseId: o.baseId, source: flow.arena?.cfg.run.id ?? 'debug', fixedRoll: o.fixedRoll }),
       /** A hand-made unique (loot/uniques.ts) at a level. */
       makeUnique: (id: string, seed = 1, level = 5) => {
         const def = uniqueDef(id);
-        return def ? generateUnique(def, { uid: `dbg_u_${id}_${randomU32() % 1_000_000_000}`, seed, level, source: flow.arena?.cfg.run.id ?? 'debug' }) : null;
+        return def ? generateUnique(def, { uid: `dbg_u_${id}_${randomU32()}`, seed, level, source: flow.arena?.cfg.run.id ?? 'debug' }) : null;
       },
       /** Put an item straight into the run cargo (as if picked up). */
       grant: (item: ReturnType<typeof generateItem>) => {
