@@ -1,4 +1,5 @@
 import { signatureDef } from '../loot/signatures';
+import { ElementTag } from './ElementTag';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { formatModifier, STAT_DEFS } from '../combat/stats';
 import { affixDef } from '../loot/affixes';
@@ -243,7 +244,7 @@ export function WeaponBlock({ item, compact }: { item: ItemInstance; compact?: b
     <>
       <div className="id-block">
         <div className="id-label">
-          {fam.label.toUpperCase()} · {MECH_LABEL[w.mechanism] ?? w.mechanism}
+          {fam.label.toUpperCase()} · {MECH_LABEL[w.mechanism] ?? w.mechanism} <ElementTag element={w.element} long />
         </div>
         <div className="id-row">
           <span>{w.mechanism === 'pulse' ? 'Damage / pulse (splash 60%) · pulses/s' : w.mechanism === 'scatter' ? 'Damage / pellet ×7 · shots/s' : w.family === 'beam' ? 'Damage / tick · ticks/s' : w.family === 'rail' && w.mechanism === 'charge' ? 'Damage (full charge) · cycle' : 'Damage / shot · fire rate'}</span>

@@ -1,4 +1,5 @@
 import { currencyTooltip } from '../../economy/currencies';
+import { ElementTag } from '../ElementTag';
 import { useEffect, useRef, useState } from 'react';
 import { getTier } from '../../progression/tiers';
 import { type BannerEvent, uiEvents, useHud } from '../store';
@@ -352,6 +353,8 @@ function AbilityBar() {
 export function WeaponPanel() {
   const name = useHud((s) => s.weaponName);
   const holster = useHud((s) => s.holster);
+  const element = useHud((s) => s.weaponElement);
+  const aff = useHud((s) => s.weaponAff);
   const heat = useHud((s) => s.heat);
   const hot = useHud((s) => s.overheated);
   const build = useHud((s) => s.buildMode);
@@ -361,6 +364,8 @@ export function WeaponPanel() {
       <div className="weapon-card panel-frame">
         <div className="wc-head">
           <span className="weapon">{name}</span>
+          <ElementTag element={element} />
+          {aff !== 0 && <span className={`el-aff ${aff > 0 ? 'weak' : 'resist'}`} title={aff > 0 ? 'This sector\'s faction is weak to this element' : 'This sector\'s faction resists this element'}>{aff > 0 ? '▲ WEAK' : '▼ RESIST'}</span>}
           <span className="ammo">∞</span>
         </div>
         <SegBar value={heat} tone={hot ? 'red' : heat > 0.7 ? 'amber' : 'heat'} segments={20} />
@@ -369,6 +374,8 @@ export function WeaponPanel() {
           <div className={`wc-holster ${holster.overheated ? 'warn' : ''}`}>
             <BoundKey action="swap" />
             <span className="wh-name">{holster.secondary ? 'SECONDARY' : 'PRIMARY'} · {holster.name}</span>
+            <ElementTag element={holster.element} />
+            {holster.aff !== 0 && <span className={`el-aff ${holster.aff > 0 ? 'weak' : 'resist'}`}>{holster.aff > 0 ? '▲' : '▼'}</span>}
             <span className="wh-heat">{holster.overheated ? 'VENTING' : holster.heat > 0.01 ? `${Math.round(holster.heat * 100)}%` : 'READY'}</span>
           </div>
         )}

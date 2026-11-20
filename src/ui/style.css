@@ -1658,3 +1658,22 @@ button.inv-slot { position: relative; }
 @media (prefers-reduced-motion: reduce) {
   .ls-grid, .ls-sweep, .ls-radar, .lm-lane, .lm-rift circle, .ls-recovery i, .ls-recovery svg { animation: none; }
 }
+
+/* ---------------------------------------------------------------- elements */
+.el-tag { display: inline-block; margin-left: 6px; padding: 0 5px; border: 1px solid var(--el); border-radius: 2px; color: var(--el); font-family: var(--display); font-size: 10px; font-weight: 700; letter-spacing: 0.08em; line-height: 15px; vertical-align: middle; background: color-mix(in srgb, var(--el) 12%, transparent); text-shadow: 0 0 6px color-mix(in srgb, var(--el) 60%, transparent); }
+.el-aff { margin-left: 5px; font-family: var(--display); font-size: 10px; font-weight: 700; letter-spacing: 0.06em; }
+.el-aff.weak { color: #7dff8a; }
+.el-aff.resist { color: #ff8a6a; }
+.wc-head .el-tag { margin-left: auto; margin-right: 6px; }
+.wc-holster .el-tag { font-size: 9px; line-height: 13px; }
+.dmg.el-thermal:not(.crit):not(.kill) { color: #ff9a55; }
+.dmg.el-electric:not(.crit):not(.kill) { color: #8cc8ff; }
+.dmg.el-cryo:not(.crit):not(.kill) { color: #b8eeff; }
+.dmg.el-corrosive:not(.crit):not(.kill) { color: #b4f06a; }
+.dmg.el-void:not(.crit):not(.kill) { color: #d79bff; }
+.dmg.aff-weak::after { content: ' ▲'; font-size: 0.6em; color: #7dff8a; }
+.dmg.aff-resist { opacity: 0.8; }
+.dmg.aff-resist::after { content: ' ▼'; font-size: 0.6em; color: #ff8a6a; }
+.aff-row { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin-top: 4px; font-size: 11px; letter-spacing: 0.06em; }
+.aff-row .el-tag { margin-left: 0; }
+.aff-row .aff-label { opacity: 0.7; margin-right: 2px; }

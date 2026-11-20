@@ -1,3 +1,4 @@
+import type { DamageElement } from '../combat/elements';
 import type { StatKey, StatOp } from '../combat/stats';
 import type { WeaponBuild } from '../weapons/build';
 import type { RarityId } from './rarity';
@@ -51,6 +52,8 @@ export interface WeaponRoll {
   chargeTime?: number;
   beamWidth?: number;
   rampMax?: number;
+  /** Damage element (absent on pre-element weapons = kinetic). */
+  element?: DamageElement;
 }
 
 export interface ModuleInfo {

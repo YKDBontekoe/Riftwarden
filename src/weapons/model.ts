@@ -1,3 +1,4 @@
+import { elementEnergy } from '../combat/elements';
 import { Color3, type Material, Matrix, Mesh, type PBRMaterial, Quaternion, type Scene, TransformNode, Vector3, VertexData } from '@babylonjs/core';
 import type { WeaponFamily } from '../data/defs';
 import type { ItemInstance } from '../loot/types';
@@ -56,6 +57,8 @@ export interface ModelOpts {
   name?: string;
   /** Include the drone hardpoint arm (viewmodel only). Default true. */
   mount?: boolean;
+  /** Damage element: non-kinetic elements tint the energy parts. */
+  element?: string;
 }
 
 type V3 = [number, number, number];
@@ -859,8 +862,8 @@ function moduleHardware(c: Ctx, m: Mounts, front: number, installed: (ItemInstan
 
 // ------------------------------------------------------------------ entry point
 
-export function energyColor(b: WeaponBuild): [number, number, number] {
-  const e = FAMILIES[b.family].energy;
+export function energyColor(b: WeaponBuild, element?: string): [number, number, number] {
+  const e = elementEnergy(FAMILIES[b.family].energy, element);
   // Core type shifts the tone a little; the hue parameter adds a subtle per-weapon drift.
   const k = b.core === 'co_dense' ? 1.25 : b.core === 'co_prism' ? 1.15 : 1;
   const h = (b.params.hue - 0.5) * 0.35;
@@ -871,7 +874,7 @@ export function buildWeaponModel(scene: Scene, build: WeaponBuild, installed: (I
   const root = new TransformNode(`${opts.name ?? 'wpn'}Root`, scene);
   const a = new Assembler(scene, root, opts);
   const M = weaponMaterials(scene);
-  const ec = energyColor(build);
+  const ec = energyColor(build, opts.element);
   const energy = weaponGlow(scene, 'wpnEnergy', ec);
   const chargeGlow = weaponGlow(scene, 'wpnCharge', [ec[0] * 0.35, ec[1] * 0.35, ec[2] * 0.35]);
   const heat = heatMetal(scene, 'wpnHeat');

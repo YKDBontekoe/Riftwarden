@@ -10,7 +10,9 @@ import type { DamageType } from './damage';
 import { type ChainInfo, type Effect, EffectBus, type Element, type SourceKind, type SourceRef } from './events';
 import type { GameEvent, HitEv } from './gameEvents';
 import type { StatModifier } from './stats';
-import { applyBurn, applyChill, applyShock, hasAnyStatus, isBurning, isChilled, isFrozen, type ReactionKind, resolveReactions, tickStatus, vulnerability } from './status';
+import { affinity, affinitySign, isElemental } from './elements';
+import { biomeOf } from '../world/biomes';
+import { applyBurn, applyChill, applyCorrode, applyShock, hasAnyStatus, isBurning, isChilled, isFrozen, type ReactionKind, resolveReactions, tickStatus, vulnerability } from './status';
 import type { HitKind } from '../ui/store';
 
 /** Chain lightning reach between jumps (m). */
@@ -26,6 +28,8 @@ export interface StatusPayload {
   /** Chill meter added. */
   chill?: number;
   shock?: boolean;
+  /** Corrode damage per second per stack (armour shred). */
+  corrode?: number;
 }
 
 export interface DamageReq {
@@ -57,6 +61,8 @@ export interface HitResult {
   dealt: number;
   killed: boolean;
   kind: HitKind;
+  /** Element affinity of the target: +1 weak, -1 resisted, 0 neutral. */
+  aff: -1 | 0 | 1;
 }
 
 interface Buff {
@@ -71,9 +77,15 @@ interface Buff {
   owner?: string;
 }
 
-const DMG_TYPE: Record<Element, DamageType> = { none: 'energy', electric: 'energy', thermal: 'explosive', cryo: 'kinetic' };
-const COLOR: Record<Element, Color3> = { none: new Color3(1.4, 2, 2.4), electric: new Color3(0.6, 1.6, 4), thermal: new Color3(3.4, 1.2, 0.2), cryo: new Color3(1.6, 2.6, 3.2) };
+const DMG_TYPE: Record<Element, DamageType> = { none: 'energy', kinetic: 'kinetic', electric: 'energy', thermal: 'explosive', cryo: 'kinetic', corrosive: 'kinetic', void: 'kinetic' };
+const COLOR: Record<Element, Color3> = { none: new Color3(1.4, 2, 2.4), kinetic: new Color3(2.2, 2.1, 1.9), electric: new Color3(0.6, 1.6, 4), thermal: new Color3(3.4, 1.2, 0.2), cryo: new Color3(1.6, 2.6, 3.2), corrosive: new Color3(1.2, 2.9, 0.35), void: new Color3(2.2, 0.5, 3.4) };
 const TMP = new Vector3();
+
+/** Status payload of one tower hit (core burn / corrode, cryo chill). */
+function towerApply(st: { burnFrac: number; corrodeFrac: number; chill: number }, dmg: number): StatusPayload | undefined {
+  if (!(st.burnFrac > 0 || st.chill > 0 || st.corrodeFrac > 0)) return undefined;
+  return { burn: st.burnFrac > 0 ? dmg * st.burnFrac : undefined, chill: st.chill > 0 ? st.chill : undefined, corrode: st.corrodeFrac > 0 ? dmg * st.corrodeFrac : undefined };
+}
 const TMP2 = new Vector3();
 
 /**
@@ -94,7 +106,9 @@ export class Director {
   damageBy: Record<SourceKind, number> = { weapon: 0, tower: 0, status: 0, effect: 0, reaction: 0 };
   dps: Record<SourceKind, number> = { weapon: 0, tower: 0, status: 0, effect: 0, reaction: 0 };
   reactions: Record<ReactionKind, number> = { thermalShock: 0, overload: 0, superconduct: 0 };
-  statusApplied = { burn: 0, shock: 0, chill: 0, freeze: 0 };
+  statusApplied = { burn: 0, shock: 0, chill: 0, freeze: 0, corrode: 0 };
+  /** Damage dealt per element (diagnostics / tests). */
+  byElement: Partial<Record<Element, number>> = {};
   kills = 0;
   /** M6: damage dealt by origin (run statistics). */
   dealt = { player: 0, tower: 0, environment: 0 };
@@ -114,6 +128,18 @@ export class Director {
     this.build = new RunBuild(seed);
   }
 
+  /** Faction holding the sector (element affinities); null on the classic arena. */
+  get faction(): string | null {
+    if (this.factionId === undefined) this.factionId = this.g.layout.biome ? biomeOf(this.g.layout).faction.id : null;
+    return this.factionId;
+  }
+  private factionId: string | null | undefined;
+
+  /** Affinity multiplier of `element` against `e` in this sector. */
+  affinityOf(e: Enemy, element: Element): number {
+    return affinity(element, e, this.faction);
+  }
+
   // ------------------------------------------------------------------ run state
 
   /** New run: nothing from a previous run may survive. */
@@ -129,7 +155,8 @@ export class Director {
     this.dps = { weapon: 0, tower: 0, status: 0, effect: 0, reaction: 0 };
     this.dpsAcc = { weapon: 0, tower: 0, status: 0, effect: 0, reaction: 0 };
     this.reactions = { thermalShock: 0, overload: 0, superconduct: 0 };
-    this.statusApplied = { burn: 0, shock: 0, chill: 0, freeze: 0 };
+    this.statusApplied = { burn: 0, shock: 0, chill: 0, freeze: 0, corrode: 0 };
+    this.byElement = {};
     this.kills = this.lightning = this.explosions = this.discharges = 0;
     this.dealt = { player: 0, tower: 0, environment: 0 };
     this.rebuildEffects();
@@ -232,6 +259,11 @@ export class Director {
             this.deal({ target: e, amount: dmg, element: 'thermal', source: { kind: 'status', id: 'burn' }, chain: this.bus.newChain(), point: e.center(TMP), dot: true, quiet: true });
             if (e.alive && stacks > 0 && Math.random() < 0.25) this.g.fx.burst('embers', e.center(TMP), 1);
           },
+          corrode: (dmg) => {
+            if (!e.alive || e.gen !== gen) return;
+            this.deal({ target: e, amount: dmg, element: 'corrosive', source: { kind: 'status', id: 'corrode' }, chain: this.bus.newChain(), point: e.center(TMP), dot: true, quiet: true });
+            if (e.alive && Math.random() < 0.2) this.g.fx.burst('oil', e.center(TMP), 1);
+          },
           expire: (kind) => {
             if (e.alive) this.bus.emit({ type: 'status', chain: this.bus.newChain(), source: { kind: 'status', id: kind }, target: e, gen: e.gen, status: kind, op: 'expire' });
           },
@@ -266,13 +298,16 @@ export class Director {
   /** Apply one damage instance from any source. Never dropped; only trigger propagation is bounded. */
   deal(r: DamageReq): HitResult {
     const e = r.target;
-    const none: HitResult = { dealt: 0, killed: false, kind: 'hit' };
+    const none: HitResult = { dealt: 0, killed: false, kind: 'hit', aff: 0 };
     if (!e.alive || !(r.amount > 0) || !Number.isFinite(r.amount)) return none;
     const gen = e.gen;
     let amount = r.amount * vulnerability(e.status) * this.exposure(e);
     const fb = this.build.count('e_frostbite');
     if (fb && isFrozen(e.status)) amount *= 1 + UP.frostbite.bonus(fb);
-    if (r.element !== 'none') amount *= this.g.stats.elementalPower;
+    if (isElemental(r.element)) amount *= this.g.stats.elementalPower;
+    // Faction / archetype / boss resistances and weaknesses.
+    const aff = this.affinityOf(e, r.element);
+    amount *= aff;
     // M6: boss loot amplifies damage against elites, bosses and high-value targets.
     if (e.mods.length || e.def.role === 'boss' || e.def.role === 'hvt') amount *= this.g.stats.eliteDamageMult;
     // Snapshot the target's state before damage (reactions/kill events need it).
@@ -282,9 +317,10 @@ export class Director {
     const burnStacks = st.burnStacks;
     const chilled = isChilled(st, 1);
 
-    const res = this.g.enemies.damage(e, amount, DMG_TYPE[r.element], r.point, this.g.enemyFx, { weak: r.weak, from: r.from ?? null, dot: r.dot });
+    const res = this.g.enemies.damage(e, amount, DMG_TYPE[r.element], r.point, this.g.enemyFx, { weak: r.weak, from: r.from ?? null, dot: r.dot, element: r.element });
     if (!res) return none;
     const dealt = res.toHp + res.toShield;
+    this.byElement[r.element] = (this.byElement[r.element] ?? 0) + dealt;
     this.damageBy[r.source.kind] += dealt;
     // M6 run statistics: who dealt it (towers incl. tower-caused reactions; hazards are the environment).
     if (r.source.towerId !== undefined || r.source.kind === 'tower') this.dealt.tower += dealt;
@@ -323,8 +359,9 @@ export class Director {
       this.bus.emit(mkHit('kill', true));
       this.g.onEnemyKilled(e);
     }
-    if (!r.quiet && !r.dot) this.g.showNumber(r.point, amount, kind, r.source.kind === 'weapon', this.numbers++ < NUMBERS_PER_FRAME, e.id * 4096 + (e.gen & 4095));
-    return { dealt, killed: res.killed, kind };
+    const sign = affinitySign(aff);
+    if (!r.quiet && !r.dot) this.g.showNumber(r.point, amount, kind, r.source.kind === 'weapon', this.numbers++ < NUMBERS_PER_FRAME, e.id * 4096 + (e.gen & 4095), r.element, sign);
+    return { dealt, killed: res.killed, kind, aff: sign };
   }
 
   /** Reactions + statuses for a hit. Contact elements = hit element plus any status the hit applies. */
@@ -333,6 +370,7 @@ export class Director {
     if (r.element !== 'none') els.add(r.element);
     if (r.apply?.burn) els.add('thermal');
     if (r.apply?.shock) els.add('electric');
+    if (r.apply?.corrode) els.add('corrosive');
     if (!r.noReact) for (const el of els) for (const rx of resolveReactions(e.status, el, amount)) this.runReaction(rx.kind, rx.damage, rx.radius, rx.element, rx.chainBonus, e, r);
     if (!r.noStatus && r.apply && e.alive) this.inflict(e, r.apply, r.source, r.chain, r.point);
   }
@@ -348,7 +386,7 @@ export class Director {
       for (const el of els) for (const rx of resolveReactions(e.status, el, Math.max(p.burn ?? 0, 1) * (el === 'thermal' ? 4 : 8))) this.runReaction(rx.kind, rx.damage, rx.radius, rx.element, rx.chainBonus, e, { source, chain, point } as DamageReq);
       if (!e.alive) return;
     }
-    const emit = (status: 'burn' | 'shock' | 'chill' | 'freeze') => {
+    const emit = (status: 'burn' | 'shock' | 'chill' | 'freeze' | 'corrode') => {
       this.statusApplied[status]++;
       this.bus.emit({ type: 'status', chain, source, target: e, gen: e.gen, status, op: 'apply' });
     };
@@ -356,6 +394,13 @@ export class Director {
       const b = applyBurn(e.status, p.burn * ep);
       if (b.fresh) emit('burn');
       if (b.fresh && Math.random() < 0.6) this.g.fx.burst('embers', e.center(TMP), 3);
+    }
+    if (p.corrode && p.corrode > 0) {
+      const c = applyCorrode(e.status, p.corrode * ep);
+      if (c.fresh) {
+        emit('corrode');
+        this.g.fx.burst('oil', e.center(TMP), 3);
+      }
     }
     if (p.shock) {
       const s = applyShock(e.status);
@@ -550,7 +595,7 @@ export class Director {
         const e = i === 0 || !others.length ? target : others[(i - 1) % others.length];
         const aim = e.center(new Vector3());
         const crit = Math.random() < st.critChance;
-        this.missiles.push({ delay: i * 0.13, t: 0, dur: 0.35 + Vector3.Distance(from, aim) / 32, target: e, gen: e.gen, from: from.clone(), aim, dmg: st.damage * (crit ? this.g.stats.critMultiplier : 1), crit, splash: st.splash, src, chain, element: st.element, burn: st.burnFrac > 0 ? st.damage * st.burnFrac : 0, launched: false });
+        this.missiles.push({ delay: i * 0.13, t: 0, dur: 0.35 + Vector3.Distance(from, aim) / 32, target: e, gen: e.gen, from: from.clone(), aim, dmg: st.damage * (crit ? this.g.stats.critMultiplier : 1), crit, splash: st.splash, src, chain, element: st.element, apply: towerApply(st, st.damage), launched: false });
       }
       if (this.missiles.length > 160) this.missiles.splice(0, this.missiles.length - 160);
       return;
@@ -559,7 +604,7 @@ export class Director {
       const dmg = st.damage * mult;
       this.arcFx(from, to);
       sfx.play('arc', { volume: a.volume * 0.6, pan: a.pan, pitch: 1.1 });
-      const apply: StatusPayload | undefined = st.burnFrac > 0 || st.chill > 0 ? { burn: st.burnFrac > 0 ? dmg * st.burnFrac : undefined, chill: st.chill > 0 ? st.chill : undefined } : undefined;
+      const apply = towerApply(st, dmg);
       const isCrit = Math.random() < st.critChance;
       this.chainLightning({ from, first: target, count: 1 + st.chain, amount: isCrit ? dmg * crit : dmg, falloff: st.chainFalloff, source: src, chain, shock: true, apply, crit: isCrit });
       return;
@@ -594,7 +639,7 @@ export class Director {
       this.g.fx.burst(st.element === 'thermal' ? 'enemySpark' : 'spark', p, 5);
       const isCrit = Math.random() < st.critChance;
       const amount = isCrit ? dmg * crit : dmg;
-      const apply: StatusPayload | undefined = st.burnFrac > 0 || st.chill > 0 ? { burn: st.burnFrac > 0 ? dmg * st.burnFrac : undefined, chill: st.chill > 0 ? st.chill : undefined } : undefined;
+      const apply = towerApply(st, dmg);
       const res = this.deal({ target: e, amount, base: dmg, crit: isCrit, element: st.element, source: src, chain, point: p, apply, family: 'ballistic', from });
       if (st.splash > 0) {
         this.blast(p, st.splash, amount * 0.5, st.element, src, chain, { falloff: 0.3, noReact: true, noStatus: true, exclude: e, family: 'splash' });
@@ -616,7 +661,7 @@ export class Director {
   }
 
   /** M7 Missile Battery: rounds in flight (launch stagger, travel time, blast on arrival). */
-  private missiles: { delay: number; t: number; dur: number; target: Enemy; gen: number; from: Vector3; aim: Vector3; dmg: number; crit: boolean; splash: number; src: SourceRef; chain: ReturnType<Director['bus']['newChain']>; element: Element; burn: number; launched: boolean }[] = [];
+  private missiles: { delay: number; t: number; dur: number; target: Enemy; gen: number; from: Vector3; aim: Vector3; dmg: number; crit: boolean; splash: number; src: SourceRef; chain: ReturnType<Director['bus']['newChain']>; element: Element; apply: StatusPayload | undefined; launched: boolean }[] = [];
 
   private updateMissiles(dt: number): void {
     for (let i = this.missiles.length - 1; i >= 0; i--) {
@@ -643,7 +688,7 @@ export class Director {
       this.g.fx.explode(p, { scale: 0.5, debris: 2, color: new Color3(3, 1.4, 0.4) });
       const a = this.g.panFor(p);
       sfx.play('explosion', { volume: a.volume * 0.4, pitch: 1.5, pan: a.pan });
-      if (alive) this.deal({ target: m.target, amount: m.dmg, base: m.dmg, crit: m.crit, element: m.element, source: m.src, chain: m.chain, point: p, apply: m.burn > 0 ? { burn: m.burn } : undefined, family: 'missile' });
+      if (alive) this.deal({ target: m.target, amount: m.dmg, base: m.dmg, crit: m.crit, element: m.element, source: m.src, chain: m.chain, point: p, apply: m.apply, family: 'missile' });
       this.blast(p, m.splash, m.dmg * 0.6, m.element, m.src, m.chain, { falloff: 0.35, noReact: true, exclude: alive ? m.target : null, family: 'splash' });
     }
   }

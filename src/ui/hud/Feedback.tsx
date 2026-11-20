@@ -130,6 +130,9 @@ export function DamageNumbers({ game }: { game: Game }) {
   const host = useRef<HTMLDivElement>(null);
   useEffect(() => {
     type Live = Num & { total: number; kind: HitKind; pop: number; target?: number; player: boolean };
+    // Element tint (non-kinetic) and affinity mark: ▲ weak (bigger), ▼ resisted (dimmer).
+    const cls = (kind: HitKind, player: boolean, el?: string, aff?: number) =>
+      `dmg ${kind} ${player ? 'own' : 'ally'}${el && el !== 'none' && el !== 'kinetic' ? ` el-${el}` : ''}${aff === 1 ? ' aff-weak' : aff === -1 ? ' aff-resist' : ''}`;
     const live: Live[] = [];
     const pool: HTMLDivElement[] = [];
     const byTarget = new Map<number, Live>();
@@ -144,7 +147,7 @@ export function DamageNumbers({ game }: { game: Game }) {
       if (merge && merge.player === e.player && merge.t < MERGE_WINDOW) {
         merge.total += e.amount;
         if (KIND_RANK[e.kind] >= KIND_RANK[merge.kind]) merge.kind = e.kind;
-        merge.el.className = `dmg ${merge.kind} ${e.player ? 'own' : 'ally'}`;
+        merge.el.className = cls(merge.kind, e.player, e.el, e.aff);
         merge.el.textContent = String(merge.total);
         merge.x = e.x;
         merge.y = e.y;
@@ -156,7 +159,7 @@ export function DamageNumbers({ game }: { game: Game }) {
       if (!e.player && e.kind !== 'kill' && Math.random() < 0.5) return; // keep turret noise down
       if (live.length > 40) drop(live.shift()!);
       const el = pool.pop() ?? document.createElement('div');
-      el.className = `dmg ${e.kind} ${e.player ? 'own' : 'ally'}`;
+      el.className = cls(e.kind, e.player, e.el, e.aff);
       el.textContent = String(e.amount);
       el.style.display = 'block';
       if (!el.parentElement) host.current.appendChild(el);

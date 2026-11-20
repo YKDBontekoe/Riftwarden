@@ -1,3 +1,4 @@
+import { ELEMENT_INFO } from '../combat/elements';
 import { BASE_STATS, type CombatStats, computeStats, formatModifier, formatStat, fmtNum, type StatKey, STAT_DEFS, type StatModifier, STAT_KEYS, type StatOp } from '../combat/stats';
 import { DAMAGE_PACE, HEAT_PACE } from '../combat/heat';
 import type { WeaponDef } from '../data/defs';
@@ -75,6 +76,7 @@ export function weaponDefFor(item: ItemInstance | null | undefined): WeaponDef |
     chargeTime: w.chargeTime ?? t.chargeTime,
     beamWidth: w.beamWidth ?? t.beamWidth,
     rampMax: w.rampMax ?? t.rampMax,
+    element: w.element ?? 'kinetic',
   };
 }
 
@@ -170,6 +172,7 @@ export function compareItems(a: ItemInstance, b: ItemInstance | null): CompareRo
       rows.push({ key, label, a: fmt(va), b: vb === undefined ? '' : fmt(vb), verdict: vb === undefined ? 0 : verdictOf(va, vb, better) });
     const same = !wb || wb.family === wa.family;
     add('w.dps', 'Sustained DPS', sa.dps, sb?.dps, 'higher');
+    rows.push({ key: 'w.element', label: 'Element', a: ELEMENT_INFO[wa.element].name, b: wb ? ELEMENT_INFO[wb.element].name : '', verdict: 0 });
     add('w.damage', wa.family === 'beam' ? 'Damage / tick' : 'Damage / shot', sa.damage, same ? sb?.damage : undefined, 'higher');
     add('w.rate', wa.family === 'beam' ? 'Tick rate' : 'Fire rate', sa.rate, same ? sb?.rate : undefined, 'higher', (v) => `${fmtNum(v)}/s`);
     add('w.range', 'Range', sa.range, sb?.range, 'higher', (v) => `${fmtNum(v)} m`);

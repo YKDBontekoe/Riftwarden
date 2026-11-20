@@ -144,7 +144,8 @@ export const enforcerBehavior: Behavior = {
     const ai = e.ai as unknown as EnforcerAI;
     if (info.dot) return amount;
     if (ai.mode !== 'move') return amount * ENFORCER.exposedMult;
-    if (ai.lower < 0.3 && !disrupted(e) && !info.weak && fromFront(e, info, ENFORCER.frontCos)) {
+    // Void damage passes through the frontal energy shield.
+    if (ai.lower < 0.3 && !disrupted(e) && !info.weak && info.element !== 'void' && fromFront(e, info, ENFORCER.frontCos)) {
       e.shieldFlash = 1;
       return amount * ENFORCER.frontMult;
     }

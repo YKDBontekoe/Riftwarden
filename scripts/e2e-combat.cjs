@@ -541,6 +541,88 @@ async function deploy(p) {
       await ev(p, () => window.__rift.flow.abandonRun());
       await H.waitFor(p, () => window.__rift.state().location === 'home' && !window.__rift.state().busy);
     }
+    if (want('G')) {
+      // Elements: element rolled on the weapon -> HUD, statuses (corrode), void shield pierce, faction affinity, briefing.
+      await ev(p, () => {
+        const R = window.__rift;
+        const w = R.makeItem({ seed: 4040, rarity: 'rare', baseId: 'plasma_repeater', level: 3 });
+        w.weapon.element = 'corrosive';
+        R.profile.mutate((d) => { d.items.push(w); d.storage.uids.push(d.loadout.weapon); d.loadout.weapon = w.uid; return true; });
+      });
+      await deploy(p);
+      await ev(p, () => { window.__rift.advance(0.2); window.__rift.render(1); });
+      await new Promise((r) => setTimeout(r, 200));
+      const g1 = await ev(p, () => ({ el: window.__rift.game.weapon.def.element }));
+      const tag = await p.$eval('.weapon-card .el-tag', (e) => e.textContent).catch(() => '');
+      check('G1 the equipped weapon fires its rolled element and the weapon card shows it', g1.el === 'corrosive' && tag === 'COR', JSON.stringify({ ...g1, tag }));
+
+      const g2 = await ev(p, () => {
+        const R = window.__rift;
+        const g = R.game;
+        const e = R.dev.spawn('bulwark');
+        const pp = g.player.position;
+        e.pos.set(pp.x + 8, 0, pp.z + 8);
+        e.root.position.copyFrom(e.pos);
+        e.shotT = 99;
+        R.advance(1 / 60);
+        for (let k = 0; k < 4; k++) g.damageEnemy('player', e, 4, e.center(new R.V3()), false);
+        const stacks = e.status.corrodeStacks;
+        const vuln = e.status.corrodeStacks > 0;
+        const hp0 = e.hp + e.shield;
+        R.advance(1.2);
+        return { stacks, vuln, hp0, hp1: e.hp + e.shield, cor: g.director.byElement.corrosive ?? 0, applied: g.director.statusApplied.corrode };
+      });
+      check('G2 corrosive hits stack corrosion that ticks damage over time', g2.stacks >= 2 && g2.hp1 < g2.hp0 && g2.applied >= 1 && g2.cor > 0, JSON.stringify(g2));
+
+      const g3 = await ev(p, () => {
+        const R = window.__rift;
+        const g = R.game;
+        const run = (el) => {
+          const e = R.dev.spawn('walker', ['shielded']);
+          const pp = g.player.position;
+          e.pos.set(pp.x - 8, 0, pp.z + 8);
+          e.root.position.copyFrom(e.pos);
+          e.shotT = 99;
+          R.advance(1 / 60);
+          const s0 = e.shield; const h0 = e.hp;
+          g.director.deal({ target: e, amount: 20, element: el, source: { kind: 'weapon', id: 'plasma' }, chain: g.director.bus.newChain(), point: e.center(new R.V3()), quiet: true });
+          const out = { s0, s1: e.shield, h0, h1: e.hp };
+          g.enemies.kill(e, g.enemyFx, g.enemyCtx);
+          return out;
+        };
+        return { kinetic: run('kinetic'), void: run('void') };
+      });
+      check('G3 void damage pierces the shield to the hull; kinetic hits the shield', g3.void.s0 > 0 && g3.void.s1 === g3.void.s0 && g3.void.h1 < g3.void.h0 && g3.kinetic.s1 < g3.kinetic.s0 && g3.kinetic.h1 === g3.kinetic.h0, JSON.stringify(g3));
+
+      const g4 = await ev(p, () => {
+        const R = window.__rift;
+        const g = R.game;
+        g.director.factionId = 'rime';
+        const hit = (el) => {
+          const e = R.dev.spawn('walker');
+          const pp = g.player.position;
+          e.pos.set(pp.x + 8, 0, pp.z - 8);
+          e.root.position.copyFrom(e.pos);
+          R.advance(1 / 60);
+          const r = g.director.deal({ target: e, amount: 10, element: el, source: { kind: 'weapon', id: 'plasma' }, chain: g.director.bus.newChain(), point: e.center(new R.V3()), noStatus: true, noReact: true, quiet: true });
+          g.enemies.kill(e, g.enemyFx, g.enemyCtx);
+          return r;
+        };
+        const base = g.stats.elementalPower;
+        const th = hit('thermal');
+        const cr = hit('cryo');
+        const ki = hit('kinetic');
+        R.advance(0.1);
+        return { th: th.dealt / base, cr: cr.dealt / base, ki: ki.dealt, thAff: th.aff, crAff: cr.aff };
+      });
+      check('G4 a Rime sector takes x1.35 thermal, x0.65 cryo and plain kinetic damage', Math.abs(g4.th - 13.5) < 0.6 && Math.abs(g4.cr - 6.5) < 0.6 && Math.abs(g4.ki - 10) < 0.3 && g4.thAff === 1 && g4.crAff === -1, JSON.stringify(g4));
+      await ev(p, () => window.__rift.flow.abandonRun());
+      await H.waitFor(p, () => window.__rift.state().location === 'home' && !window.__rift.state().busy);
+      await ev(p, () => window.__rift.previewLoading(1234567, 1));
+      await new Promise((r) => setTimeout(r, 300));
+      const aff = await p.$eval('[data-testid=ls-affinity]', (e) => e.textContent).catch(() => '');
+      check('G5 the sector briefing lists the faction weaknesses and resistances', /WEAK/.test(aff) && /RESISTS/.test(aff) && (aff.match(/KINETIC|THERMAL|ELECTRIC|CRYO|CORROSIVE|VOID/g) || []).length === 4, aff);
+    }
     const bad = errs.filter((e) => !/Error compiling effect/.test(e));
     check('Z no page/console errors', bad.length === 0, bad.slice(0, 3).join(' | '));
   } catch (e) {

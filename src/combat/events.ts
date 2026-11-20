@@ -19,7 +19,10 @@
  *    order. The queue is hard-capped (MAX_QUEUE): beyond it new TRIGGER events are refused and
  *    counted in `stats.dropped` (diagnostics) - never damage.
  */
-export type Element = 'none' | 'thermal' | 'electric' | 'cryo';
+import type { DamageElement } from './elements';
+
+/** 'none' = untyped effect damage (no affinity, no elemental power). */
+export type Element = 'none' | DamageElement;
 export type SourceKind = 'weapon' | 'tower' | 'status' | 'effect' | 'reaction';
 
 export interface SourceRef {

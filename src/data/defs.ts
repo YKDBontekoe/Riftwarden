@@ -1,3 +1,4 @@
+import type { DamageElement } from '../combat/elements';
 /** Data-driven content definitions. */
 
 export type WeaponFamily = 'plasma' | 'rail' | 'beam';
@@ -37,9 +38,11 @@ export interface WeaponDef {
   rampTime: number;
   /** Visual speed of plasma bolts (m/s); damage is resolved instantly (hitscan). */
   boltSpeed: number;
+  /** Damage element of the weapon's hits. */
+  element: DamageElement;
 }
 
-const WEAPON_DEFAULTS = { burstCount: 3, chargeTime: 0.8, pierce: 0, beamWidth: 0, rampMax: 1, rampTime: 1, boltSpeed: 130 };
+const WEAPON_DEFAULTS = { burstCount: 3, chargeTime: 0.8, pierce: 0, beamWidth: 0, rampMax: 1, rampTime: 1, boltSpeed: 130, element: 'kinetic' as DamageElement };
 
 export const PLASMA_REPEATER: WeaponDef = {
   ...WEAPON_DEFAULTS,

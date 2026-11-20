@@ -78,6 +78,8 @@ export interface HitInfo {
   from: Vector3 | null;
   point: Vector3;
   dot: boolean;
+  /** Damage element ('none' = untyped). Void pierces shields; corrosive strips elite plating twice as fast. */
+  element: string;
 }
 
 /** Plug-in AI for every archetype (core walker/rusher in coreBehaviors.ts, the rest in behaviors.ts / bosses/). Per-enemy state lives in `e.ai`. */
@@ -494,7 +496,7 @@ export class EnemyManager {
   damage(e: Enemy, amount: number, type: DamageType, hitPoint: Vector3, fx: Effects, info: Partial<HitInfo> = {}): DamageResult | null {
     // Burrowed enemies are out of reach of every source (towers do not even target them).
     if (!e.alive || e.hidden) return null;
-    const hit: HitInfo = { weak: !!info.weak, from: info.from ?? null, point: hitPoint, dot: !!info.dot };
+    const hit: HitInfo = { weak: !!info.weak, from: info.from ?? null, point: hitPoint, dot: !!info.dot, element: info.element ?? 'none' };
     if (hit.from) {
       e.hitFromX = hit.from.x;
       e.hitFromZ = hit.from.z;
@@ -503,7 +505,7 @@ export class EnemyManager {
     if (hasLost(e.limbsLost, 'head')) amount *= LIMB_EFFECT.headlessVulnerability;
     if (e.armor > 0 && !hit.weak && !hit.dot) {
       const absorbed = Math.min(e.armor, amount * ELITE.armorAbsorb);
-      e.armor -= absorbed;
+      e.armor -= hit.element === 'corrosive' ? absorbed * 2 : absorbed;
       amount -= absorbed;
       if (Math.random() < 0.3) fx.burst('sparks', hitPoint, 3, undefined, 0.5);
       if (e.armor <= 0) this.breakArmor(e, fx);
@@ -512,7 +514,7 @@ export class EnemyManager {
       e.lastHit = performance.now();
       return { toShield: 0, toHp: 0, shieldBroken: false, killed: false };
     }
-    const res = applyDamage(e, amount, type);
+    const res = applyDamage(e, amount, type, hit.element === 'void');
     const heavy = e.def.role === 'boss' ? 0.08 : e.def.radius > 1.1 ? 0.5 : 1;
     e.flinch = Math.min(1, e.flinch + (res.toHp > 0 ? 0.5 : 0.2) * heavy);
     if (!hit.dot) this.react(e, hit.from ? hit.from.x : hitPoint.x, hit.from ? hit.from.z : hitPoint.z, (res.toHp + res.toShield) / Math.max(1, e.maxHp + e.maxShield));

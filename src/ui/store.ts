@@ -186,7 +186,10 @@ export interface HudState {
   cores: number;
   weaponName: string;
   /** The holstered weapon (null without a secondary): Z swaps to it. */
-  holster: { name: string; heat: number; overheated: boolean; secondary: boolean } | null;
+  holster: { name: string; heat: number; overheated: boolean; secondary: boolean; element: string; aff: -1 | 0 | 1 } | null;
+  /** Element of the weapon in hand and its sector hint (+1 the faction is weak to it, -1 resists it). */
+  weaponElement: string;
+  weaponAff: -1 | 0 | 1;
   /** Ability I/II cooldowns and the ultimate charge (arena). */
   abilities: AbilityHudRow[];
   /** Movement kit: current state, grapple / pound cooldowns (seconds). */
@@ -244,6 +247,8 @@ export const initialHud: HudState = {
   cores: 0,
   weaponName: '',
   holster: null,
+  weaponElement: 'kinetic',
+  weaponAff: 0,
   abilities: [],
   moves: { state: '', grapple: 0, grappleMax: 1, pound: 0, poundMax: 1 },
   heat: 0,
@@ -315,6 +320,9 @@ export interface DamageNumberEvent {
   player: boolean;
   /** Target key (enemy id + spawn generation): rapid hits on the same target merge into one rising number. */
   target?: number;
+  /** Damage element of the hit (number tint) and the target's affinity: +1 weak, -1 resisted. */
+  el?: string;
+  aff?: -1 | 0 | 1;
 }
 
 export interface BannerEvent {
