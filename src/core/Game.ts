@@ -290,7 +290,7 @@ export class Game {
     scene.enablePhysics(new Vector3(0, -26, 0), new HavokPlugin(true, havok));
 
     const high = settings.quality === 'high';
-    this.pal = tintPalette(createPalette(scene, high), biomeOf(this.layout));
+    this.pal = tintPalette(createPalette(scene, high, false, this.layout), biomeOf(this.layout));
     this.kit = new Kit(scene);
 
     // Alpine horizon, haze, lamps and embers. PBR ambient comes from the captured environment.
@@ -1268,7 +1268,7 @@ export class Game {
   protected updateArenaVisuals(dt: number, hostileDt: number): void {
     const phase = this.waves.phase;
     const warning = this.screen === 'defeat' || phase === 'cleared' ? 0 : phase === 'combat' ? 1 : 0.5;
-    this.arenaVisuals.update(dt, hostileDt, warning);
+    this.arenaVisuals.update(dt, hostileDt, warning, this.settings.reduceMotion);
   }
 
   gateActivity(gate: GateId): number {

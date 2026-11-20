@@ -60,6 +60,7 @@ export function LoadingScreen() {
 }
 
 const FEATURE_LABEL: Record<string, string> = {
+  transfer: 'Grapple galleries',
   maze: 'Maze',
   serpentine: 'Chicane',
   containers: 'Container yard',

@@ -57,6 +57,34 @@ function buffers(size: number) {
   return { px, finish };
 }
 
+/** Sparse beads and narrow runoff trails on the exterior of the observation glass. */
+export function windowRainNormal(scene: Scene, high: boolean): DynamicTexture {
+  const size = high ? 512 : 256;
+  const heights = new Float32Array(size * size);
+  const random = rng(2913);
+  for (let i = 0; i < 260; i++) {
+    const cx = Math.floor(random() * size);
+    const cy = Math.floor(random() * size);
+    const radius = (0.002 + 0.008 * random() ** 2) * size;
+    const trail = i % 9 === 0 ? radius * (3 + random() * 8) : 0;
+    for (let dy = -Math.ceil(radius); dy <= Math.ceil(radius + trail); dy++) {
+      const tail = dy > radius && trail > 0;
+      const width = tail ? radius * 0.24 : radius;
+      for (let dx = -Math.ceil(width); dx <= Math.ceil(width); dx++) {
+        const profile = tail ? (1 - (dy - radius) / trail) * 0.18 - (dx / width) ** 2
+          : 1 - (dx / radius) ** 2 - (dy / radius) ** 2;
+        if (profile <= 0) continue;
+        const index = ((cy + dy + size) % size) * size + (cx + dx + size) % size;
+        heights[index] = Math.max(heights[index], Math.sqrt(profile));
+      }
+    }
+  }
+  const texture = toTexture('observationRain', heightToNormal(heights, size, size / 180), scene, { srgb: false });
+  texture.uScale = 3.5;
+  texture.level = 0.55;
+  return texture;
+}
+
 /** Bevelled seam profile: 0 in the gap, ramps to 1 over `bevel` past `gap` (all in tile units). */
 function seamProfile(edge: number, gap: number, bevel: number): { k: number; rim: number } {
   if (edge < gap) return { k: 0, rim: 0 };
@@ -132,6 +160,15 @@ export function hqDeckSet(scene: Scene, high: boolean): HqSet {
         h -= groove * 0.08;
         rough += 0.18;
         metal -= 0.15;
+      }
+      if (plate === 3 && Math.abs(pu - 0.76) < 0.065 && ev > 0.09) {
+        const slot = Math.abs((pv * 26) % 1 - 0.5);
+        const cut = slot < 0.19 && Math.abs(pu - 0.76) < 0.05;
+        base = cut ? 0.15 : 0.52 + brushed * 0.15;
+        h = cut ? 0.36 : 0.57;
+        ao = cut ? 0.54 : 0.92;
+        metal = cut ? 0.35 : 0.84;
+        rough = cut ? 0.71 : 0.34;
       }
       // Inset LED channel along the seam between the two plate columns (u = 0.5).
       const du = Math.abs(u - 0.5);

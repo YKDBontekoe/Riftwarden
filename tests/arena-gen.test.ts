@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { arenaStats, generateArena, sectorName } from '../src/world/arenaGen';
 import { distToBoxXZ } from '../src/world/geometry';
 import { ARENA, type GateId } from '../src/world/layout';
+import { KIT } from '../src/player/movement';
 import { NAV, NavGrid } from '../src/world/navgrid';
 import { EnemyNavigator, FLYERS, type NavAgent } from '../src/enemies/navigation';
 import { recycleRefund, repairCost, towerMaxHp } from '../src/towers/durability';
@@ -40,8 +41,8 @@ describe('procedural arenas', () => {
         expect(Math.hypot(end.x, end.z)).toBeLessThan(NAV.goalRadius + 1);
         for (const p of pts.slice(1, -1)) {
           for (const b of L.boxes) {
-            // Bridges are overhead (enemies walk under them).
-            if (b.kind === 'wall' || b.kind === 'gate' || b.kind === 'reactor' || b.kind === 'bridge') continue;
+            // Ground enemies can pass beneath bridge decks and transfer girders.
+            if (b.kind === 'wall' || b.kind === 'gate' || b.kind === 'reactor' || b.kind === 'bridge' || b.kind === 'runwall') continue;
             expect(distToBoxXZ(p.x, p.z, b)).toBeGreaterThan(0.5);
           }
         }
@@ -79,6 +80,27 @@ describe('districts', () => {
     // Lanes are on average clearly longer than the straight line from the tunnel to the reactor.
     expect(detour / n).toBeGreaterThan(1.1);
     for (const t of ['maze', 'serpentine', 'containers', 'overpass', 'redoubt', 'skyway']) expect(seen.has(t)).toBe(true);
+  });
+
+  it('connects the four plaza landings within grapple and wall-run range', () => {
+    for (const seed of [1, 77, 4040, 7919, 424242]) {
+      const L = generateArena(seed);
+      const inner = L.boxes.filter(b => b.kind === 'relay' && Math.abs(b.min[0]) < 22 && Math.abs(b.min[2]) < 22);
+      expect(inner).toHaveLength(4);
+      for (const relay of inner) {
+        // Each socket can reach both adjacent decks. Diagonals can require a second hook.
+        const links = inner.filter(b => b !== relay && Math.hypot(
+          b.min[0] - relay.min[0], b.max[1] - relay.min[1], b.min[2] - relay.min[2],
+        ) <= KIT.grappleRange);
+        expect(links.length).toBeGreaterThanOrEqual(2);
+      }
+      const walls = L.boxes.filter(b => b.kind === 'runwall');
+      expect(walls).toHaveLength(2);
+      for (const b of walls) {
+        expect(b.min[1]).toBeGreaterThan(3);
+        expect(b.max[2] - b.min[2]).toBeLessThan(KIT.wallRunSpeed * KIT.wallRunTime);
+      }
+    }
   });
 
   it('bridges are elevated decks the ground grid ignores; their pylons block', () => {

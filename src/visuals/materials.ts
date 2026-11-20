@@ -1,4 +1,5 @@
 import { type BaseTexture, Color3, Constants, FresnelParameters, type Material, NullEngine, PBRMaterial, type Scene, StandardMaterial, Texture } from '@babylonjs/core';
+import type { ArenaLayout } from '../world/layout';
 import { floorSet, type PbrSet, rustSet, wallSet, wearSet, yardDeckSet } from './textures';
 
 /**
@@ -116,8 +117,8 @@ function glow(scene: Scene, name: string, e: [number, number, number]): PBRMater
   return unlit(scene, name, e);
 }
 
-export function createPalette(scene: Scene, high: boolean, indoor = false): Palette {
-  const floorTex = indoor ? floorSet(scene, high) : yardDeckSet(scene, high);
+export function createPalette(scene: Scene, high: boolean, indoor = false, layout?: ArenaLayout): Palette {
+  const floorTex = indoor ? floorSet(scene, high) : yardDeckSet(scene, high, layout?.biome, layout?.seed);
   const wallTex = wallSet(scene, high, indoor);
   // Outdoors (arena) the paint fails in patches; the HQ is maintained, so only light rust.
   const wear = wearSet(scene, high, indoor ? 0.3 : 0.6);
