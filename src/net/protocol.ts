@@ -6,7 +6,7 @@
  * rewards, online profiles); clients send intents (movement state, shot claims, actions) which
  * the server validates. Messages are validated structurally here before any game code sees them.
  */
-export const PROTOCOL_VERSION = 7;
+export const PROTOCOL_VERSION = 8;
 export const MAX_PLAYERS = 4;
 export const MAX_MESSAGE_BYTES = 64 * 1024;
 /** Authoritative simulation and snapshot rates (Hz). */
@@ -34,6 +34,8 @@ export type ActMsg =
   | { a: 'equip'; uid: string; slot?: string }
   | { a: 'unequip'; slot: string }
   | { a: 'discard'; uid: string }
+  /** Put the primary ('weapon') or secondary ('weapon2') weapon in hand. */
+  | { a: 'swap'; slot: 'weapon' | 'weapon2' }
   /** Test servers only (RIFT_TEST=1): drive the run quickly through the real pipelines. */
   | { a: 'test'; op: 'killAll' | 'jump' | 'boss' | 'clear' | 'reactor'; n?: number };
 
@@ -183,6 +185,8 @@ function validAct(o: Record<string, unknown>): boolean {
       return isStr(o.slot, 24);
     case 'discard':
       return isStr(o.uid, 120);
+    case 'swap':
+      return o.slot === 'weapon' || o.slot === 'weapon2';
     case 'test':
       return (o.op === 'killAll' || o.op === 'jump' || o.op === 'boss' || o.op === 'clear' || o.op === 'reactor') && (o.n === undefined || isNum(o.n, 1e6));
     default:

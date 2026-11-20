@@ -39,11 +39,18 @@ export const SCORE_KEYS: ScoreKey[] = ['dps', 'ehp', 'mobility', 'towers'];
 const live = (items: readonly (ItemInstance | null | undefined)[]) => items.filter((i): i is ItemInstance => !!i && i.category !== 'module');
 
 export function loadoutScore(items: readonly (ItemInstance | null | undefined)[]): LoadoutScore {
-  const list = live(items);
+  const all = live(items);
+  // Two carried weapons: only the one in hand applies its affixes and modules. Firepower is the better of the two
+  // (each with its own stat block); the other headlines use the first (primary) weapon.
+  const weapons = all.filter((i) => i.category === 'weapon');
+  const gear = all.filter((i) => i.category !== 'weapon');
+  const list = weapons.length ? [...gear, weapons[0]] : gear;
   const st = computeStats(equipmentModifiers(list));
-  const weapon = list.find((i) => i.category === 'weapon');
-  const w = weapon ? weaponDefFor(weapon) : null;
-  const dps = w ? weaponSummary(w, st).dps : 0;
+  let dps = 0;
+  for (const weapon of weapons) {
+    const w = weaponDefFor(weapon);
+    if (w) dps = Math.max(dps, weaponSummary(w, weapon === weapons[0] ? st : computeStats(equipmentModifiers([...gear, weapon]))).dps);
+  }
   const pool = maxHull(ECONOMY.playerMaxHp, st) + st.shieldCapacity;
   const ehp = pool / Math.max(0.05, 1 - mitigation(st));
   const mobility = 100 * (0.7 * st.moveSpeedMult + 0.3 * st.dashRechargeMult);
@@ -72,7 +79,15 @@ const rel = (a: number, b: number) => (b > 1e-9 ? (a - b) / b : a > 1e-9 ? 1 : 0
 
 /** The loadout with `candidate` in place of `replaced` (or added to an empty slot). */
 export function swapped(equipped: readonly (ItemInstance | null)[], candidate: ItemInstance | null, replaced: ItemInstance | null): ItemInstance[] {
-  return [...live(equipped).filter((i) => i.uid !== replaced?.uid && i.uid !== candidate?.uid), ...(candidate ? [candidate] : [])];
+  // Keep slot order: the candidate takes the replaced item's place (primary stays first among weapons).
+  const out = live(equipped).filter((i) => i.uid !== candidate?.uid);
+  const at = replaced ? out.findIndex((i) => i.uid === replaced.uid) : -1;
+  if (at >= 0) {
+    if (candidate) out[at] = candidate;
+    else out.splice(at, 1);
+    return out;
+  }
+  return candidate ? [...out, candidate] : out;
 }
 
 /** What equipping `candidate` instead of `replaced` does to the headline numbers. */

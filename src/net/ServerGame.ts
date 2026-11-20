@@ -13,6 +13,7 @@ import { type Enemy, type EnemyHitboxMeta } from '../enemies/EnemyManager';
 import { DROP_SOURCES, type DropSource, type DropSourceId } from '../loot/drops';
 import { rollLoot } from '../loot/roll';
 import { equipmentModifiers, weaponDefFor } from '../loot/equipment';
+import { otherSlot, type WeaponSlot } from '../arena/WeaponSlots';
 import { hashSeed } from '../loot/generate';
 import { convertsToSalvage, expiresAfterWave, PICKUP_RANGE, type Pickup } from '../loot/LootField';
 import { scrapValue } from '../loot/economy';
@@ -57,6 +58,8 @@ export class Avatar {
   readonly inventory: RunInventory;
   stats: CombatStats = { ...BASE_STATS };
   weaponDef: WeaponDef;
+  /** Weapon in hand: only its affixes/modules count, claims must match its family. */
+  activeWeapon: WeaponSlot = 'weapon';
   rand: () => number;
   lootCounter = 0;
   connected = true;
@@ -239,7 +242,7 @@ export class ServerGame extends Game {
 
   protected override weaponSignature(): string | null {
     const a = this.rec.owner ? this.avatar(this.rec.owner) : undefined;
-    return a ? a.inventory.equipped('weapon')?.signature ?? null : null;
+    return a ? a.inventory.equipped(a.activeWeapon)?.signature ?? null : null;
   }
   protected override weaponHeat(): number {
     const a = this.rec.owner ? this.avatar(this.rec.owner) : undefined;
@@ -324,16 +327,17 @@ export class ServerGame extends Game {
     // Towers are shared: each player's tower gear contributes 1/n (a full team of tower builds = one full build).
     const towerGear: StatModifier[] = [];
     for (const a of live) {
-      for (const m of [...equipmentModifiers(a.inventory.equippedItems()), ...a.treeMods]) {
+      for (const m of [...equipmentModifiers(a.inventory.equippedItems(otherSlot(a.activeWeapon))), ...a.treeMods]) {
         if (!TOWER_KEYS.has(m.stat)) continue;
         towerGear.push({ ...m, value: m.op === 'mul' ? Math.pow(1 + m.value, 1 / n) - 1 : m.value / n });
       }
     }
     Object.assign(this.stats, computeStats([...towerGear, ...shared]));
     for (const a of this.avatars) {
-      a.stats = computeStats([...equipmentModifiers(a.inventory.equippedItems()), ...a.treeMods, ...shared]);
+      if (a.activeWeapon === 'weapon2' && !weaponDefFor(a.inventory.equipped('weapon2'))) a.activeWeapon = 'weapon';
+      a.stats = computeStats([...equipmentModifiers(a.inventory.equippedItems(otherSlot(a.activeWeapon))), ...a.treeMods, ...shared]);
       a.player.applyStats(a.stats, this.attackerScale);
-      a.weaponDef = weaponDefFor(a.inventory.equipped('weapon')) ?? a.weaponDef;
+      a.weaponDef = weaponDefFor(a.inventory.equipped(a.activeWeapon)) ?? a.weaponDef;
     }
     this.player.applyStats(this.stats, this.attackerScale);
     this.tactical.rechargeMult = this.stats.tacticalRechargeMult;
@@ -648,6 +652,13 @@ export class ServerGame extends Game {
         this.rec.push(['u', 'alert', { text: `${a.name.toUpperCase()} VOTES ${m.home ? 'RETURN TO HQ' : 'CONTINUE'}`, tone: 'white' }]);
         this.checkVote();
         return null;
+      case 'swap': {
+        if (m.slot === a.activeWeapon) return null;
+        if (!weaponDefFor(a.inventory.equipped(m.slot))) return 'No weapon in that slot';
+        a.activeWeapon = m.slot;
+        this.rebuildStats();
+        return null;
+      }
       case 'equip':
       case 'unequip':
       case 'discard': {

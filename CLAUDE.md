@@ -88,6 +88,7 @@ src/home/hqVista.ts        3D middle ground outside the observation window (land
 src/home/StationFocus.ts   HQ station floor ring under the targeted station + camera push-in while a terminal is open
 src/arena/PlayerCombat.ts  player weapon combat: shoot (hit resolution + damage), legacy damage entry (crit, situational upgrades, signatures, Arc Conductor), kill feel (hitstop/chain/dash refund), per-family shot fx (CombatHost)
 src/arena/shotTrace.ts     traceShot(): hitscan geometry (pierce, weakpoint overlap, beam aim assist) shared by Game and ClientGame (claims); shotOutcome in PlayerCombat
+src/arena/WeaponSlots.ts   primary + secondary weapon: active slot, swap (Z / 1), holstered heat (coolHolstered in combat/heat.ts), stat exclusion of the holstered weapon (WeaponSlotsHost)
 src/arena/LootPickups.ts   loot landing point (Havok), landing/pickup/refused presentation, pickup targeting (LootHost)
 src/arena/TowerControl.ts  tower inspection (crosshair pick), hold-X recycle, F repair, refit hotkeys, build template, refit/place local rules (TowerHost; ClientGame overrides recycleTower/repairTower/modifyTower/tryPlace)
 src/arena/DevTools.ts      dev lab actions behind `game.dev` (narrow DevHost interface, no Game dependency)
@@ -232,6 +233,16 @@ scripts/e2e-m6.cjs         M6 browser acceptance suite (A-L: plans, enemies, eli
 - Browser co-op section X of `e2e-construction-coop.cjs` needs a test server (`RIFT_TEST=1 RIFT_PORT=8787 npx tsx server/main.ts`) and runs both clients with the render loop stopped: two live software-GL render loops starve Playwright's actionability checks and clicks time out. It passes (13/13, including "no replicated event rejected") and is the real test of the client replay path, along with `e2e-coop-protocol.mjs`.
 
 ## Key design decisions
+
+### Combat kit (in progress, after the Game.ts refactor)
+
+- **Two weapons** (`arena/WeaponSlots.ts`): slot `weapon2` (SECONDARY WEAPON, optional, accepts weapons). One `Weapon` viewmodel stays; a swap rebuilds stats and calls `Weapon.setItem(item, def, false, quick)`, which keeps up to two built models (look key -> rig + animator) so swapping never rebuilds geometry, and a quick swap is ready after ~70 ms. Heat is per weapon: the holstered one is parked (`Weapon.heatState/restoreHeat`) and vents at full rate with no delay (`coolHolstered`). **Only the weapon in hand feeds the stat block** (`RunInventory.equippedItems(except)`, `Game.rebuildStats`, `ServerGame.rebuildStats` per avatar), and the signature is the one in hand. Keys: `Z` swap (rebindable action `swap`), `1` primary (also leaves build mode); swapping is refused in build mode. HUD: holstered row in the weapon card (`hud.holster`).
+- **Slot defaults** (`defaultSlot`): an unqualified weapon equip replaces the primary; the secondary is always chosen explicitly (inventory TARGET SLOT picker, HQ slot). Other categories fill the first empty slot. Sanitize promotes a secondary to primary when the primary is missing.
+- **Scoring** (`loadoutScore`): firepower = the better weapon (each with its own stat block); other headlines use the primary; `swapped` keeps slot order. Drone configuration shows a SECONDARY block.
+- **Save v9** (`MIGRATIONS[8]`: `loadout.weapon2` + preset slots), PostgreSQL `003_secondary_weapon.sql` (slot check + preset column). **Protocol v8**: act `swap {slot}` (server validates the slot holds a weapon; claims are checked against the avatar's active weapon family); the client predicts the swap and reverts if refused. `scripts/bot.mjs` speaks v8.
+- **Tests**: `tests/weapon-slots.test.ts`; `node scripts/e2e-combat.cjs` (A 8/8); coop protocol 49/49 (F4/F5 swap). Local PostgreSQL for the DB suites: initdb a throwaway cluster as the `postgres` user (e.g. under /var/lib/postgresql) on port 55432 and set `RIFT_TEST_DATABASE_URL=postgres://rift@127.0.0.1:55432/rift_test`.
+- **Regression**: npm test 391 (with DB), m1 69/70 (known Z), m2 52/54 (known C8/C9), m3 37/37, m4 39/39, m5 24/24.
+- **Next in the kit**: hit feedback (stagger, hit/crit audio, kill flashes, oil sprays, shoot-off parts), abilities (2 + ultimate), movement (slide/grapple/wall-run/ground pound), TTK pass.
 
 ### Destruction + VFX pass (after M10)
 

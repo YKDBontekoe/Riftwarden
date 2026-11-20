@@ -5,10 +5,11 @@ export type { ItemInstance } from '../loot/types';
 
 /**
  * Equipment slots (structured definitions). Each slot accepts one category; the two
- * accessory slots share the accessory category. Upgrade modules have no slot: they are
+ * weapon slots share the weapon category (one is active at a time in the arena), as do the
+ * two accessory slots. Upgrade modules have no slot: they are
  * stored until module installation (engineering) exists.
  */
-export type SlotId = 'weapon' | 'armor' | 'shield' | 'reactor' | 'processor' | 'accessory' | 'accessory2';
+export type SlotId = 'weapon' | 'weapon2' | 'armor' | 'shield' | 'reactor' | 'processor' | 'accessory' | 'accessory2';
 
 export interface SlotDef {
   id: SlotId;
@@ -20,6 +21,7 @@ export interface SlotDef {
 
 export const SLOTS: readonly SlotDef[] = [
   { id: 'weapon', label: 'PRIMARY WEAPON', accepts: 'weapon', required: true },
+  { id: 'weapon2', label: 'SECONDARY WEAPON', accepts: 'weapon', required: false },
   { id: 'armor', label: 'ARMOR', accepts: 'armor', required: false },
   { id: 'shield', label: 'SHIELD', accepts: 'shield', required: false },
   { id: 'reactor', label: 'REACTOR', accepts: 'reactor', required: false },
@@ -41,6 +43,16 @@ export function isSlotId(v: unknown): v is SlotId {
 /** Slots an item category may occupy. */
 export function slotsFor(category: Category): SlotId[] {
   return SLOTS.filter((s) => s.accepts === category).map((s) => s.id);
+}
+
+/**
+ * Slot an item goes to when none is named: weapons replace the primary (the secondary is always chosen
+ * explicitly), other categories fill the first empty compatible slot, else the first one.
+ */
+export function defaultSlot(category: Category, loadout: Partial<Record<SlotId, unknown>>): SlotId | null {
+  const slots = slotsFor(category);
+  if (category === 'weapon') return 'weapon';
+  return slots.find((s) => !loadout[s]) ?? slots[0] ?? null;
 }
 
 /** Can this item be equipped in this slot? (definition must still exist) */

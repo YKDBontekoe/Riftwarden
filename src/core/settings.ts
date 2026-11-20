@@ -43,6 +43,7 @@ export const ACTIONS: readonly { id: string; label: string; def: string }[] = [
   { id: 'dash', label: 'Dash / sprint', def: 'ShiftLeft' },
   { id: 'use', label: 'Use / pick up', def: 'KeyE' },
   { id: 'build', label: 'Build tower', def: 'KeyB' },
+  { id: 'swap', label: 'Swap weapon', def: 'KeyZ' },
   { id: 'tactical', label: 'Tactical time', def: 'KeyQ' },
   { id: 'wave', label: 'Start wave', def: 'KeyG' },
   { id: 'inventory', label: 'Inventory', def: 'KeyI' },

@@ -183,6 +183,8 @@ export interface HudState {
   inventoryVersion: number;
   cores: number;
   weaponName: string;
+  /** The holstered weapon (null without a secondary): Z swaps to it. */
+  holster: { name: string; heat: number; overheated: boolean; secondary: boolean } | null;
   heat: number; // 0..1
   overheated: boolean;
   /** Rail charge / cycle progress 0..1 (0 for other mechanisms): reticle charge arc. */
@@ -235,6 +237,7 @@ export const initialHud: HudState = {
   inventoryVersion: 0,
   cores: 0,
   weaponName: '',
+  holster: null,
   heat: 0,
   overheated: false,
   charge: 0,

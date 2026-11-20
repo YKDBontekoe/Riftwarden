@@ -4,7 +4,7 @@ import { type ItemInstance, type SlotId } from '../items';
 import type { RunOutcome } from '../run';
 import { type MarketState } from '../../economy/market';
 
-export const SAVE_VERSION = 8;
+export const SAVE_VERSION = 9;
 export const SAVE_KEY = 'riftwarden.save';
 export const BACKUP_KEY = 'riftwarden.save.bak';
 export const CORRUPT_KEY = 'riftwarden.save.corrupt';

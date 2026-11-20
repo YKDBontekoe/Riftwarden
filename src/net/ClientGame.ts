@@ -1,4 +1,5 @@
 import { traceShot } from '../arena/shotTrace';
+import type { WeaponSlot } from '../arena/WeaponSlots';
 import { shotOutcome } from '../arena/PlayerCombat';
 import { Color3, type Engine, Vector3 } from '@babylonjs/core';
 import { sfx } from '../audio/Sfx';
@@ -250,6 +251,16 @@ export class ClientGame extends Game {
     });
   }
 
+  /** Swaps are predicted locally (instant) and confirmed by the server, which validates claims by family. */
+  override swapWeapon(slot?: WeaponSlot): boolean {
+    const before = this.weaponSlots.active;
+    if (!super.swapWeapon(slot)) return false;
+    void this.request({ a: 'swap', slot: this.weaponSlots.active }).then((ok) => {
+      if (!ok && this.weaponSlots.active !== before) super.swapWeapon(before);
+    });
+    return true;
+  }
+
   override startWave(): void {
     void this.request({ a: 'startWave' });
   }
@@ -394,7 +405,11 @@ export class ClientGame extends Game {
       if (input.pressed('KeyG')) this.startWave();
       if (input.pressed('KeyQ')) this.toggleTactical();
       if (input.pressed('Digit2') || input.pressed('KeyB')) this.setBuildMode(!this.construction.active);
-      if (input.pressed('Digit1')) this.setBuildMode(false);
+      if (input.pressed('Digit1')) {
+        this.setBuildMode(false);
+        this.swapWeapon('weapon');
+      }
+      if (input.pressed('KeyZ')) this.swapWeapon();
       if (this.construction.active && input.mousePressed(2)) this.setBuildMode(false);
       if (input.pressed('KeyH') && this.voteOpen) this.openCheckpoint();
       if (input.pressed('KeyI') || input.pressed('Tab')) return this.openInventory();

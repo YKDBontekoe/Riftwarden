@@ -26,6 +26,7 @@ import { WeaponFx } from '../fx/WeaponFx';
 import { ECONOMY } from '../data/defs';
 import { DevTools } from '../arena/DevTools';
 import { type CombatHost, PlayerCombat } from '../arena/PlayerCombat';
+import { type WeaponSlot, WeaponSlots, type WeaponSlotsHost } from '../arena/WeaponSlots';
 import { type LootHost, LootPickups } from '../arena/LootPickups';
 import { type TowerEdit, type TowerHost, TowerControl } from '../arena/TowerControl';
 import { planBlast } from '../combat/blast';
@@ -212,6 +213,8 @@ export class Game {
   private wasOverheated = false;
   /** The player's weapon combat (hit resolution, damage entry, kill feel, shot visuals). */
   protected readonly combat = new PlayerCombat(this.combatHost());
+  /** Primary + secondary weapon: which one is in hand, the holstered one's heat. */
+  readonly weaponSlots = new WeaponSlots(this.weaponSlotsHost());
   protected kills = 0;
   protected turretsBuilt = 0;
   protected defeatT = 0;
@@ -638,8 +641,7 @@ export class Game {
    */
   refreshEquipment(): void {
     this.rebuildStats();
-    const item = this.inventory.equipped('weapon');
-    const w = weaponDefFor(item);
+    const { item, def: w } = this.weaponSlots.sync();
     if (w) {
       this.weapon.setItem(item, w);
       this.wfx.setColor(this.weapon.rig.energyBase);
@@ -661,7 +663,7 @@ export class Game {
    * Event-driven (equipment change, upgrade picked, buff gained/expired), never per frame.
    */
   rebuildStats(): void {
-    const mods = [...equipmentModifiers(this.inventory.equippedItems()), ...this.treeMods, ...this.modifiers, ...this.director.build.modifiers(), ...this.director.buffModifiers()];
+    const mods = [...equipmentModifiers(this.inventory.equippedItems(this.weaponSlots.inactive)), ...this.treeMods, ...this.modifiers, ...this.director.build.modifiers(), ...this.director.buffModifiers()];
     Object.assign(this.stats, computeStats(mods));
     this.player.applyStats(this.stats, this.attackerScale);
     this.tactical.rechargeMult = this.stats.tacticalRechargeMult;
@@ -1037,6 +1039,7 @@ export class Game {
   }
 
   protected newRun(): void {
+    this.weaponSlots.reset();
     this.enemies.clear();
     this.turrets.clear();
     this.fx.reset();
@@ -1118,7 +1121,11 @@ export class Game {
       if (input.pressed('KeyG')) this.startWave();
       if (input.pressed('KeyQ')) this.toggleTactical();
       if (input.pressed('Digit2') || input.pressed('KeyB')) this.setBuildMode(!this.construction.active);
-      if (input.pressed('Digit1')) this.setBuildMode(false);
+      if (input.pressed('Digit1')) {
+        this.setBuildMode(false);
+        this.swapWeapon('weapon');
+      }
+      if (input.pressed('KeyZ')) this.swapWeapon();
       if (this.construction.active && input.mousePressed(2)) this.setBuildMode(false);
       if (input.pressed('KeyH') && this.canReturnHome) this.openCheckpoint();
       if (input.pressed('KeyI') || input.pressed('Tab')) {
@@ -1168,6 +1175,7 @@ export class Game {
 
     // ---- shooting
     const trigger = controls && input.mouse(0) && !this.construction.active;
+    this.weaponSlots.update(dt);
     this.weapon.update(dt, trigger, this.stats, this.shoot, this.weaponFx);
     if (this.weapon.overheated && !this.wasOverheated) this.director.bus.emit({ type: 'overheat', chain: this.director.bus.newChain(), source: { kind: 'weapon', id: 'heat' }, value: 1 });
     this.wasOverheated = this.weapon.overheated;
@@ -1351,9 +1359,38 @@ export class Game {
     };
   }
 
+  /** HUD row for the holstered weapon. */
+  protected holsterHud(): { name: string; heat: number; overheated: boolean; secondary: boolean } | null {
+    const ws = this.weaponSlots;
+    const item = ws.hasSecondary ? ws.item(ws.inactive) : null;
+    if (!item) return null;
+    const p = ws.parkedHeat;
+    return { name: weaponDefFor(item)?.name ?? item.name, heat: p.heat / 100, overheated: p.overheated, secondary: ws.inactive === 'weapon2' };
+  }
+
+  /** Swap to the other carried weapon (or to `slot`). Out of build mode only. */
+  swapWeapon(slot?: WeaponSlot): boolean {
+    if (this.construction.active) return false;
+    return this.weaponSlots.swap(slot);
+  }
+
+  private weaponSlotsHost(): WeaponSlotsHost {
+    const g = this;
+    return {
+      get inventory() { return g.inventory; }, // prettier-ignore
+      get weapon() { return g.weapon; }, // prettier-ignore
+      get stats() { return g.stats; }, // prettier-ignore
+      rebuildStats: () => this.rebuildStats(),
+      changed: () => {
+        this.wfx.setColor(this.weapon.rig.energyBase);
+        this.inventoryVersion++;
+      },
+    };
+  }
+
   /** Signature of the weapon firing right now (co-op server: the shooter's). */
   protected weaponSignature(): string | null {
-    return this.inventory.equipped('weapon')?.signature ?? null;
+    return this.weaponSlots.item()?.signature ?? null;
   }
   protected weaponHeat(): number {
     return this.weapon.heat / 100;
@@ -1886,6 +1923,7 @@ export class Game {
       respawnIn: this.player.alive ? 0 : this.player.respawnT,
       cores: this.wallet.cores,
       weaponName: this.weapon.def.name,
+      holster: this.holsterHud(),
       heat: this.weapon.heat / 100,
       overheated: this.weapon.overheated,
       charge: this.weapon.def.mechanism === 'charge' || this.weapon.def.mechanism === 'cycle' ? this.weapon.charge : 0,

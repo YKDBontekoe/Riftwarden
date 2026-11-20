@@ -407,7 +407,12 @@ export function sanitizeSave(raw: unknown, now = Date.now()): { data: SaveData; 
       repairs.push('moved orphaned item to storage');
     }
   }
-  // A run needs a weapon: equip a stored one or issue the starter.
+  // A run needs a primary weapon: promote the secondary, equip a stored one or issue the starter.
+  if (!data.loadout.weapon && data.loadout.weapon2) {
+    data.loadout.weapon = data.loadout.weapon2;
+    data.loadout.weapon2 = null;
+    repairs.push('promoted secondary weapon');
+  }
   if (!data.loadout.weapon) {
     const idx = data.storage.uids.findIndex((u) => fitsSlot(byUid.get(u), 'weapon'));
     if (idx >= 0) data.loadout.weapon = data.storage.uids.splice(idx, 1)[0];

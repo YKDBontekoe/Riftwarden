@@ -306,6 +306,7 @@ export function CenterPanel() {
 
 export function WeaponPanel() {
   const name = useHud((s) => s.weaponName);
+  const holster = useHud((s) => s.holster);
   const heat = useHud((s) => s.heat);
   const hot = useHud((s) => s.overheated);
   const build = useHud((s) => s.buildMode);
@@ -318,6 +319,13 @@ export function WeaponPanel() {
         </div>
         <SegBar value={heat} tone={hot ? 'red' : heat > 0.7 ? 'amber' : 'heat'} segments={20} />
         <div className={`label heat-label ${hot ? 'warn' : ''}`}>{hot ? 'OVERHEATED · VENTING' : `HEAT ${Math.round(heat * 100)}%`}</div>
+        {holster && (
+          <div className={`wc-holster ${holster.overheated ? 'warn' : ''}`}>
+            <BoundKey action="swap" />
+            <span className="wh-name">{holster.secondary ? 'SECONDARY' : 'PRIMARY'} · {holster.name}</span>
+            <span className="wh-heat">{holster.overheated ? 'VENTING' : holster.heat > 0.01 ? `${Math.round(holster.heat * 100)}%` : 'READY'}</span>
+          </div>
+        )}
       </div>
       <div className="slots">
         <span className={!build ? 'on' : ''}>

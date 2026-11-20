@@ -100,6 +100,7 @@ const CONTROLS = [
   [<BoundKey action="dash" />, 'Dash · hold to sprint'],
   [<BoundKey action="use" />, 'Use terminal or pick up loot'],
   [<><BoundKey action="inventory" /><kbd>TAB</kbd></>, 'Drone cargo'],
+  [<><BoundKey action="swap" /><kbd>1</kbd></>, 'Swap to the other weapon · 1 primary (the holstered one cools)'],
   [<><BoundKey action="build" /><kbd>2</kbd></>, 'Build tower · C/V/N/M cycle parts'],
   [<kbd>T</kbd>, 'Tower engineering during preparation'],
   [<kbd>R/C/V/N</kbd>, 'Aim at a tower to level or refit it'],

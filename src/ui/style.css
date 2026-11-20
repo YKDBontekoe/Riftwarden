@@ -378,6 +378,10 @@ b.v { color: var(--violet); }
 .weapon { font-family: var(--display); font-size: 18px; font-weight: 700; letter-spacing: 0.14em; }
 .ammo { font-family: var(--mono); font-size: 22px; color: var(--cyan); text-shadow: 0 0 8px var(--cyan); }
 .heat-label { text-align: right; font-size: 11px; }
+.wc-holster { display: flex; align-items: center; gap: 6px; margin-top: 6px; padding-top: 5px; border-top: 1px solid rgba(160, 200, 220, 0.18); font-size: 10.5px; letter-spacing: 0.06em; opacity: 0.72; }
+.wc-holster .wh-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wc-holster .wh-heat { font-variant-numeric: tabular-nums; }
+.wc-holster.warn .wh-heat { color: #ff7a5c; }
 .slots { display: flex; justify-content: flex-end; gap: 6px; margin-top: 8px; font-size: 12px; font-weight: 700; letter-spacing: 0.14em; color: var(--faint); }
 .slots span { display: flex; align-items: center; padding: 4px 8px 4px 4px; border: 1px solid transparent; background: rgba(4, 11, 17, 0.4); }
 .slots span.on { border-color: var(--cyan-dim); color: var(--white); background: rgba(156, 207, 194, 0.1); }

@@ -3,7 +3,7 @@ import pg, { type PoolClient } from 'pg';
 import type { SaveData } from '../src/progression/save';
 import { encodeRows, profileHeader, profileRelations, profileTables, readProfile, snakeCase, type Relations, type Row } from './profileRows';
 
-const migrations = ['001_profiles.sql', '002_progress.sql'].map((file) => new URL(`./migrations/${file}`, import.meta.url));
+const migrations = ['001_profiles.sql', '002_progress.sql', '003_secondary_weapon.sql'].map((file) => new URL(`./migrations/${file}`, import.meta.url));
 const loadQuery = `
   SELECT to_jsonb(p) AS header, json_build_object(
     ${profileTables.map((table) => `'${table}', COALESCE((SELECT json_agg(t) FROM ${table} t WHERE t.player_id = p.player_id), '[]'::json)`).join(',\n')}
