@@ -33,7 +33,7 @@ export class TowerWear {
     if (Math.random() < 0.6) this.h.fx.burst('zap', at, 3, undefined, 0.7);
     if (!t.damage(damage)) return;
     this.wrecks++;
-    this.h.fx.explode(new Vector3(t.pos.x, t.pos.y + 1, t.pos.z), { scale: 0.9, debris: 8 });
+    this.h.fx.explode(new Vector3(t.pos.x, t.pos.y + 1, t.pos.z), { scale: 0.9, debris: 8, style: 'electric' });
     sfx.play('explosion', { pitch: 1.2 });
     this.h.alert(`${t.name} WRECKED${by ? ' · LANE BREACHED' : ''}`, 'red');
     this.h.changed();

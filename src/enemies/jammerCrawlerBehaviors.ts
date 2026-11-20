@@ -241,7 +241,8 @@ export const crawlerBehavior: Behavior = {
     const n = CRAWLER.deathDrones + (ai.released ? 0 : CRAWLER.drones);
     for (let i = 0; i < n; i++) ctx.summon('rusher', new Vector3(e.pos.x + (Math.random() - 0.5) * 3, 0, e.pos.z + (Math.random() - 0.5) * 3));
     const c = e.center(new Vector3());
-    ctx.effects.explode(c, { scale: 1.9, debris: 18, color: new Color3(2.8, 1.1, 0.2) });
+    ctx.effects.shatter(e.root, c, 9, 14, 1);
+    ctx.effects.explode(c, { scale: 1.9, debris: 10, color: new Color3(2.8, 1.1, 0.2), style: 'heavy' });
     sfx.play('explosion', { volume: ctx.panFor(c).volume, pitch: 0.6, pan: ctx.panFor(c).pan });
     return true;
   },

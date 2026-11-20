@@ -202,12 +202,14 @@ export const colossusBehavior: Behavior = {
     rig.hull.rotation.z = Math.sin(t * 2) * 0.05;
     if (Math.floor(t / 0.3) !== Math.floor((t - dt) / 0.3) && t < 3) {
       const p = e.center(new Vector3()).addInPlaceFromFloats((Math.random() - 0.5) * 5, (Math.random() - 0.3) * 2, (Math.random() - 0.5) * 6);
-      ctx.effects.explode(p, { scale: 1 + Math.random() * 0.6, debris: 6 });
+      ctx.effects.explode(p, { scale: 1 + Math.random() * 0.6, debris: 6, style: Math.random() < 0.35 ? 'electric' : 'fire' });
       sfx.play('explosion', { volume: ctx.panFor(p).volume * 0.8, pitch: 0.8 + Math.random() * 0.3, pan: ctx.panFor(p).pan });
     }
     if (t >= 3.2 && t - dt < 3.2) {
       const c = e.center(new Vector3());
-      ctx.effects.explode(c, { scale: 4.2, debris: 34, color: new Color3(3.2, 1.2, 0.3) });
+      // The hull comes apart: legs, plates, cannons and pods are thrown as real pieces.
+      ctx.effects.shatter(e.root, c, 13, 22, 1);
+      ctx.effects.explode(c, { scale: 4.2, debris: 20, color: new Color3(3.2, 1.2, 0.3), style: 'heavy' });
       ctx.effects.ring(new Vector3(c.x, 0.2, c.z), 16, 0.7, new Color3(3, 1.2, 0.3), true);
       ctx.effects.flashLight(c, 16, 1.2, new Color3(1, 0.6, 0.3));
       sfx.play('explosion', { volume: 1, pitch: 0.45 });

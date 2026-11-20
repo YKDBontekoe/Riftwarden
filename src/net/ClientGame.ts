@@ -879,6 +879,8 @@ export class ClientGame extends Game {
         const e = this.byNet.get(ev[1]);
         if (!e) return;
         e.flinch = Math.min(1, e.flinch + 0.35);
+        // The event carries no source: lean away from this warden (the usual shooter); small fixed kick.
+        if (e.alive) this.enemies.react(e, this.player.position.x, this.player.position.z, 0.06);
         if (ev[2]) e.shieldFlash = 1;
         this.enemies.flash(e, ev[2] ? [0.25, 0.7, 1] : [1, 0.92, 0.8]);
         e.lastHit = performance.now();
@@ -1071,7 +1073,8 @@ export class ClientGame extends Game {
 function makeFilteredFx(fx: Effects): Effects {
   return new Proxy(fx, {
     get(target, prop, recv) {
-      if (prop === 'burst') return target.burst.bind(target);
+      // Bursts and damage states are local presentation of replicated state (HP comes with the snapshots).
+      if (prop === 'burst' || prop === 'wound' || prop === 'shatter') return target[prop].bind(target);
       const v = Reflect.get(target, prop, recv);
       if (typeof v === 'function') return () => {};
       return v;

@@ -9,6 +9,7 @@ import { defaultBuild, type WeaponBuild } from '../weapons/build';
 import { buildWeaponModel, type WeaponRig } from '../weapons/model';
 import { unlit } from '../visuals/materials';
 import { starSprite } from '../visuals/textures';
+import { MuzzleHeat } from '../fx/MuzzleHeat';
 import { HEAT_PACE } from './heat';
 import { shotFeel, yawPattern } from './weaponFeel';
 import type { CombatStats } from './stats';
@@ -106,6 +107,7 @@ export class Weapon {
   private flashT = 0;
   private flashScale = 1;
   private light: PointLight;
+  private readonly heatFx: MuzzleHeat;
   private readonly modelKey: DirectionalLight;
   private readonly tmpDir = new Vector3();
   private readonly tmpPos = new Vector3();
@@ -137,6 +139,7 @@ export class Weapon {
       f.setEnabled(false);
       this.flashMeshes.push(f);
     }
+    this.heatFx = new MuzzleHeat(scene);
     this.light = new PointLight('muzzleLight', Vector3.Zero(), scene);
     this.light.range = 14;
     this.light.intensity = 0;
@@ -480,6 +483,7 @@ export class Weapon {
       this.light.intensity = Math.max(this.light.intensity, this.charge * this.charge * 2.5);
     }
     this.light.intensity = Math.max(0, this.light.intensity - dt * 50);
+    this.heatFx.update(this.muzzleWorld(this.tmpPos), this.heat / 100, this.sinceShot, this.overheated, this.visible && this.player.alive && !this.beaming);
     return fired;
   }
 }

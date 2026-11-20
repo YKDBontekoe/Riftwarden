@@ -10,6 +10,7 @@ import {
   PointLight,
   type Scene,
   StandardMaterial,
+  type TransformNode,
   Vector3,
 } from '@babylonjs/core';
 import type { SurfaceImpact } from '../combat/Weapon';
@@ -17,6 +18,9 @@ import { softenParticles } from './softParticles';
 import type { Kit } from '../visuals/kit';
 import type { ArenaLayout } from '../world/layout';
 import { BounceSparks, CollisionBoxes } from './sparks';
+import { Fragments } from './Fragments';
+import { Smolder } from './Smolder';
+import { type ExplosionStyle, styleMix } from './explosionStyles';
 import { type Palette, unlit } from '../visuals/materials';
 import { flareSprite, plumeSprite, ringSprite, scorchSprite, SMOKE_CELL, SMOKE_FRAMES, sparkSprite, starSprite } from '../visuals/textures';
 
@@ -36,7 +40,9 @@ export type BurstKind =
   | 'puff'
   | 'zap'
   | 'frost'
-  | 'mist';
+  | 'mist'
+  | 'plasma'
+  | 'shards';
 
 
 type TexKey = 'flare' | 'fire' | 'smoke' | 'spark' | 'star';
@@ -111,6 +117,15 @@ const BURSTS: Record<BurstKind, BurstConfig> = {
     minSize: 1, maxSize: 1, minLife: 0.36, maxLife: 0.69, minPower: 0.8, maxPower: 2.4,
     gravity: 0.36, blend: STD, spread: 0.77, drag: 2.1, spin: 0.9,
   },
+  // Energy rupture: a fast cyan core that cools to violet (plasma drones, energy blasts).
+  plasma: {
+    tex: 'flare', capacity: 160,
+    colors: [[0, c4(3, 4.2, 5, 1)], [0.25, c4(0.9, 2.2, 4.4, 0.9)], [0.6, c4(0.9, 0.4, 2.6, 0.5)], [1, c4(0.2, 0.05, 0.6, 0)]],
+    sizes: [[0, 0.5], [0.3, 1.5], [1, 0.4]],
+    minSize: 1, maxSize: 1, minLife: 0.18, maxLife: 0.45, minPower: 3, maxPower: 9, gravity: 0, blend: ADD, spread: 1, drag: 5, spin: 2, emitRadius: 0.25,
+  },
+  // Ice shards: pale stretched slivers that arc down hard.
+  shards: { tex: 'spark', capacity: 160, colors: [[0, c4(2.6, 3.4, 4, 1)], [0.6, c4(1.2, 2, 2.8, 0.9)], [1, c4(0.4, 0.8, 1.3, 0)]], minSize: 0.06, maxSize: 0.12, minLife: 0.4, maxLife: 0.9, minPower: 6, maxPower: 15, gravity: -20, blend: ADD, spread: 1, stretch: 4, drag: 0.6 },
 
 };
 
@@ -242,6 +257,9 @@ interface FlashLight {
 const TMP = new Vector3();
 const TMP2 = new Vector3();
 const SHIELD_RIPPLE = new Color3(2.8, 1.4, 0.42);
+const SHIELD_LIGHT = new Color3(1, 0.7, 0.3);
+const TMP_C = new Color3();
+const ZAP_LIGHT = new Color3(0.5, 0.75, 1.4);
 
 export interface ExplosionOpts {
   /** Overall size multiplier (1 = walker). */
@@ -251,6 +269,17 @@ export interface ExplosionOpts {
   debris?: number;
   /** Leave a scorch mark when close to the deck. */
   scorch?: boolean;
+  /** Visual identity (fire, plasma, electric, cryo, heavy); default fire. */
+  style?: ExplosionStyle;
+}
+
+interface Secondary {
+  pos: Vector3;
+  t: number;
+  scale: number;
+  color: Color3 | undefined;
+  /** Arc crackle instead of a cook-off blast. */
+  zap: boolean;
 }
 
 /**
@@ -281,6 +310,11 @@ export class Effects {
   private plasmaTrail: ParticleSystem;
   private liveDebris: Debris[] = [];
   private liveProjectiles: Projectile[] = [];
+  /** Detached rig parts of destroyed robots (mechanical fragmentation). */
+  readonly fragments: Fragments;
+  /** Damage states (smoke/sparks/flames on wounded machines) and burning wreckage. */
+  readonly smolder: Smolder;
+  private secondaries: Secondary[] = [];
   /** Visual budget: when particles exceed this, bursts are thinned. */
   particleBudget = 1800;
   /** M7 settings: particle density multiplier (low 0.45, medium 0.75, high 1). */
@@ -288,6 +322,8 @@ export class Effects {
   setDensity(level: 'low' | 'medium' | 'high'): void {
     this.density = level === 'low' ? 0.45 : level === 'medium' ? 0.75 : 1;
     this.particleBudget = Math.round((this.high ? 1800 : 1050) * this.density);
+    this.fragments.cap = Math.round((this.high ? 72 : 44) * this.density);
+    this.smolder.density = this.density;
   }
   /** Camera shake request: world position and strength (0..1 at the source). */
   onShake: ((pos: Vector3, strength: number) => void) | null = null;
@@ -307,8 +343,11 @@ export class Effects {
 
     this.world = new CollisionBoxes(layout);
     this.hotSparks = new BounceSparks(scene, tex.spark, this.world);
+    this.fragments = new Fragments(this.world);
+    this.fragments.cap = high ? 72 : 44;
+    this.smolder = new Smolder(scene, tex);
 
-    const poolSizes: Record<BurstKind, number> = { spark: 10, crit: 6, enemySpark: 8, impact: 10, explosion: 6, smoke: 8, shield: 5, build: 3, flash: 6, fire: 8, sparks: 8, embers: 6, puff: 8, mist: 5, zap: 8, frost: 6 };
+    const poolSizes: Record<BurstKind, number> = { spark: 10, crit: 6, enemySpark: 8, impact: 10, explosion: 6, smoke: 8, shield: 5, build: 3, flash: 6, fire: 8, sparks: 8, embers: 6, puff: 8, mist: 5, zap: 8, frost: 6, plasma: 5, shards: 4 };
     for (const k of Object.keys(BURSTS) as BurstKind[]) this.bursts.set(k, new BurstPool(scene, tex[BURSTS[k].tex], BURSTS[k], poolSizes[k]));
 
     const root = kit.node('fxRoot', null);
@@ -395,8 +434,10 @@ export class Effects {
     // at a random live source every particle (startPositionFunction).
     this.trail = this.makeTrail(tex.smoke, 'debrisTrail', 260, (out) => {
       const n = this.liveDebris.length;
-      if (!n) return;
-      out.copyFrom(this.liveDebris[(Math.random() * n) | 0].mesh.position);
+      const h = this.fragments.hot;
+      const i = (Math.random() * (n + h.length)) | 0;
+      if (i < n) out.copyFrom(this.liveDebris[i].mesh.position);
+      else if (h.length) out.copyFrom(h[i - n].position);
     }, true);
     for (const [t, c] of [[0, c4(1.6, 0.6, 0.15, 0.5)], [0.15, c4(0.2, 0.16, 0.14, 0.45)], [1, c4(0.12, 0.12, 0.13, 0)]] as [number, Color4][]) this.trail.addColorGradient(t, c);
     this.trail.addSizeGradient(0, 0.25);
@@ -443,7 +484,7 @@ export class Effects {
   get particleCount(): number {
     let n = 0;
     for (const p of this.bursts.values()) n += p.active;
-    return n + this.trail.getActiveCount() + this.plasmaTrail.getActiveCount() + this.hotSparks.ps.getActiveCount();
+    return n + this.trail.getActiveCount() + this.plasmaTrail.getActiveCount() + this.hotSparks.ps.getActiveCount() + this.smolder.active;
   }
 
   burst(kind: BurstKind, pos: Vector3, count: number, normal?: Vector3, scale = 1): void {
@@ -459,22 +500,58 @@ export class Effects {
    */
   explode(pos: Vector3, o: ExplosionOpts = {}): void {
     const s = o.scale ?? 1;
+    const st = styleMix(o.style);
     const over = this.particleCount > this.particleBudget;
     const k = over ? 0.4 : this.high ? 1 : 0.65;
+    const rs = Math.sqrt(s);
     // One star for ordinary wrecks (a pair from big blasts): a pack fight must stay readable through the bloom.
     this.burst('flash', pos, s >= 1.5 ? 2 : 1, undefined, s * 0.75);
-    this.burst('fire', pos, Math.round(13 * s * k), undefined, s);
-    this.burst('sparks', pos, Math.round(10 * s * k), undefined, Math.sqrt(s));
+    if (st.fire > 0) this.burst('fire', pos, Math.round(13 * s * k * st.fire), undefined, s);
+    if (st.plasma > 0) this.burst('plasma', pos, Math.round(st.plasma * rs * k), undefined, s);
+    if (st.zap > 0) this.burst('zap', pos, Math.round(st.zap * rs * k), undefined, rs * 1.3);
+    if (st.frost > 0) this.burst('frost', pos, Math.round(st.frost * rs * k), undefined, s * 1.6);
+    if (st.shards > 0) this.burst('shards', pos, Math.round(st.shards * rs * k), undefined, rs);
+    this.burst('sparks', pos, Math.round(10 * s * k * st.sparks), undefined, rs);
     // Molten sparks that rain down, bounce and skid across the arena.
-    this.hotSparks.emit(pos, Vector3.UpReadOnly, Math.round(55 * s * k), 13 * Math.sqrt(s), 1.1);
-    this.burst('embers', pos, Math.round(16 * s * k), undefined, Math.sqrt(s));
-    this.burst('smoke', TMP.copyFrom(pos).addInPlaceFromFloats(0, 0.35 * s, 0), Math.round(12 * s * k), undefined, s);
-    if (pos.y < 3.5) this.ring(pos, 8 * s, 0.5, o.color ?? new Color3(3, 1.3, 0.4), true);
-    this.ring(pos, 3.6 * s, 0.16, new Color3(1.6, 1.1, 0.7), false);
-    if (o.debris) this.debrisBurst(pos, Math.ceil(o.debris * k), 7 * Math.sqrt(s), Math.sqrt(s));
-    this.flashLight(pos, 4 + 2 * s, 0.35 + 0.15 * s, o.color);
-    if (o.scorch !== false && pos.y < 4) this.scorch(pos, 2.6 * s);
-    this.onShake?.(pos, Math.min(1, 0.35 * s + 0.15));
+    if (st.hotSparks > 0) this.hotSparks.emit(pos, Vector3.UpReadOnly, Math.round(55 * s * k * st.hotSparks), 13 * rs, 1.1);
+    if (st.embers > 0) this.burst('embers', pos, Math.round(16 * s * k * st.embers), undefined, rs);
+    if (st.smoke > 0) this.burst('smoke', TMP.copyFrom(pos).addInPlaceFromFloats(0, 0.35 * s, 0), Math.round(12 * s * k * st.smoke), undefined, s);
+    const rc = o.color && !o.style ? o.color : TMP_C.set(...st.ring);
+    if (pos.y < 3.5) this.ring(pos, 8 * s, 0.5, rc, true);
+    this.ring(pos, 3.6 * s, 0.16, TMP_C.set(...st.air), false);
+    if (o.debris) this.debrisBurst(pos, Math.ceil(o.debris * k * st.debris), 7 * rs, rs);
+    this.flashLight(pos, (4 + 2 * s) * st.lightMult, 0.35 + 0.15 * s, o.color ?? (o.style ? TMP_C.set(...st.light) : undefined));
+    if (st.scorch && o.scorch !== false && pos.y < 4) this.scorch(pos, 2.6 * s);
+    if (st.linger > 0 && pos.y < 4 && !over) this.smolder.linger(pos, 0.6 + 0.5 * s, st.linger);
+    for (let i = 0; i < st.secondaries && this.secondaries.length < 8; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const d = (0.6 + Math.random() * 0.8) * s;
+      this.secondaries.push({ pos: pos.clone().addInPlaceFromFloats(Math.cos(a) * d, Math.random() * 0.8 * s, Math.sin(a) * d), t: 0.14 + i * 0.16 + Math.random() * 0.12, scale: s * (0.35 + Math.random() * 0.15), color: o.color, zap: false });
+    }
+    for (let i = 0; i < st.crackle && this.secondaries.length < 14; i++) {
+      const r = 0.8 * rs;
+      this.secondaries.push({ pos: pos.clone().addInPlaceFromFloats((Math.random() - 0.5) * r * 2, (Math.random() - 0.3) * r, (Math.random() - 0.5) * r * 2), t: 0.08 + i * 0.11 + Math.random() * 0.06, scale: rs, color: undefined, zap: true });
+    }
+    this.onShake?.(pos, Math.min(1, (0.35 * s + 0.15) * st.shake));
+  }
+
+  /** Throw the visible parts of a destroyed rig as physical pieces (see Fragments). */
+  shatter(root: TransformNode, center: Vector3, power: number, max: number, heat = 1): number {
+    const n = this.particleCount > this.particleBudget ? Math.ceil(max * 0.5) : max;
+    return this.fragments.shatter(root, center, power, Math.round(n * Math.max(0.5, this.density)), heat);
+  }
+
+  /** Per-frame damage state of a wounded machine (severity from Smolder.woundSeverity). */
+  wound(pos: Vector3, radius: number, severity: number): void {
+    this.smolder.wound(pos, radius, severity);
+  }
+
+  /** An energy barrier collapses: hard ring, golden shards, flash. */
+  shieldBreak(pos: Vector3, size = 1): void {
+    this.burst('shield', pos, 40, undefined, 2 * size);
+    this.burst('plasma', pos, 8, undefined, 0.8 * size);
+    this.ring(pos, 4.2 * size, 0.28, SHIELD_RIPPLE, false);
+    this.flashLight(pos, 3.5 * size, 0.25, SHIELD_LIGHT);
   }
 
   /** Contacts keep a distinct silhouette even when the particle budget is tight. */
@@ -601,6 +678,19 @@ export class Effects {
 
   /** dt = real time. Projectiles are hostile and integrated by the game with hostile time. */
   update(dt: number): void {
+    for (let i = this.secondaries.length - 1; i >= 0; i--) {
+      const b = this.secondaries[i];
+      b.t -= dt;
+      if (b.t > 0) continue;
+      this.secondaries.splice(i, 1);
+      if (b.zap) {
+        this.burst('zap', b.pos, 10, undefined, b.scale);
+        this.burst('plasma', b.pos, 2, undefined, 0.45 * b.scale);
+        this.flashLight(b.pos, 2.2, 0.12, ZAP_LIGHT);
+      } else this.explode(b.pos, { scale: b.scale, debris: 2, color: b.color, scorch: false });
+    }
+    this.fragments.update(dt);
+    this.smolder.update(dt);
     for (const t of this.tracers) {
       for (const tr of t.pool) {
         if (tr.life <= 0) continue;
@@ -631,11 +721,15 @@ export class Effects {
       if (d.life < 0.4) d.mesh.scaling.scaleInPlace(Math.max(0.01, 1 - dt / Math.max(0.01, d.life)));
       if (d.hot > 0.3) this.liveDebris.push(d);
     }
-    this.trail.emitRate = this.liveDebris.length * 14;
+    this.trail.emitRate = (this.liveDebris.length + this.fragments.hot.length) * 14;
+    // Systems are culled by their emitter: keep it on a live source (particle positions come from the sources).
+    const lead = this.liveDebris[0]?.mesh.position ?? this.fragments.hot[0]?.position;
+    if (lead) (this.trail.emitter as Vector3).copyFrom(lead);
 
     this.liveProjectiles.length = 0;
     for (const p of this.projectiles) if (p.active) this.liveProjectiles.push(p);
     this.plasmaTrail.emitRate = this.liveProjectiles.length * 40;
+    if (this.liveProjectiles.length) (this.plasmaTrail.emitter as Vector3).copyFrom(this.liveProjectiles[0].pos);
 
     for (const f of this.flashes) {
       if (f.life > 0) {
@@ -700,6 +794,9 @@ export class Effects {
     }
     this.trail.reset();
     this.plasmaTrail.reset();
+    this.fragments.reset();
+    this.smolder.reset();
+    this.secondaries.length = 0;
     this.hotSparks.reset();
   }
 }

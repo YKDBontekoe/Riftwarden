@@ -35,7 +35,7 @@ interface SapperAI {
 function sapperDetonate(e: Enemy, ctx: EnemyContext, m: EnemyManager, at: Vector3, tower: Turret | null): void {
   if (tower) ctx.damageTower?.(tower, e.dmg(SAPPER.charge));
   ctx.hostileBlast(at, SAPPER.blast, { player: e.dmg(SAPPER.playerDamage), disable: SAPPER.disable, color: 'orange', owner: e });
-  ctx.effects.explode(at.add(new Vector3(0, 1, 0)), { scale: 1.3, debris: 10, color: new Color3(3, 1.2, 0.2) });
+  ctx.effects.explode(at.add(new Vector3(0, 1, 0)), { scale: 1.3, debris: 10, color: new Color3(3, 1.2, 0.2), style: 'heavy' });
   m.kill(e, ctx.effects, ctx, true);
 }
 
