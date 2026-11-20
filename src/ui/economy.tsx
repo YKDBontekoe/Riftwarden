@@ -8,8 +8,8 @@ import type { SaveData } from '../progression/save';
 import { uiEvents } from './store';
 
 /** Resource glyphs (consistent everywhere: HUD, terminals, costs). */
-export const RES_ICON: Record<ResourceKey, string> = { credits: CURRENCIES.credits.icon, salvage: CURRENCIES.salvage.icon, components: CURRENCIES.components.icon };
-export const RES_CLASS: Record<ResourceKey, string> = { credits: CURRENCIES.credits.cls, salvage: CURRENCIES.salvage.cls, components: CURRENCIES.components.cls };
+export const RES_ICON: Record<ResourceKey, string> = { credits: CURRENCIES.credits.icon, salvage: CURRENCIES.salvage.icon, components: CURRENCIES.components.icon, shards: CURRENCIES.shards.icon };
+export const RES_CLASS: Record<ResourceKey, string> = { credits: CURRENCIES.credits.cls, salvage: CURRENCIES.salvage.cls, components: CURRENCIES.components.cls, shards: CURRENCIES.shards.cls };
 
 /** Balances strip; with `cost`, each balance shows what it would be after paying. */
 export function ResourceBar({ save, cost, compact }: { save: SaveData; cost?: Cost; compact?: boolean }) {

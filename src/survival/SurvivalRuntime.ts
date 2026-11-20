@@ -100,7 +100,9 @@ export class SurvivalRuntime {
       const salvage = Math.round((4 + w.number) * def.reward.salvage * tierMult);
       const components = def.reward.components + (ev === 'eliteAssault' ? Math.floor(this.tier.id / 2) : 0);
       const hvtOk = ev !== 'hvt' || this.hvt.result === 'killed';
-      if (hvtOk && this.g.cfg.run.collect({ credits, salvage, components })) {
+      // Rift shards: elite assaults and destroyed high-value targets pay 2 (+1 on tier IV+).
+      const shards = ev === 'eliteAssault' || ev === 'hvt' ? 2 + (this.tier.id >= 4 ? 1 : 0) : 0;
+      if (hvtOk && this.g.cfg.run.collect({ credits, salvage, components, shards })) {
         if (credits) uiEvents.emit('creditsGained', credits);
         if (salvage) uiEvents.emit('salvageGained', salvage);
         if (components) uiEvents.emit('componentsGained', components);

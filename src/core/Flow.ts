@@ -1,6 +1,7 @@
 import { type Engine, type Scene, Vector3 } from '@babylonjs/core';
 import { buildWeaponModel } from '../weapons/model';
 import { rarity } from '../loot/rarity';
+import { generateUnique, uniqueDef } from '../loot/uniques';
 import { generateItem } from '../loot/generate';
 import type { RarityId } from '../loot/rarity';
 import type { Category, ItemInstance } from '../loot/types';
@@ -695,6 +696,11 @@ export class Flow {
       /** Generate an item without placing it (tests search seeds for specific affixes). */
       makeItem: (o: { seed: number; rarity?: RarityId; category?: Category; baseId?: string; level?: number; fixedRoll?: number }) =>
         generateItem({ uid: `dbg_${o.seed}_${Math.floor(Math.random() * 1e9)}`, seed: o.seed, level: o.level ?? 5, rarity: o.rarity ?? 'rare', category: o.category, baseId: o.baseId, source: flow.arena?.cfg.run.id ?? 'debug', fixedRoll: o.fixedRoll }),
+      /** A hand-made unique (loot/uniques.ts) at a level. */
+      makeUnique: (id: string, seed = 1, level = 5) => {
+        const def = uniqueDef(id);
+        return def ? generateUnique(def, { uid: `dbg_u_${id}_${Math.floor(Math.random() * 1e9)}`, seed, level, source: flow.arena?.cfg.run.id ?? 'debug' }) : null;
+      },
       /** Put an item straight into the run cargo (as if picked up). */
       grant: (item: ReturnType<typeof generateItem>) => {
         const a = flow.arena;

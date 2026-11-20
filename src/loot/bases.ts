@@ -1,5 +1,5 @@
 import type { StatKey, StatOp } from '../combat/stats';
-import { BEAM_EMITTER, PLASMA_REPEATER, RAILGUN, type WeaponDef, type WeaponFamily } from '../data/defs';
+import { BEAM_EMITTER, PLASMA_REPEATER, RAILGUN, SWARM_HIVE, type WeaponDef, type WeaponFamily } from '../data/defs';
 import type { Scaling } from './affixes';
 import type { Category } from './types';
 import type { AbilityKind } from '../abilities/defs';
@@ -142,6 +142,37 @@ export const BASES: readonly BaseDef[] = [
     weight: 4,
     implicit: [{ stat: 'chargeRateMult', op: 'pct', range: [0.2, 0.3], scaling: 'none' }],
     weapon: { family: 'beam', template: BEAM_EMITTER, damage: [5.0, 5.6], fireRate: [14.6, 15.4], heatPerShot: [1.0, 1.1], coolRate: [52, 58] },
+    icon: 'rifle',
+  },
+  // ---------------------------------------------------------------- weapons: drone swarm hives
+  {
+    id: 'swarm_hive',
+    category: 'weapon',
+    name: 'Seeker Hive',
+    blurb: 'Launches three seeker drones per release; they lock onto machines near the crosshair.',
+    weight: 8,
+    implicit: [],
+    weapon: { family: 'swarm', template: SWARM_HIVE, damage: [9.4, 10.6], fireRate: [3.2, 3.6], heatPerShot: [7.2, 7.8], coolRate: [44, 50] },
+    icon: 'rifle',
+  },
+  {
+    id: 'swarm_brood',
+    category: 'weapon',
+    name: 'Brood Carrier',
+    blurb: 'Heavy carrier: slow releases of hard-hitting drones with a wide lock cone.',
+    weight: 5,
+    implicit: [{ stat: 'critMultiplier', op: 'add', range: [0.1, 0.2], scaling: 'none' }],
+    weapon: { family: 'swarm', template: SWARM_HIVE, damage: [15, 17], fireRate: [2.2, 2.5], heatPerShot: [9.5, 10.5], coolRate: [42, 46] },
+    icon: 'rifle',
+  },
+  {
+    id: 'swarm_wasp',
+    category: 'weapon',
+    name: 'Wasp Nest',
+    blurb: 'Light nest: rapid releases of small, fast drones that run cool.',
+    weight: 5,
+    implicit: [{ stat: 'fireRateMult', op: 'pct', range: [0.04, 0.08], scaling: 'none' }],
+    weapon: { family: 'swarm', template: SWARM_HIVE, damage: [6.6, 7.4], fireRate: [4.6, 5.0], heatPerShot: [5.2, 5.8], coolRate: [50, 56] },
     icon: 'rifle',
   },
   // ---------------------------------------------------------------- armor

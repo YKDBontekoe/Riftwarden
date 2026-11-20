@@ -11,6 +11,7 @@ import { baseDef } from '../../loot/bases';
 import { STORAGE_EXPANSION } from '../../loot/economy';
 import { clampLevel, generateItem, hashSeed, starterWeapon } from '../../loot/generate';
 import { isRarity, rarity } from '../../loot/rarity';
+import { uniqueDef } from '../../loot/uniques';
 import { CATEGORIES, type Category, type RolledAffix, type RolledStat } from '../../loot/types';
 import { fitsSlot, type ItemInstance, newUid, SLOT_IDS } from '../items';
 import { defaultBuild, FAMILIES, isValidBuild, socketKinds, type Finish, type SocketKind, type WeaponBuild } from '../../weapons/build';
@@ -74,7 +75,7 @@ function sanitizeStat(v: unknown): RolledStat | null {
   return { stat: r.stat, op: r.op as StatOp, value: Math.max(-1e15, Math.min(1e15, r.value)) };
 }
 
-const FINISH_IDS: Finish[] = ['arctic', 'gunmetal', 'sand', 'slate', 'gilded', 'iridescent'];
+const FINISH_IDS: Finish[] = ['arctic', 'gunmetal', 'sand', 'slate', 'gilded', 'iridescent', 'ascended'];
 const SOCKET_IDS: SocketKind[] = ['barrel', 'power', 'system'];
 
 /** Validate a stored weapon build (null if missing or invalid: the caller assigns the default). */
@@ -156,10 +157,12 @@ export function sanitizeItem(v: unknown, repairs: string[] = [], nested = false,
     seed: int(r.seed, 0, 0, 0xffffffff),
     gen: int(r.gen, 1, 0, 1000),
   };
+  // Hand-made unique: only a known id on its own base keeps the identity.
+  if (typeof r.uniqueId === 'string' && uniqueDef(r.uniqueId)?.baseId === defId) item.uniqueId = r.uniqueId;
   // M4 engineering state (only stored when set).
   if (r.locked === true) item.locked = true;
   const enh = int(r.enhance, 0, 0, MAX_ENHANCE_ANY);
-  if (enh > 0) item.enhance = Math.min(enh, [4, 6, 8, 10, 12, 15][rarity(item.rarity).index]);
+  if (enh > 0) item.enhance = Math.min(enh, [4, 6, 8, 10, 12, 15, 18][rarity(item.rarity).index]);
   const rr = int(r.rerolls, 0, 0, 1e6);
   if (rr > 0) item.rerolls = rr;
   const md = int(r.mods, 0, 0, 1e6);
@@ -189,6 +192,8 @@ export function sanitizeItem(v: unknown, repairs: string[] = [], nested = false,
       opt('chargeTime', 0.05, 10);
       opt('beamWidth', 0, 5);
       opt('rampMax', 1, 10);
+      opt('drones', 1, 12);
+      opt('seekCone', 0.02, 1);
       if (isDamageElement(w.element)) item.weapon.element = w.element;
     }
     const family: WeaponFamily = base?.weapon?.family ?? 'plasma';
@@ -326,6 +331,7 @@ export function sanitizeSave(raw: unknown, now = Date.now()): { data: SaveData; 
       salvage: int(obj(r.resources).salvage, 0, 0, MAX_BALANCE),
       credits: int(obj(r.resources).credits, 0, 0, MAX_BALANCE),
       components: int(obj(r.resources).components, 0, 0, MAX_BALANCE),
+      shards: int(obj(r.resources).shards, 0, 0, MAX_BALANCE),
     },
     items: [],
     storage: { capacity: STORAGE_CAPACITY, expansions: int(obj(r.storage).expansions, 0, 0, 1000), uids: [] },

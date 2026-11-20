@@ -22,6 +22,7 @@ import {
   sellPrice,
   sumCost,
 } from './config';
+import { ascendBlock, ascendItem, ASCEND } from '../loot/ascend';
 import { checkFullReroll, checkSingleReroll, engineeringRand, maxLocks, rerollAll, rerollSingle, swapComponent } from './engineering';
 import { type MerchantId, merchantEntries } from './market';
 import { isUnlocked, partDef, STARTER_TECH, techKey, type TowerSlot } from '../towers/components';
@@ -170,12 +171,14 @@ export interface DisposalResult {
   salvage: number;
   components: number;
   credits: number;
+  /** Rift shards recovered (exotic / ascended items). */
+  shards?: number;
   modulesReturned: number;
 }
 
 /** Aggregate preview of dismantling (no state change). */
 export function previewDismantle(data: SaveData, uids: readonly string[]): DisposalResult & { blocked: { uid: string; reason: string }[] } {
-  const out = { count: 0, salvage: 0, components: 0, credits: 0, modulesReturned: 0, blocked: [] as { uid: string; reason: string }[] };
+  const out = { count: 0, salvage: 0, components: 0, shards: 0, credits: 0, modulesReturned: 0, blocked: [] as { uid: string; reason: string }[] };
   for (const uid of new Set(uids)) {
     const why = protectionReason(data, uid);
     if (why) {
@@ -187,6 +190,7 @@ export function previewDismantle(data: SaveData, uids: readonly string[]): Dispo
     out.count++;
     out.salvage += y.salvage;
     out.components += y.components;
+    out.shards += y.shards;
     out.modulesReturned += it.socketed?.filter(Boolean).length ?? 0;
   }
   return out;
@@ -201,10 +205,10 @@ export function dismantleItems(data: SaveData, uids: readonly string[], txId?: s
     if (!Array.isArray(list)) return list;
     const p = previewDismantle(data, list);
     removeStored(data, list);
-    grant(data, { salvage: p.salvage, components: p.components });
+    grant(data, { salvage: p.salvage, components: p.components, shards: p.shards });
     data.economy.stats.itemsDismantled += p.count;
     data.totals.itemsScrapped += p.count;
-    return { ok: true, count: p.count, salvage: p.salvage, components: p.components, credits: 0, modulesReturned: p.modulesReturned };
+    return { ok: true, count: p.count, salvage: p.salvage, components: p.components, shards: p.shards, credits: 0, modulesReturned: p.modulesReturned };
   });
 }
 
@@ -353,6 +357,36 @@ export function enhanceItem(data: SaveData, uid: string, txId?: string): TxResul
     it.enhance = lvl + 1;
     data.economy.stats.enhancements++;
     return { ok: true, level: it.enhance, cost };
+  });
+}
+
+// ------------------------------------------------------------------ ascension
+
+/** Shards + credits + components to ascend an item. */
+export function ascendCost(item: Pick<ItemInstance, 'level'>): Cost {
+  return { shards: ASCEND.shards(item.level), credits: ASCEND.credits(item.level), components: ASCEND.components };
+}
+
+/**
+ * Ascend an owned Exotic (stored or equipped; not an installed module): rarity -> Ascended, a perfect extra affix
+ * (deterministic from the item, so restoring a backup cannot fish for a different one), ascended finish.
+ */
+export function ascendOwned(data: SaveData, uid: string, txId?: string): TxResult<{ cost: Cost; added: RolledAffix | null }> {
+  return withTx(data, txId, () => {
+    const o = engineerable(data, uid);
+    if ('ok' in o) return o;
+    const it = o.item;
+    if (o.where === 'installed') return fail('Remove the module from its weapon first');
+    const why = ascendBlock(it);
+    if (why) return fail(why);
+    const cost = ascendCost(it);
+    if (!canAfford(data, cost)) return fail(missingText(data, cost));
+    const next = ascendItem(it, engineeringRand(it, 'ascend'));
+    if (!next) return fail('This item cannot ascend');
+    pay(data, cost);
+    const before = it.affixes.length;
+    Object.assign(it, next);
+    return { ok: true, cost, added: it.affixes.length > before ? it.affixes[it.affixes.length - 1] : null };
   });
 }
 

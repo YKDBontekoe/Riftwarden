@@ -3,11 +3,11 @@
  * its quality: affix tiers and rolls overlap between rarities, so a well-rolled Rare
  * can beat a poorly rolled Epic of the same level.
  */
-export type RarityId = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary' | 'exotic';
+export type RarityId = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary' | 'exotic' | 'ascended';
 
 export interface RarityDef {
   id: RarityId;
-  /** 0 = common ... 5 = exotic. */
+  /** 0 = common ... 5 = exotic, 6 = ascended. */
   index: number;
   label: string;
   /** Relative drop weight before luck (see rollRarity). */
@@ -41,6 +41,12 @@ export const RARITIES: readonly RarityDef[] = [
   { id: 'epic', index: 3, label: 'Epic', weight: 28, affixes: [3, 4], quality: 0.24, tierBias: 0.9, minTopTier: 3, baseMult: 1.12, affixMult: 1, sockets: 3, color: '#b866ff', glow: [1.9, 0.6, 3.6], beam: 6 },
   { id: 'legendary', index: 4, label: 'Legendary', weight: 6, affixes: [4, 4], quality: 0.32, tierBias: 1.4, minTopTier: 4, baseMult: 1.16, affixMult: 1.05, sockets: 4, color: '#ffc23d', glow: [4.2, 2.4, 0.35], beam: 9 },
   { id: 'exotic', index: 5, label: 'Exotic', weight: 1.2, affixes: [4, 5], quality: 0.4, tierBias: 2, minTopTier: 5, baseMult: 1.2, affixMult: 1.15, sockets: 4, color: '#ff4f86', glow: [4.6, 0.7, 2.2], beam: 12 },
+  /**
+   * Chase tier above Exotic: never rolled by weight (0). An exotic drop is promoted (see `ascendDrop` in drops.ts:
+   * deep waves / high tiers only, ~1 in 10 exotics) or an Exotic is ascended at the HQ for rift shards. Exotic rolls
+   * plus one extra affix at the level's top tier with a perfect roll (`generateItem` / `ascendItem`).
+   */
+  { id: 'ascended', index: 6, label: 'Ascended', weight: 0, affixes: [4, 5], quality: 0.46, tierBias: 2.4, minTopTier: 5, baseMult: 1.24, affixMult: 1.18, sockets: 4, color: '#7ef9ff', glow: [2.6, 4.8, 5.4], beam: 16 },
 ];
 
 export const RARITY_IDS: readonly RarityId[] = RARITIES.map((r) => r.id);
@@ -57,6 +63,7 @@ const CB: Record<'deuteranopia' | 'tritanopia', { color: string; glow: [number, 
     { color: '#c58cff', glow: [1.9, 0.8, 3.6] },
     { color: '#ffd23d', glow: [4.2, 3.0, 0.35] },
     { color: '#ff7a2e', glow: [4.6, 1.6, 0.3] },
+    { color: '#f4f4ff', glow: [4.4, 4.4, 5.2] },
   ],
   tritanopia: [
     { color: '#c4d0d6', glow: [0.9, 1.0, 1.05] },
@@ -65,6 +72,7 @@ const CB: Record<'deuteranopia' | 'tritanopia', { color: string; glow: [number, 
     { color: '#ff6fd8', glow: [3.2, 0.7, 2.6] },
     { color: '#ff5a3d', glow: [4.4, 1.0, 0.5] },
     { color: '#ffffff', glow: [3.6, 3.6, 3.6] },
+    { color: '#ffe14d', glow: [4.8, 4.0, 0.6] },
   ],
 };
 export function setRarityPalette(mode: 'off' | 'deuteranopia' | 'tritanopia'): void {
@@ -105,7 +113,9 @@ export function rollRarity(rand: () => number, luck = 1, min: RarityId = 'common
     x -= w[i];
     if (x < 0) return RARITIES[i].id;
   }
-  return RARITIES[RARITIES.length - 1].id;
+  // Float leftovers land on the highest rarity that can roll by weight (never a weight-0 tier).
+  for (let i = w.length - 1; i >= 0; i--) if (w[i] > 0) return RARITIES[i].id;
+  return RARITIES[0].id;
 }
 
 /** Exact probability of each rarity for a given luck (tests and the codex UI). */

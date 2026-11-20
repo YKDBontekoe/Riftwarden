@@ -3,6 +3,7 @@ import { sfx } from '../audio/Sfx';
 import type { WeaponDef, WeaponFamily } from '../data/defs';
 import { chargeFactor } from '../loot/equipment';
 import type { ItemInstance } from '../loot/types';
+import { rarity } from '../loot/rarity';
 import type { Player } from '../player/Player';
 import { WeaponAnimator } from '../weapons/animator';
 import { defaultBuild, type WeaponBuild } from '../weapons/build';
@@ -24,6 +25,10 @@ export interface ShotRequest {
   pierce: number;
   /** Aim-assist radius around the ray (beam). */
   width: number;
+  /** Swarm: lock cone (tangent of the half-angle); the drone locks onto a machine in it instead of following the ray. */
+  seek?: number;
+  /** Swarm: which lock candidate (nearest the crosshair first) this drone takes, so a launch spreads over targets. */
+  seekIndex?: number;
 }
 
 export type ShotTarget = 'enemy' | 'shield' | 'surface' | 'none';
@@ -51,6 +56,12 @@ function normalize(o: Partial<ShotOutcome> & { point: Vector3 }): ShotOutcome {
 
 /** Presentation no-op (automation / headless callers). */
 const NO_FX: WeaponFxHooks = { shot: () => {}, beam: () => {} };
+
+/** Salvo Lock: drones released for a lock fraction (0.6x at a tap, 3x the launch count at full lock). */
+export function salvoDrones(perLaunch: number, lock: number): number {
+  const l = Math.max(0, Math.min(1, Number.isFinite(lock) ? lock : 0));
+  return Math.max(1, Math.round(perLaunch * (0.6 + 2.4 * l)));
+}
 
 /** Vertical FOV the viewmodel layout is tuned for (90° horizontal at 16:9). */
 /** M7: pellets per Scatter Choke shot (+2 per extra projectile from Splitter modules). */
@@ -168,7 +179,7 @@ export class Weapon {
     let cached = this.models.get(key);
     if (cached) this.models.delete(key);
     else {
-      const ri = ['common', 'uncommon', 'rare', 'epic', 'legendary', 'exotic'].indexOf(item?.rarity ?? 'common');
+      const ri = rarity(item?.rarity ?? 'common').index;
       const rig = buildWeaponModel(this.scene, build, installed, { renderingGroupId: 1, name: 'vm', element: def.element }, Math.max(0, ri));
       rig.root.parent = this.vm;
       cached = { rig, anim: new WeaponAnimator(rig) };
@@ -284,7 +295,11 @@ export class Weapon {
   private fireShot(stats: CombatStats, shoot: (r: ShotRequest) => ShotOutcome, fx: WeaponFxHooks, power: number, heatScale: number): void {
     const d = this.def;
     const scatter = d.mechanism === 'scatter';
-    const proj = d.family === 'beam' ? 1 : scatter ? SCATTER_PELLETS + 2 * Math.max(0, Math.floor(stats.projectiles) - 1) : Math.max(1, Math.floor(stats.projectiles));
+    const swarm = d.family === 'swarm';
+    // Swarm: drones per launch x projectiles; a salvo releases more drones the longer it was locked (power = lock).
+    const drones = Math.max(1, d.drones) * Math.max(1, Math.floor(stats.projectiles));
+    const proj = d.family === 'beam' ? 1 : scatter ? SCATTER_PELLETS + 2 * Math.max(0, Math.floor(stats.projectiles) - 1) : swarm ? (d.mechanism === 'salvo' ? salvoDrones(drones, power) : drones) : Math.max(1, Math.floor(stats.projectiles));
+    if (swarm) power = 1;
     const thermal = 1 + stats.heatDamage * (this.heat / 100);
     const dmg = d.damage * DAMAGE_PACE * stats.weaponDamageMult * power * thermal;
     const muzzleIndex = this.anim.muzzleIndex;
@@ -292,9 +307,9 @@ export class Weapon {
     const origin = this.player.camera.position.clone();
     for (let i = 0; i < proj; i++) {
       // Split projectiles fan out around the aim point.
-      const extra = scatter ? 0.07 : proj > 1 ? 0.012 + 0.006 * proj : 0;
+      const extra = swarm ? 0 : scatter ? 0.07 : proj > 1 ? 0.012 + 0.006 * proj : 0;
       const dir = this.aimDir(stats, i === 0 && proj > 1 ? extra * 0.3 : extra);
-      const out = normalize(shoot({ origin, dir, range: this.range(stats), damage: dmg, family: d.family, pierce: d.pierce + Math.floor(stats.pierce), width: 0 }));
+      const out = normalize(shoot({ origin, dir, range: this.range(stats), damage: dmg, family: d.family, pierce: swarm ? 0 : d.pierce + Math.floor(stats.pierce), width: 0, seek: swarm ? d.seekCone : undefined, seekIndex: swarm ? i : undefined }));
       fx.shot(d.family, from, out, d.mechanism === 'pulse' ? -1 : power, d.boltSpeed);
       if (i === 0) this.lastShot = { from, to: out.point };
     }
@@ -323,7 +338,8 @@ export class Weapon {
     this.flashMeshes[2].rotation.z = Math.random() * Math.PI;
     this.light.position.copyFrom(from);
     this.light.intensity = feel.light;
-    if (d.mechanism === 'pulse') sfx.play('railFire', { pitch: 1.5, volume: 0.7 });
+    if (swarm) sfx.play('swarmLaunch', { pitch: (d.mechanism === 'salvo' ? 0.85 : 1) * (0.95 + Math.random() * 0.1), volume: Math.min(1.2, 0.55 + 0.08 * proj) });
+    else if (d.mechanism === 'pulse') sfx.play('railFire', { pitch: 1.5, volume: 0.7 });
     else if (scatter) {
       sfx.play('shoot', { pitch: 0.62, volume: 1 });
       sfx.play('explosion', { pitch: 2.4, volume: 0.25 });
@@ -347,6 +363,7 @@ export class Weapon {
       case 'cycle':
       case 'scatter':
       case 'pulse':
+      case 'swarm':
         if (trigger && ready && this.cooldown <= 0) {
           this.cooldown = Math.max(0, this.cooldown) + 1 / rate;
           this.fireShot(stats, shoot, fx, 1, 1);
@@ -375,7 +392,9 @@ export class Weapon {
         }
         break;
       }
+      case 'salvo':
       case 'charge': {
+        const salvo = d.mechanism === 'salvo';
         if (trigger && ready && this.cooldown <= 0) {
           if (!this.chargeSfx) {
             this.chargeSfx = true;
@@ -385,8 +404,9 @@ export class Weapon {
           this.charge = Math.min(1, this.charge + (dt * stats.chargeRateMult) / Math.max(0.05, d.chargeTime));
           if (before < 1 && this.charge >= 1) sfx.play('chargeReady');
         } else if (!trigger && this.triggerWas && this.charge >= 0.12 && ready) {
-          const power = chargeFactor(this.charge);
-          this.fireShot(stats, shoot, fx, power, 0.4 + 0.6 * this.charge);
+          // Salvo: power carries the lock fraction (drone count); heat follows the drones released.
+          const power = salvo ? this.charge : chargeFactor(this.charge);
+          this.fireShot(stats, shoot, fx, power, salvo ? (0.6 + 2.4 * this.charge) * 1.2 : 0.4 + 0.6 * this.charge);
           fired = true;
           this.cooldown = 1 / rate;
           this.charge = 0;
@@ -486,7 +506,7 @@ export class Weapon {
       verticalSpeed: this.player.verticalSpeed,
       heat: this.heat / 100,
       overheated: this.overheated,
-      charge: d.mechanism === 'charge' || d.mechanism === 'cycle' ? this.charge : 0,
+      charge: d.mechanism === 'charge' || d.mechanism === 'cycle' || d.mechanism === 'salvo' ? this.charge : 0,
       active: this.beaming ? Math.min(1, 0.5 + this.ramp / (2 * Math.max(1, d.rampMax))) : active,
       holster: Math.max(this.holster, this.switchT),
     });
@@ -509,7 +529,7 @@ export class Weapon {
       this.flashRoot.scaling.setAll(0.35 + 0.08 * Math.sin(performance.now() * 0.05) + 0.1 * this.ramp);
       this.light.position.copyFrom(this.muzzleWorld(this.tmpPos));
       this.light.intensity = Math.max(this.light.intensity, 1.5 + this.ramp);
-    } else if (d.mechanism === 'charge' && this.charge > 0) {
+    } else if ((d.mechanism === 'charge' || d.mechanism === 'salvo') && this.charge > 0) {
       this.light.position.copyFrom(this.muzzleWorld(this.tmpPos));
       this.light.intensity = Math.max(this.light.intensity, this.charge * this.charge * 2.5);
     }

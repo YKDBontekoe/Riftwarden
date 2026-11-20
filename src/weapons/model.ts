@@ -4,9 +4,11 @@ import type { WeaponFamily } from '../data/defs';
 import type { ItemInstance } from '../loot/types';
 import { loftData } from '../visuals/sculpt';
 import { FAMILIES, type SocketKind, type WeaponBuild } from './build';
-import { boxData, cylProfile, latheData, type P2, prismData, tubeProfile } from './geometry';
+import { boxData, cylProfile, latheData, prismData, tubeProfile } from './geometry';
 import { heatMetal, weaponGlow, type WeaponMaterials, weaponMaterials } from './materials';
 import { moduleTypeDef, type ModuleVisual } from './modules';
+import { alongX, alongZ, copyVd, cylX, cylZ, lathe, tubeZ } from './shapes';
+import { swarmBarrel, swarmChassis } from './swarmModel';
 
 /**
  * Procedural weapon model: turns a WeaponBuild (+ installed modules) into a hierarchy of
@@ -61,50 +63,11 @@ export interface ModelOpts {
   element?: string;
 }
 
-type V3 = [number, number, number];
+export type V3 = [number, number, number];
 
 // ------------------------------------------------------------------ assembler
 
-function copyVd(vd: VertexData): VertexData {
-  const o = new VertexData();
-  o.positions = Array.from(vd.positions as ArrayLike<number>);
-  o.normals = Array.from(vd.normals as ArrayLike<number>);
-  o.uvs = Array.from(vd.uvs as ArrayLike<number>);
-  o.indices = Array.from(vd.indices as ArrayLike<number>);
-  return o;
-}
-
-/** Lathe (+Y axis) -> +Z axis (proper rotation). */
-function alongZ(vd: VertexData): VertexData {
-  const sw = (a: number[]) => {
-    for (let i = 0; i < a.length; i += 3) {
-      const y = a[i + 1];
-      const z = a[i + 2];
-      a[i + 1] = -z;
-      a[i + 2] = y;
-    }
-  };
-  sw(vd.positions as number[]);
-  sw(vd.normals as number[]);
-  return vd;
-}
-
-/** Lathe (+Y axis) -> +X axis (proper rotation). */
-function alongX(vd: VertexData): VertexData {
-  const sw = (a: number[]) => {
-    for (let i = 0; i < a.length; i += 3) {
-      const x = a[i];
-      const y = a[i + 1];
-      a[i] = y;
-      a[i + 1] = -x;
-    }
-  };
-  sw(vd.positions as number[]);
-  sw(vd.normals as number[]);
-  return vd;
-}
-
-class Assembler {
+export class Assembler {
   private buckets = new Map<string, { node: TransformNode; mat: Material; parts: VertexData[] }>();
   readonly nodes: TransformNode[] = [];
   readonly meshes: Mesh[] = [];
@@ -194,12 +157,7 @@ class Assembler {
 
 // ------------------------------------------------------------------ shared shapes
 
-const lathe = (p: P2[], tess = 24) => latheData(p, tess);
-const cylZ = (r: number, z0: number, z1: number, ch = 0.002, tess = 24) => alongZ(latheData(cylProfile(r, z0, z1, ch), tess));
-const tubeZ = (ro: number, ri: number, z0: number, z1: number, tess = 28) => alongZ(latheData(tubeProfile(ro, ri, z0, z1), tess));
-const cylX = (r: number, x0: number, x1: number, ch = 0.002, tess = 20) => alongX(latheData(cylProfile(r, x0, x1, ch), tess));
-
-interface Ctx {
+export interface Ctx {
   mount: boolean;
   a: Assembler;
   M: WeaponMaterials;
@@ -214,7 +172,7 @@ interface Ctx {
 }
 
 /** Mount points a chassis exposes to components. */
-interface Mounts {
+export interface Mounts {
   /** Barrel axis: y height and z where the barrel starts. */
   axisY: number;
   barrelZ: number;
@@ -229,7 +187,7 @@ interface Mounts {
 }
 
 /** Small printed flank marking. Each family uses one row of the shared atlas. */
-function chassisMark(c: Ctx, row: number, width: number, at: V3): void {
+export function chassisMark(c: Ctx, row: number, width: number, at: V3): void {
   const height = width / 6;
   const half = width / 2;
   const v0 = row / 3;
@@ -886,9 +844,9 @@ export function buildWeaponModel(scene: Scene, build: WeaponBuild, installed: (I
   const c: Ctx = { mount: opts.mount !== false, a, M, shell: M.shell(build.finish), trim: rarityIndex >= 2 ? M.trim(build.finish) : M.satin, energy, chargeGlow, heat, b: build, rarity: rarityIndex, rig };
   rig.slide = a.node('slide', root);
 
-  const mounts = build.family === 'rail' ? railChassis(c) : build.family === 'beam' ? beamChassis(c) : plasmaChassis(c);
+  const mounts = build.family === 'rail' ? railChassis(c) : build.family === 'beam' ? beamChassis(c) : build.family === 'swarm' ? swarmChassis(c) : plasmaChassis(c);
   hardpoint(c, mounts);
-  const front = barrel(c, mounts);
+  const front = build.family === 'swarm' ? swarmBarrel(c, mounts) : barrel(c, mounts);
   core(c, mounts);
   cooling(c, mounts);
   attachments(c, mounts, front);

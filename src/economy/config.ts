@@ -16,11 +16,11 @@ import type { Category, ItemInstance } from '../loot/types';
  * growth with level is linear, escalation counters are capped, and every result is
  * rounded to a non-negative integer. No formula grows exponentially without a cap.
  */
-export type ResourceKey = 'credits' | 'salvage' | 'components';
-export const RESOURCE_KEYS: readonly ResourceKey[] = ['credits', 'salvage', 'components'];
+export type ResourceKey = 'credits' | 'salvage' | 'components' | 'shards';
+export const RESOURCE_KEYS: readonly ResourceKey[] = ['credits', 'salvage', 'components', 'shards'];
 
-export const RESOURCE_LABEL: Record<ResourceKey, string> = { credits: 'Credits', salvage: 'Salvage', components: 'Adv. Components' };
-export const RESOURCE_SHORT: Record<ResourceKey, string> = { credits: 'CR', salvage: 'SALVAGE', components: 'COMP' };
+export const RESOURCE_LABEL: Record<ResourceKey, string> = { credits: 'Credits', salvage: 'Salvage', components: 'Adv. Components', shards: 'Rift Shards' };
+export const RESOURCE_SHORT: Record<ResourceKey, string> = { credits: 'CR', salvage: 'SALVAGE', components: 'COMP', shards: 'SHARDS' };
 
 export type Cost = Partial<Record<ResourceKey, number>>;
 
@@ -39,11 +39,11 @@ export function levelFactor(level: number): number {
   return 1 + 0.1 * (clampLevel(level) - 1);
 }
 
-/** Rarity index 0..5. */
+/** Rarity index 0..6. */
 export const ri = (item: Pick<ItemInstance, 'rarity'>) => rarity(item.rarity).index;
 
 /** Relative value per rarity (credits, crafting). */
-export const RARITY_VALUE = [1, 1.8, 3.4, 6.5, 13, 26] as const;
+export const RARITY_VALUE = [1, 1.8, 3.4, 6.5, 13, 26, 48] as const;
 
 /** Relative value per category. */
 export const CATEGORY_VALUE: Record<Category, number> = { weapon: 1.25, armor: 1, shield: 1, reactor: 1, processor: 1, accessory: 0.9, module: 0.85, ability: 1, ultimate: 1.15 };
@@ -101,11 +101,14 @@ export const CATEGORY_SALVAGE: Record<Category, number> = { weapon: 1.2, armor: 
  * Advanced components per rarity before level growth (fractions floor away: a rare yields
  * its first component around item level 28, an epic always yields at least one).
  */
-export const COMPONENT_YIELD = [0, 0, 0.6, 1.5, 4, 8] as const;
+export const COMPONENT_YIELD = [0, 0, 0.6, 1.5, 4, 8, 14] as const;
+/** Rift shards recovered by dismantling (exotic, ascended). */
+export const SHARD_YIELD = [0, 0, 0, 0, 0, 1, 5] as const;
 
 export interface Yield {
   salvage: number;
   components: number;
+  shards: number;
 }
 
 /**
@@ -119,14 +122,14 @@ export function dismantleYield(item: Pick<ItemInstance, 'level' | 'rarity' | 'ca
   const enh = Math.max(0, Math.min(MAX_ENHANCE_ANY, Math.floor(item.enhance ?? 0)));
   const salvage = (4 + 0.6 * (L - 1)) * (1 + 1.1 * r) * (CATEGORY_SALVAGE[item.category] ?? 1) * (0.9 + 0.2 * affixQuality(item)) * (1 + 0.25 * enh);
   const components = Math.floor(COMPONENT_YIELD[r] * (1 + (L - 1) / 40)) + Math.floor(enh / 3);
-  return { salvage: Math.max(1, int(salvage)), components: int(Math.min(components, 1e6)) };
+  return { salvage: Math.max(1, int(salvage)), components: int(Math.min(components, 1e6)), shards: SHARD_YIELD[r] };
 }
 
 // ------------------------------------------------------------------ enhancement
 
 /** Maximum enhancement per rarity: better items can absorb more investment. */
-export const MAX_ENHANCE = [4, 6, 8, 10, 12, 15] as const;
-export const MAX_ENHANCE_ANY = 15;
+export const MAX_ENHANCE = [4, 6, 8, 10, 12, 15, 18] as const;
+export const MAX_ENHANCE_ANY = 18;
 
 export const ENHANCE_EFFECT = {
   /** Weapons: base damage per level (multiplicative on the stored roll). */
@@ -239,6 +242,10 @@ export const RUN_INCOME = {
   killCredits: { walker: 1, rusher: 0, bulwark: 6 } as Record<string, number>,
   /** Chance an elite kill also yields an advanced component. */
   eliteComponentChance: 0.25,
+  /** Rift shards (Ascended crafting): chance per elite kill (+ per modifier), boss kills, checkpoints on tier III+. */
+  eliteShardChance: (mods: number) => Math.min(0.6, 0.12 + 0.05 * Math.max(0, mods)),
+  bossShards: (tier: number) => 3 + Math.max(1, tier),
+  checkpointShards: (wave: number, tier: number) => (tier >= 3 ? tier - 2 + Math.floor(Math.max(0, wave) / 20) : 0),
 } as const;
 
 // ------------------------------------------------------------------ merchants & exchange

@@ -2,13 +2,14 @@
 // One implementation for single-player runs (Game), team drops and per-player rolls (ServerGame).
 import { type DropSource, type LootContext, rollDrops } from './drops';
 import { generateItem } from './generate';
+import { generateUnique, uniqueForDrop } from './uniques';
 import type { ItemInstance } from './types';
 
 export interface RollParams {
   source: DropSource;
   wave: number;
   /** Threat tier numbers that feed item level and luck. */
-  tier: { lootLevelBonus: number; lootLuck: number };
+  tier: { lootLevelBonus: number; lootLuck: number; id?: number };
   /** The stream this roll consumes (run stream, or a player's own stream in co-op). */
   rand: () => number;
   /** Produces the next unique item uid (called once per generated item, in order). */
@@ -17,6 +18,8 @@ export interface RollParams {
   originId: string;
   /** Debug/automation multiplier on every source's drop chance (1 = normal). */
   chanceMult?: number;
+  /** Sector faction (faction-locked uniques); null on the classic arena. */
+  faction?: string | null;
 }
 
 /** A source with its chance scaled (clamped to 1). Returns the same object when the multiplier is 1. */
@@ -25,14 +28,21 @@ export function scaleChance(src: DropSource, mult: number): DropSource {
 }
 
 export function lootContext(wave: number, tier: RollParams['tier']): LootContext {
-  return { wave, tierLevelBonus: tier.lootLevelBonus, tierLuck: tier.lootLuck };
+  return { wave, tier: tier.id, tierLevelBonus: tier.lootLevelBonus, tierLuck: tier.lootLuck };
 }
 
 /** Roll the source and generate the items (deterministic for a given stream, ids and parameters). */
 export function rollLoot(p: RollParams): ItemInstance[] {
   const table = scaleChance(p.source, p.chanceMult ?? 1);
-  return rollDrops(table, lootContext(p.wave, p.tier), p.rand).map((d) =>
-    generateItem({
+  let unique = false;
+  return rollDrops(table, lootContext(p.wave, p.tier), p.rand).map((d) => {
+    // Target farming: at most one drop per trigger becomes a unique listed for this source (seed-decided).
+    const u = unique ? null : uniqueForDrop(d.source, d.seed, p.faction);
+    if (u) {
+      unique = true;
+      return generateUnique(u, { uid: p.nextUid(), seed: d.seed, level: d.level, source: p.originId });
+    }
+    return generateItem({
       uid: p.nextUid(),
       seed: d.seed,
       level: d.level,
@@ -41,6 +51,6 @@ export function rollLoot(p: RollParams): ItemInstance[] {
       baseId: d.baseId,
       allowExclusive: d.baseId ? [d.baseId] : [],
       source: p.originId,
-    }),
-  );
+    });
+  });
 }

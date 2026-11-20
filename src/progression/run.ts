@@ -16,6 +16,8 @@ export interface Rewards {
   /** M4: trade currency and advanced components (banked like salvage). */
   credits: number;
   components: number;
+  /** Rift shards (Ascended crafting; banked like salvage). */
+  shards: number;
   /** Warden XP (derived from run statistics by accrueXp; banked like salvage). */
   xp: number;
   items: ItemInstance[];
@@ -63,6 +65,8 @@ export interface RunResult {
   creditsLost: number;
   componentsSecured: number;
   componentsLost: number;
+  shardsSecured?: number;
+  shardsLost?: number;
   /** XP banked at checkpoints during the run. */
   xpSecured?: number;
   /** Unsecured XP kept at the end (all of it on extraction, a share on defeat/abandon). */
@@ -92,7 +96,7 @@ export interface ItemBrief {
 
 export const brief = (i: ItemInstance): ItemBrief => ({ uid: i.uid, name: i.name, rarity: i.rarity, level: i.level, category: i.category });
 
-export const emptyRewards = (): Rewards => ({ salvage: 0, credits: 0, components: 0, xp: 0, items: [] });
+export const emptyRewards = (): Rewards => ({ salvage: 0, credits: 0, components: 0, shards: 0, xp: 0, items: [] });
 
 export class RunLedger {
   duration = 0;
@@ -137,6 +141,8 @@ export class RunLedger {
     const s = Math.max(0, Math.floor(r.salvage ?? 0));
     const cr = Math.max(0, Math.floor(r.credits ?? 0));
     const co = Math.max(0, Math.floor(r.components ?? 0));
+    const sh = Math.max(0, Math.floor(r.shards ?? 0));
+    this.unsecured.shards += sh;
     const xp = Math.max(0, Math.floor(r.xp ?? 0));
     this.unsecured.xp += xp;
     this.unsecured.salvage += s;
@@ -149,7 +155,7 @@ export class RunLedger {
       this.itemsCollected++;
       added++;
     }
-    return s > 0 || cr > 0 || co > 0 || xp > 0 || added > 0;
+    return s > 0 || cr > 0 || co > 0 || sh > 0 || xp > 0 || added > 0;
   }
 
   /** Items collected so far (for statistics). */
@@ -215,6 +221,7 @@ export class RunLedger {
     this.secured.salvage += moved.salvage;
     this.secured.credits += moved.credits;
     this.secured.components += moved.components;
+    this.secured.shards += moved.shards;
     this.secured.xp += moved.xp;
     this.secured.items.push(...moved.items);
     this.lastBankedWave = wave;
@@ -248,6 +255,8 @@ export class RunLedger {
       creditsLost: this.unsecured.credits,
       componentsSecured: this.secured.components,
       componentsLost: this.unsecured.components,
+      shardsSecured: this.secured.shards,
+      shardsLost: this.unsecured.shards,
       xpSecured: this.secured.xp,
       xpKept,
       xpLost: this.unsecured.xp - xpKept,

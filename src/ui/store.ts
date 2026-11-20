@@ -343,7 +343,7 @@ type EventMap = {
   creditsGained: number;
   componentsGained: number;
   /** HQ: a committed economy transaction (station feedback + resource deltas). */
-  econ: { station: string; kind: string; delta: Partial<Record<'credits' | 'salvage' | 'components', number>> };
+  econ: { station: string; kind: string; delta: Partial<Record<'credits' | 'salvage' | 'components' | 'shards', number>> };
   /** Loot feed: drops landing, pickups, full cargo, expiry. */
   loot: LootEvent;
   /** M6: short tactical warning line (events, bosses, evolutions, milestones). */

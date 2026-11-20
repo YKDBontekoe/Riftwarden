@@ -13,6 +13,7 @@ import type { WeaponDef, WeaponFamily } from '../data/defs';
 import { type Enemy, type EnemyHitboxMeta } from '../enemies/EnemyManager';
 import { DROP_SOURCES, type DropSource, type DropSourceId } from '../loot/drops';
 import { rollLoot } from '../loot/roll';
+import { gearUniques } from '../loot/uniques';
 import { equipmentModifiers, weaponDefFor } from '../loot/equipment';
 import { otherSlot, type WeaponSlot } from '../arena/WeaponSlots';
 import { Abilities } from '../arena/Abilities';
@@ -60,6 +61,8 @@ export class Avatar {
   readonly player: Player;
   readonly inventory: RunInventory;
   stats: CombatStats = { ...BASE_STATS };
+  /** Equipped unique gear effects (rebuilt with the stats). */
+  uniques: ReadonlySet<string> = new Set();
   weaponDef: WeaponDef;
   /** Weapon in hand: only its affixes/modules count, claims must match its family. */
   activeWeapon: WeaponSlot = 'weapon';
@@ -274,6 +277,10 @@ export class ServerGame extends Game {
     const a = this.rec.owner ? this.avatar(this.rec.owner) : undefined;
     return a ? a.inventory.equipped(a.activeWeapon)?.signature ?? null : null;
   }
+  protected override equippedUniques(): ReadonlySet<string> {
+    const a = this.rec.owner ? this.avatar(this.rec.owner) : undefined;
+    return a ? a.uniques : new Set();
+  }
   protected override weaponHeat(): number {
     const a = this.rec.owner ? this.avatar(this.rec.owner) : undefined;
     return a ? a.heat : 0;
@@ -371,6 +378,7 @@ export class ServerGame extends Game {
       if (a.activeWeapon === 'weapon2' && !weaponDefFor(a.inventory.equipped('weapon2'))) a.activeWeapon = 'weapon';
       a.stats = computeStats([...equipmentModifiers(a.inventory.equippedItems(otherSlot(a.activeWeapon))), ...a.treeMods, ...shared, ...this.director.buffModifiers(a.id)]);
       a.player.applyStats(a.stats, this.attackerScale);
+      a.uniques = gearUniques(a.inventory.equippedItems(otherSlot(a.activeWeapon)));
       a.weaponDef = weaponDefFor(a.inventory.equipped(a.activeWeapon)) ?? a.weaponDef;
     }
     this.player.applyStats(this.stats, this.attackerScale);
@@ -399,7 +407,7 @@ export class ServerGame extends Game {
   }
 
   private rollFor(a: Avatar, src: DropSource, wave: number): ItemInstance[] {
-    return rollLoot({ source: src, wave, tier: this.cfg.tier, rand: a.rand, nextUid: () => `${this.team.id}.${a.slot}.${++a.lootCounter}`, originId: this.team.id, chanceMult: this.dropChanceMult });
+    return rollLoot({ source: src, wave, tier: this.cfg.tier, rand: a.rand, nextUid: () => `${this.team.id}.${a.slot}.${++a.lootCounter}`, originId: this.team.id, chanceMult: this.dropChanceMult, faction: this.director.faction });
   }
 
   override dropLoot(source: DropSourceId, at: Vector3, wave = this.waves.number): Pickup[] {
@@ -503,7 +511,7 @@ export class ServerGame extends Game {
     const thermal = 1 + st.heatDamage * Math.max(0, Math.min(1, s.h));
     const power = def.family === 'rail' ? Math.max(0.3, Math.min(1, s.pw)) : 1;
     let dmg = def.damage * DAMAGE_PACE * st.weaponDamageMult * power * thermal;
-    const maxHits = def.family === 'rail' ? 1 + def.pierce + Math.floor(st.pierce) : def.family === 'beam' ? 1 : 1 + Math.floor(st.pierce);
+    const maxHits = def.family === 'rail' ? 1 + def.pierce + Math.floor(st.pierce) : def.family === 'beam' || def.family === 'swarm' ? 1 : 1 + Math.floor(st.pierce);
     this.as(a, () => {
       this.director.bus.emit({ type: 'fire', chain: this.director.bus.newChain(), source: { kind: 'weapon', id: def.family }, value: 1 });
       const end = s.hits.length ? [s.hits[0][2], s.hits[0][3], s.hits[0][4]] : arr(o.add(new Vector3(s.d[0], s.d[1], s.d[2]).scale(Math.min(range, 60))));
@@ -534,7 +542,7 @@ export class ServerGame extends Game {
         this.damageEnemy('player', e, amount, point, h[1] === 1 && this.weakAt(e, point), undefined, def.family as WeaponFamily, o);
         if (def.mechanism === 'pulse') this.pulseSplash(point, amount, e);
         a.damage += this.director.dealt.player - before;
-        dmg *= 0.85;
+        dmg *= a.inventory.equipped(a.activeWeapon)?.signature === 'u_ninthgate' ? 1.2 : 0.85;
         n++;
       }
     });
@@ -830,8 +838,11 @@ export class ServerGame extends Game {
         a.lastPos.copyFrom(pl.position);
         this.rec.push(['mv', arr(pl.position)], a.id);
       }
-      const rate = a.weaponDef.mechanism === 'beam' ? 16 : a.weaponDef.fireRate * a.stats.fireRateMult * Math.max(1, Math.floor(a.stats.projectiles)) * (a.weaponDef.mechanism === 'scatter' ? SCATTER_PELLETS + 2 : 1) * (a.weaponDef.mechanism === 'burst' ? 1.6 : 1.25) + 0.5;
-      a.budget = Math.min(rate * 0.6 + 3 + (a.weaponDef.mechanism === 'scatter' ? SCATTER_PELLETS * 2 : 0), a.budget + rate * dt);
+      const wd = a.weaponDef;
+      // Swarm: every drone is a claim (a full salvo releases up to 3x the launch count at once).
+      const swarmK = wd.family === 'swarm' ? Math.max(1, wd.drones) * (wd.mechanism === 'salvo' ? 3 : 1) : 1;
+      const rate = wd.mechanism === 'beam' ? 16 : wd.fireRate * a.stats.fireRateMult * Math.max(1, Math.floor(a.stats.projectiles)) * swarmK * (wd.mechanism === 'scatter' ? SCATTER_PELLETS + 2 : 1) * (wd.mechanism === 'burst' ? 1.6 : 1.25) + 0.5;
+      a.budget = Math.min(rate * 0.6 + 3 + (wd.mechanism === 'scatter' ? SCATTER_PELLETS * 2 : 0) + (wd.family === 'swarm' ? swarmK * Math.max(1, Math.floor(a.stats.projectiles)) * 2 : 0), a.budget + rate * dt);
     }
     // Offers / votes hold the preparation countdown (never the combat).
     if (this.offer && this.clock > this.offerDeadline) this.applyTeamUpgrade(this.offer[0].id, 'Auto-select');
@@ -1024,6 +1035,8 @@ export function ledgerView(r: RunLedger) {
     cs: r.secured.credits,
     ku: r.unsecured.components,
     ks: r.secured.components,
+    hu: r.unsecured.shards,
+    hs: r.secured.shards,
     xs: r.secured.xp,
     xu: Math.max(0, r.xpEarned - r.secured.xp),
     iu: r.unsecured.items.length,

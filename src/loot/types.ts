@@ -52,6 +52,9 @@ export interface WeaponRoll {
   chargeTime?: number;
   beamWidth?: number;
   rampMax?: number;
+  /** Swarm: drones per launch and lock cone (absent on other families). */
+  drones?: number;
+  seekCone?: number;
   /** Damage element (absent on pre-element weapons = kinetic). */
   element?: DamageElement;
 }
@@ -97,6 +100,8 @@ export interface ItemInstance {
   socketed: (ItemInstance | null)[];
   /** Future legendary signature effect id (none exist yet). */
   signature: string | null;
+  /** Hand-made unique id (loot/uniques.ts): fixed name, flavour and mechanic. Absent = procedural item. */
+  uniqueId?: string;
   /** Generation metadata: seed and generator version. */
   seed: number;
   gen: number;

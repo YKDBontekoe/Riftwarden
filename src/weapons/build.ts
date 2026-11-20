@@ -1,4 +1,4 @@
-import { BEAM_EMITTER, type Mechanism, PLASMA_REPEATER, RAILGUN, type WeaponDef, type WeaponFamily } from '../data/defs';
+import { BEAM_EMITTER, type Mechanism, PLASMA_REPEATER, RAILGUN, SWARM_HIVE, type WeaponDef, type WeaponFamily } from '../data/defs';
 import { type ComponentDef, componentDef, componentsFor, type ComponentEffects } from './components';
 
 /**
@@ -7,7 +7,7 @@ import { type ComponentDef, componentDef, componentsFor, type ComponentEffects }
  * about a weapon's look or behaviour is re-derived from a seed after generation.
  */
 export type SocketKind = 'barrel' | 'power' | 'system';
-export type Finish = 'arctic' | 'gunmetal' | 'sand' | 'slate' | 'gilded' | 'iridescent';
+export type Finish = 'arctic' | 'gunmetal' | 'sand' | 'slate' | 'gilded' | 'iridescent' | 'ascended';
 
 export interface WeaponBuild {
   /** Build schema version. */
@@ -45,6 +45,7 @@ export const FAMILIES: Readonly<Record<WeaponFamily, FamilyDef>> = {
   plasma: { id: 'plasma', label: 'Plasma Repeater', role: 'Fast automatic fire, rapid heat build-up', template: PLASMA_REPEATER, socketPattern: ['barrel', 'power', 'system', 'system'], energy: [0.3, 1.7, 2.6] },
   rail: { id: 'rail', label: 'Railgun', role: 'Charged precision slugs that pierce targets', template: RAILGUN, socketPattern: ['power', 'barrel', 'system', 'power'], energy: [1.9, 0.7, 3.8] },
   beam: { id: 'beam', label: 'Beam Emitter', role: 'Continuous beam, damage ramps on a held target', template: BEAM_EMITTER, socketPattern: ['power', 'system', 'barrel', 'system'], energy: [0.5, 2.6, 0.9] },
+  swarm: { id: 'swarm', label: 'Drone Swarm', role: 'Seeker drones that lock onto machines near the crosshair', template: SWARM_HIVE, socketPattern: ['system', 'power', 'barrel', 'system'], energy: [2.6, 1.7, 0.35] },
 };
 
 export const SOCKET_LABEL: Record<SocketKind, string> = { barrel: 'BARREL', power: 'POWER', system: 'SYSTEM' };
@@ -63,14 +64,14 @@ function pick<T>(items: readonly T[], weight: (t: T) => number, rand: () => numb
 }
 
 /** Attachment count range per rarity index. */
-const ATTACHMENTS: [number, number][] = [[0, 1], [1, 1], [1, 2], [2, 2], [2, 3], [3, 3]];
+const ATTACHMENTS: [number, number][] = [[0, 1], [1, 1], [1, 2], [2, 2], [2, 3], [3, 3], [3, 3]];
 
 /**
  * Roll a valid component combination for a family. Only components offered for the
  * family (and rarity) are drawn, so every result has geometry and supported mechanics.
  */
 export function rollBuild(rand: () => number, family: WeaponFamily, chassis: string, rarityIndex: number, sockets: number): WeaponBuild {
-  const ri = Math.max(0, Math.min(5, rarityIndex));
+  const ri = Math.max(0, Math.min(6, rarityIndex));
   const one = (slot: 'barrel' | 'core' | 'cooling' | 'mechanism') => pick(componentsFor(slot, family, ri), (c) => c.weight * (c.minRarity ? 2 : 1), rand).id;
   const barrel = one('barrel');
   const core = one('core');
@@ -85,7 +86,7 @@ export function rollBuild(rand: () => number, family: WeaponFamily, chassis: str
     attachments.push(c.id);
     pool.splice(pool.indexOf(c), 1);
   }
-  const finish: Finish = ri === 5 ? 'iridescent' : ri === 4 ? 'gilded' : FINISHES[Math.floor(rand() * FINISHES.length)];
+  const finish: Finish = ri === 6 ? 'ascended' : ri === 5 ? 'iridescent' : ri === 4 ? 'gilded' : FINISHES[Math.floor(rand() * FINISHES.length)];
   const r2 = (v: number) => Math.round(v * 100) / 100;
   const params = { length: r2(rand()), bulk: r2(rand()), hue: r2(rand()) };
   return { v: BUILD_VERSION, family, chassis, barrel, core, cooling, mechanism, attachments, finish, params, sockets: socketKinds(family, sockets) };
@@ -96,10 +97,18 @@ export function socketKinds(family: WeaponFamily, count: number): SocketKind[] {
   return Array.from({ length: Math.max(0, Math.min(8, Math.floor(count))) }, (_, i) => pat[i % pat.length]);
 }
 
+/** Plain default barrel + mechanism per family (starter kit, pre-M3 weapons, repairs). */
+export const DEFAULT_PARTS: Readonly<Record<WeaponFamily, { barrel: string; mechanism: string }>> = {
+  plasma: { barrel: 'pb_single', mechanism: 'mc_auto' },
+  rail: { barrel: 'rb_open', mechanism: 'mc_charge' },
+  beam: { barrel: 'be_lens', mechanism: 'mc_beam' },
+  swarm: { barrel: 'sw_pod', mechanism: 'mc_swarm' },
+};
+
 /** Deterministic default build for weapons created before M3 (stats are left untouched). */
 export function defaultBuild(chassis: string, family: WeaponFamily = 'plasma', sockets = 0): WeaponBuild {
-  const barrel = family === 'plasma' ? (chassis === 'light_repeater' ? 'pb_twin' : 'pb_single') : family === 'rail' ? 'rb_open' : 'be_lens';
-  const mechanism = family === 'plasma' ? 'mc_auto' : family === 'rail' ? 'mc_charge' : 'mc_beam';
+  const barrel = family === 'plasma' ? (chassis === 'light_repeater' ? 'pb_twin' : 'pb_single') : DEFAULT_PARTS[family].barrel;
+  const mechanism = DEFAULT_PARTS[family].mechanism;
   return { v: BUILD_VERSION, family, chassis, barrel, core: 'co_cell', cooling: 'cl_fins', mechanism, attachments: [], finish: 'arctic', params: { length: 0.5, bulk: chassis === 'heavy_repeater' ? 0.8 : 0.5, hue: 0.5 }, sockets: socketKinds(family, sockets) };
 }
 
@@ -114,11 +123,11 @@ export function buildMechanism(b: WeaponBuild | undefined): Mechanism | undefine
 
 /** Product of all component effects (pierce summed), plus the barrel-length range factor. */
 export function buildEffects(b: WeaponBuild): Required<ComponentEffects> {
-  const out: Required<ComponentEffects> = { damage: 1, fireRate: 1, heatPerShot: 1, coolRate: 1, range: 1, accuracy: 1, chargeTime: 1, beamWidth: 1, rampMax: 1, pierce: 0 };
+  const out: Required<ComponentEffects> = { damage: 1, fireRate: 1, heatPerShot: 1, coolRate: 1, range: 1, accuracy: 1, chargeTime: 1, beamWidth: 1, rampMax: 1, pierce: 0, seekCone: 1, drones: 0 };
   for (const c of buildComponents(b)) {
     for (const k of Object.keys(c.effects) as (keyof ComponentEffects)[]) {
       const v = c.effects[k]!;
-      if (k === 'pierce') out.pierce += v;
+      if (k === 'pierce' || k === 'drones') out[k] += v;
       else out[k] *= v;
     }
   }

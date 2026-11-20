@@ -58,7 +58,7 @@ describe('B: procedural weapon generation', () => {
   });
 
   it('socket counts follow the configured rarity table 0/1/2/3/4/4', () => {
-    expect(RARITIES.map((r) => r.sockets)).toEqual([0, 1, 2, 3, 4, 4]);
+    expect(RARITIES.map((r) => r.sockets)).toEqual([0, 1, 2, 3, 4, 4, 4]);
   });
 
   it('component effects are baked into the stored roll (and visible in the def)', () => {

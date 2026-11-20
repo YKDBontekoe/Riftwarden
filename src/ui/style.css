@@ -920,7 +920,7 @@ button.mini.wide { width: 100%; padding: 7px 10px; }
 @media (max-width: 1100px) { .eng-grid { grid-template-columns: 1fr; } }
 
 /* ======================================================================= M4 economy */
-:root { --credit: #7fe9ff; --salv: #edb282; --comp: #c79bff; }
+:root { --credit: #7fe9ff; --salv: #edb282; --comp: #c79bff; --shard: #8ff7e4; }
 .terminal.violet::before { background: var(--comp); box-shadow: 0 0 8px var(--comp); }
 .terminal.violet .term-code { background: #59516d; }
 .terminal.wide:has(.market-grid), .terminal.wide:has(.fab-grid) { width: min(1240px, 97vw); }
@@ -944,6 +944,10 @@ button.mini.wide { width: 100%; padding: 7px 10px; }
 .res-cr { --rcol: var(--credit); }
 .res-sv { --rcol: var(--salv); }
 .res-co { --rcol: var(--comp); }
+.res-sh { --rcol: var(--shard); }
+.ascend-bench { margin-top: 14px; padding-top: 10px; border-top: 1px solid rgba(126, 249, 255, 0.25); }
+.ascend-bench .col-label { color: #7ef9ff; text-shadow: 0 0 10px rgba(126, 249, 255, 0.6); }
+button.primary.ascend { background: linear-gradient(90deg, #3fd8e8, #b8fff6); color: #04161a; }
 .cost-line { display: inline-flex; flex-wrap: wrap; gap: 8px; align-items: center; font-family: var(--display); font-size: 15px; letter-spacing: 0.04em; }
 .cost-line .cl { display: inline-flex; align-items: center; gap: 3px; color: var(--white); }
 .cost-line .cl i { font-style: normal; color: var(--rcol); text-shadow: 0 0 8px var(--rcol); }
@@ -976,6 +980,10 @@ button.icard.dis:hover { background: rgba(255, 255, 255, 0.025); }
 .enh-tag, .lock-tag, .src-tag { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.14em; padding: 1px 5px; border: 1px solid var(--line); }
 .enh-tag { color: var(--comp); border-color: rgba(199, 155, 255, 0.45); }
 .lock-tag { color: var(--amber); border-color: var(--amber-dim); }
+.unique-tag { color: #ffb347; border: 1px solid rgba(255, 179, 71, 0.6); padding: 0 5px; letter-spacing: 0.12em; text-shadow: 0 0 8px rgba(255, 150, 40, 0.6); }
+.id-block.unique { border-left: 2px solid #ffb347; padding-left: 10px; }
+.id-block.unique .id-label { color: #ffb347; }
+.unique-flavour { font-style: italic; color: #c9b89a; margin: 4px 0; }
 .src-tag { color: var(--muted); }
 .enh-up { color: var(--comp) !important; }
 .buy-box { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; margin-top: 10px; padding: 10px 12px; border: 1px solid var(--line); background: linear-gradient(90deg, rgba(156, 207, 194, 0.06), transparent); }

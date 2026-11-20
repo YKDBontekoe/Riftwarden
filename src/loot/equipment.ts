@@ -76,6 +76,8 @@ export function weaponDefFor(item: ItemInstance | null | undefined): WeaponDef |
     chargeTime: w.chargeTime ?? t.chargeTime,
     beamWidth: w.beamWidth ?? t.beamWidth,
     rampMax: w.rampMax ?? t.rampMax,
+    drones: w.drones ?? t.drones,
+    seekCone: w.seekCone ?? t.seekCone,
     element: w.element ?? 'kinetic',
   };
 }
@@ -126,12 +128,14 @@ export function chargeFactor(c: number): number {
 export function weaponSummary(w: WeaponDef, stats: CombatStats = BASE_STATS) {
   const heat = (w.heatPerShot * HEAT_PACE.gain) / stats.heatEfficiency;
   const rate = w.fireRate * stats.fireRateMult;
-  const proj = w.family === 'beam' ? 1 : w.mechanism === 'scatter' ? 7 + 2 * Math.max(0, Math.floor(stats.projectiles) - 1) : Math.floor(stats.projectiles);
+  // Swarm: drones per launch (salvo: a full lock releases 3x) x projectiles.
+  const drones = Math.max(1, w.drones) * Math.max(1, Math.floor(stats.projectiles)) * (w.mechanism === 'salvo' ? 3 : 1);
+  const proj = w.family === 'beam' ? 1 : w.family === 'swarm' ? drones : w.mechanism === 'scatter' ? 7 + 2 * Math.max(0, Math.floor(stats.projectiles) - 1) : Math.floor(stats.projectiles);
   const dmg = w.damage * DAMAGE_PACE * stats.weaponDamageMult;
   const critFactor = 1 + stats.critChance * (stats.critMultiplier - 1);
   const chargeTime = w.chargeTime / stats.chargeRateMult;
   let cycle = 1 / rate;
-  if (w.mechanism === 'charge') cycle = Math.max(1 / rate, chargeTime + 0.05);
+  if (w.mechanism === 'charge' || w.mechanism === 'salvo') cycle = Math.max(1 / rate, chargeTime + 0.05);
   const rampTime = w.rampTime / stats.chargeRateMult;
   const rampAvg = w.mechanism === 'beam' ? (1 + w.rampMax) / 2 : 1;
   const perShot = dmg * proj;
@@ -152,8 +156,10 @@ export function weaponSummary(w: WeaponDef, stats: CombatStats = BASE_STATS) {
     pierce: w.pierce + Math.floor(stats.pierce),
     spread: w.spreadMin * stats.spreadMult,
     beamWidth: w.beamWidth,
+    /** Swarm lock cone half-angle in degrees (0 for other families). */
+    lockCone: w.family === 'swarm' ? (Math.atan(w.seekCone) * 180) / Math.PI : 0,
     /** Seconds of continuous fire from cold to overheat. */
-    sustain: (100 / Math.max(0.01, heat)) / (w.mechanism === 'charge' ? 1 / cycle : rate),
+    sustain: (100 / Math.max(0.01, heat)) / (w.mechanism === 'charge' || w.mechanism === 'salvo' ? 1 / cycle : rate),
   };
 }
 
@@ -173,13 +179,15 @@ export function compareItems(a: ItemInstance, b: ItemInstance | null): CompareRo
     const same = !wb || wb.family === wa.family;
     add('w.dps', 'Sustained DPS', sa.dps, sb?.dps, 'higher');
     rows.push({ key: 'w.element', label: 'Element', a: ELEMENT_INFO[wa.element].name, b: wb ? ELEMENT_INFO[wb.element].name : '', verdict: 0 });
-    add('w.damage', wa.family === 'beam' ? 'Damage / tick' : 'Damage / shot', sa.damage, same ? sb?.damage : undefined, 'higher');
+    add('w.damage', wa.family === 'beam' ? 'Damage / tick' : wa.family === 'swarm' ? 'Damage / drone' : 'Damage / shot', sa.damage, same ? sb?.damage : undefined, 'higher');
     add('w.rate', wa.family === 'beam' ? 'Tick rate' : 'Fire rate', sa.rate, same ? sb?.rate : undefined, 'higher', (v) => `${fmtNum(v)}/s`);
     add('w.range', 'Range', sa.range, sb?.range, 'higher', (v) => `${fmtNum(v)} m`);
     add('w.sustain', 'Fire time to overheat', sa.sustain, sb?.sustain, 'higher', (v) => `${fmtNum(v)} s`);
     add('w.cool', 'Cooling', sa.cool, sb?.cool, 'higher', (v) => `${fmtNum(v)}/s`);
     if (wa.family === 'rail' && same) add('w.pierce', 'Pierce', sa.pierce, sb?.pierce, 'higher', (v) => `${v} targets`);
     if (wa.family === 'rail' && wa.mechanism === 'charge' && same) add('w.charge', 'Charge time', sa.chargeTime, sb?.chargeTime, 'lower', (v) => `${fmtNum(v)} s`);
+    if (wa.family === 'swarm' && same) add('w.drones', 'Drones / launch', sa.projectiles, sb?.projectiles, 'higher', (v) => String(v));
+    if (wa.family === 'swarm' && same) add('w.lock', 'Lock cone', sa.lockCone, sb?.lockCone, 'higher', (v) => `${fmtNum(v)}°`);
     if (wa.family === 'beam' && same) add('w.ramp', 'Ramp ceiling', sa.rampMax, sb?.rampMax, 'higher', (v) => `×${fmtNum(v)}`);
   }
   const ta = statTotals(a);
@@ -245,8 +253,9 @@ export function weaponStatRows(item: ItemInstance): WeaponStatRow[] {
   const rows: WeaponStatRow[] = [];
   const add = (key: string, label: string, value: number, text: string, better: 'higher' | 'lower' = 'higher') => rows.push({ key, label, value, text, better });
   add('dps', 'Sustained DPS', s.dps, fmtNum(s.dps));
-  add('damage', w.family === 'beam' ? 'Damage / tick' : 'Damage / shot', s.damage, fmtNum(s.damage));
-  if (s.projectiles > 1) add('proj', 'Projectiles', s.projectiles, String(s.projectiles));
+  add('damage', w.family === 'beam' ? 'Damage / tick' : w.family === 'swarm' ? 'Damage / drone' : 'Damage / shot', s.damage, fmtNum(s.damage));
+  if (s.projectiles > 1) add('proj', w.family === 'swarm' ? 'Drones / launch' : 'Projectiles', s.projectiles, String(s.projectiles));
+  if (w.family === 'swarm') add('lock', 'Lock cone', s.lockCone, `${fmtNum(s.lockCone)}°`);
   add('rate', w.family === 'beam' ? 'Tick rate' : 'Fire rate', s.rate, `${fmtNum(s.rate)}/s`);
   add('crit', 'Critical chance', st.critChance, `${fmtNum(st.critChance * 100)}%`);
   add('critdmg', 'Critical damage', st.critMultiplier, `×${fmtNum(st.critMultiplier)}`);
@@ -254,7 +263,7 @@ export function weaponStatRows(item: ItemInstance): WeaponStatRow[] {
   add('cool', 'Cooling', s.cool, `${fmtNum(s.cool)}%/s`);
   add('range', 'Range', s.range, `${fmtNum(s.range)} m`);
   add('spread', 'Spread & recoil', st.spreadMult, `${fmtNum(st.spreadMult * 100)}%`, 'lower');
-  if (w.mechanism === 'charge') add('charge', 'Charge time', s.chargeTime, `${fmtNum(s.chargeTime)} s`, 'lower');
+  if (w.mechanism === 'charge' || w.mechanism === 'salvo') add('charge', w.mechanism === 'salvo' ? 'Full lock time' : 'Charge time', s.chargeTime, `${fmtNum(s.chargeTime)} s`, 'lower');
   if (w.family === 'rail') add('pierce', 'Pierce', s.pierce, `${s.pierce}`);
   if (w.family === 'beam') add('ramp', 'Ramp time', s.rampTime, `${fmtNum(s.rampTime)} s`, 'lower');
   if (st.arcChance > 0) add('arc', 'Arc chance · damage', st.arcChance, `${fmtNum(st.arcChance * 100)}% · ${fmtNum(st.arcDamage * 100)}%`);
