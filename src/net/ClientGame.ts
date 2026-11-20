@@ -1,4 +1,10 @@
-import { type AbstractMesh, Color3, type Engine, Vector3 } from '@babylonjs/core';
+import { traceShot } from '../arena/shotTrace';
+import { hasLost, LIMB_IDS } from '../enemies/limbs';
+import { detachLimb } from '../enemies/limbRuntime';
+import type { WeaponSlot } from '../arena/WeaponSlots';
+import type { AbilitySlot } from '../abilities/defs';
+import { shotOutcome } from '../arena/PlayerCombat';
+import { Color3, type Engine, Vector3 } from '@babylonjs/core';
 import { sfx } from '../audio/Sfx';
 import type { SfxName } from '../audio/Sfx';
 import { type ArenaConfig, Game } from '../core/Game';
@@ -6,7 +12,7 @@ import type { Input } from '../core/Input';
 import type { Settings } from '../core/settings';
 import type { WeaponFamily, EnemyKind } from '../data/defs';
 import type { Turret } from '../defense/Turrets';
-import { type Enemy, type EnemyContext, type EnemyHitboxMeta } from '../enemies/EnemyManager';
+import { type Enemy, type EnemyContext } from '../enemies/EnemyManager';
 import type { Effects } from '../fx/Effects';
 import type { Pickup } from '../loot/LootField';
 import { RunInventory } from '../loot/runInventory';
@@ -121,7 +127,6 @@ interface Remote {
 }
 
 const INTERP_DELAY = 0.1;
-const TMP = new Vector3();
 
 /**
  * Co-op replica of the arena. The scene, local drone, weapon, effects and every model are the
@@ -249,6 +254,33 @@ export class ClientGame extends Game {
     });
   }
 
+  /** Swaps are predicted locally (instant) and confirmed by the server, which validates claims by family. */
+  override swapWeapon(slot?: WeaponSlot): boolean {
+    const before = this.weaponSlots.active;
+    if (!super.swapWeapon(slot)) return false;
+    void this.request({ a: 'swap', slot: this.weaponSlots.active }).then((ok) => {
+      if (!ok && this.weaponSlots.active !== before) super.swapWeapon(before);
+    });
+    return true;
+  }
+
+  /** Abilities run on the server; the local slots mirror cooldowns once it accepts (ultimate charge comes in `me.ult`). */
+  override useAbility(slot: AbilitySlot): boolean {
+    const why = this.abilities.blocked(slot);
+    if (why) {
+      if (why !== 'Not available right now') sfx.play('buildDeny');
+      return false;
+    }
+    const o = this.player.eye;
+    const d = this.player.forward(new Vector3());
+    void this.request({ a: 'ability', slot, o: [o.x, o.y, o.z], d: [d.x, d.y, d.z] }).then((ok) => ok && this.abilities.mirrorUse(slot));
+    return true;
+  }
+
+  override chargeUltimate(): void {
+    // The server owns ultimate charge for every warden.
+  }
+
   override startWave(): void {
     void this.request({ a: 'startWave' });
   }
@@ -337,96 +369,25 @@ export class ClientGame extends Game {
     return this.voteOpen && this.screen !== 'defeat';
   }
 
-  /** Recycle (hold X) is a server request; inspection stays local. */
-  protected override updateInspect(dt: number, controls: boolean): void {
-    const holding = this.input.isDown('KeyX');
-    const before = this.recycleT;
-    if (holding) (this.input as unknown as { downKeys?: Set<string> }).downKeys;
-    // Run the inspection part of the base logic without its local recycle.
-    const repairing = controls && this.input.pressed('KeyF');
-    const isDown = this.input.isDown.bind(this.input);
-    const pressed = this.input.pressed.bind(this.input);
-    (this.input as { isDown: (k: string) => boolean }).isDown = (k) => (k === 'KeyX' ? false : isDown(k));
-    (this.input as { pressed: (k: string) => boolean }).pressed = (k) => (k === 'KeyF' ? false : pressed(k));
-    try {
-      super.updateInspect(dt, controls);
-    } finally {
-      (this.input as { isDown: (k: string) => boolean }).isDown = isDown;
-      (this.input as { pressed: (k: string) => boolean }).pressed = pressed;
-    }
-    const t = this.inspected;
-    if (t && repairing && this.layout.mazing) {
-      const sid = this.serverTowerId(t);
-      if (sid !== null) void this.request({ a: 'repair', tower: sid });
-    }
-    if (t && holding) {
-      this.recycleT = before + dt / 0.6;
-      if (this.recycleT >= 1) {
-        this.recycleT = 0;
-        const sid = this.serverTowerId(t);
-        if (sid !== null) void this.request({ a: 'recycle', tower: sid });
-      }
-    } else this.recycleT = 0;
+  /** Recycle (hold X) and repair (F) are server requests; inspection stays local. */
+  protected override recycleTower(t: Turret): void {
+    const sid = this.serverTowerId(t);
+    if (sid !== null) void this.request({ a: 'recycle', tower: sid });
+  }
+
+  protected override repairTower(t: Turret): void {
+    const sid = this.serverTowerId(t);
+    if (sid !== null) void this.request({ a: 'repair', tower: sid });
   }
 
   /** Local hit resolution for responsiveness; the server re-validates and applies damage. */
   protected override shoot = (r: ShotRequest): ShotOutcome => {
-    for (const e of this.enemies.active) {
-      e.root.computeWorldMatrix(true);
-      for (const h of e.hitboxes) h.computeWorldMatrix(true);
-    }
-    this.shotRay.origin.copyFrom(r.origin);
-    this.shotRay.direction.copyFrom(r.dir);
-    this.shotRay.length = r.range;
-    const hits = this.scene.multiPickWithRay(this.shotRay, (m: AbstractMesh) => (!!m.metadata?.surface || !!m.metadata?.enemy) && m.isEnabled()) ?? [];
-    hits.sort((a, b) => a.distance - b.distance);
-    const wall = hits.find((h) => !!(h.pickedMesh!.metadata as { surface?: string }).surface) ?? null;
-    const maxDist = wall ? wall.distance : r.range;
-    const struck: Enemy[] = [];
+    const { struck, wall } = traceShot(this.scene, this.enemies.active, r, (e) => !!e.netId);
+    const out = shotOutcome(r, struck, wall, false);
     const claim: ShotClaim = { f: r.family, o: [r.origin.x, r.origin.y, r.origin.z], d: [r.dir.x, r.dir.y, r.dir.z], pw: r.family === 'rail' ? Math.min(1, r.damage / Math.max(1, this.weapon.def.damage * this.stats.weaponDamageMult)) : 1, h: this.weapon.heat / 100, hits: [] };
-    let first: { point: Vector3; target: 'enemy' | 'shield' } | null = null;
-    for (const h of hits) {
-      if (h.distance > maxDist) break;
-      const meta = h.pickedMesh!.metadata as Partial<EnemyHitboxMeta>;
-      const e = meta.enemy;
-      if (!e || struck.includes(e) || !e.alive || !e.netId) continue;
-      struck.push(e);
-      const point = h.pickedPoint!.clone();
-      if (!first) first = { point, target: e.shield > 0 ? 'shield' : 'enemy' };
-      claim.hits.push([e.netId, meta.weak ? 1 : 0, round2(point.x), round2(point.y), round2(point.z)]);
-      if (struck.length > r.pierce) break;
-    }
-    if (!first && r.width > 0) {
-      let best: Enemy | null = null;
-      let bestT = Infinity;
-      for (const e of this.enemies.active) {
-        if (!e.alive || !e.netId) continue;
-        const c = e.center(TMP);
-        const t = (c.x - r.origin.x) * r.dir.x + (c.y - r.origin.y) * r.dir.y + (c.z - r.origin.z) * r.dir.z;
-        if (t <= 0 || t > maxDist || t >= bestT) continue;
-        const px = r.origin.x + r.dir.x * t - c.x;
-        const py = r.origin.y + r.dir.y * t - c.y;
-        const pz = r.origin.z + r.dir.z * t - c.z;
-        const rr = e.def.bodyR * e.def.scale + r.width;
-        if (px * px + py * py + pz * pz <= rr * rr) {
-          best = e;
-          bestT = t;
-        }
-      }
-      if (best) {
-        const point = r.origin.add(r.dir.scale(bestT - best.def.bodyR * 0.6));
-        first = { point, target: best.shield > 0 ? 'shield' : 'enemy' };
-        struck.push(best);
-        claim.hits.push([best.netId, 0, round2(point.x), round2(point.y), round2(point.z)]);
-      }
-    }
+    for (const s of struck) claim.hits.push([s.enemy.netId, s.weak ? 1 : 0, round2(s.point.x), round2(s.point.y), round2(s.point.z)]);
     if (this.pendingShots.length < 24) this.pendingShots.push(claim);
-    if (first) return { point: first.point, normal: null, target: first.target, enemyId: struck[0].id };
-    if (wall) {
-      const n = wall.getNormal(true, true) ?? Vector3.Up();
-      return { point: wall.pickedPoint!.clone(), normal: n, target: 'surface', surface: 'alloy', enemyId: null };
-    }
-    return { point: r.origin.add(r.dir.scale(r.range)), normal: null, target: 'none', enemyId: null };
+    return out;
   };
 
   override async closePanel(): Promise<void> {
@@ -464,8 +425,15 @@ export class ClientGame extends Game {
       if (input.pressed('KeyG')) this.startWave();
       if (input.pressed('KeyQ')) this.toggleTactical();
       if (input.pressed('Digit2') || input.pressed('KeyB')) this.setBuildMode(!this.construction.active);
-      if (input.pressed('Digit1')) this.setBuildMode(false);
+      if (input.pressed('Digit1')) {
+        this.setBuildMode(false);
+        this.swapWeapon('weapon');
+      }
+      if (input.pressed('KeyZ')) this.swapWeapon();
       if (this.construction.active && input.mousePressed(2)) this.setBuildMode(false);
+      else if (input.mousePressed(2)) this.useAbility('ability');
+      if (input.pressed('KeyF') && !(this.towers.inspected && this.layout.mazing)) this.useAbility('ability2');
+      if (input.pressed('KeyT') && this.waves.phase === 'combat') this.useAbility('ultimate');
       if (input.pressed('KeyH') && this.voteOpen) this.openCheckpoint();
       if (input.pressed('KeyI') || input.pressed('Tab')) return this.openInventory();
       if (input.pressed('KeyU')) return this.openBuildOverview();
@@ -475,10 +443,11 @@ export class ClientGame extends Game {
         this.input.releaseLock();
         return;
       }
-      this.towerKeys(input);
+      this.towers.keys(input);
     }
     const hdt = dt * this.tactical.hostileScale;
     this.runTime += dt;
+    this.abilities.update(dt);
     this.hazards?.decay(hdt, this.hostileT);
     this.hazards?.affectPlayer(0);
     this.player.update(dt, input, this.stats.moveSpeedMult * (this.hazards?.playerSpeed ?? 1), controls);
@@ -491,6 +460,7 @@ export class ClientGame extends Game {
       if (controls && input.mousePressed(0)) this.tryPlace();
     }
     const trigger = controls && input.mouse(0) && !this.construction.active;
+    this.weaponSlots.update(dt);
     this.weapon.update(dt, trigger, this.stats, this.shoot, this.weaponFx);
     this.wfx.update(dt, this.player.camera.position);
     this.updateInspect(dt, controls);
@@ -757,6 +727,7 @@ export class ClientGame extends Game {
   }
 
   private applyPersonal(me: Record<string, unknown>): void {
+    if (typeof me.ult === 'number') this.abilities.ult = Math.max(0, Math.min(1, me.ult));
     const r = me.run as Record<string, number>;
     const run = this.cfg.run;
     run.unsecured.salvage = r.su;
@@ -886,6 +857,12 @@ export class ClientGame extends Game {
         e.lastHit = performance.now();
         return;
       }
+      case 'el': {
+        const e = this.byNet.get(ev[1]);
+        if (!e || !e.walker) return;
+        for (const l of LIMB_IDS) if (hasLost(ev[2], l) && !hasLost(e.limbsLost, l)) detachLimb(e, l, this.fx);
+        return;
+      }
       case 'T+': {
         const [, id, cfg, pos, yaw, , ownerName] = ev;
         if (this.towerById.has(id)) return;
@@ -902,7 +879,7 @@ export class ClientGame extends Game {
         if (!t) return;
         this.turrets.remove(t);
         this.towerById.delete(ev[1]);
-        if (this.inspected === t) this.inspected = null;
+        this.towers.forget(t);
         return;
       }
       case 'Tc': {

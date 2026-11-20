@@ -13,6 +13,8 @@ import { type Enemy, type EnemyHitboxMeta } from '../enemies/EnemyManager';
 import { DROP_SOURCES, type DropSource, type DropSourceId } from '../loot/drops';
 import { rollLoot } from '../loot/roll';
 import { equipmentModifiers, weaponDefFor } from '../loot/equipment';
+import { otherSlot, type WeaponSlot } from '../arena/WeaponSlots';
+import { Abilities } from '../arena/Abilities';
 import { hashSeed } from '../loot/generate';
 import { convertsToSalvage, expiresAfterWave, PICKUP_RANGE, type Pickup } from '../loot/LootField';
 import { scrapValue } from '../loot/economy';
@@ -57,6 +59,10 @@ export class Avatar {
   readonly inventory: RunInventory;
   stats: CombatStats = { ...BASE_STATS };
   weaponDef: WeaponDef;
+  /** Weapon in hand: only its affixes/modules count, claims must match its family. */
+  activeWeapon: WeaponSlot = 'weapon';
+  /** Ability I/II and ultimate (swapped into the game by `as`, so damage charges this player's ultimate). */
+  abilities!: Abilities;
   rand: () => number;
   lootCounter = 0;
   connected = true;
@@ -221,6 +227,19 @@ export class ServerGame extends Game {
       this.rec.push(['h', Math.round(amount * 10) / 10, h.toHull > 0 ? 1 : 0, from ? arr(from) : null], a.id);
     };
     a.player.knockback = (dir: Vector3, strength: number) => this.rec.push(['k', arr(dir), strength], a.id);
+    const g = this;
+    a.abilities = new Abilities({
+      get scene() { return g.scene; }, // prettier-ignore
+      player: a.player,
+      get director() { return g.director; }, // prettier-ignore
+      get enemies() { return g.enemies; }, // prettier-ignore
+      get fx() { return g.fx; }, // prettier-ignore
+      get wfx() { return g.wfx; }, // prettier-ignore
+      get weapon() { return g.weapon; }, // prettier-ignore
+      inventory: a.inventory,
+      get stats() { return a.stats; }, // prettier-ignore
+      canAct: () => a.active && a.player.alive,
+    });
     this.avatars.push(a);
     this.rebuildStats();
     return a;
@@ -239,7 +258,7 @@ export class ServerGame extends Game {
 
   protected override weaponSignature(): string | null {
     const a = this.rec.owner ? this.avatar(this.rec.owner) : undefined;
-    return a ? a.inventory.equipped('weapon')?.signature ?? null : null;
+    return a ? a.inventory.equipped(a.activeWeapon)?.signature ?? null : null;
   }
   protected override weaponHeat(): number {
     const a = this.rec.owner ? this.avatar(this.rec.owner) : undefined;
@@ -262,6 +281,8 @@ export class ServerGame extends Game {
     const prevStats = this.stats;
     const prevOwner = this.rec.owner;
     const prevDef = this.weapon.def;
+    const prevAbilities = this.abilities;
+    this.abilities = a.abilities;
     (this as { player: Player }).player = a.player;
     this.stats = a.stats;
     this.rec.owner = a.id;
@@ -273,6 +294,7 @@ export class ServerGame extends Game {
       this.stats = prevStats;
       this.rec.owner = prevOwner;
       this.weapon.def = prevDef;
+      this.abilities = prevAbilities;
     }
   }
 
@@ -324,16 +346,17 @@ export class ServerGame extends Game {
     // Towers are shared: each player's tower gear contributes 1/n (a full team of tower builds = one full build).
     const towerGear: StatModifier[] = [];
     for (const a of live) {
-      for (const m of [...equipmentModifiers(a.inventory.equippedItems()), ...a.treeMods]) {
+      for (const m of [...equipmentModifiers(a.inventory.equippedItems(otherSlot(a.activeWeapon))), ...a.treeMods]) {
         if (!TOWER_KEYS.has(m.stat)) continue;
         towerGear.push({ ...m, value: m.op === 'mul' ? Math.pow(1 + m.value, 1 / n) - 1 : m.value / n });
       }
     }
     Object.assign(this.stats, computeStats([...towerGear, ...shared]));
     for (const a of this.avatars) {
-      a.stats = computeStats([...equipmentModifiers(a.inventory.equippedItems()), ...a.treeMods, ...shared]);
+      if (a.activeWeapon === 'weapon2' && !weaponDefFor(a.inventory.equipped('weapon2'))) a.activeWeapon = 'weapon';
+      a.stats = computeStats([...equipmentModifiers(a.inventory.equippedItems(otherSlot(a.activeWeapon))), ...a.treeMods, ...shared]);
       a.player.applyStats(a.stats, this.attackerScale);
-      a.weaponDef = weaponDefFor(a.inventory.equipped('weapon')) ?? a.weaponDef;
+      a.weaponDef = weaponDefFor(a.inventory.equipped(a.activeWeapon)) ?? a.weaponDef;
     }
     this.player.applyStats(this.stats, this.attackerScale);
     this.tactical.rechargeMult = this.stats.tacticalRechargeMult;
@@ -648,6 +671,26 @@ export class ServerGame extends Game {
         this.rec.push(['u', 'alert', { text: `${a.name.toUpperCase()} VOTES ${m.home ? 'RETURN TO HQ' : 'CONTINUE'}`, tone: 'white' }]);
         this.checkVote();
         return null;
+      case 'swap': {
+        if (m.slot === a.activeWeapon) return null;
+        if (!weaponDefFor(a.inventory.equipped(m.slot))) return 'No weapon in that slot';
+        a.activeWeapon = m.slot;
+        this.rebuildStats();
+        return null;
+      }
+      case 'ability': {
+        const why = a.abilities.blocked(m.slot);
+        if (why) return why;
+        const before = a.player.position.clone();
+        const ok = this.as(a, () => a.abilities.use(m.slot, new Vector3(m.o[0], m.o[1], m.o[2]), new Vector3(m.d[0], m.d[1], m.d[2])));
+        if (!ok) return 'Ability unavailable';
+        // Blink moves the server body: the owner's drone snaps to it.
+        if (Vector3.Distance(before, a.player.position) > 0.5) {
+          a.lastPos.copyFrom(a.player.position);
+          this.rec.push(['mv', arr(a.player.position)], a.id);
+        }
+        return null;
+      }
       case 'equip':
       case 'unequip':
       case 'discard': {
@@ -753,6 +796,7 @@ export class ServerGame extends Game {
         a.run.survival.deaths++;
         this.rec.push(['u', 'alert', { text: `${a.name.toUpperCase()} DOWN · RESPAWNING`, tone: 'red' }]);
       }
+      this.as(a, () => a.abilities.update(dt));
       if (!was && pl.alive) {
         a.lastPos.copyFrom(pl.position);
         this.rec.push(['mv', arr(pl.position)], a.id);
@@ -928,7 +972,7 @@ export class ServerGame extends Game {
 
   /** Personal state for one player (inventory/ledger only when changed). */
   personal(a: Avatar): Record<string, unknown> {
-    const out: Record<string, unknown> = { seq: a.lastSeq, run: ledgerView(a.run) };
+    const out: Record<string, unknown> = { seq: a.lastSeq, run: ledgerView(a.run), ult: Math.round(a.abilities.ult * 1000) / 1000 };
     if (a.inventoryDirty) {
       a.inventoryDirty = false;
       out.inv = { loadout: a.inventory.loadout, items: a.inventory.entries().map((e) => e.item), status: Object.fromEntries(a.inventory.entries().map((e) => [e.item.uid, e.status])), cargo: a.inventory.cargoUsed, cap: a.inventory.cargoCapacity };

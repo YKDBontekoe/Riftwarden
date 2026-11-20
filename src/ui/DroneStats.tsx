@@ -1,6 +1,6 @@
-import { BASE_STATS, fmtNum, formatStat, maxHull, mitigation, type StatKey, STAT_DEFS } from '../combat/stats';
+import { BASE_STATS, computeStats, fmtNum, formatStat, maxHull, mitigation, type StatKey, STAT_DEFS } from '../combat/stats';
 import { ECONOMY, SENTINEL, towerCost } from '../data/defs';
-import { weaponDefFor, weaponSummary } from '../loot/equipment';
+import { equipmentModifiers, weaponDefFor, weaponSummary } from '../loot/equipment';
 import { MOVE } from '../player/Player';
 import type { ItemInstance, SlotId } from '../progression/items';
 import { SLOTS } from '../progression/items';
@@ -19,8 +19,12 @@ function Stat({ k, v, tone, stats, equipped, note }: { k: string; v: string; ton
 
 /** Calculated drone statistics from the real stat pipeline, with headline scores and per-stat sources. */
 export function DroneStats({ equipped }: { equipped: Record<SlotId, ItemInstance | null> }) {
-  const list = SLOTS.map((s) => equipped[s.id]);
-  const score = useScore(list);
+  const all = SLOTS.map((s) => equipped[s.id]);
+  const score = useScore(all);
+  // Stat sources follow the primary in hand: the holstered secondary's affixes apply only after a swap.
+  const list = SLOTS.filter((s) => s.id !== 'weapon2').map((s) => equipped[s.id]);
+  const w2 = weaponDefFor(equipped.weapon2);
+  const ws2 = w2 ? weaponSummary(w2, computeStats(equipmentModifiers(SLOTS.filter((s) => s.id !== 'weapon').map((s) => equipped[s.id])))) : null;
   const st = score.stats;
   const w = weaponDefFor(equipped.weapon);
   const ws = w ? weaponSummary(w, st) : null;
@@ -48,6 +52,17 @@ export function DroneStats({ equipped }: { equipped: Record<SlotId, ItemInstance
             <S k="COOLING" v={`${fmtNum(ws.cool)}%/s`} tone={d('coolRateMult')} stats={['coolRateMult']} />
             <S k="CRIT CHANCE" v={`${formatStat('critChance', st.critChance)} · weakpoints 100%`} tone={d('critChance')} stats={['critChance']} />
             <S k="CRIT DAMAGE" v={formatStat('critMultiplier', st.critMultiplier)} tone={d('critMultiplier')} stats={['critMultiplier']} />
+          </div>
+        </>
+      )}
+      {w2 && ws2 && (
+        <>
+          <div className="col-label">SECONDARY · {w2.name} · swap in the arena</div>
+          <div className="stat-grid">
+            <S k="DAMAGE / SHOT" v={fmtNum(ws2.damage)} note="With the secondary in hand (its own affixes and modules apply)." />
+            <S k="FIRE RATE" v={`${fmtNum(ws2.rate)}/s`} note="With the secondary in hand." />
+            <S k="EXPECTED DPS (CRITS)" v={fmtNum(ws2.dps)} note="Sustained damage per second with the secondary in hand." />
+            <S k="SHOTS TO OVERHEAT" v={String(ws2.shotsToOverheat)} note="The holstered weapon vents at full rate while the other one fires." />
           </div>
         </>
       )}

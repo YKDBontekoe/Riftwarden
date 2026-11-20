@@ -46,7 +46,7 @@ export const ri = (item: Pick<ItemInstance, 'rarity'>) => rarity(item.rarity).in
 export const RARITY_VALUE = [1, 1.8, 3.4, 6.5, 13, 26] as const;
 
 /** Relative value per category. */
-export const CATEGORY_VALUE: Record<Category, number> = { weapon: 1.25, armor: 1, shield: 1, reactor: 1, processor: 1, accessory: 0.9, module: 0.85 };
+export const CATEGORY_VALUE: Record<Category, number> = { weapon: 1.25, armor: 1, shield: 1, reactor: 1, processor: 1, accessory: 0.9, module: 0.85, ability: 1, ultimate: 1.15 };
 
 /** Affix roll quality 0..1 (tier position and roll inside the tier). 0.5 when there are no affixes. */
 export function affixQuality(item: Pick<ItemInstance, 'affixes'>): number {
@@ -96,7 +96,7 @@ export function sellPrice(item: Pick<ItemInstance, 'level' | 'rarity' | 'categor
 // ------------------------------------------------------------------ dismantling
 
 /** Category weight of dismantle output (weapons are mostly machinery). */
-export const CATEGORY_SALVAGE: Record<Category, number> = { weapon: 1.2, armor: 1.1, shield: 1, reactor: 1, processor: 0.9, accessory: 0.9, module: 0.8 };
+export const CATEGORY_SALVAGE: Record<Category, number> = { weapon: 1.2, armor: 1.1, shield: 1, reactor: 1, processor: 0.9, accessory: 0.9, module: 0.8, ability: 1, ultimate: 1.1 };
 /**
  * Advanced components per rarity before level growth (fractions floor away: a rare yields
  * its first component around item level 28, an epic always yields at least one).

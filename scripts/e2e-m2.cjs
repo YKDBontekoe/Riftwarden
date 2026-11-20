@@ -182,7 +182,7 @@ const savedItems = (p) => p.evaluate(() => JSON.parse(JSON.stringify(window.__ri
     const names = new Set(items.map((x) => x.name)).size;
     return { n: items.length, unique: uids.size === items.length, valid, cats: cats.size, rar, names };
   });
-  check('B1 live rolls: unique identities, valid values, all categories, varied names', b1.unique && b1.valid && b1.cats === 7 && b1.names > b1.n * 0.5, JSON.stringify(b1));
+  check('B1 live rolls: unique identities, valid values, all categories, varied names', b1.unique && b1.valid && b1.cats === 9 && b1.names > b1.n * 0.5, JSON.stringify(b1));
   check('B2 checkpoint/elite sources never roll below their minimum rarity', !b1.rar.common, JSON.stringify(b1.rar));
   const b3 = await p.evaluate(() => {
     const R = window.__rift;
@@ -266,7 +266,8 @@ const savedItems = (p) => p.evaluate(() => JSON.parse(JSON.stringify(window.__ri
     return p.evaluate(() => {
       const R = window.__rift;
       const g = R.game;
-      R.teleport(0, -20);
+      // Open south lane: a faster drone must not reach the reactor collider within the measured second.
+      R.teleport(0, -42);
       R.look(0, 0);
       R.advance(0.3);
       const z0 = g.player.position.z;

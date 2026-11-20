@@ -10,7 +10,7 @@ import { buildWeaponModel, type WeaponRig } from '../weapons/model';
 import { unlit } from '../visuals/materials';
 import { starSprite } from '../visuals/textures';
 import { MuzzleHeat } from '../fx/MuzzleHeat';
-import { HEAT_PACE } from './heat';
+import { HEAT_PACE, type HeatState } from './heat';
 import { shotFeel, yawPattern } from './weaponFeel';
 import type { CombatStats } from './stats';
 
@@ -101,6 +101,8 @@ export class Weapon {
   rig!: WeaponRig;
   anim!: WeaponAnimator;
   private buildKey = '';
+  /** Built viewmodels by look key, most recently used last (at most two). */
+  private models = new Map<string, { rig: WeaponRig; anim: WeaponAnimator }>();
   private flashMeshes: Mesh[] = [];
   private flashRoot: TransformNode;
   private flashMat: Material & { emissiveColor: Color3 };
@@ -153,7 +155,7 @@ export class Weapon {
   }
 
   /** Build/rebuild the model for an item (no-op if its look did not change). */
-  setItem(item: ItemInstance | null, def: WeaponDef, initial = false): void {
+  setItem(item: ItemInstance | null, def: WeaponDef, initial = false, quick = false): void {
     this.def = def;
     this.spread = Math.max(def.spreadMin, Math.min(def.spreadMax, this.spread));
     const build: WeaponBuild = item?.build ?? defaultBuild(def.id, def.family);
@@ -161,12 +163,27 @@ export class Weapon {
     const key = JSON.stringify([build, installed.map((m) => m?.uid ?? null), item?.rarity]);
     if (key === this.buildKey) return;
     this.buildKey = key;
-    this.rig?.dispose();
-    const ri = ['common', 'uncommon', 'rare', 'epic', 'legendary', 'exotic'].indexOf(item?.rarity ?? 'common');
-    this.rig = buildWeaponModel(this.scene, build, installed, { renderingGroupId: 1, name: 'vm' }, Math.max(0, ri));
-    this.rig.root.parent = this.vm;
+    // Up to two models stay built (primary + secondary), so swapping weapons never rebuilds geometry.
+    this.rig?.root.setEnabled(false);
+    let cached = this.models.get(key);
+    if (cached) this.models.delete(key);
+    else {
+      const ri = ['common', 'uncommon', 'rare', 'epic', 'legendary', 'exotic'].indexOf(item?.rarity ?? 'common');
+      const rig = buildWeaponModel(this.scene, build, installed, { renderingGroupId: 1, name: 'vm' }, Math.max(0, ri));
+      rig.root.parent = this.vm;
+      cached = { rig, anim: new WeaponAnimator(rig) };
+    }
+    this.models.set(key, cached);
+    for (const [k, m] of this.models) {
+      if (this.models.size <= 2) break;
+      if (k !== key) {
+        m.rig.dispose();
+        this.models.delete(k);
+      }
+    }
+    this.rig = cached.rig;
+    this.anim = cached.anim;
     this.modelKey.includedOnlyMeshes = this.rig.meshes;
-    this.anim = new WeaponAnimator(this.rig);
     const e = this.rig.energyBase;
     this.flashMat.emissiveColor.set(1.4 + e.r * 0.9, 1.4 + e.g * 0.9, 1.4 + e.b * 0.9);
     this.light.diffuse.copyFrom(e).scaleInPlace(0.4);
@@ -176,10 +193,24 @@ export class Weapon {
     this.beaming = false;
     this.flashRoot.parent = this.rig.muzzles[0] ?? this.rig.root;
     if (!initial) {
-      this.switchT = 1;
-      sfx.play('weaponSwitch');
+      // A quick swap (between the two carried weapons) is ready to fire after ~70 ms instead of ~200 ms.
+      this.switchT = quick ? 0.6 : 1;
+      sfx.play('weaponSwitch', quick ? { pitch: 1.25 } : undefined);
     }
     this.rig.root.setEnabled(this.visible);
+  }
+
+  /** Heat state of the weapon in hand (parked while it is holstered by a swap). */
+  heatState(): HeatState {
+    return { heat: this.heat, overheated: this.overheated };
+  }
+
+  restoreHeat(s: HeatState): void {
+    this.heat = s.heat;
+    this.overheated = s.overheated;
+    this.charge = 0;
+    this.burstLeft = 0;
+    this.beaming = false;
   }
 
   /** Swap the weapon parameters only (same model). */

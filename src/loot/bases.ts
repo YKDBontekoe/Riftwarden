@@ -2,6 +2,7 @@ import type { StatKey, StatOp } from '../combat/stats';
 import { BEAM_EMITTER, PLASMA_REPEATER, RAILGUN, type WeaponDef, type WeaponFamily } from '../data/defs';
 import type { Scaling } from './affixes';
 import type { Category } from './types';
+import type { AbilityKind } from '../abilities/defs';
 
 /**
  * Base item definitions (pure data). A base describes what a family of items is; the
@@ -42,6 +43,8 @@ export interface BaseDef {
   implicit: BaseStatDef[];
   weapon?: WeaponBase;
   module?: { type: string; compatible: Category[]; socketCost: number };
+  /** Ability / ultimate items: which ability the item grants (numbers in abilities/defs). */
+  ability?: AbilityKind;
   /** Restrict the affix pool (ids). Defaults to every affix compatible with the category. */
   affixes?: string[];
   icon: IconKind;
@@ -319,6 +322,14 @@ export const BASES: readonly BaseDef[] = [
     implicit: [{ stat: 'critMultiplier', op: 'add', range: [0.12, 0.2], scaling: 'none' }],
     icon: 'gem',
   },
+  // ---------------------------------------------------------------- abilities (two cooldown slots) and ultimates
+  { id: 'frag_charge', category: 'ability', name: 'Frag Charge', blurb: 'Lobbed charge: bursts on impact (or after 1.6 s) for heavy thermal blast damage that ignites.', weight: 10, implicit: [], ability: 'frag', icon: 'gem' },
+  { id: 'cryo_charge', category: 'ability', name: 'Cryo Charge', blurb: 'Lobbed charge: a frost burst that chills hard (freezes most frames) and deals light damage.', weight: 8, implicit: [], ability: 'cryo', icon: 'gem' },
+  { id: 'arc_pulse', category: 'ability', name: 'Arc Pulse', blurb: 'Instant electric pulse around the drone: shocks everything near, triple damage to shields.', weight: 8, implicit: [], ability: 'emp', icon: 'gem' },
+  { id: 'blink_drive', category: 'ability', name: 'Blink Drive', blurb: 'Instant jump along your aim (up to 10 m, stops at walls), keeps your momentum.', weight: 7, implicit: [], ability: 'blink', icon: 'gem' },
+  { id: 'aegis_cell', category: 'ability', name: 'Aegis Cell', blurb: 'Instant overshield and 50% damage resistance for 4 s.', weight: 7, implicit: [], ability: 'aegis', icon: 'gem' },
+  { id: 'orbital_lance', category: 'ultimate', name: 'Orbital Lance', blurb: 'Marks the aim point; 1.2 s later a lance from orbit erases everything in the zone.', weight: 10, implicit: [], ability: 'orbital', icon: 'core' },
+  { id: 'overdrive_core', category: 'ultimate', name: 'Overdrive Core', blurb: 'For a few seconds: +60% fire rate, no weapon heat, +20% movement speed.', weight: 8, implicit: [], ability: 'overdrive', icon: 'core' },
   // ---------------------------------------------------------------- weapon upgrade modules (M3)
   // Trade-off ranges are ordered worst -> best roll, so a better roll means a smaller penalty.
   {

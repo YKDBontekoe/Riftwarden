@@ -1,6 +1,6 @@
 import { storageExpansionCost, STORAGE_EXPANSION } from '../../loot/economy';
 import { rarity } from '../../loot/rarity';
-import { fitsSlot, getSlot, type ItemInstance, SLOT_IDS, type SlotId, slotsFor } from '../items';
+import { fitsSlot, getSlot, type ItemInstance, SLOT_IDS, type SlotId, defaultSlot } from '../items';
 import type { Rewards, RunResult } from '../run';
 import { CHECKPOINT_INTERVAL, unlocksNextTier } from '../tiers';
 import { dismantleYield, MAX_BALANCE } from '../../economy/config';
@@ -223,7 +223,7 @@ export function equipFromStorage(data: SaveData, uid: string, slot?: SlotId): bo
   const idx = data.storage.uids.indexOf(uid);
   const item = itemByUid(data, uid);
   if (idx < 0 || !item) return false;
-  const target = slot ?? slotsFor(item.category).find((s) => !data.loadout[s]) ?? slotsFor(item.category)[0];
+  const target = slot ?? defaultSlot(item.category, data.loadout);
   if (!target || !fitsSlot(item, target)) return false;
   data.storage.uids.splice(idx, 1);
   const prev = data.loadout[target];

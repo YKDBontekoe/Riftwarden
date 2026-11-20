@@ -208,6 +208,13 @@ async function profileRows(id) {
       await sleep(250);
       check('F3 rapid activations never produce an invalid time scale', [0.35, 1].some((v) => Math.abs(A.snap.tac[2] - v) < 0.7) && A.snap.tac[2] > 0 && A.snap.tac[2] <= 1, `${A.snap.tac} ok=${spam.filter((r) => r.ok).length}`);
       if (A.snap.tac[1]) await A.act({ a: 'tactical' });
+      // Weapon swap: validated per player against the server-side loadout (bots deploy without a secondary).
+      const sw = await A.act({ a: 'swap', slot: 'weapon2' });
+      check('F4 swapping to an empty secondary slot is refused', !sw.ok && /no weapon/i.test(sw.reason ?? ''), JSON.stringify(sw));
+      const sw1 = await A.act({ a: 'swap', slot: 'weapon' });
+      check('F5 swapping to the weapon in hand is accepted as a no-op', sw1.ok, JSON.stringify(sw1));
+      const ab = await A.act({ a: 'ability', slot: 'ultimate', o: [0, 2, 0], d: [0, 0, 1] });
+      check('F6 an ability act without an equipped ability is refused by the server', !ab.ok && /no ability/i.test(ab.reason ?? ''), JSON.stringify(ab));
       // Combat: the heartbeat fires real shot claims; clear wave 1.
       const w1 = A.snap.w[0];
       await A.act({ a: 'startWave' });

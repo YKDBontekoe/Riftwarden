@@ -26,6 +26,7 @@ export type ReplicatedEvent =
   | readonly ['ek', number, Flag]
   | readonly ['er', number]
   | readonly ['ed', number, Flag]
+  | readonly ['el', number, number] // walker frame lost-part mask (limbs.ts bits)
   // towers
   | readonly ['T+', number, TowerConfig, V3, number, string, string]
   | readonly ['T-', number]
@@ -71,6 +72,7 @@ const SHAPES: { [K in EventTag]: { fields: Check[]; optional?: number } } = {
   ek: { fields: [num, flag] },
   er: { fields: [num] },
   ed: { fields: [num, flag] },
+  el: { fields: [num, num] },
   'T+': { fields: [num, obj, v3, num, str, str] },
   'T-': { fields: [num] },
   Tc: { fields: [num, obj, num] },

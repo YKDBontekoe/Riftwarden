@@ -76,7 +76,7 @@ export function withRecorder<T>(rec: Recorder, fn: () => T): T {
   }
 }
 
-const PERSONAL_UI = new Set(['hit', 'damageNumber', 'hurt', 'loot', 'chain']);
+const PERSONAL_UI = new Set(['hit', 'damageNumber', 'hurt', 'loot', 'chain', 'limb']);
 let patched = false;
 export function patchGlobals(): void {
   if (patched) return;
@@ -174,8 +174,11 @@ export function capturePresentation(g: PresentationSource, rec: Recorder): void 
   };
   const damage = g.enemies.damage.bind(g.enemies);
   g.enemies.damage = (e, ...rest) => {
+    const lost = e.limbsLost;
     const res = rec.quiet(() => damage(e, ...rest));
     if (res && res.toShield + res.toHp > 0) rec.push(['ed', e.id, res.toShield > 0 ? 1 : 0]);
+    // Shoot-off parts: replicas knock off every newly lost part of the mask.
+    if (e.limbsLost !== lost) rec.push(['el', e.id, e.limbsLost]);
     return res;
   };
   // Evolution / gates.

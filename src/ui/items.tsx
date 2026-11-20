@@ -10,14 +10,14 @@ import { STAT_HELP } from './statHelp';
 import type { StatKey } from '../combat/stats';
 import { RARITIES, rarity } from '../loot/rarity';
 import { CATEGORY_LABEL, type Category, type ItemInstance } from '../loot/types';
-import { getSlot, type SlotId, SLOTS, slotsFor } from '../progression/items';
+import { getSlot, type SlotId, SLOTS, slotsFor, defaultSlot } from '../progression/items';
 import { fmtNum } from '../combat/stats';
 import { buildComponents, FAMILIES, SOCKET_LABEL } from '../weapons/build';
 import { describeEffects } from '../weapons/components';
 import { moduleTypeDef } from '../weapons/modules';
 import { enhanceLevel, enhanceStatMult, maxEnhance } from '../economy/config';
 
-const CATEGORY_ICON: Record<Category, IconKind> = { weapon: 'rifle', armor: 'plate', shield: 'ring', reactor: 'core', processor: 'chip', accessory: 'gem', module: 'cube' };
+const CATEGORY_ICON: Record<Category, IconKind> = { weapon: 'rifle', armor: 'plate', shield: 'ring', reactor: 'core', processor: 'chip', accessory: 'gem', module: 'cube', ability: 'gem', ultimate: 'core' };
 
 /** Inline SVG glyph per base icon kind (matches the pickup holograms). */
 export function ItemGlyph({ item, size = 34 }: { item: Pick<ItemInstance, 'defId' | 'rarity' | 'category'>; size?: number }) {
@@ -404,7 +404,7 @@ type Filter = 'all' | Category | 'unsecured';
 type Sort = 'rarity' | 'level' | 'newest' | 'name';
 type ViewSort = Sort | 'impact';
 
-const FILTERS: Filter[] = ['all', 'weapon', 'armor', 'shield', 'reactor', 'processor', 'accessory', 'module'];
+const FILTERS: Filter[] = ['all', 'weapon', 'armor', 'shield', 'reactor', 'processor', 'accessory', 'ability', 'ultimate', 'module'];
 
 export function sortEntries(list: InvEntry[], sort: Sort): InvEntry[] {
   const r = (e: InvEntry) => rarity(e.item.rarity).index;
@@ -466,8 +466,7 @@ export function InventoryView({ entries, equipped, actions, extraFilter, header 
     const m = new Map<string, SwapImpact>();
     for (const e of entries) {
       if (e.equippedIn || e.item.category === 'module' || !baseDef(e.item.defId)) continue;
-      const slots = slotsFor(e.item.category);
-      const s = slots.find((x) => !equipped[x]) ?? slots[0];
+      const s = defaultSlot(e.item.category, equipped);
       if (s) m.set(e.item.uid, swapImpact(equippedList, e.item, equipped[s], base));
     }
     return m;
@@ -484,7 +483,7 @@ export function InventoryView({ entries, equipped, actions, extraFilter, header 
   const item = selected?.item ?? null;
   const shown = shownEntry?.item ?? null;
   const slots = shown ? slotsFor(shown.category) : [];
-  const slot = targetSlot && slots.includes(targetSlot) ? targetSlot : (slots.find((s) => !equipped[s]) ?? slots[0] ?? null);
+  const slot = targetSlot && slots.includes(targetSlot) ? targetSlot : shown ? defaultSlot(shown.category, equipped) : null;
   const against = slot ? equipped[slot] : null;
   const counts = useMemo(() => {
     const m: Record<string, number> = { all: entries.length, unsecured: entries.filter((e) => e.status === 'unsecured').length };

@@ -1,4 +1,4 @@
-import { fitsSlot, getSlot, type SlotId, SLOT_IDS, slotsFor } from '../progression/items';
+import { fitsSlot, getSlot, type SlotId, SLOT_IDS, defaultSlot } from '../progression/items';
 import type { RunLedger } from '../progression/run';
 import type { ItemInstance } from './types';
 
@@ -75,18 +75,18 @@ export class RunInventory {
     return uid ? this.find(uid) : null;
   }
 
-  equippedItems(): ItemInstance[] {
-    return SLOT_IDS.map((s) => this.equipped(s)).filter((i): i is ItemInstance => !!i);
+  /** Equipped items in slot order; `except` leaves one slot out (the holstered weapon in the arena). */
+  equippedItems(except?: SlotId): ItemInstance[] {
+    return SLOT_IDS.filter((s) => s !== except).map((s) => this.equipped(s)).filter((i): i is ItemInstance => !!i);
   }
 
   slotOf(uid: string): SlotId | null {
     return SLOT_IDS.find((s) => this.loadout[s] === uid) ?? null;
   }
 
-  /** Default target slot: an empty compatible slot, else the first compatible one. */
+  /** Default target slot (`defaultSlot`: weapons -> primary, others -> first empty compatible slot). */
   targetSlot(item: ItemInstance): SlotId | null {
-    const slots = slotsFor(item.category);
-    return slots.find((s) => !this.loadout[s]) ?? slots[0] ?? null;
+    return defaultSlot(item.category, this.loadout);
   }
 
   /** Equip from the run inventory. `allowed` = equipment changes are permitted right now. */

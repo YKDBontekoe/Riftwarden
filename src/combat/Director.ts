@@ -282,7 +282,11 @@ export class Director {
     // M6 run statistics: who dealt it (towers incl. tower-caused reactions; hazards are the environment).
     if (r.source.towerId !== undefined || r.source.kind === 'tower') this.dealt.tower += dealt;
     else if (r.source.id === 'hazard') this.dealt.environment += dealt;
-    else this.dealt.player += dealt;
+    else {
+      this.dealt.player += dealt;
+      // The drone's own damage (weapon, its effects, abilities) charges the ultimate; the ultimate itself does not.
+      if (r.source.id !== 'ability:orbital') this.g.chargeUltimate(dealt);
+    }
     this.dpsAcc[r.source.kind] += dealt;
     if (r.source.towerId !== undefined) {
       const t = this.g.turrets.byId(r.source.towerId);

@@ -7,7 +7,7 @@ import { craftCostFor, fabricationLevel, previewDismantle, protectionReason, ref
 import { fmtNum } from '../combat/stats';
 import { rarity, RARITIES } from '../loot/rarity';
 import { CATEGORY_LABEL, type Category, type ItemInstance } from '../loot/types';
-import { SLOTS, slotsFor } from '../progression/items';
+import { defaultSlot, SLOTS, slotsFor } from '../progression/items';
 import { swapImpact } from '../loot/loadoutScore';
 import { useScore } from './compare';
 import { type SaveData } from '../progression/save';
@@ -140,7 +140,7 @@ function BuyPane({ save, merchant, tx }: { save: SaveData; merchant: MerchantId;
   const base = useScore(eqList);
   const impactOf = (it: ItemInstance) => {
     if (it.category === 'module') return null;
-    const s = slotsFor(it.category).find((x) => !equipped[x]) ?? slotsFor(it.category)[0];
+    const s = defaultSlot(it.category, equipped);
     return s ? swapImpact(eqList, it, equipped[s], base) : null;
   };
   const entries = merchant === 'equipment' ? save.market.equipment : save.market.modules;
@@ -150,11 +150,11 @@ function BuyPane({ save, merchant, tx }: { save: SaveData; merchant: MerchantId;
   const entry = entries.find((e) => e.id === sel) ?? list.find((e) => !e.sold) ?? list[0] ?? null;
   const item = entry?.item ?? null;
   const price = item ? buyPrice(item, merchant) : 0;
-  const slot = item ? (slotsFor(item.category).find((s) => !equipped[s]) ?? slotsFor(item.category)[0]) : null;
+  const slot = item ? defaultSlot(item.category, equipped) : null;
   const bays = save.storage.capacity - save.storage.uids.length;
   const expensive = !!item && (price >= save.resources.credits * 0.4 || rarity(item.rarity).index >= 3);
   const rc = refreshCost(save);
-  const cats = merchant === 'equipment' ? (['weapon', 'armor', 'shield', 'reactor', 'processor', 'accessory'] as Category[]) : [];
+  const cats = merchant === 'equipment' ? (['weapon', 'armor', 'shield', 'reactor', 'processor', 'accessory', 'ability', 'ultimate'] as Category[]) : [];
   return (
     <div className="market-grid">
       <div className="mk-list-col">
@@ -241,7 +241,7 @@ function SellPane({ save, modules, tx }: { save: SaveData; modules: boolean; tx:
   const entry = all.find((e) => e.item.uid === sel) ?? list.find((e) => !protectionReason(save, e.item.uid)) ?? list[0] ?? null;
   const item = entry?.item ?? null;
   const why = item ? protectionReason(save, item.uid) : null;
-  const cats = modules ? [] : (['weapon', 'armor', 'shield', 'reactor', 'processor', 'accessory'] as Category[]);
+  const cats = modules ? [] : (['weapon', 'armor', 'shield', 'reactor', 'processor', 'accessory', 'ability', 'ultimate'] as Category[]);
   return (
     <div className="market-grid">
       <div className="mk-list-col">
@@ -363,7 +363,7 @@ export function SalvageTerminal({ flow, close }: { flow: Flow; close: () => void
     });
   };
   const pickRarity = (rid: string) => setPicked(new Set([...valid, ...list.filter((e) => e.item.rarity === rid && !protectionReason(save, e.item.uid)).map((e) => e.item.uid)]));
-  const cats = ['weapon', 'armor', 'shield', 'reactor', 'processor', 'accessory', 'module'] as Category[];
+  const cats = ['weapon', 'armor', 'shield', 'reactor', 'processor', 'accessory', 'ability', 'ultimate', 'module'] as Category[];
   return (
     <Shell code="RC-07" title="RECLAMATION PRESS" sub="Dismantle equipment into salvage and advanced components" close={close} wide accent="amber">
       <div className="market-head">

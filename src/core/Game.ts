@@ -1,5 +1,4 @@
 import {
-  type AbstractMesh,
   Color3,
   Color4,
   DirectionalLight,
@@ -16,28 +15,31 @@ import {
 } from '@babylonjs/core';
 import { treeModifiers, treeRules } from '../progression/skilltree';
 import { type Emitter, sfx } from '../audio/Sfx';
-import { mulberry32, rollDamage } from '../combat/damage';
+import { mulberry32 } from '../combat/damage';
 import { Director } from '../combat/Director';
-import { isChilled, speedFactor } from '../combat/status';
-import { hashRunSeed, type OfferContext, UP, type UpgradeDef, upgradeDef } from '../roguelite/upgrades';
-import { availableParts, configCost, DEFAULT_CONFIG, levelCost, MAX_TOWER_LEVEL, partDef, STARTER_TECH, swapCost, type TowerConfig, type TowerSlot } from '../towers/components';
+import { hashRunSeed, type OfferContext, type UpgradeDef, upgradeDef } from '../roguelite/upgrades';
+import { configCost, DEFAULT_CONFIG, partDef, STARTER_TECH, type TowerConfig, type TowerSlot } from '../towers/components';
 import { BASE_STATS, type CombatStats, computeStats, type StatModifier } from '../combat/stats';
-import { type ShotOutcome, type ShotRequest, type SurfaceImpact, Weapon, type WeaponFxHooks } from '../combat/Weapon';
+import { type ShotOutcome, type ShotRequest, Weapon, type WeaponFxHooks } from '../combat/Weapon';
 import type { WeaponFamily } from '../data/defs';
 import { WeaponFx } from '../fx/WeaponFx';
 import { ECONOMY } from '../data/defs';
 import { DevTools } from '../arena/DevTools';
+import { type CombatHost, PlayerCombat } from '../arena/PlayerCombat';
+import { type WeaponSlot, WeaponSlots, type WeaponSlotsHost } from '../arena/WeaponSlots';
+import { Abilities, type AbilityHost } from '../arena/Abilities';
+import type { AbilitySlot } from '../abilities/defs';
+import { type LootHost, LootPickups } from '../arena/LootPickups';
+import { type TowerEdit, type TowerHost, TowerControl } from '../arena/TowerControl';
 import { planBlast } from '../combat/blast';
 import { hintFor, lootTargetInfo, runHud } from '../ui/hudModel';
-import { planBuildConfig, planRefit } from '../towers/refit';
 import { rollLoot } from '../loot/roll';
 import { createSunShadows } from '../arena/shadows';
 import { CORE_BEHAVIORS } from '../enemies/coreBehaviors';
-import { pickInteractable } from '../home/interaction';
 import { DROP_SOURCES, type DropSourceId } from '../loot/drops';
 import { equipmentModifiers, weaponDefFor } from '../loot/equipment';
 import { flatScale, hashSeed } from '../loot/generate';
-import { convertsToSalvage, LootField, type Pickup, PICKUP_RANGE } from '../loot/LootField';
+import { convertsToSalvage, LootField, type Pickup } from '../loot/LootField';
 import { rarity } from '../loot/rarity';
 import { scrapValue } from '../loot/economy';
 import { RUN_INCOME } from '../economy/config';
@@ -45,8 +47,8 @@ import { RunInventory } from '../loot/runInventory';
 import type { ItemInstance } from '../loot/types';
 import type { SlotId } from '../progression/items';
 import { Construction } from '../defense/Construction';
-import { type Turret, type TurretContext, type TurretHitboxMeta, TurretManager } from '../defense/Turrets';
-import { type Behavior, type Enemy, type EnemyContext, type EnemyHitboxMeta, EnemyManager } from '../enemies/EnemyManager';
+import { type Turret, type TurretContext, TurretManager } from '../defense/Turrets';
+import { type Behavior, type Enemy, type EnemyContext, EnemyManager } from '../enemies/EnemyManager';
 import { Effects } from '../fx/Effects';
 import { MOVE, Player } from '../player/Player';
 import { type HitKind, hudStore, type LootTargetInfo, type Screen, uiEvents } from '../ui/store';
@@ -59,8 +61,8 @@ import { MoodDirector } from '../visuals/moodDirector';
 import { Kit } from '../visuals/kit';
 import { createPalette, type Palette } from '../visuals/materials';
 import { buildReactor, type ReactorRig } from '../visuals/models';
-import { arenaDeckWetness } from '../visuals/textures';
 import { WaveManager } from '../waves/WaveManager';
+import type { WaveDef } from '../waves/waves';
 import { earlyCallBonus } from '../waves/pace';
 import { ARENA, type ArenaLayout, type GateId } from '../world/layout';
 import { EnemyNavigator } from '../enemies/navigation';
@@ -87,15 +89,9 @@ import { TacticalEnergy, Wallet } from './tactical';
 import { type TutorialHost, TutorialDirector } from './TutorialDirector';
 
 const TMP = new Vector3();
-/** Seconds between kills that keep a kill chain going. */
-const KILL_CHAIN_WINDOW = 2.5;
 /** Sun intensity (directional, range-free). */
 const SUN = 1.85;
 const TMP2 = new Vector3();
-/** Arc Conductor reach (m): enemies on the lanes are spread a few metres apart. */
-export const ARC_RANGE = 12;
-/** M7: Pulse Capacitor splash radius (m). */
-export const PULSE_SPLASH = 3;
 
 /** Callbacks into the session flow (persistence and scene transitions live there). */
 export interface ArenaHooks {
@@ -139,8 +135,6 @@ export class Game {
   readonly weapon: Weapon;
   readonly fx: Effects;
   readonly wfx: WeaponFx;
-  /** Arc Conductor procs this run (automation/tests). */
-  arcs = 0;
   readonly enemies: EnemyManager;
   readonly turrets: TurretManager;
   readonly construction: Construction;
@@ -194,6 +188,8 @@ export class Game {
   protected lootRand: () => number;
   protected lootCounter = 0;
   lootTarget: Pickup | null = null;
+  /** Loot placement, landing/pickup presentation and targeting. */
+  protected readonly pickups = new LootPickups(this.lootHost());
   /** Bumped on every inventory/loadout change so UI can refresh without polling. */
   inventoryVersion = 0;
   /** Items granted by the most recent checkpoint cache (checkpoint panel). */
@@ -216,12 +212,19 @@ export class Game {
   hitstopEnabled = true;
   protected hitstopT = 0;
   protected hitstopScale = 1;
+  private wasOverheated = false;
+  /** The player's weapon combat (hit resolution, damage entry, kill feel, shot visuals). */
+  protected readonly combat = new PlayerCombat(this.combatHost());
+  /** Primary + secondary weapon: which one is in hand, the holstered one's heat. */
+  readonly weaponSlots = new WeaponSlots(this.weaponSlotsHost());
+  /** Ability I/II and the ultimate (the co-op server keeps one per avatar and swaps it in with `as`). */
+  abilities = new Abilities(this.abilityHost());
   protected kills = 0;
   protected turretsBuilt = 0;
   protected defeatT = 0;
   protected hudT = 0;
-  protected inspected: Turret | null = null;
-  protected recycleT = 0;
+  /** Tower inspection, recycle/repair, refit hotkeys and the build template. */
+  protected readonly towers = new TowerControl(this.towerHost());
   protected perfOn = false;
   protected instrumentation: SceneInstrumentation | null = null;
   protected fpsSmooth = 60;
@@ -370,7 +373,7 @@ export class Game {
     this.turrets = new TurretManager(scene, this.kit, this.pal);
     this.construction = new Construction(scene, (cfg, u) => this.turrets.build(cfg, 1, u), this.pal, this.layout);
     this.loot = new LootField(scene, this.kit, this.pal);
-    this.loot.onLand = (p) => this.onLootLanded(p);
+    this.loot.onLand = (p) => this.pickups.landed(p);
     this.inventory = new RunInventory(cfg.loadout, cfg.run);
     this.lootRand = mulberry32(hashSeed(cfg.run.id));
     this.towerTech = new Set([...STARTER_TECH, ...(cfg.towerTech ?? [])]);
@@ -411,7 +414,6 @@ export class Game {
       panFor: (p) => this.panFor(p),
     };
 
-    const run = cfg.run;
     this.waves = new WaveManager({
       spawn: (s, w) => {
         let hp = w.hpMult * (s.hpMult ?? 1);
@@ -425,70 +427,9 @@ export class Game {
         this.arenaVisuals.gateSpawned(s.gate, this.enemies.spawn(s.kind, s.gate, this.layout, hp, dmg, w.speedMult, { mods: s.mods, tag: s.tag, encounter: s.encounter, ctx: this.enemyCtx }).path[0]);
       },
       aliveCount: () => this.enemies.count,
-      onWaveStart: (w) => {
-        this.checkpointOpen = false;
-        this.survival.start(w);
-        // Armor is measured against the incoming wave's level.
-        this.player.applyStats(this.stats, this.attackerScale);
-        sfx.play('waveStart');
-        if (!w.plan?.event && !w.plan?.boss) uiEvents.emit('banner', { title: `WAVE ${w.number}`, sub: `${w.spawns.length} hostiles inbound${w.plan && w.number > 3 ? ` · ${this.survival.hud().theme.toLowerCase()}` : ''}`, tone: 'orange' });
-      },
-      onWaveCleared: (w) => {
-        this.survival.cleared(w);
-        this.upgradeDue = true;
-        this.director.bus.emit({ type: 'waveCleared', chain: this.director.bus.newChain(), source: { kind: 'effect', id: 'wave' }, value: w.number });
-        this.wallet.earn(w.clearReward);
-        uiEvents.emit('coresGained', w.clearReward);
-        this.reactorHp = Math.min(ECONOMY.reactorMaxHp, this.reactorHp + ECONOMY.reactorMaxHp * ECONOMY.reactorRepairPerWave);
-        sfx.play('waveClear');
-        const salvage = Math.round((ECONOMY.salvageWaveBase + w.number * ECONOMY.salvagePerWave) * cfg.tier.salvageMult);
-        const credits = Math.round(RUN_INCOME.waveCredits(w.number) * cfg.tier.salvageMult);
-        run.collect({ salvage, credits });
-        uiEvents.emit('salvageGained', salvage);
-        uiEvents.emit('creditsGained', credits);
-        run.waveCleared(w.number);
-        // Wave reward drop lands on the reactor apron.
-        this.dropLoot('wave', new Vector3(0, 3, -4.2), w.number);
-        // Lifetime rule: uncollected loot from wave N expires once wave N+2 is cleared.
-        const expired = this.loot.expire(w.number);
-        if (expired.length) {
-          this.dropsExpired += expired.length;
-          if (this.lootTarget && expired.includes(this.lootTarget)) this.lootTarget = null;
-          uiEvents.emit('loot', { kind: 'expired', count: expired.length, name: expired.length === 1 ? expired[0].item.name : `${expired.length} uncollected drops`, rarity: expired.reduce((m, p) => (rarity(p.item.rarity).index > rarity(m).index ? p.item.rarity : m), expired[0].item.rarity), level: 0, category: '' });
-        }
-        let banked = null;
-        if (isCheckpointWave(w.number)) {
-          // Milestone cache: granted with the checkpoint and banked together with everything collected.
-          this.lastCache = this.rollItems('checkpoint', w.number);
-          // Milestone: credits and advanced components (tier scaled).
-          const cpCredits = Math.round(RUN_INCOME.checkpointCredits(w.number) * cfg.tier.salvageMult);
-          const cpComponents = RUN_INCOME.checkpointComponents(w.number, cfg.tier.id);
-          run.collect({ items: this.lastCache, credits: cpCredits, components: cpComponents });
-          uiEvents.emit('creditsGained', cpCredits);
-          uiEvents.emit('componentsGained', cpComponents);
-          banked = run.bank(w.number);
-        }
-        if (banked) {
-          this.lastBankSaved = cfg.hooks.bank(w.number, banked);
-          this.inventoryVersion++;
-          const n = banked.items.length;
-          if (this.lastBankSaved) {
-            sfx.play('bank');
-            uiEvents.emit('banner', { title: 'CHECKPOINT SECURED', sub: `Wave ${w.number} cleared · ${banked.salvage} salvage · ${banked.credits} cr · ${banked.components} comp${n ? ` · ${n} item${n === 1 ? '' : 's'}` : ''} banked to HQ`, tone: 'cyan' });
-          } else if (cfg.run.survival.dev) uiEvents.emit('banner', { title: 'CHECKPOINT · DEVELOPMENT SESSION', sub: 'Development tools were used this run: nothing is banked to HQ', tone: 'white' });
-          else uiEvents.emit('banner', { title: 'CHECKPOINT · SAVE FAILED', sub: 'Rewards are held by the run but could not be written to storage yet', tone: 'red' });
-        } else uiEvents.emit('banner', { title: `WAVE ${w.number} CLEARED`, sub: `+${w.clearReward} cores · +${salvage} salvage · +${credits} cr · reactor repaired`, tone: 'cyan' });
-      },
-      onPrepStart: (w) => {
-        this.arenaVisuals.prepareWave(w.spawns.map((entry) => entry.gate));
-        this.survival.prep(w);
-        run.waveReached(w.number);
-        if (w.number > 1 && run.atCheckpoint) this.checkpointOpen = true;
-        // Mandatory upgrade choice first (the prep countdown is frozen while it is open), then the checkpoint choice.
-        if (this.skipUpgrades) this.upgradeDue = false;
-        if (this.upgradeDue && w.number > 1) this.openUpgrade();
-        else if (this.checkpointOpen) this.openCheckpoint();
-      },
+      onWaveStart: (w) => this.waveStarted(w),
+      onWaveCleared: (w) => this.waveCleared(w),
+      onPrepStart: (w) => this.prepStarted(w),
     }, cfg.tier, (n) => this.planner.compose(n));
     this.arenaVisuals.setSealed('south', true);
     this.atmosphere.setGateOpen(3, false);
@@ -536,6 +477,76 @@ export class Game {
         if (this.screen !== 'playing' && this.screen !== 'defeat') this.setScreen('playing');
       },
     });
+  }
+
+  // ---------------------------------------------------------------- wave lifecycle
+
+  protected waveStarted(w: WaveDef): void {
+    this.checkpointOpen = false;
+    this.survival.start(w);
+    // Armor is measured against the incoming wave's level.
+    this.player.applyStats(this.stats, this.attackerScale);
+    sfx.play('waveStart');
+    if (!w.plan?.event && !w.plan?.boss) uiEvents.emit('banner', { title: `WAVE ${w.number}`, sub: `${w.spawns.length} hostiles inbound${w.plan && w.number > 3 ? ` · ${this.survival.hud().theme.toLowerCase()}` : ''}`, tone: 'orange' });
+  }
+
+  /** Wave cleared: rewards, reactor repair, wave drop, loot lifetime, checkpoint banking. */
+  protected waveCleared(w: WaveDef): void {
+    this.survival.cleared(w);
+    this.upgradeDue = true;
+    this.director.bus.emit({ type: 'waveCleared', chain: this.director.bus.newChain(), source: { kind: 'effect', id: 'wave' }, value: w.number });
+    this.wallet.earn(w.clearReward);
+    uiEvents.emit('coresGained', w.clearReward);
+    this.reactorHp = Math.min(ECONOMY.reactorMaxHp, this.reactorHp + ECONOMY.reactorMaxHp * ECONOMY.reactorRepairPerWave);
+    sfx.play('waveClear');
+    const salvage = Math.round((ECONOMY.salvageWaveBase + w.number * ECONOMY.salvagePerWave) * this.cfg.tier.salvageMult);
+    const credits = Math.round(RUN_INCOME.waveCredits(w.number) * this.cfg.tier.salvageMult);
+    this.cfg.run.collect({ salvage, credits });
+    uiEvents.emit('salvageGained', salvage);
+    uiEvents.emit('creditsGained', credits);
+    this.cfg.run.waveCleared(w.number);
+    // Wave reward drop lands on the reactor apron.
+    this.dropLoot('wave', new Vector3(0, 3, -4.2), w.number);
+    // Lifetime rule: uncollected loot from wave N expires once wave N+2 is cleared.
+    const expired = this.loot.expire(w.number);
+    if (expired.length) {
+      this.dropsExpired += expired.length;
+      if (this.lootTarget && expired.includes(this.lootTarget)) this.lootTarget = null;
+      uiEvents.emit('loot', { kind: 'expired', count: expired.length, name: expired.length === 1 ? expired[0].item.name : `${expired.length} uncollected drops`, rarity: expired.reduce((m, p) => (rarity(p.item.rarity).index > rarity(m).index ? p.item.rarity : m), expired[0].item.rarity), level: 0, category: '' });
+    }
+    let banked = null;
+    if (isCheckpointWave(w.number)) {
+      // Milestone cache: granted with the checkpoint and banked together with everything collected.
+      this.lastCache = this.rollItems('checkpoint', w.number);
+      // Milestone: credits and advanced components (tier scaled).
+      const cpCredits = Math.round(RUN_INCOME.checkpointCredits(w.number) * this.cfg.tier.salvageMult);
+      const cpComponents = RUN_INCOME.checkpointComponents(w.number, this.cfg.tier.id);
+      this.cfg.run.collect({ items: this.lastCache, credits: cpCredits, components: cpComponents });
+      uiEvents.emit('creditsGained', cpCredits);
+      uiEvents.emit('componentsGained', cpComponents);
+      banked = this.cfg.run.bank(w.number);
+    }
+    if (banked) {
+      this.lastBankSaved = this.cfg.hooks.bank(w.number, banked);
+      this.inventoryVersion++;
+      const n = banked.items.length;
+      if (this.lastBankSaved) {
+        sfx.play('bank');
+        uiEvents.emit('banner', { title: 'CHECKPOINT SECURED', sub: `Wave ${w.number} cleared · ${banked.salvage} salvage · ${banked.credits} cr · ${banked.components} comp${n ? ` · ${n} item${n === 1 ? '' : 's'}` : ''} banked to HQ`, tone: 'cyan' });
+      } else if (this.cfg.run.survival.dev) uiEvents.emit('banner', { title: 'CHECKPOINT · DEVELOPMENT SESSION', sub: 'Development tools were used this run: nothing is banked to HQ', tone: 'white' });
+      else uiEvents.emit('banner', { title: 'CHECKPOINT · SAVE FAILED', sub: 'Rewards are held by the run but could not be written to storage yet', tone: 'red' });
+    } else uiEvents.emit('banner', { title: `WAVE ${w.number} CLEARED`, sub: `+${w.clearReward} cores · +${salvage} salvage · +${credits} cr · reactor repaired`, tone: 'cyan' });
+  }
+
+  protected prepStarted(w: WaveDef): void {
+    this.arenaVisuals.prepareWave(w.spawns.map((entry) => entry.gate));
+    this.survival.prep(w);
+    this.cfg.run.waveReached(w.number);
+    if (w.number > 1 && this.cfg.run.atCheckpoint) this.checkpointOpen = true;
+    // Mandatory upgrade choice first (the prep countdown is frozen while it is open), then the checkpoint choice.
+    if (this.skipUpgrades) this.upgradeDue = false;
+    if (this.upgradeDue && w.number > 1) this.openUpgrade();
+    else if (this.checkpointOpen) this.openCheckpoint();
   }
 
   // ---------------------------------------------------------------- M7 onboarding
@@ -634,8 +645,7 @@ export class Game {
    */
   refreshEquipment(): void {
     this.rebuildStats();
-    const item = this.inventory.equipped('weapon');
-    const w = weaponDefFor(item);
+    const { item, def: w } = this.weaponSlots.sync();
     if (w) {
       this.weapon.setItem(item, w);
       this.wfx.setColor(this.weapon.rig.energyBase);
@@ -657,7 +667,7 @@ export class Game {
    * Event-driven (equipment change, upgrade picked, buff gained/expired), never per frame.
    */
   rebuildStats(): void {
-    const mods = [...equipmentModifiers(this.inventory.equippedItems()), ...this.treeMods, ...this.modifiers, ...this.director.build.modifiers(), ...this.director.buffModifiers()];
+    const mods = [...equipmentModifiers(this.inventory.equippedItems(this.weaponSlots.inactive)), ...this.treeMods, ...this.modifiers, ...this.director.build.modifiers(), ...this.director.buffModifiers()];
     Object.assign(this.stats, computeStats(mods));
     this.player.applyStats(this.stats, this.attackerScale);
     this.tactical.rechargeMult = this.stats.tacticalRechargeMult;
@@ -741,76 +751,38 @@ export class Game {
     return p;
   }
 
-  /** A walkable landing point near `at` (Havok ray down; never on top of tall geometry). */
-  protected groundPoint(at: Vector3): Vector3 {
-    const physics = this.scene.getPhysicsEngine() as PhysicsEngineV2 | null;
-    for (let attempt = 0; attempt < 6; attempt++) {
-      const a = Math.random() * Math.PI * 2;
-      const d = attempt === 5 ? 0 : 1 + Math.random() * 1.8;
-      const x = at.x + Math.cos(a) * d;
-      const z = at.z + Math.sin(a) * d;
-      if (!physics) return new Vector3(x, 0, z);
-      physics.raycastToRef(TMP.set(x, Math.max(at.y, 0) + 2.5, z), TMP2.set(x, -3, z), this.physResult, ENV_QUERY);
-      if (!this.physResult.hasHit) continue;
-      const y = this.physResult.hitPointWorld.y;
-      if (y > at.y + 1.2 || this.physResult.hitNormalWorld.y < 0.7) continue;
-      // Not inside a wall: the hologram's focus must be visible from slightly above.
-      return new Vector3(x, y, z);
-    }
-    return new Vector3(at.x, 0, at.z);
+  private lootHost(): LootHost {
+    const g = this;
+    return {
+      get scene() { return g.scene; }, // prettier-ignore
+      get loot() { return g.loot; }, // prettier-ignore
+      get fx() { return g.fx; }, // prettier-ignore
+      blocked: (a, b) => !this.los(a, b),
+      panFor: (p) => this.panFor(p),
+    };
   }
 
-  protected onLootLanded(p: Pickup): void {
-    const r = rarity(p.item.rarity);
-    const c = LootField.color(p.item.rarity);
-    this.fx.ring(p.ground.add(new Vector3(0, 0.08, 0)), 1.2 + r.index * 0.5, 0.45 + r.index * 0.08, c.scale(0.8), true);
-    if (r.index >= 2) {
-      this.fx.flashLight(p.focus, 1.5 + r.index, 0.5 + r.index * 0.12, c.scale(0.4));
-      const a = this.panFor(p.ground);
-      sfx.play('lootDrop', { pitch: 0.8 + r.index * 0.12, volume: Math.max(0.5, a.volume), pan: a.pan });
-    }
-    uiEvents.emit('loot', { kind: 'drop', name: p.item.name, rarity: p.item.rarity, level: p.item.level, category: p.item.category, count: 1 });
-    if (r.index >= 4) uiEvents.emit('banner', { title: `${r.label.toUpperCase()} SIGNAL`, sub: p.item.name, tone: r.index >= 5 ? 'red' : 'orange' });
+  /** A walkable landing point near `at` (Havok ray down; never on top of tall geometry). */
+  protected groundPoint(at: Vector3): Vector3 {
+    return this.pickups.groundPoint(at);
   }
 
   /** Pick up a pickup: into the run cargo (unsecured), or refuse when the hold is full. */
   collectPickup(p: Pickup): boolean {
     if (!this.loot.landed(p) || !this.player.alive) return false;
     if (!this.inventory.collect(p.item)) {
-      sfx.play('buildDeny');
-      uiEvents.emit('loot', { kind: 'full', name: p.item.name, rarity: p.item.rarity, level: p.item.level, category: p.item.category, count: 1 });
+      this.pickups.refused(p);
       return false;
     }
-    const r = rarity(p.item.rarity);
-    const c = LootField.color(p.item.rarity);
-    this.fx.burst('build', p.focus, 14 + r.index * 8);
-    this.fx.ring(p.ground.add(new Vector3(0, 0.1, 0)), 2 + r.index * 0.6, 0.35, c, true);
-    if (r.index >= 3) this.fx.flashLight(p.focus, 2 + r.index, 0.35, c.scale(0.5));
-    sfx.play('pickup', { pitch: 1 + r.index * 0.1, volume: 0.8 + r.index * 0.05 });
-    this.loot.remove(p);
+    this.pickups.collected(p);
     if (this.lootTarget === p) this.lootTarget = null;
     this.inventoryVersion++;
-    uiEvents.emit('loot', { kind: 'pickup', name: p.item.name, rarity: p.item.rarity, level: p.item.level, category: p.item.category, count: 1 });
     return true;
   }
 
   protected updateLootTarget(controls: boolean): void {
-    this.lootTarget = null;
-    if (!this.player.alive || this.construction.active || this.loot.count === 0) return;
-    const eye = this.player.eye;
-    const dir = this.player.forward(TMP);
-    // Distance prefilter first: only pickups within reach go through the cone/occlusion test.
-    const r2 = (PICKUP_RANGE + 0.5) * (PICKUP_RANGE + 0.5);
-    const cands: { id: string; point: Vector3; range: number; p: Pickup }[] = [];
-    for (const p of this.loot.pickups) {
-      if (!this.loot.landed(p)) continue;
-      const dx = p.focus.x - eye.x;
-      const dz = p.focus.z - eye.z;
-      if (dx * dx + dz * dz <= r2) cands.push({ id: '', point: p.focus, range: PICKUP_RANGE, p });
-    }
-    if (!cands.length) return;
-    const hit = pickInteractable(cands, eye, dir, { maxAngle: 0.42, targetRadius: 0.6 }, (c) => !this.los(eye, c.point));
-    this.lootTarget = hit?.p ?? null;
+    const free = this.player.alive && !this.construction.active;
+    this.lootTarget = free ? this.pickups.target(this.player.eye, (o) => this.player.forward(o)) : null;
     if (controls && this.lootTarget && this.input.pressed('KeyE')) this.collectPickup(this.lootTarget);
   }
 
@@ -912,7 +884,7 @@ export class Game {
     if (!this.towerPanelAllowed) return;
     this.setBuildMode(false);
     this.tactical.deactivate();
-    this.towerPanelFocus = this.inspected?.id ?? null;
+    this.towerPanelFocus = this.towers.inspected?.id ?? null;
     this.setScreen('towers');
     this.publishHud(true);
     this.input.releaseLock();
@@ -953,81 +925,55 @@ export class Game {
   }
 
   protected towerFail(text: string): { ok: false; reason: string } {
-    this.towerNote = { text, t: 3 };
-    sfx.play('buildDeny');
-    return { ok: false, reason: text };
+    return this.towers.fail(text);
   }
 
-  /**
-   * Upgrade a tower's level or swap its weapon / core / modifier. Validates phase, compatibility, research and
-   * resources first, then spends, recomposes numbers from scratch, rebuilds the model and resets attack state.
-   */
-  modifyTower(t: Turret, what: 'level' | TowerSlot, id?: string): { ok: true; cost: number } | { ok: false; reason: string } {
-    const plan = planRefit({
-      phaseBlock: this.towerEditReason(),
-      exists: this.turrets.turrets.includes(t),
-      building: t.building,
-      config: t.config,
-      level: t.level,
-      what,
-      id,
-      tech: this.towerTech,
-      cores: this.wallet.cores,
-      costMult: this.stats.buildCostMult,
-    });
-    if (!plan.ok) return this.towerFail(plan.reason);
-    if (!this.wallet.spend(plan.cost)) return this.towerFail(`Not enough cores (need ${plan.cost})`);
-    t.paid += plan.cost;
-    t.refit(plan.config, plan.level, this.turretCtx);
-    this.bumpStats();
-    this.fx.burst('build', t.head, 24);
-    this.fx.ring(new Vector3(t.pos.x, t.pos.y + 0.1, t.pos.z), 3, 0.4, new Color3(0.4, 1.8, 2.2), true);
-    sfx.play('equip', { pitch: 1.1 });
-    this.towerNote = { text: `${t.name} refit${what === 'level' ? ` · level ${plan.level}` : ''}${plan.cost ? ` · -${plan.cost} cores` : ''}`, t: 3 };
-    this.inventoryVersion++;
-    return { ok: true, cost: plan.cost };
+  /** Upgrade a tower's level or swap a part (rules in towers/refit; the co-op replica sends a request instead). */
+  modifyTower(t: Turret, what: 'level' | TowerSlot, id?: string): TowerEdit {
+    return this.towers.refitLocal(t, what, id);
   }
 
   /** Choose the configuration for towers built from now on (no cost). Incompatible dependants reset to defaults. */
   setBuildConfig(slot: TowerSlot, id: string): { ok: true } | { ok: false; reason: string } {
-    const plan = planBuildConfig(this.buildConfig, slot, id, this.towerTech);
-    if (!plan.ok) return plan;
-    this.buildConfig = plan.config;
-    this.construction.setTemplate(plan.config);
-    this.inventoryVersion++;
-    return { ok: true };
+    return this.towers.setBuildConfig(slot, id);
   }
 
-  /** Cycle helper for hotkeys: next owned+compatible component of a slot. */
-  protected nextPart(cfg: TowerConfig, slot: TowerSlot): string | null {
-    const list = availableParts(cfg, slot, this.towerTech);
-    if (list.length < 2) return null;
-    const i = list.findIndex((p) => p.id === cfg[slot]);
-    return list[(i + 1) % list.length].id;
+  /** Hold-X recycle of the inspected tower (the co-op replica sends a request instead). */
+  protected recycleTower(t: Turret): void {
+    this.towers.recycleLocal(t);
   }
 
-  /** In-world tower hotkeys: while aiming at a tower (refit) or in build mode (template). R level, C weapon, V core, N modifier, M base. */
-  protected towerKeys(input: Input): void {
-    const t = this.inspected;
-    const slots: [string, TowerSlot][] = [['KeyC', 'weapon'], ['KeyV', 'core'], ['KeyN', 'modifier'], ['KeyM', 'base']];
-    if (this.construction.active) {
-      for (const [key, slot] of slots) {
-        if (!input.pressed(key)) continue;
-        const nxt = this.nextPart(this.buildConfig, slot);
-        const r = nxt ? this.setBuildConfig(slot, nxt) : { ok: false as const, reason: 'No other compatible blueprint owned' };
-        this.towerNote = { text: r.ok ? `Build template: ${partDef(slot, nxt!)?.name} · ${configCost(this.buildConfig, this.stats.buildCostMult)} cores` : r.reason, t: 2.5 };
-        sfx.play(r.ok ? 'ui' : 'buildDeny');
-      }
-      return;
-    }
-    if (!t) return;
-    if (input.pressed('KeyR')) this.modifyTower(t, 'level');
-    for (const [key, slot] of slots) {
-      if (!input.pressed(key) || slot === 'base') continue;
-      const nxt = this.nextPart(t.config, slot);
-      if (!nxt) this.towerFail('No other compatible blueprint owned');
-      else this.modifyTower(t, slot, nxt);
-    }
+  /** F repair of the inspected tower on mazing arenas (the co-op replica sends a request instead). */
+  protected repairTower(t: Turret): void {
+    this.towers.repairLocal(t);
+  }
+
+  private towerHost(): TowerHost {
+    const g = this;
+    return {
+      get scene() { return g.scene; }, // prettier-ignore
+      get player() { return g.player; }, // prettier-ignore
+      get input() { return g.input; }, // prettier-ignore
+      get construction() { return g.construction; }, // prettier-ignore
+      get turrets() { return g.turrets; }, // prettier-ignore
+      get wallet() { return g.wallet; }, // prettier-ignore
+      get fx() { return g.fx; }, // prettier-ignore
+      get stats() { return g.stats; }, // prettier-ignore
+      get turretCtx() { return g.turretCtx; }, // prettier-ignore
+      get towerTech() { return g.towerTech; }, // prettier-ignore
+      get wear() { return g.wear; }, // prettier-ignore
+      get mazing() { return !!g.layout.mazing; }, // prettier-ignore
+      get buildConfig() { return g.buildConfig; }, // prettier-ignore
+      set buildConfig(c) { g.buildConfig = c; }, // prettier-ignore
+      editBlock: () => this.towerEditReason(),
+      note: (text, t) => { this.towerNote = { text, t }; }, // prettier-ignore
+      modify: (t, what, id) => this.modifyTower(t, what, id),
+      recycle: (t) => this.recycleTower(t),
+      repair: (t) => this.repairTower(t),
+      bumpStats: () => this.bumpStats(),
+      towerHpScale: () => this.towerHpScale(),
+      changed: () => { this.inventoryVersion++; }, // prettier-ignore
+    };
   }
 
   /** Floating damage number with a per-frame budget (kills always show). */
@@ -1040,12 +986,7 @@ export class Game {
 
   /** Inspect card data for HUD / panel. */
   towerInfo(t: Turret) {
-    const mult = this.stats.buildCostMult;
-    const slots = (['weapon', 'core', 'modifier'] as const).map((slot) => {
-      const nxt = this.nextPart(t.config, slot);
-      return { slot, id: t.config[slot], name: partDef(slot, t.config[slot])?.name ?? '?', next: nxt ? partDef(slot, nxt)?.name ?? null : null, nextCost: nxt ? swapCost(t.config, slot, nxt, mult) : 0 };
-    });
-    return { id: t.id, name: t.name, base: partDef('base', t.config.base)?.name ?? '', level: t.level, maxLevel: MAX_TOWER_LEVEL, levelCost: t.level < MAX_TOWER_LEVEL ? levelCost(t.config, t.level, mult) : 0, slots, st: { ...t.st }, empowered: t.empowered, kills: t.kills, damage: Math.round(t.damageDealt) };
+    return this.towers.info(t);
   }
 
   /** Enter the arena: fresh run state, preparation phase of wave 1. */
@@ -1102,6 +1043,8 @@ export class Game {
   }
 
   protected newRun(): void {
+    this.weaponSlots.reset();
+    this.abilities.reset();
     this.enemies.clear();
     this.turrets.clear();
     this.fx.reset();
@@ -1130,7 +1073,7 @@ export class Game {
     this.kills = 0;
     this.turretsBuilt = 0;
     this.defeatT = 0;
-    this.inspected = null;
+    this.towers.reset();
     this.construction.setActive(false);
     this.weapon.setHolstered(false);
     this.waves.reset();
@@ -1183,8 +1126,16 @@ export class Game {
       if (input.pressed('KeyG')) this.startWave();
       if (input.pressed('KeyQ')) this.toggleTactical();
       if (input.pressed('Digit2') || input.pressed('KeyB')) this.setBuildMode(!this.construction.active);
-      if (input.pressed('Digit1')) this.setBuildMode(false);
+      if (input.pressed('Digit1')) {
+        this.setBuildMode(false);
+        this.swapWeapon('weapon');
+      }
+      if (input.pressed('KeyZ')) this.swapWeapon();
       if (this.construction.active && input.mousePressed(2)) this.setBuildMode(false);
+      else if (input.mousePressed(2)) this.useAbility('ability');
+      // F repairs the tower under the crosshair on mazing arenas; otherwise it fires ability II.
+      if (input.pressed('KeyF') && !(this.towers.inspected && this.layout.mazing)) this.useAbility('ability2');
+      if (input.pressed('KeyT') && this.waves.phase === 'combat') this.useAbility('ultimate');
       if (input.pressed('KeyH') && this.canReturnHome) this.openCheckpoint();
       if (input.pressed('KeyI') || input.pressed('Tab')) {
         this.openInventory();
@@ -1202,7 +1153,7 @@ export class Game {
         this.openTowerPanel();
         return;
       }
-      this.towerKeys(input);
+      this.towers.keys(input);
     }
 
     this.tactical.update(dt);
@@ -1233,6 +1184,8 @@ export class Game {
 
     // ---- shooting
     const trigger = controls && input.mouse(0) && !this.construction.active;
+    this.weaponSlots.update(dt);
+    this.abilities.update(dt);
     this.weapon.update(dt, trigger, this.stats, this.shoot, this.weaponFx);
     if (this.weapon.overheated && !this.wasOverheated) this.director.bus.emit({ type: 'overheat', chain: this.director.bus.newChain(), source: { kind: 'weapon', id: 'heat' }, value: 1 });
     this.wasOverheated = this.weapon.overheated;
@@ -1355,246 +1308,32 @@ export class Game {
   }
 
   protected tryPlace(): void {
-    const c = this.construction;
-    const cost = configCost(this.buildConfig, this.stats.buildCostMult);
-    if (!c.valid || !this.wallet.spend(cost)) {
-      sfx.play('buildDeny');
-      return;
-    }
-    const built = this.turrets.add(c.point, this.player.yaw, this.turretCtx, this.buildConfig);
-    built.paid = cost;
-    built.rescaleHp(this.towerHpScale());
+    const built = this.towers.placeLocal();
+    if (!built) return;
     this.turretsBuilt++;
-    this.bumpStats();
-    this.fx.burst('build', c.point.add(new Vector3(0, 0.5, 0)), 40);
     // Rapid multi-placement while tactical mode is active.
     if (!this.tactical.active) this.setBuildMode(false);
   }
 
   protected updateInspect(dt: number, controls: boolean): void {
-    let t: Turret | null = null;
-    if (controls && !this.construction.active) {
-      const cam = this.player.camera;
-      this.shotRay.origin.copyFrom(cam.position);
-      cam.getDirectionToRef(Vector3.Forward(), this.shotRay.direction);
-      this.shotRay.length = 30;
-      const hit = this.scene.pickWithRay(this.shotRay, (m) => (!!m.metadata?.turret || !!m.metadata?.surface) && m.isEnabled());
-      const meta = hit?.pickedMesh?.metadata as TurretHitboxMeta | undefined;
-      if (meta?.turret && !meta.turret.building) t = meta.turret;
-    }
-    if (t !== this.inspected) this.recycleT = 0;
-    this.inspected = t;
-    this.construction.showInspect(t);
-    if (t && controls && this.input.pressed('KeyF') && this.layout.mazing) {
-      const why = this.wear.repair(t);
-      if (why) this.towerFail(why);
-      else this.towerNote = { text: `${t.name} repaired`, t: 2.5 };
-    }
-    if (t && this.input.isDown('KeyX')) {
-      this.recycleT += dt / 0.6;
-      if (this.recycleT >= 1) {
-        const refund = t.recycleValue;
-        this.wallet.earn(refund);
-        uiEvents.emit('coresGained', refund);
-        this.fx.burst('build', t.head, 30);
-        this.fx.debrisBurst(t.head, 6, 4, 0.8);
-        this.turrets.remove(t);
-        this.bumpStats();
-        sfx.play('recycle');
-        this.inspected = null;
-        this.recycleT = 0;
-      }
-    } else this.recycleT = 0;
+    this.towers.inspect(dt, controls);
   }
 
   // ---------------------------------------------------------------- combat
 
-  /**
-   * Player hitscan: level surfaces and enemy hitboxes (turrets are see-through).
-   * Rail slugs continue through `pierce` further enemies (15% less damage each) until a
-   * surface stops them; beams get an aim-assist radius (`width`) around their axis.
-   * Damage is applied here, immediately; `weaponFx` only visualises the outcome.
-   */
-  protected shoot = (r: ShotRequest): ShotOutcome => {
-    this.director.bus.emit({ type: 'fire', chain: this.director.bus.newChain(), source: { kind: 'weapon', id: r.family }, value: 1 });
-    // Hitboxes must reflect this frame's enemy poses, not last frame's render.
-    for (const e of this.enemies.active) {
-      e.root.computeWorldMatrix(true);
-      for (const h of e.hitboxes) h.computeWorldMatrix(true);
-    }
-    this.shotRay.origin.copyFrom(r.origin);
-    this.shotRay.direction.copyFrom(r.dir);
-    this.shotRay.length = r.range;
-    const hits = this.scene.multiPickWithRay(this.shotRay, (m: AbstractMesh) => (!!m.metadata?.surface || !!m.metadata?.enemy) && m.isEnabled()) ?? [];
-    hits.sort((a, b) => a.distance - b.distance);
-    const wallIdx = hits.findIndex((h) => !!(h.pickedMesh!.metadata as { surface?: string }).surface);
-    const wall = wallIdx >= 0 ? hits[wallIdx] : null;
-    const maxDist = wall ? wall.distance : r.range;
-    const struck: Enemy[] = [];
-    let first: { point: Vector3; target: 'enemy' | 'shield' } | null = null;
-    let dmg = r.damage;
-    for (const h of hits) {
-      if (h.distance > maxDist) break;
-      const meta = h.pickedMesh!.metadata as Partial<EnemyHitboxMeta>;
-      const e = meta.enemy;
-      if (!e || struck.includes(e) || !e.alive) continue;
-      let weak = !!meta.weak;
-      if (!weak) {
-        // Weakpoint overlapping the body sphere still counts if the ray passes through it.
-        const w = hits.find((x) => (x.pickedMesh!.metadata as EnemyHitboxMeta | null)?.enemy === e && (x.pickedMesh!.metadata as EnemyHitboxMeta).weak);
-        if (w && w.distance - h.distance < 0.6) weak = true;
-      }
-      const shielded = e.shield > 0;
-      struck.push(e);
-      const point = h.pickedPoint!.clone();
-      if (!first) first = { point, target: shielded ? 'shield' : 'enemy' };
-      this.damageEnemy('player', e, dmg, point, weak, undefined, r.family);
-      if (this.weapon.def.mechanism === 'pulse') this.pulseSplash(point, dmg, e);
-      if (struck.length > r.pierce) break;
-      dmg *= 0.85;
-    }
-    // Beam aim assist: nearest enemy body within `width` of the axis, in front of the wall.
-    if (!first && r.width > 0) {
-      let best: Enemy | null = null;
-      let bestT = Infinity;
-      for (const e of this.enemies.active) {
-        if (!e.alive) continue;
-        const c = e.center(TMP);
-        const t = (c.x - r.origin.x) * r.dir.x + (c.y - r.origin.y) * r.dir.y + (c.z - r.origin.z) * r.dir.z;
-        if (t <= 0 || t > maxDist || t >= bestT) continue;
-        const px = r.origin.x + r.dir.x * t - c.x;
-        const py = r.origin.y + r.dir.y * t - c.y;
-        const pz = r.origin.z + r.dir.z * t - c.z;
-        const rr = e.def.bodyR * e.def.scale + r.width;
-        if (px * px + py * py + pz * pz <= rr * rr) {
-          best = e;
-          bestT = t;
-        }
-      }
-      if (best) {
-        const point = r.origin.add(r.dir.scale(bestT - best.def.bodyR * 0.6));
-        first = { point, target: best.shield > 0 ? 'shield' : 'enemy' };
-        struck.push(best);
-        this.damageEnemy('player', best, dmg, point, false, undefined, 'beam');
-      }
-    }
-    if (first) return { point: first.point, normal: null, target: first.target, enemyId: struck[0].id };
-    if (wall) {
-      const n = wall.getNormal(true, true) ?? Vector3.Up();
-      const point = wall.pickedPoint!.clone();
-      const meta = wall.pickedMesh!.metadata as { surface: string; impact?: SurfaceImpact };
-      const surface = meta.surface === 'floor' && arenaDeckWetness(point.x, point.z) > 0.48 ? 'wetDeck' : meta.impact ?? 'alloy';
-      return { point, normal: n, target: 'surface', surface, enemyId: null };
-    }
-    return { point: r.origin.add(r.dir.scale(r.range)), normal: null, target: 'none', enemyId: null };
-  };
-
-  /** World-space shot visuals and impacts per family (presentation only). */
-  protected beamFxT = 0;
-  protected weaponFx: WeaponFxHooks = {
-    shot: (family, from, out, power, speed) => {
-      if (power < 0) {
-        // M7 Pulse Capacitor: bright streak + detonation at the impact.
-        this.wfx.rail(from, out.point, 0.7);
-        if (out.target !== 'none') {
-          this.fx.explode(out.point, { scale: 0.45, debris: 1, color: this.weapon.rig.energyBase.scale(1.4), style: 'plasma' });
-          this.fx.ring(out.point, PULSE_SPLASH, 0.22, this.weapon.rig.energyBase.scale(0.8), false);
-        }
-        return;
-      }
-      const impact = () => this.impactFx(family, out, power);
-      if (family === 'plasma') {
-        this.wfx.bolt(from, out.point, speed, 0.34, out.target === 'none' ? null : impact);
-      } else if (family === 'rail') {
-        this.wfx.rail(from, out.point, power);
-        this.fx.ring(from, 0.22 + 0.18 * power, 0.12, this.weapon.rig.energyBase.scale(0.5), false);
-        impact();
-      } else {
-        // Beam ticks: throttle contact particles (the beam itself is continuous).
-        this.beamFxT -= 1 / 15;
-        if (this.beamFxT <= 0) {
-          this.beamFxT = 0.12;
-          impact();
-        }
-      }
-    },
-    beam: (on, from, to, intensity, contact) => this.wfx.beam(on, from, to, intensity, contact),
-  };
-
-  protected impactFx(family: WeaponFamily, out: ShotOutcome, power: number): void {
-    const p = out.point;
-    if (out.target === 'surface' && out.normal) {
-      const pos = p.add(out.normal.scale(0.03));
-      this.fx.impact(pos, out.normal, out.surface, family === 'beam');
-      if (family === 'rail') {
-        this.fx.burst('sparks', pos, Math.round(8 + 10 * power), out.normal, 0.7);
-        this.fx.ring(pos, 1.6 * power + 0.6, 0.25, this.weapon.rig.energyBase.scale(0.5), false);
-        this.fx.flashLight(pos, 3 * power, 0.18, this.weapon.rig.energyBase.scale(0.4));
-      }
-    } else if (out.target === 'shield') {
-      this.fx.burst('shield', p, family === 'rail' ? 24 : 8, undefined, family === 'rail' ? 1.5 : 1);
-      if (family === 'rail') this.fx.ring(p, 2.4, 0.25, new Color3(2.6, 0.9, 0.2), false);
-    } else if (out.target === 'enemy') {
-      if (family === 'rail') {
-        this.fx.burst('sparks', p, 14, undefined, 0.8);
-        this.fx.debrisBurst(p, 3, 5, 0.6);
-      } else if (family === 'beam') this.fx.burst('enemySpark', p, 4, undefined, 0.8);
-    }
+  /** Player hitscan + damage (PlayerCombat); the co-op replica overrides it with a claim builder. */
+  protected shoot = (r: ShotRequest): ShotOutcome => this.combat.shoot(r);
+  protected get weaponFx(): WeaponFxHooks {
+    return this.combat.fxHooks;
+  }
+  /** Arc Conductor procs this run (automation/tests). */
+  get arcs(): number {
+    return this.combat.arcs;
   }
 
-  /**
-   * Legacy damage entry (player weapon, Sentinel-style tower hits, debug): rolls crit, then hands the hit to the
-   * director's shared pipeline (statuses, reactions, events, kill handling) and plays direct-hit feedback.
-   */
+  /** Legacy damage entry (player weapon, Sentinel-style tower hits, debug): see PlayerCombat.damage. */
   damageEnemy(source: 'player' | 'turret', e: Enemy, base: number, point: Vector3, weakpoint: boolean, turret?: Turret, family?: WeaponFamily | 'arc', from?: Vector3): void {
-    if (!e.alive) return;
-    const player = source === 'player';
-    const prec = this.director.build.count('s_precision');
-    const crit = player && prec && (isChilled(e.status, 1) || speedFactor(e.status) < 0.95) ? { critChance: this.stats.critChance + UP.precision.crit(prec), critMultiplier: this.stats.critMultiplier + UP.precision.critDmg(prec) } : this.stats;
-    // M7 run upgrades that scale weapon hits from the situation.
-    if (player) {
-      const ex = this.director.build.count('w_exec');
-      if (ex && e.hp < e.maxHp * UP.exec.hp) base *= 1 + UP.exec.bonus(ex);
-      const mo = this.director.build.count('m_momentum');
-      if (mo && this.droneSpeed() > UP.momentum.speed) base *= 1 + UP.momentum.bonus(mo);
-      // M7 legendary / exotic signatures (damage shaping).
-      const sig = family !== 'arc' ? this.weaponSignature() : null;
-      if (sig === 'overdrive' && this.weaponHeat() > 0.7) base *= 1.35;
-      if (sig === 'phase' && (e.shield > 0 || e.armor > 0 || e.kind === 'enforcer' || e.kind === 'crawler')) base *= 1.8;
-    }
-    const roll = rollDamage(base, crit, weakpoint, Math.random, 'energy', source);
-    // Arc Conductor: a player hit may jump to the nearest other enemy (no chains of arcs).
-    if (player && family !== 'arc' && this.stats.arcChance > 0 && Math.random() < this.stats.arcChance) this.arcFrom(e, point, roll.amount * this.stats.arcDamage);
-    const src = family === 'arc' ? { kind: 'effect' as const, id: 'arc_conductor' } : player ? { kind: 'weapon' as const, id: family ?? 'plasma' } : { kind: 'tower' as const, id: 'sentinel', towerId: turret?.id };
-    const res = this.director.deal({ target: e, amount: roll.amount, base, crit: roll.crit, weak: weakpoint, element: 'none', source: src, chain: this.director.bus.newChain(), point, family: family ?? (player ? 'plasma' : 'tower'), from: from ?? (player ? this.player.eye : undefined) });
-    if (player && family !== 'arc') this.signatureAfterHit(e, point, roll.amount, roll.crit, res);
-    if (player) {
-      const kind = res.kind;
-      if (res.killed && family !== 'arc') this.playerKill(e);
-      uiEvents.emit('hit', kind);
-      // Beam ticks are frequent: lighter per-tick feedback (the beam contact carries the rest).
-      const beam = family === 'beam';
-      if (kind === 'crit') this.fx.burst('crit', point, beam ? 3 : 10);
-      else if (kind === 'hit' && !beam) this.fx.burst('enemySpark', point, 6);
-      if (kind === 'kill') sfx.play('kill', { pitch: 1 + Math.min(0.45, (this.player.chain - 1) * 0.045) });
-      else if (!beam || kind === 'crit') sfx.play(kind === 'crit' ? 'crit' : kind === 'shield' ? 'shieldHit' : 'hit');
-      else sfx.play('hit', { volume: 0.35 });
-    }
-  }
-
-  /**
-   * A kill by the current drone's weapon: hitstop (heavier for elites / big chassis), kill chain (kills within
-   * `KILL_CHAIN_WINDOW` s stack) and a dash refund, so aggressive play keeps the drone fast.
-   */
-  protected playerKill(e: Enemy): void {
-    const heavy = e.elite || e.def.role === 'boss' || e.def.role === 'hvt' || e.def.hp >= 150;
-    this.hitstop(heavy ? 0.1 : 0.045, heavy ? 0.04 : 0.2);
-    const p = this.player;
-    p.refundDash(MOVE.killDashRefund * (heavy ? 2 : 1));
-    p.chain = this.runTime - p.chainAt <= KILL_CHAIN_WINDOW ? p.chain + 1 : 1;
-    p.chainAt = this.runTime;
-    if (p.chain >= 2) uiEvents.emit('chain', p.chain);
-    if (heavy) p.addTrauma(0.2);
+    this.combat.damage(source, e, base, point, weakpoint, turret, family, from);
   }
 
   /** Dilate hostile time for `seconds` (overlapping stops keep the longest / strongest). */
@@ -1604,68 +1343,97 @@ export class Game {
     this.hitstopT = Math.max(this.hitstopT, seconds);
   }
 
-  /** M7 Pulse Capacitor: every pulse detonates (60% damage in PULSE_SPLASH m). */
+  /** Pulse Capacitor splash (the co-op server applies validated claims through it). */
   protected pulseSplash(point: Vector3, dmg: number, hit: Enemy | null): void {
-    this.director.blast(point, PULSE_SPLASH, dmg * 0.6, 'none', { kind: 'weapon', id: 'beam' }, this.director.bus.newChain(), { falloff: 0.4, exclude: hit, family: 'splash' });
+    this.combat.pulseSplash(point, dmg, hit);
   }
 
-  private wasOverheated = false;
-  private sigHits = 0;
+  /** PlayerCombat's view of the arena (lazy: read when a shot lands, never during construction). */
+  private combatHost(): CombatHost {
+    const g = this;
+    return {
+      get scene() { return g.scene; }, // prettier-ignore
+      get enemies() { return g.enemies; }, // prettier-ignore
+      get director() { return g.director; }, // prettier-ignore
+      get fx() { return g.fx; }, // prettier-ignore
+      get wfx() { return g.wfx; }, // prettier-ignore
+      get weapon() { return g.weapon; }, // prettier-ignore
+      get player() { return g.player; }, // prettier-ignore
+      get stats() { return g.stats; }, // prettier-ignore
+      get runTime() { return g.runTime; }, // prettier-ignore
+      signature: () => this.weaponSignature(),
+      heat: () => this.weaponHeat(),
+      droneSpeed: () => this.droneSpeed(),
+      hitstop: (s, k) => this.hitstop(s, k),
+      damageEnemy: (...a) => this.damageEnemy(...a),
+    };
+  }
+
+  /** Fire an ability slot (RMB ability I, F ability II, T ultimate in combat). */
+  useAbility(slot: AbilitySlot): boolean {
+    return this.abilities.use(slot);
+  }
+
+  /** Damage dealt by the drone charges its ultimate (the co-op server routes it to the shooter's avatar). */
+  chargeUltimate(dealt: number): void {
+    this.abilities.charge(dealt);
+  }
+
+  private abilityHost(): AbilityHost {
+    const g = this;
+    return {
+      get scene() { return g.scene; }, // prettier-ignore
+      get player() { return g.player; }, // prettier-ignore
+      get director() { return g.director; }, // prettier-ignore
+      get enemies() { return g.enemies; }, // prettier-ignore
+      get fx() { return g.fx; }, // prettier-ignore
+      get wfx() { return g.wfx; }, // prettier-ignore
+      get weapon() { return g.weapon; }, // prettier-ignore
+      get inventory() { return g.inventory; }, // prettier-ignore
+      get stats() { return g.stats; }, // prettier-ignore
+      canAct: () => this.screen === 'playing' && !this.construction.active && this.player.alive,
+    };
+  }
+
+  /** HUD row for the holstered weapon. */
+  protected holsterHud(): { name: string; heat: number; overheated: boolean; secondary: boolean } | null {
+    const ws = this.weaponSlots;
+    const item = ws.hasSecondary ? ws.item(ws.inactive) : null;
+    if (!item) return null;
+    const p = ws.parkedHeat;
+    return { name: weaponDefFor(item)?.name ?? item.name, heat: p.heat / 100, overheated: p.overheated, secondary: ws.inactive === 'weapon2' };
+  }
+
+  /** Swap to the other carried weapon (or to `slot`). Out of build mode only. */
+  swapWeapon(slot?: WeaponSlot): boolean {
+    if (this.construction.active) return false;
+    return this.weaponSlots.swap(slot);
+  }
+
+  private weaponSlotsHost(): WeaponSlotsHost {
+    const g = this;
+    return {
+      get inventory() { return g.inventory; }, // prettier-ignore
+      get weapon() { return g.weapon; }, // prettier-ignore
+      get stats() { return g.stats; }, // prettier-ignore
+      rebuildStats: () => this.rebuildStats(),
+      changed: () => {
+        this.wfx.setColor(this.weapon.rig.energyBase);
+        this.inventoryVersion++;
+      },
+    };
+  }
 
   /** Signature of the weapon firing right now (co-op server: the shooter's). */
   protected weaponSignature(): string | null {
-    return this.inventory.equipped('weapon')?.signature ?? null;
+    return this.weaponSlots.item()?.signature ?? null;
   }
   protected weaponHeat(): number {
     return this.weapon.heat / 100;
   }
-
-  /** M7 signatures that react to a landed hit. */
-  private signatureAfterHit(e: Enemy, point: Vector3, amount: number, crit: boolean, res: { dealt: number; killed: boolean }): void {
-    const sig = this.weaponSignature();
-    if (!sig) return;
-    const d = this.director;
-    const src = { kind: 'effect' as const, id: `sig:${sig}` };
-    if (sig === 'chain_reaction' && res.killed) {
-      d.blast(point, 3.5, amount * 0.6, 'thermal', src, d.bus.newChain(), { falloff: 0.35, exclude: e });
-      d.explosionFx(point, 3.5, 'thermal');
-    } else if (sig === 'stormcaller' && ++this.sigHits % 6 === 0 && e.alive) {
-      const sky = point.add(new Vector3(0, 9, 0));
-      this.wfx.arc(sky, point);
-      d.chainLightning({ from: point, first: e, count: 3, amount: amount * 2, falloff: 0.7, source: src, chain: d.bus.newChain(), shock: true });
-      sfx.play('arc', { volume: 0.9, pitch: 0.7 });
-    } else if (sig === 'siphon' && res.dealt > 0 && this.player.maxShield > 0) {
-      this.player.shield = Math.min(this.player.maxShield, this.player.shield + res.dealt * 0.03);
-    } else if (sig === 'rift_echo' && crit) {
-      for (const o of d.enemiesNear(point, 4)) d.inflict(o, { chill: 40 }, src, d.bus.newChain(), o.center(new Vector3()));
-      this.fx.ring(point, 4, 0.4, new Color3(1.6, 0.5, 3.0), false);
-    }
-  }
   /** Current drone speed (m/s); dashes count as fast. The co-op server reports the shooter's. */
   protected droneSpeed(): number {
     return this.player.dashing ? 40 : this.player.speed;
-  }
-
-  /** Arc to the nearest other living enemy within ARC_RANGE of the struck one. */
-  protected arcFrom(src: Enemy, point: Vector3, amount: number): void {
-    if (amount <= 0) return;
-    let best: Enemy | null = null;
-    let bestD = ARC_RANGE * ARC_RANGE;
-    for (const o of this.enemies.active) {
-      if (o === src || !o.alive) continue;
-      const d = Vector3.DistanceSquared(o.pos, src.pos);
-      if (d < bestD) {
-        bestD = d;
-        best = o;
-      }
-    }
-    if (!best) return;
-    const to = best.center(new Vector3());
-    this.arcs++;
-    this.wfx.arc(point, to);
-    this.fx.burst('impact', to, 8);
-    sfx.play('arc', { volume: 0.7 });
-    this.damageEnemy('player', best, amount, to, false, undefined, 'arc');
   }
 
   onEnemyKilled(e: Enemy): void {
@@ -2144,7 +1912,7 @@ export class Game {
   protected publishHud(force = false): void {
     const w = this.waves;
     const c = this.construction;
-    const t = this.inspected;
+    const t = this.towers.inspected;
     const hint = hintFor({
       playing: this.screen === 'playing',
       phase: w.phase,
@@ -2191,6 +1959,8 @@ export class Game {
       respawnIn: this.player.alive ? 0 : this.player.respawnT,
       cores: this.wallet.cores,
       weaponName: this.weapon.def.name,
+      holster: this.holsterHud(),
+      abilities: this.abilities.hud(),
       heat: this.weapon.heat / 100,
       overheated: this.weapon.overheated,
       charge: this.weapon.def.mechanism === 'charge' || this.weapon.def.mechanism === 'cycle' ? this.weapon.charge : 0,
@@ -2205,7 +1975,7 @@ export class Game {
       buildMessage: c.message,
       buildCost: configCost(this.buildConfig, this.stats.buildCostMult),
       m5: this.towerHud(),
-      inspect: t ? { name: t.name, kills: t.kills, damage: Math.round(t.damageDealt), refund: t.recycleValue, recycle: this.recycleT, card: this.towerInfo(t), edit: this.towerEditReason(), hp: this.layout.mazing ? { hp: Math.round(t.hp), max: t.maxHp, wrecked: t.wrecked, repair: t.repairCost } : null } : null,
+      inspect: t ? { name: t.name, kills: t.kills, damage: Math.round(t.damageDealt), refund: t.recycleValue, recycle: this.towers.recycleT, card: this.towerInfo(t), edit: this.towerEditReason(), hp: this.layout.mazing ? { hp: Math.round(t.hp), max: t.maxHp, wrecked: t.wrecked, repair: t.repairCost } : null } : null,
       hint,
       spread: 6 + this.weapon.spread * 900,
       perf: this.perfOn

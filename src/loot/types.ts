@@ -3,9 +3,9 @@ import type { WeaponBuild } from '../weapons/build';
 import type { RarityId } from './rarity';
 
 /** Equipment categories. 'module' items are collectible upgrade modules (installation: M3). */
-export type Category = 'weapon' | 'armor' | 'shield' | 'reactor' | 'processor' | 'accessory' | 'module';
+export type Category = 'weapon' | 'armor' | 'shield' | 'reactor' | 'processor' | 'accessory' | 'module' | 'ability' | 'ultimate';
 
-export const CATEGORIES: readonly Category[] = ['weapon', 'armor', 'shield', 'reactor', 'processor', 'accessory', 'module'];
+export const CATEGORIES: readonly Category[] = ['weapon', 'armor', 'shield', 'reactor', 'processor', 'accessory', 'module', 'ability', 'ultimate'];
 
 export const CATEGORY_LABEL: Readonly<Record<Category, string>> = {
   weapon: 'Weapon',
@@ -15,6 +15,8 @@ export const CATEGORY_LABEL: Readonly<Record<Category, string>> = {
   processor: 'Processor',
   accessory: 'Accessory',
   module: 'Upgrade module',
+  ability: 'Ability',
+  ultimate: 'Ultimate',
 };
 
 /** One stat contribution stored on an item (already scaled by level and rarity). */

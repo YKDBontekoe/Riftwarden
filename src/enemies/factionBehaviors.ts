@@ -7,6 +7,7 @@ import type { Turret } from '../defense/Turrets';
 import { buildCrawler, type CrawlerRig, enemyMats } from '../visuals/enemyModels';
 import { buildRusher, buildWalker } from '../visuals/models';
 import { animateCore, updateCore } from './coreBehaviors';
+import { hasLost } from './limbs';
 import { type Behavior, type Enemy, type EnemyContext, type EnemyManager, turnTowards } from './EnemyManager';
 
 const TMP = new Vector3();
@@ -270,7 +271,8 @@ export const marksmanBehavior: Behavior = {
         if (ai.scan <= 0) {
           ai.scan = MARKSMAN.scan;
           const muzzle = m.muzzlePos(e, TMP);
-          if (p.alive && Vector3.DistanceSquared(muzzle, p.eye) < e.def.playerShotRange ** 2 && ctx.los(muzzle, p.eye) && !disrupted(e)) {
+          // A marksman whose sensor head was shot off can no longer paint the drone.
+          if (p.alive && !hasLost(e.limbsLost, 'head') && Vector3.DistanceSquared(muzzle, p.eye) < e.def.playerShotRange ** 2 && ctx.los(muzzle, p.eye) && !disrupted(e)) {
             ai.mode = 'aim';
             ai.t = MARKSMAN.aim / e.rateMult;
             ai.blind = 0;

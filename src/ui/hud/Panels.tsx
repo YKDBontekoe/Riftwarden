@@ -304,13 +304,40 @@ export function CenterPanel() {
   );
 }
 
+const ABILITY_KEY = { ability: 'RMB', ability2: 'F', ultimate: 'T' } as const;
+
+/** Ability I/II cooldowns and the ultimate charge, stacked above the weapon card. */
+function AbilityBar() {
+  const rows = useHud((s) => s.abilities);
+  if (!rows.length) return null;
+  return (
+    <div className="ability-bar">
+      {rows.map((r) => {
+        const ult = r.slot === 'ultimate';
+        const fill = ult ? r.cd : r.max > 0 ? 1 - r.cd / r.max : 1;
+        const state = r.active > 0 ? 'active' : r.ready ? 'ready' : 'cooling';
+        return (
+          <div key={r.slot} className={`ab-slot ${ult ? 'ult' : ''} ${state}`} title={r.name}>
+            <kbd>{ABILITY_KEY[r.slot]}</kbd>
+            <span className="ab-name">{r.name}</span>
+            <span className="ab-state">{r.active > 0 ? `${r.active.toFixed(1)}s` : r.ready ? 'READY' : ult ? `${Math.floor(r.cd * 100)}%` : `${r.cd.toFixed(1)}s`}</span>
+            <i className="ab-fill" style={{ transform: `scaleX(${Math.max(0, Math.min(1, fill))})` }} />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export function WeaponPanel() {
   const name = useHud((s) => s.weaponName);
+  const holster = useHud((s) => s.holster);
   const heat = useHud((s) => s.heat);
   const hot = useHud((s) => s.overheated);
   const build = useHud((s) => s.buildMode);
   return (
     <div className={`bottom-right ${build ? 'stowed' : ''}`}>
+      <AbilityBar />
       <div className="weapon-card panel-frame">
         <div className="wc-head">
           <span className="weapon">{name}</span>
@@ -318,6 +345,13 @@ export function WeaponPanel() {
         </div>
         <SegBar value={heat} tone={hot ? 'red' : heat > 0.7 ? 'amber' : 'heat'} segments={20} />
         <div className={`label heat-label ${hot ? 'warn' : ''}`}>{hot ? 'OVERHEATED · VENTING' : `HEAT ${Math.round(heat * 100)}%`}</div>
+        {holster && (
+          <div className={`wc-holster ${holster.overheated ? 'warn' : ''}`}>
+            <BoundKey action="swap" />
+            <span className="wh-name">{holster.secondary ? 'SECONDARY' : 'PRIMARY'} · {holster.name}</span>
+            <span className="wh-heat">{holster.overheated ? 'VENTING' : holster.heat > 0.01 ? `${Math.round(holster.heat * 100)}%` : 'READY'}</span>
+          </div>
+        )}
       </div>
       <div className="slots">
         <span className={!build ? 'on' : ''}>

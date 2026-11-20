@@ -43,19 +43,32 @@ export function Crosshair() {
   );
 }
 
+const LIMB_LABEL = { cannon: 'CANNON SHEARED · DISARMED', arm: 'ARM SEVERED', head: 'SENSOR HEAD OFF · BLINDED' } as const;
+
 export function Hitmarker() {
-  const [state, setState] = useState<{ kind: HitKind; id: number } | null>(null);
+  const [state, setState] = useState<{ kind: HitKind | 'limb'; id: number; label?: string } | null>(null);
   useEffect(() => {
     let id = 0;
     let timer: ReturnType<typeof setTimeout>;
-    const off = uiEvents.on('hit', (kind) => {
+    let holdUntil = 0;
+    const show = (kind: HitKind | 'limb', ms: number, label?: string) => {
       id++;
-      setState({ kind, id });
+      setState({ kind, id, label });
       clearTimeout(timer);
-      timer = setTimeout(() => setState(null), kind === 'kill' ? 320 : 160);
+      timer = setTimeout(() => setState(null), ms);
+    };
+    const offHit = uiEvents.on('hit', (kind) => {
+      // A part knocked off holds its marker briefly over the ordinary hits that follow it.
+      if (performance.now() < holdUntil && kind !== 'kill') return;
+      show(kind, kind === 'kill' ? 320 : 160);
+    });
+    const offLimb = uiEvents.on('limb', (l) => {
+      holdUntil = performance.now() + 260;
+      show('limb', 620, LIMB_LABEL[l]);
     });
     return () => {
-      off();
+      offHit();
+      offLimb();
       clearTimeout(timer);
     };
   }, []);
@@ -67,6 +80,7 @@ export function Hitmarker() {
       <span />
       <span />
       {state.kind === 'kill' && <i className="kill-ring" />}
+      {state.kind === 'limb' && <em className="limb-label">{state.label}</em>}
     </div>
   );
 }
