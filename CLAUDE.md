@@ -1,6 +1,6 @@
 # Riftwarden: project notes for future sessions
 
-Browser FPS + tower-defense roguelite. **Design direction (owner Q&A, wins over older notes): `docs/design-direction.md`** (FPS first, loot chasers, branching run map, two weapons + abilities, six elements; build order: Game.ts refactor -> combat kit -> M11 loot -> map -> enemies). Current milestone: **M10** (biomes with factions, ground hazards, enemy mutations, faction archetypes) on top of **M9** (procedural arenas: seeded 170-200 m sectors with districts, nav-grid pathing with tower mazing + breaching, forward rifts, loading screens), M8 and the fast-pace pass (see "Key design decisions"). Read this before changing code.
+Browser FPS + tower-defense roguelite. **Design direction (owner Q&A, wins over older notes): `docs/design-direction.md`** (FPS first, loot chasers, branching run map, two weapons + abilities, six elements; build order: Game.ts refactor -> combat kit -> M11 loot -> map -> enemies). Current milestone: **combat kit (in progress)**: done = Game.ts system extraction, second weapon slot, shoot-off parts, abilities + ultimates; next = movement (slide/grapple/wall-run/ground pound). See "Roadmap" at the end and "Combat kit" under Key design decisions. Built on **M10** (biomes with factions, ground hazards, enemy mutations, faction archetypes), **M9** (procedural arenas: seeded 170-200 m sectors with districts, nav-grid pathing with tower mazing + breaching, forward rifts, loading screens), M8 and the fast-pace pass (see "Key design decisions"). Read this before changing code.
 
 ## Stack
 
@@ -542,5 +542,22 @@ Goal: high-tempo play (think VOIDBREAKER): fast enemies, little dead time, momen
 - **M8 (done):** Warden levels (XP banked like loot), per-profile procedural skill tree at the Neural Lattice, currency table + tooltips, station purposes and directory, save v8.
 - **M9 (done):** procedural arenas with districts, nav-grid mazing with breachable towers, forward rifts, loading screens.
 - **M10 (done):** biomes with factions and hazards, six mutations, four faction archetypes.
-- **Next:** M11 loot (affix pool, uniques, sets, Launcher + Drone Swarm families); deeper keystone rules, team HUD levels, Terminals.tsx split.
-- Later: combat depth (second tower, turret upgrades, enemy variety, hit flash, audio pass, deep-import bundle split), run upgrades, M4 modular towers, M5 advanced endless (bosses/events), M6 content, M7 co-op evaluation.
+- **Game.ts refactor (done):** PlayerCombat + shotTrace, LootPickups, TowerControl, wave lifecycle out of the constructor.
+- **Combat kit (in progress):** done = second weapon slot (save v9), shoot-off parts, abilities + ultimates as loot (save v10, protocol v9). Remaining: see Roadmap step 1.
+
+## Roadmap (owner-approved order; details and rationale in `docs/design-direction.md`)
+
+1. **Combat kit (finish)**
+   - Movement: slide (default Left Ctrl; alternative `C` with tower refit hotkeys moved behind a modifier; Ctrl+W closes the tab in some browsers, so test that), grapple, wall-run, ground pound. Vertical arenas come later (step 5).
+   - TTK pass: ~0.3 s for a basic walker with a matched weapon (a plasma repeater currently needs ~5 s of fire to shoot a cannon off).
+   - Hit feedback still missing: meatier hit/crit/kill audio, kill flashes, oil sprays on parts; legless walkers that crawl (parts so far: cannon, arm, head).
+   - Abilities: skill-tree and run-upgrade modifiers, deployables (shield wall, decoy, mini-sentry), replicate the thrown charge / orbital beam to co-op clients, make Aegis/Overdrive personal in co-op (director buffs are team-wide), personal "ULTIMATE READY" alert.
+   - Second weapon: mouse-wheel swap, swap-triggered affixes later (M11 conditional affixes).
+2. **Elements**: six damage types (kinetic, thermal, electric, cryo, corrosive = armour shred + DoT, void = pierces shields) rolled on weapons and towers; per-faction resistances / weaknesses.
+3. **M11 loot depth**: Launcher, Drone Swarm and Flamer/Cryo-spray weapon families; hand-made uniques; 3-4 sets (tower, crit, element, tank); conditional affixes ("while airborne", "on dash", "after swap"); Ascended tier above Exotic; build-aware "is this an upgrade?" score; target farming (boss/faction uniques); pinnacle bosses summoned with keys (keys from elites, crafted at HQ); rift shards currency; tower parts as loot; full trading at an HQ trading post (Ascended/pinnacle trade-locked, level/time gate, credit tax).
+4. **Branching run map**: a node per 5-wave segment (combat sectors, elite/boss nodes, merchant/forge, events/anomalies); bank + choose next node or extract at every node; towers reset between nodes, cores carry over.
+5. **Enemies and world**: faction bosses (Rime/cryo first), player hunters (one stalker per faction + greed bounties for hoarded unsecured loot), mini-bosses (procedural named elites, later hand-made), wave intel via a scanner upgrade, 5-6 factions, biomes (orbital station with low gravity, ruined city vertical, rift core endgame), destructible props, weather shifts, vertical arenas.
+6. **Towers support layer**: cheap breachable player walls, hazards affect towers (frost slows fire, slag damages).
+7. **Progression and economy**: upgrade tag set bonuses, reroll/banish, cursed upgrades, meta-unlocked upgrade pool; consumables, gamble vendor; fixed core + procedural outer rings for the skill tree; paragon alongside endless levels.
+8. **HQ, co-op, presentation**: firing range with DPS readout, facility bonuses, lobby browser, adaptive industrial/synth music, art refinement with CC0 assets (Poly Haven, ambientCG, Kenney).
+- Ongoing: remaining Game.ts extractions (upgrade flow, summon/ordnance, publishHud/snapshot, constructor scene setup), Terminals.tsx/items.tsx split, deep-import bundle split, team HUD levels, deeper keystone rules.
