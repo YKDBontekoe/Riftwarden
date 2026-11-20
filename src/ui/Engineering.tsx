@@ -15,7 +15,10 @@ import { ConfirmButton, CostLine, ResourceBar, TxMessage, useTx } from './econom
 import { type InvEntry, ItemCard, ItemDetail, itemTitle, sortEntries, TierPips } from './items';
 import { Shell } from './shell';
 import { TowerTech } from './TowerTech';
-import { ModuleBench, saveEntries } from './Terminals';
+import { ModuleBench, saveEntries, useEquipped } from './Terminals';
+import { impactBetween, loadoutScore, swapped } from '../loot/loadoutScore';
+import { ImpactBanner } from './compare';
+import { SLOTS } from '../progression/items';
 import { WeaponViewer } from './WeaponViewer';
 
 type Tab = 'modules' | 'affixes' | 'enhance' | 'components' | 'towers';
@@ -116,6 +119,7 @@ function Bench({ flow, save, tab, selW, setSelW }: { flow: Flow; save: SaveData;
               </span>
             </div>
             <StatDiff before={item} after={shown!} />
+            <EquippedImpact save={save} before={item} after={shown!} />
           </>
         ) : (
           <div className="empty-state">
@@ -131,6 +135,17 @@ function Bench({ flow, save, tab, selW, setSelW }: { flow: Flow; save: SaveData;
       </div>
     </div>
   );
+}
+
+/** For an equipped item: what the proposed change does to the whole loadout. */
+function EquippedImpact({ save, before, after }: { save: SaveData; before: ItemInstance; after: ItemInstance }) {
+  const equipped = useEquipped(save);
+  const list = useMemo(() => SLOTS.map((s) => equipped[s.id]), [equipped]);
+  const impact = useMemo(() => {
+    if (before === after || !list.some((i) => i?.uid === before.uid)) return null;
+    return impactBetween(loadoutScore(list), loadoutScore(swapped(list, after, before)));
+  }, [list, before, after]);
+  return impact ? <ImpactBanner impact={impact} title="IF APPLIED · LOADOUT IMPACT" /> : null;
 }
 
 /** Before/after effective statistics (weapons: full weapon readout incl. modules; others: item stats). */

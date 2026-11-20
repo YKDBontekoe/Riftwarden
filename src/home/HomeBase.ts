@@ -34,6 +34,10 @@ import { calibrationRing, type EconCtx, equipmentExchange, fabricator, moduleBro
 import { captureEnvironment } from '../visuals/envCapture';
 import { Kit } from '../visuals/kit';
 import { createPalette, unlit } from '../visuals/materials';
+import { roomStyle, STYLED_ROOMS } from './roomStyle';
+import { RubbleBuilder } from '../visuals/rubble';
+import { buildHqAtmosphere } from './hqAtmosphere';
+import { hqCeilingSet, hqDeckSet, type HqSet, hqWallSet } from '../visuals/hqTextures';
 import { StationFocus } from './StationFocus';
 import { AmbientDrones } from './AmbientDrones';
 import { buildNav } from './ambientNav';
@@ -161,30 +165,40 @@ export class HomeBase {
     this.pal = pal;
     this.kit = new Kit(scene);
 
-    // HQ material set: brighter, cleaner interior variants of the shared palette.
-    // Interior composites: panel detail from the shared wall set, but dielectric and
-    // fairly rough so they read as light surfaces without a bright sky to reflect.
-    const composite = (name: string, albedo: [number, number, number], rough: number, coat: number) => {
+    // Clean high-tech interior sets (hqTextures): deck plates with an LED seam, composite wall
+    // panels with lit recess bands, acoustic ceiling tiles with light slots.
+    const deckSet = hqDeckSet(scene, high);
+    const wallSet = hqWallSet(scene, high);
+    const ceilSet = hqCeilingSet(scene, high);
+    const surface = (name: string, set: HqSet, albedo: [number, number, number], bump: number, emissive: number, coat: number) => {
       const m = new PBRMaterial(name, scene);
-      // Keep the broad ceramic faces clean. The shared normal carries the panel joints.
-      m.bumpTexture = pal.panel.bumpTexture;
       m.albedoColor = new Color3(...albedo);
-      m.metallic = 0;
-      m.roughness = rough;
+      m.albedoTexture = set.albedo;
+      m.bumpTexture = set.normal;
+      set.normal.level = bump;
+      m.metallicTexture = set.orm;
+      m.metallic = 1;
+      m.roughness = 1;
+      m.useAmbientOcclusionFromMetallicTextureRed = true;
+      m.useRoughnessFromMetallicTextureGreen = true;
+      m.useMetallnessFromMetallicTextureBlue = true;
+      m.useRoughnessFromMetallicTextureAlpha = false;
+      m.emissiveTexture = set.emissive;
+      m.emissiveColor = new Color3(emissive, emissive, emissive);
       m.usePhysicalLightFalloff = false;
       m.maxSimultaneousLights = 8;
       if (coat > 0) {
         m.clearCoat.isEnabled = true;
         m.clearCoat.intensity = coat;
-        m.clearCoat.roughness = 0.1;
+        m.clearCoat.roughness = 0.12;
       }
       return m;
     };
-    const floor = pal.floor;
-    const wall = composite('hqWall', [0.76, 0.75, 0.67], 0.63, 0.12);
-    const ceiling = composite('hqCeiling', [0.35, 0.37, 0.32], 0.85, 0);
-    ceiling.albedoTexture = null; // plain acoustic panels: keeps the vents for walls/floor
-    ceiling.bumpTexture = null;
+    // Dark graphite deck, mid-grey composite walls, dark ceiling: the light comes from fixtures,
+    // accents and screens, not from every surface being white.
+    const floor = surface('hqDeck', deckSet, [0.34, 0.36, 0.38], 0.32, 1.6, 0.25);
+    const wall = surface('hqWall', wallSet, [0.6, 0.62, 0.64], 0.28, 1.5, 0.1);
+    const ceiling = surface('hqCeiling', ceilSet, [0.2, 0.21, 0.23], 0.25, 2.2, 0);
     const glass = new PBRMaterial('hqGlass', scene);
     glass.albedoColor = new Color3(0.02, 0.06, 0.08);
     glass.metallic = 0;
@@ -206,7 +220,7 @@ export class HomeBase {
       m.maxSimultaneousLights = 8;
       return m;
     };
-    const terrazzo = plain('castTerrazzo', [0.59, 0.59, 0.52], 0.04, 0.65);
+    const terrazzo = plain('castTerrazzo', [0.3, 0.3, 0.29], 0.04, 0.42);
     const aggregate = new Texture(new URL('../assets/cast-aggregate.webp', import.meta.url).href, scene);
     aggregate.anisotropicFilteringLevel = 8;
     terrazzo.albedoTexture = aggregate;
@@ -229,6 +243,7 @@ export class HomeBase {
       amber: unlit(scene, 'hqAmber', [2.2, 1.0, 0.12]),
       amberDim: unlit(scene, 'hqAmberDim', [0.5, 0.22, 0.03]),
       lamp: unlit(scene, 'hqLamp', [2.15, 1.89, 1.51]),
+      accents: Object.fromEntries(STYLED_ROOMS.map((id) => [id, unlit(scene, `hqAccent_${id}`, roomStyle(id).accent)])),
       plant,
       screenFrame,
     };
@@ -237,6 +252,11 @@ export class HomeBase {
     // ---- static shell + props
     const builder = new HqBuilder(scene, M);
     builder.buildShell();
+    // Reclamation is the one worn corner of the HQ: heaps of scrap waiting for the press.
+    const scrap = new RubbleBuilder({ scene, add: (m, mat, s) => builder.add(m, mat, s) }, { concrete: pal.graphite, rust: pal.rust, graphite: pal.graphite, enamel: pal.enamel });
+    scrap.scrapPile(-23.1, 5.4, 0.95, 11);
+    scrap.scrapPile(-28.2, 5.7, 0.85, 23); // feeding the conveyor
+    scrap.scrapPile(-31.9, -3.4, 0.7, 37); // beside the press
     const ctx: EconCtx = {
       scene,
       kit: this.kit,
@@ -260,7 +280,7 @@ export class HomeBase {
 
     // ---- lighting: cool fill, sunlight through the window, cyan/teal accents, warm workshop
     const hemi = new HemisphericLight('hqFill', new Vector3(0, 1, 0), scene);
-    hemi.intensity = 0.54;
+    hemi.intensity = 0.3;
     hemi.diffuse = new Color3(0.94, 0.95, 1);
     hemi.groundColor = new Color3(0.5, 0.53, 0.56);
     hemi.specular = Color3.Black();
@@ -269,6 +289,7 @@ export class HomeBase {
     moon.intensity = 1.08;
     moon.diffuse = new Color3(1.0, 0.83, 0.64);
     moon.specular = new Color3(1.0, 0.90, 0.74);
+    buildHqAtmosphere(scene, moon.direction, high, { low: 0.5, medium: 0.8, high: 1 }[settings.particles] ?? 1);
     const point = (name: string, pos: [number, number, number], color: [number, number, number], intensity: number, range: number, pulse = false) => {
       const l = new PointLight(name, new Vector3(...pos), scene);
       l.diffuse = new Color3(...color);
@@ -283,12 +304,12 @@ export class HomeBase {
     pendant.specular.copyFrom(pendant.diffuse);
     pendant.intensity = 3.4;
     pendant.range = 18;
-    point('hqLaunch', [0, 6.5, 16.5], [0.65, 0.92, 0.81], 2.7, 18, true);
-    point('hqBay', [-16.5, 4.4, 0], [0.42, 1, 0.76], 2.65, 12);
+    point('hqLaunch', [0, 6.5, 16.5], roomStyle('deploy').light, 2.7, 18, true);
+    point('hqBay', [-16.5, 4.4, 0], roomStyle('config').light, 2.65, 12);
     // Storage + workshop share one light (frees a slot for the player's light budget).
-    point('hqWorks', [17, 4.6, 0], [0.98, 0.86, 0.72], 3.0, 16);
-    point('hqMarket', [30, 5.2, 0], [0.86, 0.94, 1], 2.8, 14);
-    point('hqReclaim', [-27, 5.2, 0], [1, 0.8, 0.55], 2.6, 13, true);
+    point('hqWorks', [17, 4.6, 0], roomStyle('works').light, 3.0, 16);
+    point('hqMarket', [30, 5.2, 0], roomStyle('market').light, 2.8, 14);
+    point('hqReclaim', [-27, 5.2, 0], roomStyle('reclaim').light, 2.6, 13, true);
     // Eight fixed lights plus the player's light budget (12 is the portable per-material maximum).
     for (const m of lit) m.maxSimultaneousLights = 8 + LIMITS.lights;
     this.litMaterials = lit;
@@ -318,7 +339,7 @@ export class HomeBase {
     this.post.pipeline.bloomKernel = high ? 64 : 48;
     this.post.baseGrain = 0.4;
     this.post.baseExposure = 0.91;
-    this.post.baseContrast = 1.09;
+    this.post.baseContrast = 1.16;
 
     this.input.onLockChange = (locked) => {
       if (!locked && this.screen === 'home') this.setScreen('paused');

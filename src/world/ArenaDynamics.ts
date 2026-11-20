@@ -95,7 +95,7 @@ export class ArenaDynamics {
   }
 
   private part(root: TransformNode, w: number, h: number, d: number, x: number, y: number, z: number, mat: Material, surface: string | null): AbstractMesh {
-    const m = createBeveledBox('dynPart', w, h, d, Math.min(0.08, Math.min(w, h, d) * 0.2), this.scene);
+    const m = createBeveledBox('dynPart', w, h, d, Math.min(0.045, Math.min(w, h, d) * 0.12), this.scene);
     m.parent = root;
     m.position.set(x, y, z);
     m.material = mat;

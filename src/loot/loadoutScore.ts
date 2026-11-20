@@ -1,0 +1,125 @@
+import { type CombatStats, computeStats, formatModifier, maxHull, mitigation, type StatKey, type StatOp } from '../combat/stats';
+import { ECONOMY } from '../data/defs';
+import { equipmentModifiers, itemModifiers, weaponDefFor, weaponSummary } from './equipment';
+import type { ItemInstance } from './types';
+
+/**
+ * Drone-level loadout scoring (pure). Turns a set of equipped items into a handful of
+ * headline numbers (firepower, survivability, mobility, tower support) through the real
+ * stat pipeline, and explains what swapping one item does to them. Used by every terminal
+ * that shows an item next to the current loadout (storage, market, engineering).
+ */
+
+export type ScoreKey = 'dps' | 'ehp' | 'mobility' | 'towers';
+
+export interface LoadoutScore {
+  /** Sustained weapon DPS with crits (0 without a weapon). */
+  dps: number;
+  /** Effective HP at wave 1: (hull + shield) / (1 - mitigation). */
+  ehp: number;
+  /** Movement index, 100 = base drone (speed, dash recharge weighted 70/30). */
+  mobility: number;
+  /** Tower support index, 100 = base (damage x fire rate / build cost). */
+  towers: number;
+  stats: CombatStats;
+}
+
+export const SCORE_LABEL: Record<ScoreKey, string> = { dps: 'FIREPOWER', ehp: 'SURVIVABILITY', mobility: 'MOBILITY', towers: 'TOWERS' };
+export const SCORE_UNIT: Record<ScoreKey, string> = { dps: 'DPS', ehp: 'EHP', mobility: 'IDX', towers: 'IDX' };
+export const SCORE_HELP: Record<ScoreKey, string> = {
+  dps: 'Sustained damage per second of the equipped weapon with crits, heat and all equipped modifiers. Ignores overheating pauses.',
+  ehp: 'Effective hit points at wave 1: hull + shield capacity, divided by the share of damage left after armor and resistance.',
+  mobility: 'Movement index (100 = stock drone): 70% movement speed, 30% dash recharge rate.',
+  towers: 'Tower support index (100 = stock): tower damage × tower fire rate ÷ construction cost.',
+};
+/** How much each headline counts towards the overall verdict. */
+const WEIGHT: Record<ScoreKey, number> = { dps: 0.45, ehp: 0.35, mobility: 0.1, towers: 0.1 };
+export const SCORE_KEYS: ScoreKey[] = ['dps', 'ehp', 'mobility', 'towers'];
+
+const live = (items: readonly (ItemInstance | null | undefined)[]) => items.filter((i): i is ItemInstance => !!i && i.category !== 'module');
+
+export function loadoutScore(items: readonly (ItemInstance | null | undefined)[]): LoadoutScore {
+  const list = live(items);
+  const st = computeStats(equipmentModifiers(list));
+  const weapon = list.find((i) => i.category === 'weapon');
+  const w = weapon ? weaponDefFor(weapon) : null;
+  const dps = w ? weaponSummary(w, st).dps : 0;
+  const pool = maxHull(ECONOMY.playerMaxHp, st) + st.shieldCapacity;
+  const ehp = pool / Math.max(0.05, 1 - mitigation(st));
+  const mobility = 100 * (0.7 * st.moveSpeedMult + 0.3 * st.dashRechargeMult);
+  const towers = (100 * st.turretDamageMult * st.turretFireRateMult) / Math.max(0.01, st.buildCostMult);
+  return { dps, ehp, mobility, towers, stats: st };
+}
+
+export interface ScoreDelta {
+  key: ScoreKey;
+  before: number;
+  after: number;
+  /** Relative change (0.12 = +12%); `before` 0 and `after` > 0 counts as +100%. */
+  pct: number;
+}
+
+export type Verdict = 'upgrade' | 'downgrade' | 'sidegrade' | 'same';
+
+export interface SwapImpact {
+  deltas: ScoreDelta[];
+  /** Weighted relative change of the whole loadout. */
+  score: number;
+  verdict: Verdict;
+}
+
+const rel = (a: number, b: number) => (b > 1e-9 ? (a - b) / b : a > 1e-9 ? 1 : 0);
+
+/** The loadout with `candidate` in place of `replaced` (or added to an empty slot). */
+export function swapped(equipped: readonly (ItemInstance | null)[], candidate: ItemInstance | null, replaced: ItemInstance | null): ItemInstance[] {
+  return [...live(equipped).filter((i) => i.uid !== replaced?.uid && i.uid !== candidate?.uid), ...(candidate ? [candidate] : [])];
+}
+
+/** What equipping `candidate` instead of `replaced` does to the headline numbers. */
+export function swapImpact(equipped: readonly (ItemInstance | null)[], candidate: ItemInstance | null, replaced: ItemInstance | null, base?: LoadoutScore): SwapImpact {
+  const b = base ?? loadoutScore(equipped);
+  const a = loadoutScore(swapped(equipped, candidate, replaced));
+  return impactBetween(b, a);
+}
+
+/** Compare two scored loadouts (also used for engineering before/after previews). */
+export function impactBetween(b: LoadoutScore, a: LoadoutScore): SwapImpact {
+  const deltas = SCORE_KEYS.map((key) => ({ key, before: b[key], after: a[key], pct: rel(a[key], b[key]) })).filter((d) => Math.abs(d.pct) >= 0.001);
+  const score = deltas.reduce((s, d) => s + WEIGHT[d.key] * Math.max(-1, Math.min(1, d.pct)), 0);
+  const gains = deltas.some((d) => d.pct > 0);
+  const losses = deltas.some((d) => d.pct < 0);
+  let verdict: Verdict = 'same';
+  if (gains && !losses) verdict = 'upgrade';
+  else if (losses && !gains) verdict = 'downgrade';
+  else if (gains && losses) verdict = score >= 0.03 ? 'upgrade' : score <= -0.03 ? 'downgrade' : 'sidegrade';
+  return { deltas, score, verdict };
+}
+
+export const VERDICT_LABEL: Record<Verdict, string> = { upgrade: 'UPGRADE', downgrade: 'DOWNGRADE', sidegrade: 'SIDEGRADE', same: 'NO CHANGE' };
+
+export interface StatSource {
+  uid: string;
+  name: string;
+  rarity: string;
+  op: StatOp;
+  value: number;
+  text: string;
+}
+
+/** Which equipped items contribute to a stat, summed per (item, op). Installed modules count towards their weapon. */
+export function statSources(items: readonly (ItemInstance | null | undefined)[], stat: StatKey): StatSource[] {
+  const out: StatSource[] = [];
+  for (const it of live(items)) {
+    const sums = new Map<StatOp, number>();
+    for (const m of itemModifiers(it)) if (m.stat === stat) sums.set(m.op, (sums.get(m.op) ?? 0) + m.value);
+    for (const [op, value] of sums) if (Math.abs(value) > 1e-12) out.push({ uid: it.uid, name: it.name, rarity: it.rarity, op, value, text: formatModifier(stat, op, value) });
+  }
+  return out;
+}
+
+/** Signed percentage text, "+12%" / "−4.5%". */
+export function pctText(p: number): string {
+  const v = Math.abs(p * 100);
+  const s = v >= 100 ? v.toFixed(0) : v >= 10 ? v.toFixed(0) : v.toFixed(1);
+  return `${p >= 0 ? '+' : '−'}${s}%`;
+}

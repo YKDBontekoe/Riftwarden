@@ -22,6 +22,9 @@ import { createPathLight } from './pathLighting';
 import { segmentedRing } from './rings';
 import { ArenaDecals } from './arenaDecals';
 import { ArenaDressing } from './arenaDressing';
+import { RubbleBuilder } from './rubble';
+import { ArenaFloor } from './arenaFloor';
+import { planRubble } from '../world/rubblePlan';
 import { smoothLatheData } from './sculpt';
 
 interface GateVisual {
@@ -131,6 +134,10 @@ export class ArenaBuilder {
     decals.finish();
     this.buildSkyline();
     new ArenaDressing({ scene: this.scene, box: (...a) => this.box(...a), add: (m, mat, s) => this.add(m, mat, s) }, this.pal, this.layout).build();
+    // Floor zoning: reactor plaza, wall gutters, gate chevrons (thin inlays under decals and lanes).
+    new ArenaFloor({ scene: this.scene, add: (m, mat, s) => this.add(m, mat, s) }, this.pal, this.layout).build();
+    // Weathering: rubble piles, scattered debris and wreckage (visual only, planned off every lane).
+    new RubbleBuilder({ scene: this.scene, add: (m, mat, s) => this.add(m, mat, s) }, { concrete: P.debris, rust: P.rust, graphite: P.graphite, enamel: P.enamel }, true).build(planRubble(L));
 
     this.merge();
 
@@ -162,7 +169,7 @@ export class ArenaBuilder {
         };
         const [left, right] = trim(x0, x1);
         const [front, back] = trim(z0, z1);
-        this.box(left, y0, front, right, y1, back, P.graphite, 'wall');
+        this.box(left, y0, front, right, y1, back, P.steel, 'wall');
         const extendX = right - left < back - front ? 0.045 : 0;
         const extendZ = extendX > 0 ? 0 : 0.045;
         this.box(left - extendX, 2.0, front - extendZ, right + extendX, 2.15, back + extendZ, P.orangeDim, null);
@@ -464,7 +471,7 @@ export class ArenaBuilder {
       // World-scale texturing: panels tile every 4 m, worn metal every 2 m.
       const masonry = g.mat === this.pal.concrete;
       if (masonry || g.mat === this.pal.panel) boxProjectUVs(merged, masonry ? 3 : 4);
-      else if (g.mat === this.pal.white || g.mat === this.pal.graphite || g.mat === this.pal.metal || g.mat === this.pal.enamel) boxProjectUVs(merged, 2.5);
+      else if (g.mat === this.pal.white || g.mat === this.pal.graphite || g.mat === this.pal.metal || g.mat === this.pal.enamel || g.mat === this.pal.steel) boxProjectUVs(merged, 2.5);
       this.meshes.push(merged);
       merged.isPickable = g.surface !== null;
       merged.metadata = g.surface ? { surface: g.surface, impact: masonry || g.mat === this.pal.white || g.mat === this.pal.panel ? 'ceramic' : 'alloy' } : null;

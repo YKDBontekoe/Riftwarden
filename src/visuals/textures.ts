@@ -138,6 +138,29 @@ export function yardDeckSet(scene: Scene, high: boolean): PbrSet {
   const albedo = a.createImageData(size, size);
   const orm = o.createImageData(size, size);
   const height = new Float32Array(size * size);
+  // Cracks: jagged random walks drawn once, read back as a mask.
+  const { ctx: crackCtx } = canvas(size);
+  const cr = rng(2027);
+  crackCtx.strokeStyle = 'rgba(255,255,255,1)';
+  crackCtx.lineCap = 'round';
+  for (let c = 0; c < 26; c++) {
+    let x = cr() * size;
+    let y = cr() * size;
+    let ang = cr() * Math.PI * 2;
+    crackCtx.lineWidth = Math.max(0.8, (0.6 + cr() * 1.4) * size / 1024);
+    crackCtx.beginPath();
+    crackCtx.moveTo(x, y);
+    const steps = 6 + Math.floor(cr() * 18);
+    for (let k = 0; k < steps; k++) {
+      ang += (cr() - 0.5) * 1.1;
+      const l = (4 + cr() * 12) * size / 1024;
+      x += Math.cos(ang) * l;
+      y += Math.sin(ang) * l;
+      crackCtx.lineTo(x, y);
+    }
+    crackCtx.stroke();
+  }
+  const cracks = crackCtx.getImageData(0, 0, size, size).data;
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const u = (x + 0.5) / size;
@@ -148,14 +171,18 @@ export function yardDeckSet(scene: Scene, high: boolean): PbrSet {
       const slab = (u * 9) % 1;
       const seam = Math.min(slab, 1 - slab, Math.abs(((v * 9 + Math.floor(u * 9) * 0.5) % 1) - 0.5));
       const expansionJoint = Math.max(0, 1 - seam * 155);
-      const base = 0.46 + (grit - 0.5) * 0.16 + (stain - 0.5) * 0.12 - wet * 0.115 - expansionJoint * 0.12;
       const i = (y * size + x) * 4;
-      albedo.data[i] = base * 255;
-      albedo.data[i + 1] = base * 255 * 0.98;
-      albedo.data[i + 2] = base * 255 * 0.945;
+      // Stains ~2-4 m across (the deck map spans the whole 120 m yard).
+      const oil = smooth(Math.max(0, Math.min(1, (fbm(u, v, 36, 3, 91) - 0.68) * 8))) * 0.8;
+      const rustStain = smooth(Math.max(0, Math.min(1, (fbm(u, v, 40, 3, 133) - 0.64) * 6))) * (0.4 + expansionJoint * 0.6);
+      const crack = cracks[i + 3] / 255;
+      const base = (0.46 + (grit - 0.5) * 0.16 + (stain - 0.5) * 0.12 - wet * 0.115 - expansionJoint * 0.12) * (1 - oil * 0.45) * (1 - crack * 0.6);
+      albedo.data[i] = base * 255 * (1 + rustStain * 0.12);
+      albedo.data[i + 1] = base * 255 * 0.98 * (1 - rustStain * 0.2);
+      albedo.data[i + 2] = base * 255 * 0.945 * (1 - rustStain * 0.42);
       albedo.data[i + 3] = 255;
-      height[y * size + x] = 0.5 + (grit - 0.5) * (0.035 - wet * 0.025) - expansionJoint * 0.19;
-      ormPixel(orm.data, i, 1 - expansionJoint * 0.24, 0.79 + (grit - 0.5) * 0.11 - wet * 0.66, 0);
+      height[y * size + x] = 0.5 + (grit - 0.5) * (0.035 - wet * 0.025) - expansionJoint * 0.19 - crack * 0.12;
+      ormPixel(orm.data, i, 1 - expansionJoint * 0.24 - crack * 0.3, 0.79 + (grit - 0.5) * 0.11 - wet * 0.66 - oil * 0.42 + crack * 0.1, 0);
     }
   }
   a.putImageData(albedo, 0, 0);
@@ -293,7 +320,8 @@ export function wallSet(scene: Scene, high: boolean, indoor: boolean): PbrSet {
       const width = PW / scale;
       const depth = PH / scale;
       const edge = Math.min(px, py, width - px, depth - py);
-      const streak = vnoise(u * 64, v * 3, 64, 9, 3);
+      // Broad runoff streaks (~20 cm): narrow ones read as wood grain under warm light.
+      const streak = vnoise(u * 20, v * 3, 20, 9, 3);
       const runoff = (indoor ? 0.12 : 1) * Math.max(0, streak - 0.43) * Math.max(0, 1 - py / (depth * 0.86));
       const grime = fbm(u, v, 8, 3, 2);
       const grain = vnoise(u * 192, v * 192, 192, 25) - 0.5;
@@ -325,9 +353,11 @@ export function wallSet(scene: Scene, high: boolean, indoor: boolean): PbrSet {
       }
       height[y * S + x] = h;
       const i = (y * S + x) * 4;
-      d[i] = alb * 255 * (indoor ? 1 : 0.91);
-      d[i + 1] = alb * 255 * (indoor ? 1.015 : 0.99);
-      d[i + 2] = alb * 255 * (indoor ? 1.025 : 1.06);
+      // Outdoor runoff carries rust: warm the streaks instead of only darkening them.
+      const rr = indoor ? 0 : Math.min(1, runoff * 1.6 + Math.max(0, grime - 0.62) * 0.8);
+      d[i] = alb * 255 * (indoor ? 1 : 0.91) * (1 - rr * 0.08);
+      d[i + 1] = alb * 255 * (indoor ? 1.015 : 0.99) * (1 - rr * 0.32);
+      d[i + 2] = alb * 255 * (indoor ? 1.025 : 1.06) * (1 - rr * 0.55);
       d[i + 3] = 255;
       ormPixel(oimg.data, i, edge < 3 ? 0.5 : 1, rough, 1);
     }
@@ -354,6 +384,24 @@ export function wallSet(scene: Scene, high: boolean, indoor: boolean): PbrSet {
           }
         }
       }
+  if (!indoor) {
+    // Rust bleeding down from rivets and the stiffener ribs.
+    const r = rng(404);
+    for (let cx = 0; cx < cols; cx++)
+      for (let cy = 0; cy < rows; cy++)
+        for (let k = 0; k < 8; k++)
+          for (const side of [10 * scale, PW - 10 * scale]) {
+            if (r() > 0.55) continue;
+            const x = cx * PW + side;
+            const y = cy * PH + 14 * scale + k * ((PH - 28 * scale) / 7);
+            const len = (14 + r() * 60) * scale;
+            const g = a.createLinearGradient(x, y, x, y + len);
+            g.addColorStop(0, `rgba(118,58,24,${0.35 + r() * 0.3})`);
+            g.addColorStop(1, 'rgba(118,58,24,0)');
+            a.fillStyle = g;
+            a.fillRect(x - 1.6 * scale, y, (2.2 + r() * 2.5) * scale, len);
+          }
+  }
   return {
     albedo: toTexture('wallAlb', ac, scene),
     normal: toTexture('wallNrm', heightToNormal(height, S, 5), scene, { srgb: false }),
@@ -362,7 +410,7 @@ export function wallSet(scene: Scene, high: boolean, indoor: boolean): PbrSet {
 }
 
 /** Generic wear for small props and machines: grime albedo multiplier + roughness noise + scratches. */
-export function wearSet(scene: Scene, high: boolean): PbrSet {
+export function wearSet(scene: Scene, high: boolean, rust = 1): PbrSet {
   const S = high ? 512 : 256;
   const { c: ac, ctx: a } = canvas(S);
   const img = a.createImageData(S, S);
@@ -376,12 +424,23 @@ export function wearSet(scene: Scene, high: boolean): PbrSet {
       const g = fbm(u, v, 6, 5, 31);
       const speck = vnoise(u * 96, v * 96, 96, 4);
       const brushing = vnoise(u * 7, v * 192, 7, 41, 192) - 0.5;
-      const alb = 0.93 + (g - 0.5) * 0.15 + brushing * 0.06 - Math.max(0, speck - 0.73) * 0.35;
+      // Light speckle only: dense dark pits read as cork/plywood once warm light hits them.
+      const alb = 0.93 + (g - 0.5) * 0.15 + brushing * 0.02 - Math.max(0, speck - 0.8) * 0.18;
+      // Rust: blotches where the paint has failed (fbm threshold), pitted inside, with a soft halo.
+      // Rust runs: vertically stretched noise, so failures read as streaks and drips, not spots.
+      const patch = vnoise(u * 28, v * 5, 28, 77, 5) * 0.6 + fbm(u, v, 9, 3, 78) * 0.4;
+      const pit = vnoise(u * 80, v * 80, 80, 13);
+      const rm = rust * smooth(Math.max(0, Math.min(1, (patch - 0.66) * 9)));
+      const halo = rust * smooth(Math.max(0, Math.min(1, (patch - 0.6) * 10))) * 0.25;
+      const k = Math.max(rm, halo);
+      const rAlb = alb * (0.62 + (pit - 0.5) * 0.25);
       const i = (y * S + x) * 4;
-      img.data[i] = img.data[i + 1] = img.data[i + 2] = Math.min(1, alb) * 255;
+      img.data[i] = Math.min(1, alb * (1 - k) + rAlb * 0.95 * k) * 255;
+      img.data[i + 1] = Math.min(1, alb * (1 - k) + rAlb * 0.52 * k) * 255;
+      img.data[i + 2] = Math.min(1, alb * (1 - k) + rAlb * 0.3 * k) * 255;
       img.data[i + 3] = 255;
-      ormPixel(oimg.data, i, 1, 0.77 + (g - 0.5) * 0.32 + brushing * 0.16, 1);
-      height[y * S + x] = g * 0.12 + brushing * 0.09;
+      ormPixel(oimg.data, i, 1 - rm * 0.15, Math.min(1, 0.77 + (g - 0.5) * 0.32 + brushing * 0.06 + rm * 0.25), 1 - rm * 0.75);
+      height[y * S + x] = g * 0.12 + brushing * 0.03 - rm * (0.05 + pit * 0.08);
     }
   }
   a.putImageData(img, 0, 0);
@@ -404,6 +463,43 @@ export function wearSet(scene: Scene, high: boolean): PbrSet {
     albedo: toTexture('wearAlb', ac, scene, { aniso: 4 }),
     normal: toTexture('wearNrm', heightToNormal(height, S, 3), scene, { srgb: false }),
     orm: toTexture('wearOrm', oc, scene, { srgb: false, aniso: 4 }),
+  };
+}
+
+/** Corroded steel: mottled oxide with flaking paint islands and pitting (wreckage, scrap, rebar). */
+export function rustSet(scene: Scene, high: boolean): PbrSet {
+  const S = high ? 512 : 256;
+  const { c: ac, ctx: a } = canvas(S);
+  const { c: oc, ctx: o } = canvas(S);
+  const img = a.createImageData(S, S);
+  const oimg = o.createImageData(S, S);
+  const height = new Float32Array(S * S);
+  for (let y = 0; y < S; y++) {
+    for (let x = 0; x < S; x++) {
+      const u = x / S;
+      const v = y / S;
+      const ox = fbm(u, v, 6, 5, 211);
+      const fine = vnoise(u * 96, v * 96, 96, 17);
+      const paint = smooth(Math.max(0, Math.min(1, (fbm(u, v, 4, 3, 307) - 0.58) * 9)));
+      const dark = 0.55 + ox * 0.6 + (fine - 0.5) * 0.25;
+      const i = (y * S + x) * 4;
+      const r = (0.5 * dark) * (1 - paint) + 0.36 * paint;
+      const g = (0.25 * dark) * (1 - paint) + 0.38 * paint;
+      const b = (0.11 * dark) * (1 - paint) + 0.36 * paint;
+      img.data[i] = Math.min(1, r) * 255;
+      img.data[i + 1] = Math.min(1, g) * 255;
+      img.data[i + 2] = Math.min(1, b) * 255;
+      img.data[i + 3] = 255;
+      ormPixel(oimg.data, i, 0.85 + ox * 0.15, 0.88 - paint * 0.3 - (fine - 0.5) * 0.1, 0.2 + paint * 0.4);
+      height[y * S + x] = ox * 0.3 + (fine - 0.5) * 0.12 + paint * 0.06;
+    }
+  }
+  a.putImageData(img, 0, 0);
+  o.putImageData(oimg, 0, 0);
+  return {
+    albedo: toTexture('rustAlb', ac, scene),
+    normal: toTexture('rustNrm', heightToNormal(height, S, 4), scene, { srgb: false }),
+    orm: toTexture('rustOrm', oc, scene, { srgb: false }),
   };
 }
 

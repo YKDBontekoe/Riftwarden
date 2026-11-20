@@ -22,6 +22,7 @@ import { canvas, flareSprite, sparkSprite, toTexture } from './textures';
 import { placeScan } from './scannedProps';
 import { captureEnvironment } from './envCapture';
 import { BASE_FOG } from './mood';
+import { RiftMist } from './riftMist';
 
 // ---------------------------------------------------------------- shaders
 
@@ -64,16 +65,18 @@ void main(){
 
   // Low morning haze and long cirrus bands keep the yard silhouette legible.
   float horizon = exp(-3.7 * max(h, 0.0));
-  vec3 col = mix(vec3(0.115, 0.24, 0.27), horizonColor, horizon);
-  col += vec3(0.62, 0.34, 0.16) * pow(sd, 4.0) * (0.46 + horizon);
+  vec3 col = mix(vec3(0.045, 0.07, 0.095), horizonColor, horizon);
+  col += vec3(0.85, 0.42, 0.17) * pow(sd, 3.0) * (0.35 + horizon);
   vec3 cloudPos = d * vec3(3.1, 18.0, 6.0) + vec3(time * 0.003, 2.0, time * 0.002);
   float cloud = fbm3(cloudPos);
-  float cover = smoothstep(0.46, 0.66, cloud) * smoothstep(-0.03, 0.22, h);
-  col = mix(col, vec3(0.55, 0.62, 0.59) + vec3(0.33, 0.16, 0.08) * sd, cover * 0.50);
+  float cover = smoothstep(0.38, 0.62, cloud) * smoothstep(-0.03, 0.22, h);
+  col = mix(col, vec3(0.13, 0.13, 0.15) + vec3(0.55, 0.26, 0.1) * pow(sd, 2.0), cover * 0.78);
   // Mirror at the rear meridian so both ends of the panorama join continuously.
   float azimuth = atan(d.x, d.z) / 3.14159265 + 0.76;
   float elevation = (asin(clamp(h, -1.0, 1.0)) + 0.045) / 0.78;
   vec3 ridgeColor = texture2D(mountains, vec2(azimuth, elevation)).rgb;
+  // Ridges sit in the dusk: darkened and warmed toward the sun, cooler away from it.
+  ridgeColor = ridgeColor * mix(vec3(0.42, 0.45, 0.52), vec3(0.85, 0.62, 0.45), pow(sd, 2.0));
   col = mix(col, ridgeColor, (1.0 - smoothstep(0.75, 1.0, elevation)) * 0.94);
   col += vec3(0.95, 0.58, 0.27) * pow(sd, 45.0);
   col += vec3(3.6, 2.7, 1.7) * smoothstep(0.99945, 0.99982, sd) * (1.0 - cover * 0.6);
@@ -236,6 +239,8 @@ export class Atmosphere {
   private gateEmbers: ParticleSystem[] = [];
   private portalMats: ShaderMaterial[] = [];
   private time = 0;
+  /** Vapour rolling out of the gate tunnels (seal state follows the arena gates). */
+  readonly mist: RiftMist;
   private flash = 0;
   private nextFlash = 6;
   readonly skyMesh: Mesh;
@@ -260,7 +265,7 @@ export class Atmosphere {
     sky.disableDepthWrite = true;
     sky.setVector3('riftDir', new Vector3(-0.42, 0.4, 1).normalize());
     sky.setVector3('sunDir', this.sunDir);
-    sky.setColor3('horizonColor', new Color3(0.69, 0.72, 0.64));
+    sky.setColor3('horizonColor', new Color3(0.36, 0.33, 0.32));
     sky.setFloat('time', 0);
     sky.setFloat('flash', 0);
     this.sky = sky;
@@ -273,10 +278,11 @@ export class Atmosphere {
     this.envMeshes.push(this.skyMesh);
 
     const fill = new HemisphericLight('stormFill', new Vector3(-0.3, 1, 0.35), scene);
-    fill.diffuse.set(0.75, 0.86, 0.82);
-    fill.groundColor.set(0.34, 0.40, 0.38);
+    // Cool storm fill, low: the warm sun and the practical lights carry the contrast.
+    fill.diffuse.set(0.58, 0.68, 0.82);
+    fill.groundColor.set(0.2, 0.19, 0.2);
     fill.specular.set(0, 0, 0);
-    fill.intensity = 0.37;
+    fill.intensity = 0.26;
 
     this.beamMat = new ShaderMaterial('lampBeam', scene, 'rwBeam', {
       attributes: ['position', 'normal', 'uv'],
@@ -288,6 +294,7 @@ export class Atmosphere {
     this.beamMat.backFaceCulling = false;
     this.beamMat.setColor3('color', new Color3(0.12, 0.16, 0.21));
 
+    this.mist = new RiftMist(scene, layout);
     this.buildSkyline();
     this.buildLamps();
     this.buildSconces();
@@ -334,7 +341,7 @@ export class Atmosphere {
       [72, -43, -0.82, 102, 67, 83], [-85, 30, -0.41, 132, 108, 99],
       [-78, -33, 0.75, 119, 88, 85], [-32, -93, 1.21, 149, 76, 95],
       [23, -104, 1.75, 140, 97, 120],
-    ]) placeScan(cut, 'rock', [x, -4.7, z], yaw, [length, height, depth]);
+    ]) placeScan(cut, 'rock', [x * 1.35, -9, z * 1.35], yaw, [length * 1.1, height * 0.8, depth]);
   }
 
   private buildLamps(): void {
@@ -560,6 +567,7 @@ export class Atmosphere {
     this.flash = Math.max(0, this.flash - dt * 3.2);
     const flick = f > 0.5 ? f : f * (0.5 + 0.5 * Math.sin(this.time * 60));
     this.sky.setFloat('time', this.time);
+    this.mist.update(this.time, camPos);
     this.sky.setFloat('flash', flick);
     this.riftMatsTime();
     this.beamMat.setFloat('time', this.time);
@@ -568,7 +576,8 @@ export class Atmosphere {
     (this.rain.emitter as Vector3).copyFrom(camPos);
     for (let i = 0; i < this.gateLights.length; i++) {
       const l = this.gateLights[i];
-      l.intensity = 3.5 + 0.4 * Math.sin(this.time * 7.3 + i * 2) * Math.sin(this.time * 3.1 + i) + flick * 0.6;
+      // Rift-lit, not floodlit: the tunnel steel keeps its dark value; the mist carries the glow into the yard.
+      l.intensity = 2.1 + 0.35 * Math.sin(this.time * 7.3 + i * 2) * Math.sin(this.time * 3.1 + i) + flick * 0.6;
     }
     return flick;
   }

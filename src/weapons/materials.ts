@@ -28,6 +28,9 @@ interface Micro {
 
 const LIBS = new WeakMap<Scene, WeaponMaterials>();
 
+/** Seam positions across the tile (irregular so panels differ in length). */
+const SEAMS_U = [0.07, 0.31, 0.49, 0.78];
+
 /** Brushed and lightly worn finish shared by the viewmodel and the workshop preview. */
 function micro(scene: Scene): Micro {
   const size = 256;
@@ -58,19 +61,31 @@ function micro(scene: Scene): Micro {
       const rub = Math.max(0, fbm(u, v, 5, 3, 40) - 0.55);
       const i = (y * size + x) * 4;
       const scrape = scratches[i + 3] / 255;
-      const tint = 0.90 + grain * 0.11 + brush * 0.06 + rub * 0.38 + scrape * 0.25;
-      albedo.data[i] = albedo.data[i + 1] = albedo.data[i + 2] = tint * 255;
+      // Handling grime collects in broad patches; rubbed-through areas and scratches read brighter.
+      const grime = Math.max(0, fbm(u, v, 4, 3, 91) - 0.5) * 0.55;
+      // Machined panel breaks (tile = 0.5 m of weapon): irregular seams across the length,
+      // one along it, with a fastener beside each seam. Grooves are dark, rough and recessed.
+      let seam = 0;
+      for (const su of SEAMS_U) seam = Math.max(seam, 1 - Math.min(1, Math.abs(u - su) * size / 1.3));
+      seam = Math.max(seam, 1 - Math.min(1, Math.abs(v - 0.58) * size / 1.3));
+      let bolt = 0;
+      for (const su of SEAMS_U) for (const bv of [0.14, 0.39, 0.83]) {
+        const d = Math.hypot((u - su - 0.022) * size, (v - bv) * size);
+        if (d < 2.6) bolt = Math.max(bolt, 1 - d / 2.6);
+      }
+      const tint = (0.88 + grain * 0.14 + brush * 0.08 + rub * 0.42 + scrape * 0.32 - grime) * (1 - seam * 0.55) + bolt * 0.25;
+      albedo.data[i] = albedo.data[i + 1] = albedo.data[i + 2] = Math.min(1, tint) * 255;
       albedo.data[i + 3] = 255;
-      orm.data[i] = 255;
-      orm.data[i + 1] = (0.89 + grain * 0.19 + brush * 0.15 - rub * 0.52 - scrape * 0.26) * 255;
+      orm.data[i] = (1 - seam * 0.5) * 255;
+      orm.data[i + 1] = Math.min(1, 0.89 + grain * 0.19 + brush * 0.15 - rub * 0.52 - scrape * 0.26 + seam * 0.1 - bolt * 0.4) * 255;
       orm.data[i + 2] = orm.data[i + 3] = 255;
-      height[y * size + x] = grain * 0.085 + brush * 0.05 - scrape * 0.037;
+      height[y * size + x] = grain * 0.085 + brush * 0.05 - scrape * 0.037 - seam * 0.35 + bolt * 0.25;
     }
   }
   a.putImageData(albedo, 0, 0);
   o.putImageData(orm, 0, 0);
   const normal = toTexture('wpnMicroNrm', heightToNormal(height, size, 2.2), scene, { srgb: false });
-  normal.level = 0.31;
+  normal.level = 0.45;
   return {
     albedo: toTexture('wpnMicroAlb', ac, scene),
     orm: toTexture('wpnMicroOrm', oc, scene, { srgb: false }),
@@ -136,7 +151,7 @@ function surface(scene: Scene, m: Micro, name: string, albedo: [number, number, 
 }
 
 const SHELL: Record<Finish, [[number, number, number], number, number, number?]> = {
-  arctic: [[0.85, 0.85, 0.76], 0.07, 0.48, 0.19],
+  arctic: [[0.64, 0.65, 0.63], 0.12, 0.56, 0.12],
   gunmetal: [[0.15, 0.16, 0.18], 0.65, 0.34, 0.3],
   sand: [[0.58, 0.51, 0.39], 0.02, 0.5, 0.35],
   slate: [[0.22, 0.29, 0.37], 0.08, 0.42, 0.5],

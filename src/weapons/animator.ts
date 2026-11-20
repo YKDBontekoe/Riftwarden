@@ -42,7 +42,7 @@ export interface Pose {
 
 /** Per-family recoil feel. */
 const RECOIL: Record<WeaponFamily, { back: number; pitch: number; roll: number; slide: number; stiff: number; damp: number }> = {
-  plasma: { back: 0.022, pitch: 0.045, roll: 0.03, slide: 0.012, stiff: 520, damp: 34 },
+  plasma: { back: 0.032, pitch: 0.07, roll: 0.035, slide: 0.02, stiff: 620, damp: 30 },
   rail: { back: 0.075, pitch: 0.2, roll: 0.06, slide: 0.034, stiff: 170, damp: 17 },
   beam: { back: 0.006, pitch: 0.006, roll: 0.004, slide: 0.004, stiff: 260, damp: 26 },
 };
@@ -148,8 +148,12 @@ export class WeaponAnimator {
     const oh = i.overheated ? 1 : 0;
     this.ohT += ((oh) - this.ohT) * (1 - Math.exp(-dt * 6));
 
-    p.x = this.swayX + bx - this.sprint * 0.03 + this.ohT * 0.01;
-    p.y = -this.swayY + by + bobY * 0.04 - this.sprint * 0.025 - this.hol * 0.22 - this.ohT * 0.02;
+    // A running beam hums in the hands: a small high-frequency shake scaled by activity.
+    const hum = this.family === 'beam' && !this.reduceMotion ? i.active : 0;
+    const hx = hum * 0.0016 * Math.sin(this.t * 83);
+    const hy = hum * 0.0012 * Math.sin(this.t * 71 + 1.3);
+    p.x = this.swayX + bx - this.sprint * 0.03 + this.ohT * 0.01 + hx;
+    p.y = -this.swayY + by + bobY * 0.04 - this.sprint * 0.025 - this.hol * 0.22 - this.ohT * 0.02 + hy;
     p.z = -back * 0.03 - this.sprint * 0.02 + (this.family === 'beam' ? -i.active * 0.006 : 0);
     p.pitch = -pitch * 0.025 + this.swayY * 0.8 + this.sprint * 0.16 + this.hol * 0.7 + this.ohT * 0.06;
     p.yaw = yaw * 0.03 + this.swayX * 1.2 - this.sprint * 0.42 + this.ohT * 0.12;

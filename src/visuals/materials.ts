@@ -1,5 +1,5 @@
 import { type BaseTexture, Color3, Constants, FresnelParameters, type Material, NullEngine, PBRMaterial, type Scene, StandardMaterial, Texture } from '@babylonjs/core';
-import { floorSet, type PbrSet, wallSet, wearSet, yardDeckSet } from './textures';
+import { floorSet, type PbrSet, rustSet, wallSet, wearSet, yardDeckSet } from './textures';
 
 /**
  * Material palette. Surfaces are metallic/roughness PBR lit by the captured
@@ -23,6 +23,12 @@ export interface Palette {
   whiteGlow: PBRMaterial;
   enemyArmor: PBRMaterial;
   enemyDark: PBRMaterial;
+  /** Corroded steel (wreckage, scrap, rebar). */
+  rust: PBRMaterial;
+  /** Broken, dusty concrete (rubble chunks, fallen slabs). */
+  debris: PBRMaterial;
+  /** Blackened structural steel for large slabs (gate tunnels): wear in the finish only, no rust blotches. */
+  steel: PBRMaterial;
   shield: StandardMaterial;
   ghostOk: StandardMaterial;
   ghostBad: StandardMaterial;
@@ -113,7 +119,8 @@ function glow(scene: Scene, name: string, e: [number, number, number]): PBRMater
 export function createPalette(scene: Scene, high: boolean, indoor = false): Palette {
   const floorTex = indoor ? floorSet(scene, high) : yardDeckSet(scene, high);
   const wallTex = wallSet(scene, high, indoor);
-  const wear = wearSet(scene, high);
+  // Outdoors (arena) the paint fails in patches; the HQ is maintained, so only light rust.
+  const wear = wearSet(scene, high, indoor ? 0.3 : 0.6);
 
   const floor = pbr(scene, indoor ? 'hqFloor' : 'floor', {
     albedo: indoor ? [0.59, 0.60, 0.54] : [0.80, 0.81, 0.82],
@@ -154,11 +161,13 @@ export function createPalette(scene: Scene, high: boolean, indoor = false): Pale
   rift.backFaceCulling = false;
 
   // Clean hard-surface set: off-white composite panels, dark gunmetal trims, bright machined metal.
-  const panel = pbr(scene, 'panel', { albedo: [0.88, 0.87, 0.78], metallic: 0.12, roughness: 1, set: wallTex, clearCoat: 0.3 });
-  const concrete = indoor ? panel : pbr(scene, 'castConcrete', { albedo: [0.64, 0.62, 0.53], metallic: 0, roughness: 0.84 });
+  // Outdoors everything is weathered: grey cast concrete and dirty composite, no cream.
+  const panel = pbr(scene, 'panel', { albedo: indoor ? [0.88, 0.87, 0.78] : [0.5, 0.52, 0.52], metallic: 0.12, roughness: 1, set: wallTex, clearCoat: indoor ? 0.3 : 0.1 });
+  const concrete = indoor ? panel : pbr(scene, 'castConcrete', { albedo: [0.4, 0.4, 0.39], metallic: 0, roughness: 0.9 });
   const glazing = pbr(scene, 'smokedFacade', { albedo: [0.06, 0.17, 0.20], metallic: 0.67, roughness: 0.17, clearCoat: 0.65 });
-  const white = pbr(scene, 'white', { albedo: [0.87, 0.86, 0.76], metallic: 0.08, roughness: 0.65, set: wear, noAlbedo: true, clearCoat: 0.18 });
-  const graphite = pbr(scene, 'graphite', { albedo: [0.155, 0.185, 0.18], metallic: 0.44, roughness: 0.67, set: wear });
+  const white = pbr(scene, 'white', { albedo: indoor ? [0.87, 0.86, 0.76] : [0.5, 0.5, 0.48], metallic: 0.08, roughness: 0.65, set: wear, noAlbedo: true, clearCoat: 0.18 });
+  // Outdoors: painted steel, cooler and less metallic, so the low warm sun does not turn it tan-brown.
+  const graphite = pbr(scene, 'graphite', indoor ? { albedo: [0.155, 0.185, 0.18], metallic: 0.44, roughness: 0.67, set: wear } : { albedo: [0.12, 0.135, 0.145], metallic: 0.22, roughness: 0.7, set: wear });
   const metal = pbr(scene, 'metal', { albedo: [0.69, 0.74, 0.78], metallic: 0.78, roughness: 0.49, set: wear, noAlbedo: true });
   const enamel = pbr(scene, 'safetyEnamel', { albedo: [0.84, 0.30, 0.14], metallic: 0.12, roughness: 0.65, set: wear });
   const enemyArmor = pbr(scene, 'enemyArmor', { albedo: [0.65, 0.29, 0.15], metallic: 0.24, roughness: 0.66, set: wear, clearCoat: 0.21 });
@@ -167,7 +176,10 @@ export function createPalette(scene: Scene, high: boolean, indoor = false): Pale
   wallTex.normal.level = indoor ? 0.19 : 0.36;
   wear.normal.level = 0.21;
 
-  const lit = [white, panel, graphite, metal, enamel, floor, enemyArmor, enemyDark];
+  const rust = pbr(scene, 'rustMetal', { albedo: [1, 1, 1], metallic: 1, roughness: 1, set: rustSet(scene, high) });
+  const debris = pbr(scene, 'rubbleConcrete', { albedo: [0.25, 0.24, 0.22], metallic: 0, roughness: 1, set: wear, noAlbedo: true });
+  const steel = pbr(scene, 'blackSteel', { albedo: [0.1, 0.105, 0.11], metallic: 0.6, roughness: 0.72, set: wear, noAlbedo: true });
+  const lit = [white, panel, graphite, metal, enamel, floor, enemyArmor, enemyDark, rust, debris, steel];
   if (!indoor) {
     lit.push(concrete, glazing);
     if (!(scene.getEngine() instanceof NullEngine)) {
@@ -202,6 +214,9 @@ export function createPalette(scene: Scene, high: boolean, indoor = false): Pale
     redGlow: glow(scene, 'redGlow', [2.6, 0.28, 0.12]),
     whiteGlow: glow(scene, 'whiteGlow', [2.4, 2.6, 2.9]),
     enemyArmor,
+    rust,
+    debris,
+    steel,
     enemyDark,
     shield,
     ghostOk: ghost('ghostOk', [0.2, 1.4, 1.6]),

@@ -480,11 +480,12 @@ export class Effects {
   /** Contacts keep a distinct silhouette even when the particle budget is tight. */
   impact(pos: Vector3, normal: Vector3, surface: SurfaceImpact = 'alloy', light = false): void {
     const contact = TMP.copyFrom(normal).scaleInPlace(0.065).addInPlace(pos);
-    const sparks = surface === 'alloy' ? (this.high ? 9 : 6) : 3;
+    // Every surface answers a hit: metal throws sparks, masonry chips and a dust puff, both flash.
+    const sparks = surface === 'alloy' ? (this.high ? 9 : 6) : this.high ? 6 : 4;
     this.burst('impact', contact, light ? 2 : sparks, normal);
-    this.burst(surface === 'wetDeck' ? 'mist' : 'puff', contact, light ? 1 : surface === 'alloy' ? 1 : 4, normal);
+    this.burst(surface === 'wetDeck' ? 'mist' : 'puff', contact, light ? 1 : surface === 'alloy' ? 1 : 5, normal);
     if (light) return;
-    if (this.high && surface === 'alloy') this.burst('flash', contact, 1, normal, 0.13);
+    if (this.high) this.burst('flash', contact, 1, normal, surface === 'alloy' ? 0.13 : 0.1);
     if (surface === 'alloy') this.hotSparks.emit(pos, normal, 7, 6.8, 0.5);
     const hi = this.holeNext;
     const h = this.holes[hi];

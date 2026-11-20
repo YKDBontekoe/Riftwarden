@@ -1,16 +1,15 @@
 import { useMemo, useState } from 'react';
 import { sfx } from '../audio/Sfx';
-import { BASE_STATS, computeStats, fmtNum, formatModifier, formatStat, maxHull, mitigation, STAT_DEFS } from '../combat/stats';
+import { fmtNum, formatModifier, STAT_DEFS } from '../combat/stats';
 import type { Flow } from '../core/Flow';
-import { ECONOMY, SENTINEL, towerCost } from '../data/defs';
 import { STORAGE_EXPANSION, storageExpansionCost } from '../loot/economy';
-import { equipmentModifiers, weaponDefFor, weaponStatRows, weaponSummary, withSocket } from '../loot/equipment';
+import { weaponStatRows, withSocket } from '../loot/equipment';
 import { FAMILIES, SOCKET_LABEL } from '../weapons/build';
 import { canInstall, moduleTypeDef, removalCost } from '../weapons/modules';
 import { WeaponViewer } from './WeaponViewer';
+import { DroneStats } from './DroneStats';
 import { rarity } from '../loot/rarity';
 import { ARENA } from '../world/layout';
-import { MOVE } from '../player/Player';
 import { type ItemInstance, type SlotId, SLOTS } from '../progression/items';
 import {
   deployBlocker,
@@ -161,59 +160,6 @@ function Stat({ k, v, tone }: { k: string; v: string; tone?: 'up' | 'down' }) {
 
 export function useEquipped(save: SaveData): Record<SlotId, ItemInstance | null> {
   return useMemo(() => Object.fromEntries(SLOTS.map((s) => [s.id, equippedItem(save, s.id)])) as Record<SlotId, ItemInstance | null>, [save]);
-}
-
-/** Calculated drone statistics from the real stat pipeline. */
-function DroneStats({ equipped }: { equipped: Record<SlotId, ItemInstance | null> }) {
-  const items = Object.values(equipped).filter((i): i is ItemInstance => !!i);
-  const st = computeStats(equipmentModifiers(items));
-  const w = weaponDefFor(equipped.weapon);
-  const ws = w ? weaponSummary(w, st) : null;
-  const b = BASE_STATS;
-  const d = (k: keyof typeof st): 'up' | 'down' | undefined => {
-    const def = STAT_DEFS[k];
-    if (Math.abs(st[k] - b[k]) < 1e-9) return undefined;
-    return (st[k] > b[k]) === (def.better === 'higher') ? 'up' : 'down';
-  };
-  return (
-    <>
-      {w && ws && (
-        <>
-          <div className="col-label">PRIMARY · {w.name}</div>
-          <div className="stat-grid">
-            <Stat k="DAMAGE / SHOT" v={fmtNum(ws.damage)} tone={d('weaponDamageMult')} />
-            <Stat k="FIRE RATE" v={`${fmtNum(ws.rate)}/s`} tone={d('fireRateMult')} />
-            <Stat k="EXPECTED DPS (CRITS)" v={fmtNum(ws.dps)} />
-            <Stat k="RANGE" v={`${w.range} m`} />
-            <Stat k="HEAT / SHOT" v={`${fmtNum(ws.heat)}%`} tone={d('heatEfficiency')} />
-            <Stat k="SHOTS TO OVERHEAT" v={String(ws.shotsToOverheat)} tone={d('heatEfficiency')} />
-            <Stat k="COOLING" v={`${fmtNum(ws.cool)}%/s`} tone={d('coolRateMult')} />
-            <Stat k="CRIT CHANCE" v={`${formatStat('critChance', st.critChance)} · weakpoints 100%`} tone={d('critChance')} />
-            <Stat k="CRIT DAMAGE" v={formatStat('critMultiplier', st.critMultiplier)} tone={d('critMultiplier')} />
-          </div>
-        </>
-      )}
-      <div className="col-label">DRONE</div>
-      <div className="stat-grid">
-        <Stat k="HULL INTEGRITY" v={fmtNum(maxHull(ECONOMY.playerMaxHp, st))} tone={st.maxHealthBonus !== 0 || st.maxHealthMult !== 1 ? 'up' : undefined} />
-        <Stat k="SELF-REPAIR" v="18/s after 4 s" />
-        <Stat k="SHIELD" v={st.shieldCapacity > 0 ? `${fmtNum(st.shieldCapacity)} · +${fmtNum(st.shieldRegen)}/s` : 'NONE'} tone={d('shieldCapacity')} />
-        <Stat k="SHIELD DELAY" v={st.shieldCapacity > 0 ? formatStat('shieldDelay', st.shieldDelay) : '—'} tone={st.shieldCapacity > 0 ? d('shieldDelay') : undefined} />
-        <Stat k="ARMOR · RESIST" v={`${fmtNum(st.armor)} · ${formatStat('damageResist', st.damageResist)}`} tone={d('armor') ?? d('damageResist')} />
-        <Stat k="DAMAGE REDUCTION (W1)" v={`${fmtNum(mitigation(st) * 100)}%`} />
-        <Stat k="SPEED · SPRINT" v={`${fmtNum(MOVE.runSpeed * st.moveSpeedMult)} · ${fmtNum(MOVE.sprintSpeed * st.moveSpeedMult)} m/s`} tone={d('moveSpeedMult')} />
-        <Stat k="DASH RECHARGE" v={`${MOVE.dashCharges} × ${fmtNum(MOVE.dashRecharge / st.dashRechargeMult)} s`} tone={d('dashRechargeMult')} />
-      </div>
-      <div className="col-label">DEFENSES & TACTICAL</div>
-      <div className="stat-grid">
-        <Stat k="TURRET DAMAGE" v={formatStat('turretDamageMult', st.turretDamageMult)} tone={d('turretDamageMult')} />
-        <Stat k="TURRET FIRE RATE" v={formatStat('turretFireRateMult', st.turretFireRateMult)} tone={d('turretFireRateMult')} />
-        <Stat k="TURRET RANGE" v={`${fmtNum(SENTINEL.range * st.turretRangeMult)} m`} tone={d('turretRangeMult')} />
-        <Stat k="SENTINEL COST" v={`${towerCost(SENTINEL, st.buildCostMult)} cores`} tone={d('buildCostMult')} />
-        <Stat k="TACTICAL RECHARGE" v={formatStat('tacticalRechargeMult', st.tacticalRechargeMult)} tone={d('tacticalRechargeMult')} />
-      </div>
-    </>
-  );
 }
 
 export function LoadoutTerminal({ flow, close }: { flow: Flow; close: () => void }) {

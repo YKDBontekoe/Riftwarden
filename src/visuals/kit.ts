@@ -31,7 +31,7 @@ export class Kit {
    */
   flashMode = false;
 
-  /** While true, boxes become softened hard-surface blocks and spheres smooth (enemy rigs). */
+  /** While true, boxes become chamfered hard-surface blocks and spheres smooth (enemy rigs). */
   softMode = false;
 
   /** Run `fn` with softened primitives. */
@@ -50,10 +50,10 @@ export class Kit {
     if (!this.softMode) return shape;
     if (shape === 'box') {
       return this.sculpt('softBox', () => loftData([
-        { t: -0.5, w: 0.43, h: 0.43, n: 4 },
-        { t: -0.455, w: 0.5, h: 0.5, n: 5 },
-        { t: 0.455, w: 0.5, h: 0.5, n: 5 },
-        { t: 0.5, w: 0.43, h: 0.43, n: 4 },
+        { t: -0.5, w: 0.465, h: 0.465, n: 6 },
+        { t: -0.475, w: 0.5, h: 0.5, n: 6 },
+        { t: 0.475, w: 0.5, h: 0.5, n: 6 },
+        { t: 0.5, w: 0.465, h: 0.465, n: 6 },
       ], 'y', 28));
     }
     if (shape === 'sphere') return this.sculpt('softSphere', () => smoothLatheData(Array.from({ length: 13 }, (_, i) => {
@@ -99,7 +99,7 @@ export class Kit {
     switch (shape) {
       case 'box': {
         const m = new Mesh('k_box', s);
-        beveledBoxData(1, 1, 1, 0.08).applyToMesh(m);
+        beveledBoxData(1, 1, 1, 0.035).applyToMesh(m);
         return m;
       }
       case 'cyl':
