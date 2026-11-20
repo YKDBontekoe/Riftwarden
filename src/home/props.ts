@@ -10,6 +10,7 @@ import { loftData, smoothLatheData } from '../visuals/sculpt';
 import { canvas, flareSprite, toTexture } from '../visuals/textures';
 import { ARENA } from '../world/layout';
 import type { HqMaterials } from './HqBuilder';
+import { buildLaunchCollar } from './launchCollar';
 import { SURVEY_DESK, type Station } from './layout';
 import type { Placeable } from './placeables';
 
@@ -193,6 +194,7 @@ export function launchRing(ctx: PropCtx): void {
   kit.part('torus', M.graphite, root, { pos: [0, 4.2, 0], rot: [Math.PI / 2, 0, 0], scale: [7.4, 7.4, 7.4] });
   kit.part('torusThin', M.cyan, root, { pos: [0, 4.2, -0.3], rot: [Math.PI / 2, 0, 0], scale: [6.6, 6.6, 6.6] });
   kit.part('torusThin', M.white, root, { pos: [0, 4.2, 0.3], rot: [Math.PI / 2, 0, 0], scale: [8.1, 8.1, 8.1] });
+  buildLaunchCollar(scene, root);
   const shoe = kit.sculpt('launchClamp', () => loftData([
     { t: -0.75, w: 0.28, h: 0.33, n: 5 }, { t: -0.51, w: 0.49, h: 0.41, n: 6 },
     { t: 0.35, w: 0.43, h: 0.37, n: 6 }, { t: 0.62, w: 0.25, h: 0.26, n: 5 },

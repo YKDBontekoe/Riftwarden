@@ -5,7 +5,7 @@
  */
 
 /** `barrier`: thin concrete walls (mazes, chicanes, redoubts, pylons); `container`: shipping-container stacks; `bridge`: elevated deck (enemies pass under). */
-export type SolidKind = 'wall' | 'platform' | 'block' | 'machine' | 'reactor' | 'gate' | 'barrier' | 'container' | 'bridge';
+export type SolidKind = 'wall' | 'platform' | 'block' | 'machine' | 'reactor' | 'gate' | 'barrier' | 'container' | 'bridge' | 'relay' | 'runwall';
 
 export interface Box {
   min: [number, number, number];
@@ -166,11 +166,11 @@ function buildLayout(): ArenaLayout {
   boxes.push({ min: [-43, 0, -14], max: [-38, 3.2, -6], kind: 'machine' });
   boxes.push({ min: [38, 0, 6], max: [43, 3.2, 14], kind: 'machine' });
   boxes.push({ min: [-22, 0, -43], max: [-12, 2.4, -39], kind: 'machine' });
-  // Cover pillars
-  boxes.push({ min: [-18.0, 0, -19.5], max: [-15.5, 3.85, -17.0], kind: 'block' });
-  boxes.push({ min: [15.5, 0, -16.5], max: [18, 6.7, -14], kind: 'block' });
-  boxes.push({ min: [-24.5, 0, 19], max: [-22, 5.3, 21.5], kind: 'block' });
-  boxes.push({ min: [20, 0, 19.0], max: [22.5, 4.45, 21.5], kind: 'block' });
+  // Grapple relays flank the approaches to the four existing ramp decks.
+  boxes.push({ min: [-18.0, 0, -19.5], max: [-15.5, 8.8, -17.0], kind: 'relay' });
+  boxes.push({ min: [15.5, 0, -16.5], max: [18, 10.2, -14], kind: 'relay' });
+  boxes.push({ min: [-24.5, 0, 19], max: [-22, 10.5, 21.5], kind: 'relay' });
+  boxes.push({ min: [20, 0, 19.0], max: [22.5, 9.4, 21.5], kind: 'relay' });
 
   // Reactor collision (approximated by a box slightly inside the visual radius)
   const reactor = { x: 0, z: 0, radius: 3.4, height: 7 };

@@ -3,6 +3,7 @@ import {
   Mesh,
   type PBRMaterial,
   MeshBuilder,
+  NullEngine,
   PhysicsBody,
   PhysicsMotionType,
   PhysicsShapeBox,
@@ -23,7 +24,8 @@ import { createBeveledBox } from './bevel';
 import { createPathLight } from './pathLighting';
 import { segmentedRing } from './rings';
 import { ArenaDecals } from './arenaDecals';
-import { ArenaDressing } from './arenaDressing';
+import { ArenaLandmark } from './arenaLandmark';
+import { ArenaDressing, type DressingHost } from './arenaDressing';
 import { RubbleBuilder } from './rubble';
 import { ArenaFloor } from './arenaFloor';
 import { planRubble } from '../world/rubblePlan';
@@ -49,6 +51,7 @@ export class ArenaBuilder {
   private parts = new Map<string, { mat: Material; surface: string | null; meshes: Mesh[] }>();
   private physicsShape: PhysicsShapeContainer;
   private gates = new Map<GateId, GateVisual>();
+  private readonly relayLight: PBRMaterial;
   private armed = new Set<GateId>();
   /** M6: gates sealed until an arena evolution opens them (lane shown as a dim reserved corridor). */
   private sealed = new Set<GateId>();
@@ -59,6 +62,7 @@ export class ArenaBuilder {
 
   constructor(private scene: Scene, private pal: Palette, private layout: ArenaLayout) {
     this.physicsShape = new PhysicsShapeContainer(scene);
+    this.relayLight = unlit(scene, 'relayBeacon', [0.24, 2.1, 1.75]);
   }
 
   private add(mesh: Mesh, mat: Material, surface: string | null): void {
@@ -90,6 +94,8 @@ export class ArenaBuilder {
   /** Forward rift anchors (procedural arenas only). */
   rifts: RiftAnchors | null = null;
   private riftT = 0;
+  private landmark: ArenaLandmark | null = null;
+  private landmarkTime = 0;
 
   build(): void {
     if (this.layout.rifts?.length) this.rifts = new RiftAnchors(this.scene, this.layout.rifts);
@@ -123,7 +129,7 @@ export class ArenaBuilder {
 
     for (const r of L.ramps) this.buildRamp(r);
     this.buildConduits();
-    const decals = new ArenaDecals(this.scene);
+    const decals = new ArenaDecals(this.scene, L.code);
     this.buildGates(decals);
     decals.floor(8, 0, -12.4, 8, 5.2, 0);
     decals.floor(9, 0, -15.3, 3.7, 4, 0);
@@ -132,6 +138,7 @@ export class ArenaBuilder {
     decals.floor(11, -15, -31, 5.3, 4, Math.PI / 2);
     decals.floor(11, 15, -31, 5.3, 4, -Math.PI / 2);
     for (const b of L.boxes) {
+      if (b.kind === 'relay' || b.kind === 'runwall') decals.transfer(b);
       if (b.kind === 'machine') decals.floor(0, (b.min[0] + b.max[0]) * 0.5, (b.min[2] + b.max[2]) * 0.5, 11, 9, 0.6);
     }
     for (const route of Object.values(L.routes)) {
@@ -141,9 +148,16 @@ export class ArenaBuilder {
       const q = pts[Math.min(3, pts.length - 1)];
       decals.floor(1, q.x, q.z, 7.4, 5.1, Math.atan2(q.x, q.z) + 0.55);
     }
+    this.buildSkyline(decals);
     decals.finish();
-    this.buildSkyline();
-    new ArenaDressing({ scene: this.scene, box: (...a) => this.box(...a), add: (m, mat, s) => this.add(m, mat, s) }, this.pal, this.layout).build();
+    const dressing: DressingHost = {
+      scene: this.scene, box: (...a) => this.box(...a), add: (m, mat, s) => this.add(m, mat, s),
+    };
+    new ArenaDressing(dressing, P, L).build();
+    if (!(this.scene.getEngine() instanceof NullEngine)) {
+      this.landmark = new ArenaLandmark(dressing, P, L);
+      this.landmark.build();
+    }
     // Floor zoning: reactor plaza, wall gutters, gate chevrons (thin inlays under decals and lanes).
     new ArenaFloor({ scene: this.scene, add: (m, mat, s) => this.add(m, mat, s) }, this.pal, this.layout).build();
     // Weathering: rubble piles, scattered debris and wreckage (visual only, planned off every lane).
@@ -329,6 +343,43 @@ export class ArenaBuilder {
         }
         break;
       }
+      case 'relay': {
+        // Armoured tether column, with a luminous collar visible from every approach.
+        this.box(x0, y0, z0, x1, y1, z1, P.steel, 'wall');
+        const collar = (bottom: number, top: number, lip: number, mat: Material) =>
+          this.box(x0 - lip, bottom, z0 - lip, x1 + lip, top, z1 + lip, mat, null);
+        collar(y0, y0 + 0.58, 0.08, P.metal);
+        collar(y1 - 2.45, y1 - 0.6, 0.04, P.graphite);
+        collar(y1 - 0.59, y1 - 0.26, 0.045, this.relayLight);
+        collar(y1 - 0.25, y1, 0.09, P.metal);
+        // Recessed power cartridges face both the lane and the landing.
+        const cx = (x0 + x1) / 2;
+        const cz = (z0 + z1) / 2;
+        for (const side of [-1, 1]) {
+          const z = side < 0 ? z0 : z1;
+          const x = side < 0 ? x0 : x1;
+          const nearZ = z + side * 0.04;
+          const nearX = x + side * 0.04;
+          this.box(cx - 0.64, y0 + 1.03, z - 0.06, cx + 0.64, y1 - 2.66, z + 0.06, P.metal, null);
+          this.box(x - 0.06, y0 + 1.03, cz - 0.64, x + 0.06, y1 - 2.66, cz + 0.64, P.metal, null);
+          this.box(cx - 0.46, y0 + 1.22, nearZ - 0.05, cx + 0.46, y1 - 2.85, nearZ + 0.05, P.graphite, null);
+          this.box(nearX - 0.05, y0 + 1.22, cz - 0.46, nearX + 0.05, y1 - 2.85, cz + 0.46, P.graphite, null);
+        }
+        for (let fin = 0; fin < 4; fin++) {
+          const y = y0 + 1.32 + fin * 0.23;
+          this.box(cx - 0.45, y, z0 - 0.11, cx + 0.45, y + 0.09, z1 + 0.11, P.metal, null);
+          this.box(x0 - 0.11, y, cz - 0.45, x1 + 0.11, y + 0.09, cz + 0.45, P.metal, null);
+        }
+        break;
+      }
+      case 'runwall': {
+        // Flush faces let the drone keep wall contact for the entire span.
+        this.box(x0, y0, z0, x1, y1, z1, P.panel, 'wall');
+        this.box(x0 - 0.035, y0, z0, x1 + 0.035, y0 + 0.31, z1, P.graphite, null);
+        this.box(x0 - 0.035, y1 - 0.32, z0, x1 + 0.035, y1, z1, P.steel, null);
+        this.box(x0 - 0.04, y1 - 0.29, z0 + 0.16, x1 + 0.04, y1 - 0.19, z1 - 0.16, P.cyanGlow, null);
+        break;
+      }
       case 'block':
         // ArenaDressing builds the pickable cooling plant inside this collision footprint.
         break;
@@ -440,9 +491,15 @@ export class ArenaBuilder {
     v.lane.setColor(sealed ? new Color3(0.32, 0.36, 0.4) : new Color3(2.7, 0.65, 0.11));
   }
 
-  update(dt: number, hostileDt: number, warning: number): void {
+  update(dt: number, hostileDt: number, warning: number, reduceMotion = false): void {
     this.riftT += dt;
     this.rifts?.update(dt, this.riftT);
+    if (this.landmark && !reduceMotion) {
+      this.landmarkTime += dt;
+      this.landmark.update(this.landmarkTime);
+    }
+    const pulse = 1 + 0.14 * Math.sin(this.riftT * 2.1);
+    this.relayLight.emissiveColor.set(0.24 * pulse, 2.1 * pulse, 1.75 * pulse);
     for (const [id, gate] of this.gates) {
       const target = this.sealed.has(id) ? 0.02 : this.armed.has(id) ? 0.13 + 0.87 * warning : 0.12;
       gate.charge += (target - gate.charge) * (1 - Math.exp(-dt * 4));
@@ -520,6 +577,20 @@ export class ArenaBuilder {
         const gusset = mk(1.34, 0.39, 0.53, side * 4.47, 7.38, -1.27, P.graphite);
         gusset.rotate(Vector3.Forward(), side * 0.68);
       }
+      // Shelters step up behind the gate: a spray shield in the outpost, insulated
+      // white louvers in Cryo, and blackened heat baffles in the foundry.
+      const biome = biomeOf(this.layout).id;
+      const cowl = biome === 'cryo' ? P.white : biome === 'foundry' ? P.steel : P.panel;
+      mk(11.6, .62, 3.2, 0, 9.67, 1.6, P.graphite);
+      for (const side of [-1, 1]) {
+        const cheek = mk(2.4, 3.1, 2.6, side * 5.15, 10.85, 1.7, cowl);
+        cheek.rotate(Vector3.Forward(), side * .21);
+        mk(.14, 2.28, .055, side * 5.29, 10.63, .355, lights);
+      }
+      for (let slat = 0; slat < 3; slat++) {
+        const louver = mk(8.6 - slat * .46, .55, 1.25, 0, 10.27 + slat * .49, 1.73 + slat * .19, cowl);
+        louver.rotate(Vector3.Right(), -.36);
+      }
       const stencilPosition = Vector3.TransformCoordinates(new Vector3(0, 8.67, -1.128), root.getWorldMatrix());
       decals.gate(f.id, stencilPosition, f.yaw);
       for (const side of [-1, 1]) {
@@ -559,13 +630,28 @@ export class ArenaBuilder {
     }
   }
 
-  /** Overhead truss frame and distant light pylons: frames the space without enclosing it. */
-  private buildSkyline(): void {
+  /** Give the long gantry chords and their tether housings the same profile in Havok and in the scene. */
+  private gantryBeam(x: number, y: number, z: number, w: number, h: number, d: number, mat: Material, rot = Quaternion.Identity()): void {
+    const mesh = createBeveledBox('gantryBeam', w, h, d, Math.min(0.08, h * 0.2), this.scene);
+    mesh.position.set(x, y, z);
+    mesh.rotationQuaternion = rot;
+    this.add(mesh, mat, 'wall');
+    this.collider(mesh.position, new Vector3(w, h, d), rot);
+  }
+
+  /** The overhead maintenance gantries carry a grapple route from the plaza into the outer districts. */
+  private buildSkyline(decals: ArenaDecals): void {
     const P = this.pal;
     const H = this.layout.half;
     for (const x of [-22, 22]) {
-      this.box(x - 0.46, 12.09, -H - 2, x + 0.46, 12.36, H + 2, P.graphite, null);
-      this.box(x - 0.40, 13.12, -H - 2, x + 0.40, 13.34, H + 2, P.graphite, null);
+      this.gantryBeam(x, 12.225, 0, 0.92, 0.27, 2 * H + 4, P.graphite);
+      this.gantryBeam(x, 13.23, 0, 0.8, 0.22, 2 * H + 4, P.graphite);
+      for (let i = -Math.floor((H - 8) / 32); i <= Math.floor((H - 8) / 32); i++) {
+        const z = i * 32;
+        this.gantryBeam(x, 11.39, z, 1.7, 1.4, 1.7, P.steel);
+        this.box(x - 0.88, 11.8, z - 0.88, x + 0.88, 11.94, z + 0.88, this.relayLight, null);
+        decals.socket(x, 11.25, z, 0.86, 0.86, 1.25);
+      }
       for (let z = -H; z < H; z += 4) {
         const brace = createBeveledBox('trussBrace', 0.3, 0.28, Math.hypot(4, 1.03), 0.04, this.scene);
         brace.position.set(x, 12.73, z + 2);
@@ -579,10 +665,8 @@ export class ArenaBuilder {
       for (let i = 1; i < arch.length; i++) {
         const [x0, y0] = arch[i - 1];
         const [x1, y1] = arch[i];
-        const strut = createBeveledBox('gantrySpan', Math.hypot(x1 - x0, y1 - y0) + 0.45, 0.67, 0.91, 0.095, this.scene);
-        strut.position.set((x0 + x1) / 2, (y0 + y1) / 2, z);
-        strut.rotation.z = Math.atan2(y1 - y0, x1 - x0);
-        this.add(strut, P.graphite, null);
+        this.gantryBeam((x0 + x1) / 2, (y0 + y1) / 2, z, Math.hypot(x1 - x0, y1 - y0) + 0.45, 0.67, 0.91,
+          P.graphite, Quaternion.RotationAxis(Vector3.Forward(), Math.atan2(y1 - y0, x1 - x0)));
       }
       const catenary = Array.from({ length: 15 }, (_, i) => {
         const span = i / 14;

@@ -1,3 +1,4 @@
+import type { BiomeId } from '../world/biomes';
 import { DynamicTexture, type Scene, Texture } from '@babylonjs/core';
 
 /**
@@ -131,7 +132,7 @@ export function arenaDeckWetness(x: number, z: number): number {
 }
 
 /** Poured yard slab. The macro map spans the entire yard so puddles don't repeat. */
-export function yardDeckSet(scene: Scene, high: boolean): PbrSet {
+export function yardDeckSet(scene: Scene, high: boolean, biome: BiomeId = 'outpost', seed = 0): PbrSet {
   const size = high ? 1024 : 512;
   const { c: ac, ctx: a } = canvas(size);
   const { c: oc, ctx: o } = canvas(size);
@@ -140,7 +141,7 @@ export function yardDeckSet(scene: Scene, high: boolean): PbrSet {
   const height = new Float32Array(size * size);
   // Cracks: jagged random walks drawn once, read back as a mask.
   const { ctx: crackCtx } = canvas(size);
-  const cr = rng(2027);
+  const cr = rng(2027 ^ seed);
   crackCtx.strokeStyle = 'rgba(255,255,255,1)';
   crackCtx.lineCap = 'round';
   for (let c = 0; c < 26; c++) {
@@ -167,7 +168,7 @@ export function yardDeckSet(scene: Scene, high: boolean): PbrSet {
       const v = (y + 0.5) / size;
       const wet = arenaDeckWetness(u * 120 - 60, v * 120 - 60);
       const grit = fbm(u, v, 43, 3, 53);
-      const stain = vnoise(u * 13, v * 13, 13, 71);
+      const stain = vnoise(u * 13, v * 13, 13, 71 ^ seed);
       const slab = (u * 9) % 1;
       const seam = Math.min(slab, 1 - slab, Math.abs(((v * 9 + Math.floor(u * 9) * 0.5) % 1) - 0.5));
       const expansionJoint = Math.max(0, 1 - seam * 155);
@@ -177,12 +178,36 @@ export function yardDeckSet(scene: Scene, high: boolean): PbrSet {
       const rustStain = smooth(Math.max(0, Math.min(1, (fbm(u, v, 40, 3, 133) - 0.64) * 6))) * (0.4 + expansionJoint * 0.6);
       const crack = cracks[i + 3] / 255;
       const base = (0.46 + (grit - 0.5) * 0.16 + (stain - 0.5) * 0.12 - wet * 0.115 - expansionJoint * 0.12) * (1 - oil * 0.45) * (1 - crack * 0.6);
-      albedo.data[i] = base * 255 * (1 + rustStain * 0.12);
-      albedo.data[i + 1] = base * 255 * 0.98 * (1 - rustStain * 0.2);
-      albedo.data[i + 2] = base * 255 * 0.945 * (1 - rustStain * 0.42);
+      let red = base * (1 + rustStain * 0.12);
+      let green = base * 0.98 * (1 - rustStain * 0.2);
+      let blue = base * 0.945 * (1 - rustStain * 0.42);
+      let relief = 0.5 + (grit - 0.5) * (0.035 - wet * 0.025) - expansionJoint * 0.19 - crack * 0.12;
+      let rough = 0.79 + (grit - 0.5) * 0.11 - wet * 0.66 - oil * 0.42 + crack * 0.1;
+      if (biome === 'cryo') {
+        // Rime feathers accumulate in the slab joints and around frozen depressions.
+        const grain = Math.abs(Math.sin((u + v * 0.64) * 490 + stain * 20));
+        const frost = Math.min(1, wet * 0.7 + expansionJoint * 0.4 + Math.max(0, stain + grit * 0.44 - 0.79) * 2);
+        const crystal = frost * (0.63 + 0.37 * grain);
+        red += crystal * 0.25;
+        green += crystal * 0.35;
+        blue += crystal * 0.43;
+        rough += (0.26 + 0.35 * grain - rough) * frost;
+        relief += crystal * 0.13;
+      } else if (biome === 'foundry') {
+        // Cooled clinker collects in broken seams, with a rusty heat halo around it.
+        const slag = Math.min(1, crack * 0.85 + Math.max(0, stain - grit * 0.25 - 0.42) * 2.5);
+        red += slag * (0.18 - grit * 0.16);
+        green *= 1 - slag * 0.44;
+        blue *= 1 - slag * 0.62;
+        relief += slag * (grit - 0.3) * 0.26;
+        rough += (0.38 + grit * 0.34 - rough) * slag;
+      }
+      albedo.data[i] = red * 255;
+      albedo.data[i + 1] = green * 255;
+      albedo.data[i + 2] = blue * 255;
       albedo.data[i + 3] = 255;
-      height[y * size + x] = 0.5 + (grit - 0.5) * (0.035 - wet * 0.025) - expansionJoint * 0.19 - crack * 0.12;
-      ormPixel(orm.data, i, 1 - expansionJoint * 0.24 - crack * 0.3, 0.79 + (grit - 0.5) * 0.11 - wet * 0.66 - oil * 0.42 + crack * 0.1, 0);
+      height[y * size + x] = relief;
+      ormPixel(orm.data, i, 1 - expansionJoint * 0.24 - crack * 0.3, rough, 0);
     }
   }
   a.putImageData(albedo, 0, 0);

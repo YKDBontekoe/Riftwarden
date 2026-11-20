@@ -37,7 +37,7 @@ import { createPalette, unlit } from '../visuals/materials';
 import { roomStyle, STYLED_ROOMS } from './roomStyle';
 import { RubbleBuilder } from '../visuals/rubble';
 import { buildHqAtmosphere } from './hqAtmosphere';
-import { hqCeilingSet, hqDeckSet, type HqSet, hqWallSet } from '../visuals/hqTextures';
+import { hqCeilingSet, hqDeckSet, type HqSet, hqWallSet, windowRainNormal } from '../visuals/hqTextures';
 import { StationFocus } from './StationFocus';
 import { AmbientDrones } from './AmbientDrones';
 import { buildNav } from './ambientNav';
@@ -201,6 +201,7 @@ export class HomeBase {
     const ceiling = surface('hqCeiling', ceilSet, [0.2, 0.21, 0.23], 0.25, 2.2, 0);
     const glass = new PBRMaterial('hqGlass', scene);
     glass.albedoColor = new Color3(0.02, 0.06, 0.08);
+    glass.bumpTexture = windowRainNormal(scene, high);
     glass.metallic = 0;
     glass.roughness = 0.03;
     glass.alpha = 0.07;
