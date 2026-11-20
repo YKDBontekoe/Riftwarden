@@ -13,6 +13,8 @@ export interface MoodInput {
   reactorFrac: number;
   /** Seconds (drives the pulses). */
   time: number;
+  /** M10: the biome's base fog colour (default: the outpost haze). */
+  baseFog?: Rgb;
 }
 
 export interface Mood {
@@ -40,6 +42,7 @@ const clamp01 = (x: number): number => (x < 0 ? 0 : x > 1 ? 1 : x);
 
 export function moodFor(i: MoodInput): Mood {
   const m = calmMood();
+  if (i.baseFog) m.fog = [...i.baseFog];
   const tierK = clamp01(((Number.isFinite(i.tier) ? i.tier : 1) - 1) / 4);
   m.fog = mix(m.fog, [0.5, 0.34, 0.34], tierK * 0.35);
   m.fogMul = 1 + tierK * 0.35;

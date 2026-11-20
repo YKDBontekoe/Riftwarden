@@ -7,6 +7,7 @@ import type { GateId } from '../world/layout';
 import { type BossId, bossScaling } from './bosses';
 import { ELITE_MODS, type EliteModId, eliteHpMult, rollMods } from './elites';
 import { EVENTS, EVENT_IDS, EVENT_TUNING, type EventId } from './events';
+import { type Faction, factionMix } from '../world/biomes';
 
 /**
  * M6 survival director (pure, deterministic per seed + tier).
@@ -50,6 +51,11 @@ export const ENEMY_COST: Record<EnemyKind, number> = {
   pylon: 0,
   jammer: 2.6,
   crawler: 6.5,
+  // M10 faction archetypes
+  sapper: 2.2,
+  skimmer: 0.4,
+  marksman: 2.8,
+  burrower: 3.4,
 };
 
 /** First wave each archetype can appear (tier `unlockShift` pulls these earlier, never below 4). */
@@ -62,6 +68,10 @@ export const ENEMY_UNLOCK: Partial<Record<EnemyKind, number>> = {
   engineer: 9,
   jammer: 8,
   crawler: 11,
+  skimmer: 3,
+  sapper: 5,
+  marksman: 7,
+  burrower: 8,
 };
 
 interface ThemeDef {
@@ -171,6 +181,8 @@ export class SurvivalPlanner {
   constructor(
     readonly seed: number,
     tier: ThreatTier | number,
+    /** M10: the sector's faction (biome): composition bias, signature archetypes, preferred mutations. */
+    readonly faction: Faction | null = null,
   ) {
     this.tier = typeof tier === 'number' ? getTier(tier) : tier;
     const r = mulberry32(h32(seed >>> 0, 0xe501));
@@ -291,7 +303,7 @@ export class SurvivalPlanner {
     const base = { number: n, hpMult: hp, damageMult: dmg, speedMult: t.speedMult, prepTime: prepTime(n), clearReward: 60 + Math.min(n, 2000) * 15, plan };
     if (n <= HAND_WAVES.length && !plan.event && !plan.boss) return { ...base, spawns: expand(HAND_WAVES[n - 1], t.countMult) };
     const r = mulberry32(h32(this.seed >>> 0, n, 0xc0de));
-    return { ...base, spawns: composeSpawns(n, plan, t, r) };
+    return { ...base, spawns: composeSpawns(n, plan, t, r, this.faction) };
   }
 }
 
@@ -312,7 +324,8 @@ function weighted<T>(pool: T[], w: (x: T) => number, r: () => number): T | null 
 }
 
 /** Spend the plan's budget on spawns. Pure. */
-export function composeSpawns(n: number, plan: WavePlan, t: ThreatTier, r: () => number): SpawnEntry[] {
+export function composeSpawns(n: number, plan: WavePlan, t: ThreatTier, r: () => number, faction: Faction | null = null): SpawnEntry[] {
+  const modRoll = { wave: n, weights: faction?.mods };
   const gates = [...plan.gates].sort(() => r() - 0.5);
   const k = Math.max(0, n - 3);
   const duration = (30 + Math.min(40, k * 2.5)) * (plan.theme === 'swarm' ? 0.7 : 1);
@@ -335,15 +348,17 @@ export function composeSpawns(n: number, plan: WavePlan, t: ThreatTier, r: () =>
     const gate = gates[0];
     for (let i = 0; i < size; i++) {
       const kind = kinds[Math.floor(r() * kinds.length) % kinds.length];
-      const mods = rollMods(kind, Math.max(Math.min(2, t.maxMods), maxMods), r);
+      const mods = rollMods(kind, Math.max(Math.min(2, t.maxMods), maxMods), r, modRoll);
       groups.push({ kind, count: 1, gate, start: duration * 0.4 + i * 0.9, interval: 0, mods, tag: 'squad', hpMult: eliteHpMult(mods) });
       budget -= ENEMY_COST[kind] * (1 + mods.reduce((s, m) => s + ELITE_MODS[m].cost, 0)) * 0.5;
     }
   }
 
   // Theme mix -> per-kind budget shares.
-  const mix: Partial<Record<EnemyKind, number>> =
-    plan.theme === 'swarm' ? { rusher: 5, walker: 2.5 } : plan.theme === 'boss' ? { walker: 3, rusher: 2, engineer: n >= 12 ? 0.6 : 0 } : THEMES[plan.theme as keyof typeof THEMES].mix;
+  const mix: Partial<Record<EnemyKind, number>> = factionMix(
+    plan.theme === 'swarm' ? { rusher: 5, walker: 2.5 } : plan.theme === 'boss' ? { walker: 3, rusher: 2, engineer: n >= 12 ? 0.6 : 0 } : THEMES[plan.theme as keyof typeof THEMES].mix,
+    faction,
+  );
   const kinds = (Object.keys(mix) as EnemyKind[]).filter((kd) => eligible(kd) && (mix[kd] ?? 0) > 0);
   if (!kinds.includes('walker')) kinds.push('walker');
   const totalW = kinds.reduce((s, kd) => s + (mix[kd] ?? 1), 0);
@@ -368,7 +383,7 @@ export function composeSpawns(n: number, plan: WavePlan, t: ThreatTier, r: () =>
   }
 
   // Elites: per spawn chance (squad waves and the elite theme get more).
-  const eChance = Math.min(0.85, eliteChance(n, t) * (plan.theme === 'elite' ? 2.5 : plan.theme === 'swarm' ? 0.2 : 1));
+  const eChance = Math.min(0.85, eliteChance(n, t) * (plan.theme === 'elite' ? 2.5 : plan.theme === 'swarm' ? 0.2 : 1) * (faction?.eliteRate ?? 1));
   const eliteCap = Math.min(16, 2 + Math.floor(n / 5));
   let elites = 0;
   const swarm = plan.theme === 'swarm';
@@ -390,7 +405,7 @@ export function composeSpawns(n: number, plan: WavePlan, t: ThreatTier, r: () =>
       for (let m = 0; m < count; m++) {
         if (elites >= eliteCap || maxMods <= 0 || !(r() < eChance)) continue;
         const nm = 1 + Math.floor(r() * maxMods);
-        const mods = rollMods(kd, nm, r);
+        const mods = rollMods(kd, nm, r, modRoll);
         if (!mods.length) continue;
         elites++;
         plain--;

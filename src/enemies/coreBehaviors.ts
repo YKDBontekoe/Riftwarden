@@ -13,7 +13,7 @@ const TMP2 = new Vector3();
 const SHOT_CHARGE = 0.48;
 const BOLT_SPEED = { walker: 28, bulwark: 31 };
 
-function updateCore(e: Enemy, hdt: number, ctx: EnemyContext, m: EnemyManager): void {
+export function updateCore(e: Enemy, hdt: number, ctx: EnemyContext, m: EnemyManager): void {
   const def = e.def;
   const player = ctx.player;
   const ppos = player.position;
@@ -91,7 +91,7 @@ function updateCore(e: Enemy, hdt: number, ctx: EnemyContext, m: EnemyManager): 
   animateCore(e, adt, ppos, ctx.effects);
 }
 
-function animateCore(e: Enemy, hdt: number, ppos: Vector3, fx: Effects): void {
+export function animateCore(e: Enemy, hdt: number, ppos: Vector3, fx: Effects): void {
   e.root.position.copyFrom(e.pos);
   e.root.rotation.y = e.yaw;
   e.phase += hdt;

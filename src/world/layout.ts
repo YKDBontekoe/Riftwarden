@@ -64,6 +64,10 @@ export interface ArenaLayout {
   code?: string;
   /** Towers may stand on lanes; ground enemies path on a nav grid and breach blocking towers. */
   mazing?: boolean;
+  /** M10: biome (look, hazards, faction); absent = the outpost. */
+  biome?: 'outpost' | 'cryo' | 'foundry';
+  /** M10: ground hazard patches (frost fields / slag pools). */
+  hazards?: { x: number; z: number; r: number; kind: 'frost' | 'slag' }[];
   /** Procedural arenas: set pieces placed (e.g. 'maze', 'overpass', 'skyway'), for the briefing. */
   features?: string[];
   /** Forward rifts: spawn points inside the arena, grouped by the gate whose waves they carry. */

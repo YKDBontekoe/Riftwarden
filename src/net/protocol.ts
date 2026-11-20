@@ -6,7 +6,7 @@
  * rewards, online profiles); clients send intents (movement state, shot claims, actions) which
  * the server validates. Messages are validated structurally here before any game code sees them.
  */
-export const PROTOCOL_VERSION = 6;
+export const PROTOCOL_VERSION = 7;
 export const MAX_PLAYERS = 4;
 export const MAX_MESSAGE_BYTES = 64 * 1024;
 /** Authoritative simulation and snapshot rates (Hz). */

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { arenaStats } from '../world/arenaGen';
+import { biomeOf } from '../world/biomes';
 import type { ArenaLayout } from '../world/layout';
 import { pickTip } from './loadingTips';
 import { type TransitInfo, useHud } from './store';
@@ -75,6 +76,16 @@ function SectorCard({ s }: { s: NonNullable<TransitInfo['sector']> }) {
         <span className="ls-tier">TIER {s.tier} · {s.tierName}</span>
       </div>
       <div className="ls-name">{s.name}</div>
+      {s.layout.biome && (
+        <div className={`ls-biome b-${s.layout.biome}`} data-testid="ls-biome">
+          <b>{biomeOf(s.layout).name}</b>
+          <span>{biomeOf(s.layout).blurb}</span>
+          <em>
+            HOSTILE FACTION · {biomeOf(s.layout).faction.name.toUpperCase()}
+          </em>
+          <span>{biomeOf(s.layout).faction.blurb}</span>
+        </div>
+      )}
       <div className="ls-stats">
         <div><b>{st.size} m</b><span>SPAN</span></div>
         <div><b>{st.structures}</b><span>STRUCTURES</span></div>
@@ -97,6 +108,7 @@ function SectorCard({ s }: { s: NonNullable<TransitInfo['sector']> }) {
 
 /** Top-down sector map (SVG): structures by kind, ramps, lanes, rifts, reactor and drop point. */
 function SectorMap({ layout: L }: { layout: ArenaLayout }) {
+  const biome = L.biome ?? 'outpost';
   const ext = L.half + 14;
   const content = useMemo(() => {
     const solids = L.boxes.filter((b) => b.kind !== 'reactor');
@@ -124,6 +136,9 @@ function SectorMap({ layout: L }: { layout: ArenaLayout }) {
             <circle r={1.6} className="core" />
           </g>
         ))}
+        {(L.hazards ?? []).map((h, i) => (
+          <circle key={`h${i}`} className={`lm-haz ${h.kind}`} cx={h.x} cy={-h.z} r={h.r} />
+        ))}
         <circle className="lm-reactor-ring" cx={L.reactor.x} cy={-L.reactor.z} r={L.reactor.radius + 6} />
         <circle className="lm-reactor" cx={L.reactor.x} cy={-L.reactor.z} r={L.reactor.radius} />
         <path className="lm-spawn" d={`M ${L.playerSpawn.x} ${-L.playerSpawn.z - 3} l 2.4 5 l -4.8 0 z`} />
@@ -131,7 +146,7 @@ function SectorMap({ layout: L }: { layout: ArenaLayout }) {
     );
   }, [L]);
   return (
-    <div className="ls-mapframe">
+    <div className={`ls-mapframe biome-${biome}`}>
       <svg viewBox={`${-ext} ${-ext} ${ext * 2} ${ext * 2}`} className="lm" aria-label="Sector map">
         {content}
       </svg>

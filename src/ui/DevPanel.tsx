@@ -10,7 +10,7 @@ import { eliteChance, maxModsFor, SurvivalPlanner } from '../survival/plan';
 import type { GateId } from '../world/layout';
 import { fmtNum } from './App';
 
-const KINDS: EnemyKind[] = ['walker', 'rusher', 'bulwark', 'enforcer', 'artillery', 'engineer', 'jammer', 'crawler', 'courier', 'colossus', 'overseer'];
+const KINDS: EnemyKind[] = ['walker', 'rusher', 'bulwark', 'enforcer', 'artillery', 'engineer', 'jammer', 'crawler', 'sapper', 'skimmer', 'marksman', 'burrower', 'courier', 'colossus', 'overseer'];
 
 /**
  * Development tools (F4, only with ?dev / ?test). Every action marks the run as a development session:

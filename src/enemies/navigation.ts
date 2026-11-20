@@ -15,7 +15,10 @@ import type { ArenaLayout, GateId, Vec2 } from '../world/layout';
 import { NavGrid } from '../world/navgrid';
 
 /** Kinds that fly over towers (rush drones, jammers, artillery, the courier, the overseer and its emitters). */
-export const FLYERS: ReadonlySet<EnemyKind> = new Set<EnemyKind>(['rusher', 'jammer', 'artillery', 'courier', 'overseer', 'pylon']);
+export const FLYERS: ReadonlySet<EnemyKind> = new Set<EnemyKind>(['rusher', 'jammer', 'artillery', 'courier', 'overseer', 'pylon', 'skimmer']);
+
+/** Kinds that ignore towers on the ground field: flyers and the tunnelling burrower. */
+export const PASS_TOWERS: ReadonlySet<EnemyKind> = new Set<EnemyKind>([...FLYERS, 'skimmer', 'burrower']);
 
 export const NAV_TUNING = {
   /** Share of spawns that come out of a forward rift (when the gate has any). */
@@ -72,7 +75,7 @@ export class EnemyNavigator {
   }
 
   grid(kind: EnemyKind): NavGrid {
-    return FLYERS.has(kind) ? this.air : this.ground;
+    return PASS_TOWERS.has(kind) ? this.air : this.ground;
   }
 
   /** Re-read tower footprints (cheap when nothing changed). Returns true when the ground field changed. */
@@ -127,7 +130,7 @@ export class EnemyNavigator {
    * agent stays put and breaches it at its attack cadence.
    */
   blocked(e: NavAgent, nx: number, nz: number, hdt: number): boolean {
-    if (FLYERS.has(e.kind)) return false;
+    if (PASS_TOWERS.has(e.kind)) return false;
     let hit: NavTower | null = null;
     for (const t of this.host.towers()) {
       if (!t.blocking) continue;

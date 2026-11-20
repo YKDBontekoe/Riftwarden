@@ -767,6 +767,13 @@ export class ServerGame extends Game {
     if (!hold) this.waves.update(dt, hdt);
     this.hostileT += hdt;
     this.enemies.update(hdt, this.enemyCtx, dt);
+    // Hazards: patches and enemies once, the drone effects (slag burns) per avatar.
+    if (this.hazards) {
+      this.hazards.onAdd ??= (x, z, r, kind, life) => this.rec.push(['hz', Math.round(x * 100) / 100, Math.round(z * 100) / 100, r, kind, life]);
+      this.hazards.decay(hdt, this.hostileT);
+      this.hazards.affectEnemyList(dt);
+      for (const a of this.avatars) if (a.active) this.as(a, () => this.hazards!.affectPlayer(dt));
+    }
     this.ordnance.update(hdt, this.ordnanceCtx, this.hostileT);
     this.tele.update(hdt);
     this.dynamics.update(dt, hdt);

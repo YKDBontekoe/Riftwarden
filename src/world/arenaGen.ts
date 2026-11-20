@@ -16,6 +16,7 @@ import { mulberry32 } from '../combat/damage';
 import { type ArenaLayout, type Box, type GateId, LAYOUT_CONST, perimeterBoxes, type Ramp, type Rift, type Route, southDoorBox } from './layout';
 import { barrierX, barrierZ, containerYard, maze, orient, overpass, type Piece, redoubt, serpentine, skyway, withWings } from './districts';
 import { NavGrid } from './navgrid';
+import { BIOMES, biomeForSeed } from './biomes';
 
 export const GEN = {
   halfMin: 84,
@@ -52,7 +53,8 @@ const overlaps = (a: Rect, b: Rect, pad: number): boolean => a.x0 - pad < b.x1 &
 /** Sector code + display name for a seed (also used by the loading screen before the arena exists). */
 export function sectorName(seed: number): { code: string; name: string } {
   const r = mulberry32((seed ^ 0x2c1b3c6d) >>> 0);
-  const name = `${NAME_A[Math.floor(r() * NAME_A.length)]} ${NAME_B[Math.floor(r() * NAME_B.length)]}`;
+  const words = BIOMES[biomeForSeed(seed)].words ?? NAME_A;
+  const name = `${words[Math.floor(r() * words.length)]} ${NAME_B[Math.floor(r() * NAME_B.length)]}`;
   const code = `${String.fromCharCode(65 + Math.floor(r() * 26))}${String.fromCharCode(65 + Math.floor(r() * 26))}-${(seed >>> 0).toString(16).slice(-4).padStart(4, '0').toUpperCase()}`;
   return { code, name };
 }
@@ -434,6 +436,7 @@ function build(seed: number): ArenaLayout {
       seed,
       mazing: true,
       rifts: [],
+      biome: biomeForSeed(seed),
       features: placed.map((p) => p.tag).filter((t) => !['platform', 'block', 'machine'].includes(t)),
       ...sectorName(seed),
     };
@@ -489,6 +492,28 @@ function build(seed: number): ArenaLayout {
   }
   base.rifts = rifts;
 
+  // Biome hazards: frost fields / slag pools in open ground (some across lanes), never on rifts or the drop point.
+  const hz = BIOMES[biomeForSeed(seed)].hazard;
+  const hazards: NonNullable<ArenaLayout['hazards']> = [];
+  if (hz !== 'none') {
+    const hr = mulberry32(seed ^ 0x6a09e667);
+    const want = 7 + Math.floor(hr() * 5);
+    for (let tries = 0; tries < 400 && hazards.length < want; tries++) {
+      const rad = 3.5 + hr() * 3.5;
+      const x = (hr() * 2 - 1) * (H - 12);
+      const z = (hr() * 2 - 1) * (H - 12);
+      if (Math.hypot(x, z) < GEN.plaza + rad) continue;
+      if (Math.hypot(x - playerSpawn.x, z - playerSpawn.z) < 10 + rad) continue;
+      if (rifts.some((q) => Math.hypot(q.x - x, q.z - z) < rad + 5)) continue;
+      if (hazards.some((q) => Math.hypot(q.x - x, q.z - z) < q.r + rad + 3)) continue;
+      // Open ground only: the patch centre and its rim are walkable.
+      let open = nav.walkable(x, z);
+      for (let a = 0; a < 6 && open; a++) open = nav.walkable(x + Math.cos(a) * rad * 0.8, z + Math.sin(a) * rad * 0.8);
+      if (open) hazards.push({ x, z, r: rad, kind: hz });
+    }
+  }
+  base.hazards = hazards;
+
   // Vents on the lanes, about 45% of the way in.
   base.vents = (['north', 'east', 'west', 'south'] as GateId[]).map((g) => {
     const p = pointAlong(base.routes[g].points, 0.5);
@@ -502,6 +527,7 @@ function build(seed: number): ArenaLayout {
       const cz = d.z * (H - 5);
       return { x0: cx - (d.x ? 5 : 7), z0: cz - (d.x ? 7 : 5), x1: cx + (d.x ? 5 : 7), z1: cz + (d.x ? 7 : 5), label: 'Reserved: gate mouth' };
     }),
+    ...hazards.map((q) => ({ x0: q.x - q.r, z0: q.z - q.r, x1: q.x + q.r, z1: q.z + q.r, label: q.kind === 'frost' ? 'Reserved: frost field' : 'Reserved: slag pool' })),
     ...rifts.map((q) => ({ x0: q.x - 3.5, z0: q.z - 3.5, x1: q.x + 3.5, z1: q.z + 3.5, label: 'Reserved: rift anchor' })),
     ...base.vents.map((v) => ({ x0: v.x - v.r, z0: v.z - v.r, x1: v.x + v.r, z1: v.z + v.r, label: 'Reserved: plasma vent' })),
   ];

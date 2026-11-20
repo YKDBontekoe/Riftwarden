@@ -20,6 +20,7 @@ export type ReplicatedEvent =
   | readonly ['t', string, number, unknown] // telegraph op, server id, args
   | readonly ['o', string, number, unknown] // ordnance op, server id, args
   | readonly ['ev', EvolutionId, Flag] // arena evolution
+  | readonly ['hz', number, number, number, 'frost' | 'slag', number] // M10 transient hazard patch (x, z, r, kind, life)
   // enemies
   | readonly ['es', number, EnemyKind, EliteModId[], string | null, number, number, number, number, number, number, number, string]
   | readonly ['ek', number, Flag]
@@ -65,6 +66,7 @@ const SHAPES: { [K in EventTag]: { fields: Check[]; optional?: number } } = {
   t: { fields: [str, num, () => true] },
   o: { fields: [str, num, () => true] },
   ev: { fields: [str, flag] },
+  hz: { fields: [num, num, num, (v: unknown) => v === 'frost' || v === 'slag', num] },
   es: { fields: [num, str, arrOf(str), opt(str), num, num, num, num, num, num, num, str] },
   ek: { fields: [num, flag] },
   er: { fields: [num] },

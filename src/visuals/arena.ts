@@ -15,6 +15,7 @@ import {
 } from '@babylonjs/core';
 import type { ArenaLayout, Box, GateId, Ramp } from '../world/layout';
 import { RiftAnchors } from './riftAnchors';
+import { biomeOf } from '../world/biomes';
 import { PHYS_ENV } from '../world/physicsGroups';
 import { type Palette, unlit } from './materials';
 import { boxProjectUVs } from './uv';
@@ -527,7 +528,7 @@ export class ArenaBuilder {
       counterRotor.parent = frame;
       counterRotor.material = P.orangeDim;
       const lane = createPathLight(this.scene, `hostileLane:${f.id}`, this.layout.routes[f.id].points,
-        this.layout.laneHalfWidth, new Color3(2.7, 0.65, 0.11), true);
+        this.layout.laneHalfWidth, new Color3(...biomeOf(this.layout).lane), true);
       this.gates.set(f.id, { lane, rotor, counterRotor, lights, charge: 0.4, flash: 0 });
     }
   }

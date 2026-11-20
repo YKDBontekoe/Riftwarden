@@ -65,10 +65,14 @@ import { earlyCallBonus } from '../waves/pace';
 import { ARENA, type ArenaLayout, type GateId } from '../world/layout';
 import { EnemyNavigator } from '../enemies/navigation';
 import { TowerWear } from '../arena/TowerWear';
+import { Hazards } from '../arena/Hazards';
+import { biomeOf } from '../world/biomes';
+import { tintPalette } from '../visuals/biomeLook';
 import { ENV_QUERY } from '../world/physicsGroups';
 import { type Impact, Ordnance, Telegraphs } from '../fx/Hostile';
 import { M6_BEHAVIORS } from '../enemies/behaviors';
 import { JAMMER_CRAWLER_BEHAVIORS } from '../enemies/jammerCrawlerBehaviors';
+import { FACTION_BEHAVIORS } from '../enemies/factionBehaviors';
 import { BOSS_BEHAVIORS } from '../enemies/bosses';
 import { bossMults, SurvivalPlanner } from '../survival/plan';
 import { SurvivalRuntime } from '../survival/SurvivalRuntime';
@@ -244,6 +248,8 @@ export class Game {
   get layout(): ArenaLayout {
     return this.cfg.layout ?? ARENA;
   }
+  /** M10: biome ground hazards (frost fields, slag pools, slag trails). */
+  hazards: Hazards | null = null;
   /** Tower durability (breaches, wrecks, repairs) on mazing arenas. */
   readonly wear: TowerWear;
   /** Hostile time since the run started (enemy animation phase). */
@@ -274,21 +280,21 @@ export class Game {
     scene.enablePhysics(new Vector3(0, -26, 0), new HavokPlugin(true, havok));
 
     const high = settings.quality === 'high';
-    this.pal = createPalette(scene, high);
+    this.pal = tintPalette(createPalette(scene, high), biomeOf(this.layout));
     this.kit = new Kit(scene);
 
     // Alpine horizon, haze, lamps and embers. PBR ambient comes from the captured environment.
     this.atmosphere = new Atmosphere(scene, this.pal, this.layout);
     this.atmosphere.setQuality(high);
     scene.fogMode = Scene.FOGMODE_EXP2;
-    scene.fogDensity = 0.0042;
+    scene.fogDensity = biomeOf(this.layout).fogDensity;
     scene.fogColor = this.atmosphere.fogColor;
 
     // Low warm key against the mountain sky. Sky fill also keeps shaded enemies readable.
     const moon = new DirectionalLight('sun', this.atmosphere.sunDir.scale(-1), scene);
     moon.position = this.atmosphere.sunDir.scale(120);
-    moon.intensity = SUN;
-    moon.diffuse = new Color3(1, 0.74, 0.5);
+    moon.intensity = SUN * biomeOf(this.layout).sunMul;
+    moon.diffuse = new Color3(...biomeOf(this.layout).sun);
     moon.specular = new Color3(1, 0.86, 0.70);
     this.moon = moon;
     this.reactorLight = new PointLight('reactorLight', new Vector3(0, 5, 0), scene);
@@ -331,7 +337,7 @@ export class Game {
     if (sg) this.kit.shadowSink = (m) => sg.addShadowCaster(m);
     this.enemies = new EnemyManager(scene, this.kit, this.pal);
     this.wear = this.setupMazing();
-    for (const [kind, b] of Object.entries({ ...CORE_BEHAVIORS, ...M6_BEHAVIORS, ...JAMMER_CRAWLER_BEHAVIORS, ...BOSS_BEHAVIORS })) if (b) this.enemies.register(kind as EnemyKind, b as Behavior);
+    for (const [kind, b] of Object.entries({ ...CORE_BEHAVIORS, ...M6_BEHAVIORS, ...JAMMER_CRAWLER_BEHAVIORS, ...FACTION_BEHAVIORS, ...BOSS_BEHAVIORS })) if (b) this.enemies.register(kind as EnemyKind, b as Behavior);
     this.tele = new Telegraphs(scene);
     this.ordnance = new Ordnance(scene, this.tele);
     this.dynamics = new ArenaDynamics(scene, this.pal, this.layout, {
@@ -359,7 +365,7 @@ export class Game {
       shake: (pos, k) => this.fx.onShake?.(pos, k),
     });
     this.shaderWarmup = this.warmShaders();
-    this.planner = new SurvivalPlanner(((cfg.seed ?? hashRunSeed(cfg.run.id)) >>> 0) ^ 0x6d2b79f5, cfg.tier);
+    this.planner = new SurvivalPlanner(((cfg.seed ?? hashRunSeed(cfg.run.id)) >>> 0) ^ 0x6d2b79f5, cfg.tier, this.layout.biome ? biomeOf(this.layout).faction : null);
     this.survival = new SurvivalRuntime(this);
     this.turrets = new TurretManager(scene, this.kit, this.pal);
     this.construction = new Construction(scene, (cfg, u) => this.turrets.build(cfg, 1, u), this.pal, this.layout);
@@ -390,9 +396,9 @@ export class Game {
       summon: (kind, at, o) => this.summon(kind, at, o),
       alert: (text, tone) => uiEvents.emit('alert', { text, tone }),
       escaped: (e) => this.survival.onEscape(e),
-      get time() {
-        return game.hostileT;
-      },
+      get time() { return game.hostileT; }, // prettier-ignore
+      hazard: (x, z, r, kind, life) => this.hazards?.add(x, z, r, kind, life),
+      damageTower: (t, amount) => this.wear.breach(t.id, amount, null),
     };
     this.turretCtx = {
       enemies: this.enemies.active,
@@ -1213,7 +1219,7 @@ export class Game {
       this.runTime += dt;
       this.cfg.run.tick(dt);
     }
-    this.player.update(dt, input, this.stats.moveSpeedMult, controls);
+    this.player.update(dt, input, this.stats.moveSpeedMult * (this.hazards?.playerSpeed ?? 1), controls);
     if (this.player.dashedThisFrame) {
       this.player.dashedThisFrame = false;
       this.director.bus.emit({ type: 'dash', chain: this.director.bus.newChain(), source: { kind: 'weapon', id: 'dash' }, value: 1 });
@@ -1265,6 +1271,7 @@ export class Game {
     this.post.update(dt, k, this.hurtFx, flash);
 
     this.wear.tick(this.waves.phase, this.towerHpScale());
+    this.hazards?.update(dt, hdt, this.hostileT);
     this.updateArenaVisuals(dt, hdt);
 
     if (this.screen === 'defeat') {
@@ -1300,8 +1307,9 @@ export class Game {
   }
 
   /** Situation inputs for the mood director (shared by the replica, which mirrors the same state). */
-  protected moodInput(): { tier: number; boss: boolean; event: 'swarm' | 'eliteAssault' | 'instability' | 'hvt' | null; reactorFrac: number } {
+  protected moodInput(): { tier: number; boss: boolean; event: 'swarm' | 'eliteAssault' | 'instability' | 'hvt' | null; reactorFrac: number; baseFog: [number, number, number] } {
     return {
+      baseFog: biomeOf(this.layout).fog,
       tier: this.cfg.tier.id,
       boss: this.enemies.active.some((e) => e.alive && e.def.role === 'boss'),
       event: this.survival.event,
@@ -1761,7 +1769,7 @@ export class Game {
    */
   protected warmShaders(): Promise<unknown> {
     // One of every rig (and all elite hardware) so every (shape, material) template exists, then compile them all.
-    this.enemies.prebuild(['walker', 'rusher', 'bulwark', 'enforcer', 'artillery', 'engineer', 'courier', 'colossus', 'overseer', 'pylon', 'jammer', 'crawler']);
+    this.enemies.prebuild(['walker', 'rusher', 'bulwark', 'enforcer', 'artillery', 'engineer', 'courier', 'colossus', 'overseer', 'pylon', 'jammer', 'sapper', 'skimmer', 'marksman', 'burrower', 'crawler']);
     const jobs: Promise<unknown>[] = [this.tele.warm(), this.ordnance.warm(), this.kit.warmAll()];
     for (const m of this.scene.meshes) {
       if (m.isEnabled() || !m.material || !/^(dynPart|ventPlume|ventWarn|volatileCharge)/.test(m.name)) continue;
@@ -1883,6 +1891,19 @@ export class Game {
       changed: () => this.bumpStats(),
       editReason: () => this.towerEditReason(),
     });
+    // Biome hazards (frost fields / slag pools) and Molten slag trails.
+    this.hazards = new Hazards(
+      {
+        scene: this.scene,
+        enemies: () => game.enemies.active,
+        get player() {
+          return game.player;
+        },
+        hurtPlayer: (a, from) => game.hurtPlayer(a, new Vector3(from.x, from.y, from.z)),
+        inflict: (e, p) => game.director.inflict(e, p, { kind: 'effect', id: 'hazard' }, game.director.bus.newChain(), e.center(new Vector3())),
+      },
+      this.layout.hazards ?? [],
+    );
     if (this.layout.mazing) {
       this.enemies.nav = new EnemyNavigator(this.layout, {
         // Towers on decks, bridges and container tops stand above the ground lanes: they never block them.
@@ -1922,6 +1943,16 @@ export class Game {
     armored: 'ELITE · ARMORED · plating absorbs body hits: aim for weakpoints',
     accelerated: 'ELITE · ACCELERATED · fast with thruster boosts: intercept early',
     volatile: 'ELITE · VOLATILE · detonates 1.4 s after death: keep your distance',
+    sapper: 'NEW THREAT · SAPPER · it runs for a tower and blows it up: kill it before it plants the charge',
+    skimmer: 'NEW THREAT · SKIMMER SWARM · tiny fast flyers that peck at the drone in passes: sweep them',
+    marksman: 'NEW THREAT · MARKSMAN · a red laser marks you before the shot: break line of sight',
+    burrower: 'NEW THREAT · BURROWER · tunnels under towers and is untouchable while buried: hit it when it surfaces',
+    regenerating: 'MUTATION · REGENERATING · heals when left alone: keep the pressure on or burn it',
+    splitting: 'MUTATION · SPLITTING · splits into two lesser copies when destroyed',
+    shielded: 'MUTATION · SHIELDED · recharging barrier: energy damage breaks it fast',
+    blinking: 'MUTATION · BLINKING · phases forward along its route: shock or freeze pins it',
+    frostbound: 'MUTATION · FROSTBOUND · immune to chill; its frost nova shorts nearby towers',
+    molten: 'MUTATION · MOLTEN · immune to burning; leaves slag pools in its wake',
   };
 
   protected watchIntel(): void {

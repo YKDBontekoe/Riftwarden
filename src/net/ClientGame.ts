@@ -174,8 +174,10 @@ export class ClientGame extends Game {
     this.kitRef = (this as unknown as { kit: Kit }).kit;
     this.palRef = (this as unknown as { pal: Palette }).pal;
     this.player.vitalsLocal = false;
-    // Replicas never path or breach: the server owns navigation and tower damage.
+    // Replicas never path or breach: the server owns navigation and tower damage. Hazards only render here
+    // and slow the local drone; their trails arrive as 'hz' events.
     this.enemies.nav = null;
+    if (this.hazards) this.hazards.affectEnemies = false;
     // Local drone starts at its team slot.
     const sp = spawnFor(cfg.slot, this.layout);
     (this.player as unknown as { spawn: Vector3 }).spawn.set(sp.x, 0.95, sp.z);
@@ -477,7 +479,9 @@ export class ClientGame extends Game {
     }
     const hdt = dt * this.tactical.hostileScale;
     this.runTime += dt;
-    this.player.update(dt, input, this.stats.moveSpeedMult, controls);
+    this.hazards?.decay(hdt, this.hostileT);
+    this.hazards?.affectPlayer(0);
+    this.player.update(dt, input, this.stats.moveSpeedMult * (this.hazards?.playerSpeed ?? 1), controls);
     if (this.player.dashedThisFrame) {
       this.player.dashedThisFrame = false;
       this.dashFlag = true;
@@ -888,6 +892,9 @@ export class ClientGame extends Game {
         if (ownerName && ownerName !== this.myName) this.towerNote = { text: `${ownerName} deployed ${t.name}`, t: 2 };
         return;
       }
+      case 'hz':
+        this.hazards?.add(ev[1], ev[2], ev[3], ev[4], ev[5]);
+        break;
       case 'T-': {
         const t = this.towerById.get(ev[1]);
         if (!t) return;

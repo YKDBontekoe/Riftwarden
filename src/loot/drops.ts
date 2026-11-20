@@ -58,6 +58,11 @@ export const DROP_SOURCES = {
   enforcer: { id: 'enforcer', label: 'Shielded Enforcer', chance: 0.2, rolls: 1, levelBonus: 1, luck: 1.3, categories: { armor: 4, shield: 4, reactor: 1.5, weapon: 1, processor: 1, accessory: 1, module: 1 } },
   jammer: { id: 'jammer', label: 'Jammer Drone', chance: 0.16, rolls: 1, levelBonus: 1, luck: 1.2, categories: { processor: 4, accessory: 3, module: 2.5, reactor: 1, weapon: 1, armor: 0.5, shield: 0.5 } },
   crawler: { id: 'crawler', label: 'Siege Crawler', chance: 0.32, rolls: 1, levelBonus: 2, luck: 1.45, categories: { armor: 4, reactor: 3.5, shield: 2, weapon: 1, module: 1.5, processor: 1, accessory: 1 } },
+  // ---- M10 faction archetypes
+  sapper: { id: 'sapper', label: 'Sapper', chance: 0.12, rolls: 1, levelBonus: 1, luck: 1.15, categories: { accessory: 4, module: 3, processor: 2, weapon: 1, reactor: 1, armor: 0.5, shield: 0.5 } },
+  skimmer: { id: 'skimmer', label: 'Skimmer', chance: 0.025, rolls: 1, levelBonus: 0, luck: 0.9, categories: ALL },
+  marksman: { id: 'marksman', label: 'Marksman', chance: 0.18, rolls: 1, levelBonus: 1, luck: 1.25, categories: { weapon: 5, processor: 3, module: 2, accessory: 1, reactor: 0.6, armor: 0.4, shield: 0.4 } },
+  burrower: { id: 'burrower', label: 'Burrower', chance: 0.24, rolls: 1, levelBonus: 2, luck: 1.35, categories: { armor: 4, shield: 3, reactor: 3, module: 1.2, weapon: 0.8, processor: 0.8, accessory: 0.8 } },
   artillery: { id: 'artillery', label: 'Artillery Drone', chance: 0.18, rolls: 1, levelBonus: 1, luck: 1.25, categories: { weapon: 4, processor: 3, module: 2.5, accessory: 1, reactor: 1, armor: 0.5, shield: 0.5 } },
   engineer: { id: 'engineer', label: 'Support Engineer', chance: 0.22, rolls: 1, levelBonus: 1, luck: 1.35, categories: { reactor: 4, accessory: 3, module: 3, processor: 1.5, shield: 1, weapon: 0.6, armor: 0.6 } },
   /** Elite modifiers improve drops (luck/chance are raised per modifier in Game.eliteSource). */

@@ -191,7 +191,7 @@ export class Turret {
   }
 
   private validTarget(e: Enemy | null, range: number, ctx: TurretContext): boolean {
-    if (!e || !e.alive) return false;
+    if (!e || !e.alive || e.hidden) return false;
     const c = e.center(TMP);
     const dx = c.x - this.pos.x;
     const dz = c.z - this.pos.z;
@@ -203,7 +203,7 @@ export class Turret {
     let best: Enemy | null = null;
     let bestScore = Infinity;
     for (const e of ctx.enemies) {
-      if (!e.alive) continue;
+      if (!e.alive || e.hidden) continue;
       const c = e.center(TMP);
       const dx = c.x - this.pos.x;
       const dz = c.z - this.pos.z;
@@ -221,7 +221,7 @@ export class Turret {
   private anyInRange(range: number, ctx: TurretContext): boolean {
     const r2 = range * range;
     for (const e of ctx.enemies) {
-      if (!e.alive) continue;
+      if (!e.alive || e.hidden) continue;
       const dx = e.pos.x - this.pos.x;
       const dz = e.pos.z - this.pos.z;
       if (dx * dx + dz * dz <= r2) return true;
