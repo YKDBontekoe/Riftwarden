@@ -57,6 +57,7 @@ uniform float flash;
 uniform vec3 riftDir;
 uniform vec3 sunDir;
 uniform vec3 horizonColor;
+uniform float skyBiome;
 uniform sampler2D mountains;
 ${NOISE_GLSL}
 void main(){
@@ -64,23 +65,47 @@ void main(){
   float h = d.y;
   float sd = max(dot(d, normalize(sunDir)), 0.0);
 
-  // Low morning haze and long cirrus bands keep the yard silhouette legible.
-  float horizon = exp(-3.7 * max(h, 0.0));
-  vec3 col = mix(vec3(0.045, 0.07, 0.095), horizonColor, horizon);
-  col += vec3(0.85, 0.42, 0.17) * pow(sd, 3.0) * (0.35 + horizon);
-  vec3 cloudPos = d * vec3(3.1, 18.0, 6.0) + vec3(time * 0.003, 2.0, time * 0.002);
+  // Keep the distant rock on the horizon so the foreground silhouettes have room above them.
+  bool cryo = skyBiome > .5 && skyBiome < 1.5;
+  bool foundry = skyBiome > 1.5;
+  float horizon = exp(-6.8 * max(h, 0.0));
+  vec3 zenith = cryo ? vec3(.026, .049, .102) : foundry ? vec3(.10, .04, .055) : vec3(.049, .044, .105);
+  vec3 key = cryo ? vec3(.45, .7, 1.) : vec3(1., .58, .33);
+  vec3 col = mix(zenith, horizonColor, horizon * .88);
+  col += key * pow(sd, 4.0) * (0.15 + horizon * .57);
+  vec3 cloudPos = d * vec3(4.8, 22.0, 9.0) + vec3(time * .012, 2., time * .006);
   float cloud = fbm3(cloudPos);
-  float cover = smoothstep(0.38, 0.62, cloud) * smoothstep(-0.03, 0.22, h);
-  col = mix(col, vec3(0.13, 0.13, 0.15) + vec3(0.55, 0.26, 0.1) * pow(sd, 2.0), cover * 0.78);
-  // Mirror at the rear meridian so both ends of the panorama join continuously.
-  float azimuth = atan(d.x, d.z) / 3.14159265 + 0.76;
-  float elevation = (asin(clamp(h, -1.0, 1.0)) + 0.045) / 0.78;
+  float cover = smoothstep(.34, .64, cloud) * smoothstep(-.04, .21, h);
+  vec3 silver = key * (pow(sd, 2.5) * .29 + .05);
+  col = mix(col, zenith * .42 + silver, cover * (cryo ? .54 : .93));
+  float azimuth = atan(d.x, d.z) / 3.14159265 + .76;
+  float elevation = (asin(clamp(h, -1.0, 1.0)) + .11) / .44;
   vec3 ridgeColor = texture2D(mountains, vec2(azimuth, elevation)).rgb;
-  // Ridges sit in the dusk: darkened and warmed toward the sun, cooler away from it.
-  ridgeColor = ridgeColor * mix(vec3(0.42, 0.45, 0.52), vec3(0.85, 0.62, 0.45), pow(sd, 2.0));
-  col = mix(col, ridgeColor, (1.0 - smoothstep(0.75, 1.0, elevation)) * 0.94);
-  col += vec3(0.95, 0.58, 0.27) * pow(sd, 45.0);
-  col += vec3(3.6, 2.7, 1.7) * smoothstep(0.99945, 0.99982, sd) * (1.0 - cover * 0.6);
+  vec3 ridgeTint = cryo ? vec3(.43, .56, .74) : foundry ? vec3(.61, .32, .25) : vec3(.42, .42, .56);
+  ridgeColor *= mix(ridgeTint, key * .69, pow(sd, 2.0));
+  col = mix(col, ridgeColor, (1.0 - smoothstep(.62, .98, elevation)) * .87);
+  col += key * .78 * pow(sd, 45.);
+  col += key * 3.2 * smoothstep(.99945, .99982, sd) * (1. - cover * .8);
+
+  if (cryo) {
+    // Vertical striations drift along two curved auroral curtains.
+    float north = smoothstep(-.45, .5, d.z);
+    float bend = .43 + .15 * sin(azimuth * 7. + time * .045) + .062 * sin(azimuth * 14. - time * .035);
+    float edge = h - bend;
+    float striation = vnoise3(vec3(azimuth * 183., h * 5., time * .08));
+    float curtain = (1. - smoothstep(0., .22, edge)) * smoothstep(-.028, .027, edge);
+    float rim = exp(-edge * edge * 4600.);
+    col += (vec3(.12, .84, .64) * curtain * .64 + vec3(.39, .8, .98) * rim * .35)
+      * north * (.23 + striation * .77);
+    float upper = h - bend - .18;
+    col += vec3(.31, .18, .6) * exp(-upper * upper * 160.) * north * striation * .31;
+  }
+  if (foundry) {
+    float smoke = fbm3(vec3(azimuth * 11., h * 16. + time * .018, time * .03));
+    float height = (h - .23) * 4.4;
+    float bank = smoothstep(.28, .63, smoke) * exp(-height * height);
+    col = mix(col, vec3(.14, .045, .05) + vec3(.48, .105, .037) * (1. - h), bank * .68);
+  }
 
   // The rift: a thin burning tear high in the sky away from the sun.
   vec3 rd = normalize(riftDir);
@@ -88,7 +113,7 @@ void main(){
   float along = dot(d, rd);
   float distort = (fbm3(d * 5.0 + vec3(0.0, time * 0.03, 0.0)) - 0.5) * 0.1;
   float w = abs(dot(d, n) + distort);
-  float mask = smoothstep(0.57, 0.87, along) * smoothstep(0.12, 0.35, h);
+  float mask = smoothstep(.57, .87, along) * smoothstep(.12, .35, h) * (cryo || foundry ? .16 : .55);
   float ridge = fbm3(d * 24.0 + vec3(time * 0.018, 1.8, 0.0));
   float core = exp(-w * w * 49000.0) * mask * (0.4 + ridge);
   float branch = (fbm3(d * 11.0 + vec3(3.7, 0.0, time * 0.022)) - 0.43) * 0.14;
@@ -255,7 +280,7 @@ export class Atmosphere {
   constructor(private scene: Scene, private P: Palette, private layout: ArenaLayout) {
     const sky = new ShaderMaterial('sky', scene, 'rwSky', {
       attributes: ['position'],
-      uniforms: ['worldViewProjection', 'time', 'flash', 'riftDir', 'sunDir', 'horizonColor'],
+      uniforms: ['worldViewProjection', 'time', 'flash', 'riftDir', 'sunDir', 'horizonColor', 'skyBiome'],
       samplers: ['mountains'],
     });
     const mountains = new Texture(new URL('../assets/alpine-horizon.webp', import.meta.url).href, scene, false, true);
@@ -266,7 +291,9 @@ export class Atmosphere {
     sky.disableDepthWrite = true;
     sky.setVector3('riftDir', new Vector3(-0.42, 0.4, 1).normalize());
     sky.setVector3('sunDir', this.sunDir);
-    sky.setColor3('horizonColor', new Color3(...biomeOf(layout).horizon));
+    const biome = biomeOf(layout);
+    sky.setColor3('horizonColor', new Color3(...biome.horizon));
+    sky.setFloat('skyBiome', biome.id === 'cryo' ? 1 : biome.id === 'foundry' ? 2 : 0);
     sky.setFloat('time', 0);
     sky.setFloat('flash', 0);
     this.sky = sky;
@@ -575,9 +602,9 @@ export class Atmosphere {
     const f = this.flash;
     this.flash = Math.max(0, this.flash - dt * 3.2);
     const flick = f > 0.5 ? f : f * (0.5 + 0.5 * Math.sin(this.time * 60));
-    this.sky.setFloat('time', this.time);
+    if (!this.reduceMotion) this.sky.setFloat('time', this.time);
     this.mist.update(this.time, camPos);
-    this.sky.setFloat('flash', flick);
+    this.sky.setFloat('flash', this.reduceMotion ? 0 : flick);
     this.riftMatsTime();
     this.beamMat.setFloat('time', this.time);
     this.beamMat.setVector3('cameraPosition', camPos);

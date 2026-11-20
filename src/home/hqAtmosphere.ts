@@ -11,7 +11,7 @@ import { HQ_WINDOW } from './layout';
  * `lightDir` is the direction the moonlight travels (the scene's directional light direction).
  */
 export function buildHqAtmosphere(scene: Scene, lightDir: Vector3, high: boolean, particles: number): { dispose(): void } {
-  const d = lightDir.normalize();
+  const d = lightDir.clone().normalize();
   const W = HQ_WINDOW;
   // Streaky gradient: bright at the window, fading toward the floor, broken into soft columns.
   const { c, ctx } = canvas(256, 64);
@@ -66,6 +66,39 @@ export function buildHqAtmosphere(scene: Scene, lightDir: Vector3, high: boolean
   shafts.applyFog = false;
   shafts.freezeWorldMatrix();
 
+  // Project the five observation panes along the same light vector as the shafts.
+  // Each pane casts one soft patch, separated by the shadows of the mullions.
+  const poolMap = canvas(512, 128);
+  const poolImage = poolMap.ctx.createImageData(512, 128);
+  for (let y = 0; y < 128; y++) {
+    const v = (y + 0.5) / 128;
+    for (let x = 0; x < 512; x++) {
+      const u = (x + 0.5) / 512;
+      const pane = (u * 5) % 1;
+      const edge = Math.min(1, Math.min(pane, 1 - pane) * 12, Math.min(v, 1 - v) * 10);
+      const k = edge * edge * (3 - 2 * edge) * (1 - 0.38 * v);
+      const i = (y * 512 + x) * 4;
+      poolImage.data[i] = poolImage.data[i + 1] = poolImage.data[i + 2] = 255 * k;
+      poolImage.data[i + 3] = 255;
+    }
+  }
+  poolMap.ctx.putImageData(poolImage, 0, 0);
+  const pool = new Mesh('hqWindowLight', scene);
+  const footprint = new VertexData();
+  footprint.positions = [W.y0, W.y1].flatMap((height) => {
+    const t = height / -d.y;
+    return [W.x0 + d.x * t, 0.009, W.z + d.z * t, W.x1 + d.x * t, 0.009, W.z + d.z * t];
+  });
+  footprint.uvs = [0, 0, 1, 0, 0, 1, 1, 1];
+  footprint.indices = [0, 1, 2, 2, 1, 3];
+  footprint.normals = [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0];
+  footprint.applyToMesh(pool);
+  pool.material = unlit(scene, 'hqMoonPool', [0.24, 0.156, 0.079], {
+    tex: toTexture('hqWindowShadow', poolMap.c, scene), additive: true, twoSided: true,
+  });
+  pool.isPickable = false;
+  pool.freezeWorldMatrix();
+
   // Dust motes drifting through the deck (density follows the particle setting).
   const count = Math.round((high ? 140 : 70) * Math.max(0, Math.min(1.5, particles)));
   const dust = new ParticleSystem('hqDust', Math.max(1, count), scene);
@@ -93,6 +126,7 @@ export function buildHqAtmosphere(scene: Scene, lightDir: Vector3, high: boolean
     dispose() {
       dust.dispose();
       shafts.dispose();
+      pool.dispose();
     },
   };
 }

@@ -1,6 +1,6 @@
 import { Mesh, MeshBuilder, PBRMaterial, type Scene, Texture, Vector3, VertexBuffer } from '@babylonjs/core';
 import { canvas, rng, toTexture } from './textures';
-import type { GateId } from '../world/layout';
+import type { Box, GateId } from '../world/layout';
 
 const cell = 256;
 const size = cell * 4;
@@ -10,10 +10,10 @@ export class ArenaDecals {
   private material: PBRMaterial;
   private pieces: Mesh[] = [];
 
-  constructor(private scene: Scene) {
+  constructor(private scene: Scene, sector = 'SECTOR 07') {
     const { c, ctx } = canvas(size);
     const random = rng(201);
-    for (let i = 0; i < 12; i++) {
+    for (let i = 0; i < 14; i++) {
       ctx.save();
       ctx.translate((i % 4) * cell, Math.floor(i / 4) * cell);
       ctx.beginPath();
@@ -53,8 +53,8 @@ export class ArenaDecals {
         ctx.fillText(direction, 46, 147, 185);
         ctx.font = 'bold 27px Arial, sans-serif';
         ctx.fillText('RIFT GATE', 48, 199);
-      } else {
-        const label = ['REACTOR', 'SECTOR 07', 'KEEP CLEAR', 'SERVICE'][i - 8];
+      } else if (i < 12) {
+        const label = ['REACTOR', sector, 'KEEP CLEAR', 'SERVICE'][i - 8];
         ctx.fillStyle = i === 10 ? '#d5a054' : '#b4c4c9';
         ctx.textAlign = 'center';
         ctx.font = '900 31px sans-serif';
@@ -63,6 +63,28 @@ export class ArenaDecals {
         for (const x of [24, 194]) {
           ctx.fillRect(x, 101, 38, 4);
           ctx.fillRect(x < 100 ? x : x + 34, 105, 4, 14);
+        }
+      } else if (i === 12) {
+        // Split socket and centre pin. A single silhouette reads from across the plaza.
+        ctx.strokeStyle = '#b5ffe1';
+        ctx.lineWidth = 17;
+        for (let j = 0; j < 3; j++) {
+          const angle = j * Math.PI * 2 / 3;
+          ctx.beginPath();
+          ctx.arc(128, 128, 81, angle + 0.12, angle + 1.87);
+          ctx.stroke();
+        }
+        ctx.fillStyle = '#e3fff0';
+        ctx.fillRect(109, 109, 38, 38);
+      } else {
+        ctx.fillStyle = '#9be8ce';
+        for (const start of [19, 94, 169]) {
+          ctx.beginPath();
+          ctx.moveTo(start, 184);
+          ctx.lineTo(start + 39, 72);
+          ctx.lineTo(start + 68, 72);
+          ctx.lineTo(start + 29, 184);
+          ctx.fill();
         }
       }
       ctx.globalCompositeOperation = 'destination-out';
@@ -101,6 +123,34 @@ export class ArenaDecals {
     sign.position.copyFrom(position);
     sign.rotation.y = yaw;
     this.add(sign, gateCells[id]);
+  }
+
+  private stamp(index: number, x: number, y: number, z: number, yaw: number, w: number, h: number): void {
+    const mesh = MeshBuilder.CreatePlane('transferStencil', { width: w, height: h }, this.scene);
+    mesh.position.set(x, y, z);
+    mesh.rotation.y = yaw;
+    this.add(mesh, index);
+  }
+
+  /** The same socket marking on all four faces of a standing or hanging tether point. */
+  socket(x: number, y: number, z: number, halfX: number, halfZ: number, size: number): void {
+    this.stamp(12, x, y, z - halfZ, 0, size, size);
+    this.stamp(12, x, y, z + halfZ, Math.PI, size, size);
+    this.stamp(12, x - halfX, y, z, Math.PI / 2, size, size);
+    this.stamp(12, x + halfX, y, z, -Math.PI / 2, size, size);
+  }
+
+  transfer(b: Box): void {
+    const [x0, y0, z0] = b.min;
+    const [x1, y1, z1] = b.max;
+    if (b.kind === 'relay') {
+      this.socket((x0 + x1) / 2, y1 - 1.52, (z0 + z1) / 2, (x1 - x0) / 2 + 0.055, (z1 - z0) / 2 + 0.055, 2);
+    } else {
+      for (let t = z0 + 2.5; t < z1 - 1.9; t += 5) {
+        this.stamp(13, x0 - 0.02, (y0 + y1) / 2, t, Math.PI / 2, 4.1, 2.6);
+        this.stamp(13, x1 + 0.02, (y0 + y1) / 2, t, -Math.PI / 2, 4.1, 2.6);
+      }
+    }
   }
 
   private add(mesh: Mesh, index: number): void {

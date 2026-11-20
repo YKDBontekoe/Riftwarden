@@ -14,7 +14,7 @@
  */
 import { mulberry32 } from '../combat/damage';
 import { type ArenaLayout, type Box, type GateId, LAYOUT_CONST, perimeterBoxes, type Ramp, type Rift, type Route, southDoorBox } from './layout';
-import { barrierX, barrierZ, containerYard, maze, orient, overpass, type Piece, redoubt, serpentine, skyway, withWings } from './districts';
+import { barrierX, barrierZ, containerYard, maze, orient, overpass, type Piece, transferGallery, redoubt, serpentine, skyway, withWings } from './districts';
 import { NavGrid } from './navgrid';
 import { BIOMES, biomeForSeed } from './biomes';
 
@@ -94,7 +94,11 @@ function districtStage(g: Gen): void {
   // (a maze, a serpentine chicane, a container yard or an overpass with a bridge), so lanes wind and differ.
   const kinds = ['maze', 'serpentine', 'containers', 'overpass'] as const;
   type DistrictKind = (typeof kinds)[number];
-  const order = [...kinds].sort(() => r() - 0.5);
+  const order = [...kinds];
+  for (let i = order.length - 1; i > 0; i--) {
+    const j = Math.floor(r() * (i + 1));
+    [order[i], order[j]] = [order[j], order[i]];
+  }
   const makeDistrict = (kind: DistrictKind): Omit<Piece, 'rect'> => {
     if (kind === 'maze') return maze(r, 4 + Math.floor(r() * 3), 3 + Math.floor(r() * 2), rand(8, 10));
     if (kind === 'serpentine') return serpentine(r, rand(28, 38), 3 + Math.floor(r() * 3), rand(7.5, 9.5), rand(7, 8.5));
@@ -142,10 +146,11 @@ function districtStage(g: Gen): void {
       const probe = orient(proto, k, 0, 0);
       const ext = (k % 2 === 0 ? probe.rect.z1 - probe.rect.z0 : probe.rect.x1 - probe.rect.x0) / 2;
       const lo = GEN.plaza + ext + 4;
-      const hi = Math.min(H * 0.52, H - 19 - ext);
+      const hi = Math.min(H * 0.58, H - 19 - ext);
       if (hi <= lo) continue;
       const along = rand(lo, hi);
-      const lateral = rand(-3, 3);
+      // Offset the district mouth so the ground approach turns below the upper crossing.
+      const lateral = (r() < 0.5 ? -1 : 1) * rand(5, 12);
       const piece = orient(proto, k, d.x ? d.x * along : lateral, d.z ? d.z * along : lateral);
       if (!freePiece(piece)) continue;
       placed.push(piece);
@@ -156,7 +161,8 @@ function districtStage(g: Gen): void {
     if (!done) {
       // No district fits: the ring side gets a plain 9 m opening instead.
       ringAt[gate] = rand(GEN.plaza + 14, H * 0.45);
-      span[gate] = [-4.5, 4.5];
+      const breach = (r() < 0.5 ? -1 : 1) * rand(11, 17);
+      span[gate] = [breach - 4.5, breach + 4.5];
     }
   });
   const ring: Box[] = [];
@@ -402,6 +408,13 @@ function build(seed: number): ArenaLayout {
   };
 
   const g: Gen = { r, rand, pick, H, placed, keepOut, free, freePiece, tryPlace, spot, placeOriented };
+  // Opposing galleries have diagonal ramp entries and clear shots across the plaza.
+  const galleryRand = mulberry32(seed ^ 0x543a1c);
+  for (const side of [-1, 1]) {
+    const span = 14.8 + galleryRand() * 1.8;
+    const height = 4.5 + galleryRand() * 1.3;
+    placed.push(orient(transferGallery(span, height), side > 0 ? 0 : 2, side * 17.3, 0));
+  }
   districtStage(g);
   scatterStage(g);
   skywayStage(g);

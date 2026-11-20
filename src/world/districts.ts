@@ -197,6 +197,31 @@ export function containerYard(rand: Rand, cols: number, rows: number): Omit<Piec
 }
 
 /**
+ * Paired transfer decks at the edge of the plaza. The girder sits on the outside
+ * edge so a wall jump throws the drone toward the fight. Its clear underside
+ * spans the ground lane. The ramp climbs from the plaza onto the first deck.
+ */
+export function transferGallery(halfSpan: number, deckHeight: number): Omit<Piece, 'rect'> {
+  const boxes: Box[] = [];
+  for (const end of [-1, 1]) {
+    const z = end * halfSpan;
+    boxes.push({ min: [-3.8, 0, z - 4.5], max: [3.8, deckHeight, z + 4.5], kind: 'platform' });
+    const tip = z + end * 2.8;
+    boxes.push({ min: [0.1, deckHeight, tip - 1.2], max: [2.5, deckHeight + 6.8, tip + 1.2], kind: 'relay' });
+  }
+  boxes.push({
+    min: [2.7, deckHeight - 0.95, -halfSpan + 4.5],
+    max: [3.8, deckHeight + 2.8, halfSpan - 4.5], kind: 'runwall',
+  });
+  return {
+    boxes,
+    ramps: [{ x0: -3.8 - deckHeight * 2.6, x1: -3.8, z0: -halfSpan - 2.4, z1: -halfSpan + 2.4,
+      axis: 'x', hMin: 0, hMax: deckHeight }],
+    tag: 'transfer',
+  };
+}
+
+/**
  * Overpass across the local z axis: two platforms at +-(span/2 + depth/2) in x, each with a ramp running along z,
  * joined by a bridge deck (kind 'bridge', underside at h - 0.45) with two pairs of slim pylons.
  */
@@ -214,6 +239,9 @@ export function overpass(rand: Rand, span: number, h: number): Omit<Piece, 'rect
     // Ramp down the outer half of the platform, toward +z or -z.
     const rx0 = Math.min(xi, xo) + (s > 0 ? pw - 5 : 1);
     const toward = rand() < 0.5 ? 1 : -1;
+    const mastX = xi + s * (pw - 2);
+    const mastZ = -toward * (pd / 2 - 1.6);
+    boxes.push({ min: [mastX - 1.2, h, mastZ - 1.2], max: [mastX + 1.2, h + 6.8, mastZ + 1.2], kind: 'relay' });
     ramps.push(toward > 0
       ? { x0: rx0, x1: rx0 + 4, z0: pd / 2, z1: pd / 2 + len, axis: 'z', hMin: h, hMax: 0 }
       : { x0: rx0, x1: rx0 + 4, z0: -pd / 2 - len, z1: -pd / 2, axis: 'z', hMin: 0, hMax: h });

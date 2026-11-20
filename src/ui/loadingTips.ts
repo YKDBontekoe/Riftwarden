@@ -6,6 +6,7 @@ export const TIPS = {
     'Forward rifts open inside the sector: watch the radar for orange rings near your defenses.',
     'Rush drones, jammers and artillery fly over towers. Mazes only slow the ground crews.',
     'Call a wave early with G: every skipped second pays 2 cores.',
+    'Aim for the mint rings and press R or middle mouse to grapple. Jump from a transfer deck alongside a striped girder to wall-run across the lane.',
     'Dash, jump and boost chain: carried momentum keeps you near 30 m/s.',
     'Kills refund dash charge. Chain kills within 2.5 s for RAMPAGE and OVERDRIVE.',
     'Tactical time slows hostiles only, and lets you refit and repair towers mid-wave.',

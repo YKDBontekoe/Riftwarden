@@ -1,5 +1,6 @@
 import { type Material, Mesh, MeshBuilder, type Scene } from '@babylonjs/core';
 import type { ArenaLayout, Box } from '../world/layout';
+import { biomeOf } from '../world/biomes';
 import { prismData } from '../weapons/geometry';
 import type { Palette } from './materials';
 import { loftData, smoothLatheData } from './sculpt';
@@ -27,11 +28,11 @@ export class ArenaDressing {
     for (const b of this.L.boxes) {
       if (b.kind === 'wall') this.wall(b);
       else if (b.kind === 'block') this.block(b);
+      else if (b.kind === 'platform') this.platformServices(b);
     }
     this.tunnels();
     this.drains();
     this.outside();
-    this.containmentArch();
     this.operationsGallery();
   }
 
@@ -233,32 +234,46 @@ export class ArenaDressing {
     }
   }
 
-  // ------------------------------------------------------------------ beyond the walls
-
-  /** Split ceramic magnet above the north yard. Its opening frames the sky rift. */
-  private containmentArch(): void {
-    const { scene } = this.h;
-    const x = -37, z = this.L.half + 58;
-    for (const side of [-1, 1]) {
-      // A cast magnet yoke follows a single elliptical arc. Narrow insulating joints
-      // divide the outer ceramic jacket into removable sections.
-      const band = (name: string, t0: number, t1: number, spread: number, reach: number, back: number, mat: Material) => {
-        const mesh = new Mesh(name, scene);
-        const sections = Array.from({length: 19}, (_, i) => {
-          const t = t0 + (t1-t0) * i/18, angle = -0.72 + t * 2.16;
-          return {t: 24 + 33 * Math.sin(angle), u: side * (4.3 + 27 * Math.cos(angle)),
-            v: back + t * 3.2, w: spread * (1-0.53*t), h: reach * (1-0.45*t), n: 3.5};
-        });
-        loftData(sections, 'y', 32).applyToMesh(mesh);
-        mesh.position.set(x, 0, z);
-        this.h.add(mesh, mat, null);
-      };
-      band('magnetKeel', -0.08, 1.0, 3.35, 4.0, 0.7, this.P.graphite);
-      for (let i = 0; i < 5; i++) band('magnetCeramic', i/5 + 0.004, (i+1)/5 - 0.003, 3.71, 4.05, -0.09, i === 4 ? this.P.enamel : this.P.white);
-      this.cbox(x + side * 24, 2.4, z, 6.9, 2.4, 6.4, this.P.concrete);
+  /** Large service bays make the platform faces readable from a ground lane. */
+  private platformServices(b: Box): void {
+    const P = this.P;
+    const [x0, y0, z0] = b.min;
+    const [x1, y1, z1] = b.max;
+    const biome = biomeOf(this.L).id;
+    const shell = biome === 'cryo' ? P.white : biome === 'foundry' ? P.enamel : P.metal;
+    const vents = biome === 'foundry' ? P.steel : P.graphite;
+    const light = biome === 'cryo' ? P.cyanDim : P.orangeDim;
+    for (const alongX of [true, false]) {
+      const start = alongX ? x0 : z0;
+      const end = alongX ? x1 : z1;
+      const count = Math.max(1, Math.floor((end - start) / 3.4));
+      const step = (end - start) / count;
+      for (const side of [-1, 1]) {
+        const edge = alongX ? (side === -1 ? z0 : z1) : (side === -1 ? x0 : x1);
+        const face = (t: number, y: number, width: number, height: number, depth: number, mat: Material) => {
+          const offset = edge + side * depth;
+          if (alongX) this.cbox(t, y, offset, width / 2, height / 2, .042, mat);
+          else this.cbox(offset, y, t, .042, height / 2, width / 2, mat);
+        };
+        for (let i = 0; i < count; i++) {
+          const t = start + (i + .5) * step;
+          const y = y0 + (y1 - y0) * .38;
+          const width = Math.min(2.6, step * .83);
+          face(t, y, width, 1.35, .015, P.graphite);
+          face(t, y, width - .18, 1.17, .052, shell);
+          face(t, y - .04, width - .40, .78, .093, vents);
+          if (biome === 'cryo') {
+            for (let rib = -2; rib <= 2; rib++) face(t + rib * (width - .43) / 5, y - .04, .058, .61, .13, P.metal);
+          } else {
+            for (const slot of [-1, 0, 1]) face(t, y - .08 + slot * .21, width - .55, .075, .13, P.metal);
+          }
+          face(t, y + .48, width * .29, .055, .096, light);
+        }
+      }
     }
-    this.cbox(x, 4.1, z, 24, 0.45, 2.3, this.P.graphite);
   }
+
+  // ------------------------------------------------------------------ beyond the walls
 
   /** Glazed control room overlooking the north gate, with a continuous curved nose. */
   private operationsGallery(): void {

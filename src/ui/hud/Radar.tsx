@@ -44,7 +44,7 @@ export function Radar({ game }: { game: Game }) {
       const [x0, , z0] = box.min;
       const [x1, , z1] = box.max;
       const fill = box.kind === 'platform' || box.kind === 'bridge' ? 'rgba(120,170,190,0.22)' : box.kind === 'wall' || box.kind === 'gate' ? 'rgba(150,200,215,0.42)' : 'rgba(120,150,165,0.32)';
-      b.fillStyle = fill;
+      b.fillStyle = box.kind === 'relay' || box.kind === 'runwall' ? 'rgba(151,235,199,0.84)' : fill;
       b.fillRect(X(x0), Y(z1), (x1 - x0) * k, (z1 - z0) * k);
     }
     const routes = Object.values(ARENA.routes).map(({ gate, points }) => {
