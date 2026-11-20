@@ -4,7 +4,8 @@
  * so gameplay geometry and rendered geometry can never drift apart.
  */
 
-export type SolidKind = 'wall' | 'platform' | 'block' | 'machine' | 'reactor' | 'gate';
+/** `barrier`: thin concrete walls (mazes, chicanes, redoubts, pylons); `container`: shipping-container stacks; `bridge`: elevated deck (enemies pass under). */
+export type SolidKind = 'wall' | 'platform' | 'block' | 'machine' | 'reactor' | 'gate' | 'barrier' | 'container' | 'bridge';
 
 export interface Box {
   min: [number, number, number];
@@ -63,6 +64,8 @@ export interface ArenaLayout {
   code?: string;
   /** Towers may stand on lanes; ground enemies path on a nav grid and breach blocking towers. */
   mazing?: boolean;
+  /** Procedural arenas: set pieces placed (e.g. 'maze', 'overpass', 'skyway'), for the briefing. */
+  features?: string[];
   /** Forward rifts: spawn points inside the arena, grouped by the gate whose waves they carry. */
   rifts?: Rift[];
 }

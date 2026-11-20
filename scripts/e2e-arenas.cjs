@@ -109,7 +109,7 @@ async function deploy(p, seed) {
       const mx = (e.pos.x + a.x) / 2;
       const mz = (e.pos.z + a.z) / 2;
       const t = g.turrets.add(new V(mx, 0, mz), 0, g.turretCtx, g.buildConfig);
-      R.advance(1.0);
+      R.advance(1.4); // build animation (0.8 s) + one field sync period (0.25 s)
       const v1 = g.enemies.nav.ground.version;
       let through = false;
       for (let i = e.seg; i < e.path.length; i++) {
@@ -121,7 +121,11 @@ async function deploy(p, seed) {
           if (Math.hypot(x - t.pos.x, z - t.pos.z) < t.radius) through = true;
         }
       }
-      return { v0, v1, through, navV: e.navV, building: t.building, blocking: t.blocking, screen: g.screen, phase: g.waves.phase, hostile: g.tactical.hostileScale };
+      // Nobody defends the reactor in this suite: clear the field and top it up so later sections run on a live game.
+      const result = { v0, v1, through, navV: e.navV, building: t.building, blocking: t.blocking, phase: g.waves.phase, pos: [t.pos.x, t.pos.y, t.pos.z], n: g.turrets.turrets.length, resync: g.enemies.nav.sync(), v2: g.enemies.nav.ground.version };
+      R.killAll();
+      g.reactorHp = Math.max(g.reactorHp, 600);
+      return result;
     });
     check('C2 tower on a lane re-plans enemy paths around it', !!c2 && c2.v1 > c2.v0 && !c2.through, JSON.stringify(c2));
   }
@@ -137,8 +141,11 @@ async function deploy(p, seed) {
         R.advance(1 / 60);
         g.input.simulateKey('KeyG', false);
       }
-      for (let i = 0; i < 60 * 20 && !g.enemies.active.some((x) => x.kind === 'walker' && x.alive && x.state === 'move'); i++) R.advance(1 / 60);
-      const e = g.enemies.active.find((x) => x.kind === 'walker' && x.alive && x.state === 'move');
+      // Earlier sections may leave the wave cleared on an upgrade/checkpoint screen: back to live play.
+      if (g.screen !== 'playing') g.setScreen('playing');
+      // A fresh walker (marks the run as a dev session, which is fine here): far from the reactor, still moving.
+      const e = R.dev.spawn('walker', [], 'east');
+      R.advance(0.5);
       if (!e) return null;
       const a = e.path[Math.min(e.seg, e.path.length - 1)];
       const dx = a.x - e.pos.x;
@@ -151,13 +158,17 @@ async function deploy(p, seed) {
         R.advance(1 / 60);
         e.pos.x = hold.x;
         e.pos.z = hold.z;
+        e.hp = e.maxHp; // towers would shoot it during the hold (and the pool would recycle the object)
       }
-      // Pin the walker's path straight through the tower (as a sealed maze would), then let it walk.
+      // Pin the walker's path straight through the tower (as a sealed maze would), then let it walk. Re-pin whenever
+      // the navigator re-plans it (field changes as the tower finishes building).
+      let pinned = null;
       const pin = () => {
         const ux = t.pos.x - e.pos.x;
         const uz = t.pos.z - e.pos.z;
         const ul = Math.hypot(ux, uz) || 1;
         e.path = [{ x: e.pos.x, z: e.pos.z }, { x: t.pos.x + (ux / ul) * 6, z: t.pos.z + (uz / ul) * 6 }];
+        pinned = e.path;
         e.seg = 1;
         e.navV = g.enemies.nav.ground.version;
       };
@@ -166,14 +177,15 @@ async function deploy(p, seed) {
       let wrecked = false;
       for (let i = 0; i < 60 * 40 && !wrecked; i++) {
         R.advance(1 / 60);
-        if (e.navV !== g.enemies.nav.ground.version) pin();
+        if (e.path !== pinned) pin();
         wrecked = t.wrecked;
         if (!e.alive) break;
-        // Keep the walker alive (the tower shoots it) so the breach plays out.
+        // Keep the walker alive (the tower shoots it) and the reactor standing, so the breach plays out.
         e.hp = e.maxHp;
+        g.reactorHp = Math.max(g.reactorHp, 300);
       }
       const breaches = g.enemies.nav.breaches;
-      window.__dbgD = { alive: e.alive, state: e.state, d: Math.hypot(e.pos.x - t.pos.x, e.pos.z - t.pos.z), seg: e.seg, len: e.path.length, kind: e.kind, building: t.building, path: e.path };
+      window.__dbgD = { screen: g.screen, phase: g.waves.phase, tac: g.tactical.hostileScale, pos: [e.pos.x, e.pos.z], t: [t.pos.x, t.pos.z], alive: e.alive, state: e.state, d: Math.hypot(e.pos.x - t.pos.x, e.pos.z - t.pos.z), seg: e.seg, len: e.path.length, kind: e.kind, building: t.building, path: e.path };
       const wreckedAt = t.wrecked;
       const blockingWreck = t.blocking;
       // Repair between waves: force the phase check open via tactical-free prep state.
@@ -183,7 +195,6 @@ async function deploy(p, seed) {
       const why = g.wear.repair(t);
       return { hp0, breaches, wrecked: wreckedAt, blockingWreck, why, after: { hp: t.hp, max: t.maxHp, wrecked: t.wrecked } };
     });
-    console.log(JSON.stringify(await p.evaluate(() => window.__dbgD)));
     check('D1 walker breaches a blocking tower until it is wrecked', !!d && d.breaches > 0 && d.wrecked, JSON.stringify(d && { breaches: d.breaches, wrecked: d.wrecked, hp0: d.hp0 }));
     check('D2 wrecks do not block', !!d && d.blockingWreck === false);
     check('D3 repair restores a wreck to full', !!d && d.why === null && !d.after.wrecked && d.after.hp === d.after.max, JSON.stringify(d && { why: d.why, ...d.after }));
@@ -199,6 +210,28 @@ async function deploy(p, seed) {
     await waitFor(p, () => !!window.__rift.game.scene.environmentTexture, null, 120000).catch(() => {});
     await shot(p, 'arenas-overview', { frames: 2, timeout: 240000 });
     console.log(`screenshot ${OUT}/arenas-overview.png`);
+    // Ground-level views of set pieces: a maze/chicane wall, a container yard and a bridge.
+    const views = await p.evaluate(() => {
+      const L = window.__rift.game.layout;
+      const run = (b) => Math.max(b.max[0] - b.min[0], b.max[2] - b.min[2]);
+      const pick = (k) => L.boxes.filter((b) => b.kind === k).sort((a, b) => run(b) - run(a))[0];
+      return ['barrier', 'container', 'bridge'].map((k) => pick(k)).filter(Boolean).map((b) => ({ kind: b.kind, x: (b.min[0] + b.max[0]) / 2, z: (b.min[2] + b.max[2]) / 2, top: b.max[1] }));
+    });
+    for (const v of views) {
+      await p.evaluate((v) => {
+        const g = window.__rift.game;
+        const V = g.player.position.constructor;
+        const out = Math.hypot(v.x, v.z) || 1;
+        g.player.camera.position.set(v.x - (v.x / out) * 12 + 5, v.top + 6, v.z - (v.z / out) * 12 + 5);
+        g.player.camera.setTarget(new V(v.x, v.top * 0.5, v.z));
+      }, v);
+      // SwiftShader compiles shaders asynchronously: let the page idle between renders so new views are complete.
+      for (let i = 0; i < 4; i++) {
+        await p.evaluate(() => window.__rift.render(1));
+        await p.waitForTimeout(1500);
+      }
+      await shot(p, `arenas-${v.kind}`, { frames: 1, timeout: 400000 });
+    }
     for (const [seed, w, h] of [[424242, 1280, 720], [9001, 1280, 720], [777, 390, 844]]) {
       await p.setViewportSize({ width: w, height: h });
       await p.evaluate((sd) => window.__rift.previewLoading(sd, 1), seed);

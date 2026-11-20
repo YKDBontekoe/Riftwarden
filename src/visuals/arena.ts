@@ -156,6 +156,100 @@ export class ArenaBuilder {
     body.shape = this.physicsShape;
   }
 
+  /** Thin concrete wall (mazes, chicanes, the bastion ring, pylons): kick plate, cap, ribs and a dim marker line. */
+  private buildBarrier(b: Box): void {
+    const P = this.pal;
+    const [x0, , z0] = b.min;
+    const [x1, y1, z1] = b.max;
+    const alongX = x1 - x0 >= z1 - z0;
+    const run = alongX ? x1 - x0 : z1 - z0;
+    this.box(x0, 0, z0, x1, y1 - 0.22, z1, P.concrete, 'wall');
+    this.box(x0 - 0.05, y1 - 0.22, z0 - 0.05, x1 + 0.05, y1, z1 + 0.05, P.graphite, 'wall');
+    this.box(x0 - 0.04, 0, z0 - 0.04, x1 + 0.04, 0.42, z1 + 0.04, P.graphite, 'wall');
+    if (run < 2.2) return; // pylons / bastion blocks: plain
+    // Steel ribs every ~3 m on both faces and a dim marker line under the cap (reads at distance and in the dark).
+    for (let t = 1.4; t < run - 0.6; t += 3.1) {
+      if (alongX) this.box(x0 + t - 0.12, 0.42, z0 - 0.09, x0 + t + 0.12, y1 - 0.22, z1 + 0.09, P.metal, 'wall');
+      else this.box(x0 - 0.09, 0.42, z0 + t - 0.12, x1 + 0.09, y1 - 0.22, z0 + t + 0.12, P.metal, 'wall');
+    }
+    if (alongX) this.box(x0 + 0.3, y1 - 0.5, z0 - 0.03, x1 - 0.3, y1 - 0.42, z1 + 0.03, P.orangeDim, null);
+    else this.box(x0 - 0.03, y1 - 0.5, z0 + 0.3, x1 + 0.03, y1 - 0.42, z1 - 0.3, P.orangeDim, null);
+  }
+
+  /** Shipping-container stack: one shell per 2.6 m level (colour per level), corrugation ribs, rails, door frame. */
+  private buildContainer(b: Box): void {
+    const P = this.pal;
+    const [x0, , z0] = b.min;
+    const [x1, y1, z1] = b.max;
+    const alongX = x1 - x0 >= z1 - z0;
+    const run = alongX ? x1 - x0 : z1 - z0;
+    const levels = Math.max(1, Math.round(y1 / 2.6));
+    const lh = y1 / levels;
+    const mats = [P.rust, P.enamel, P.panel, P.graphite];
+    const hash = Math.abs(Math.round(x0 * 7.3 + z0 * 3.1));
+    for (let l = 0; l < levels; l++) {
+      const ya = l * lh;
+      const yb = ya + lh;
+      const top = l === levels - 1;
+      this.box(x0 + 0.04, ya + 0.04, z0 + 0.04, x1 - 0.04, yb - 0.04, z1 - 0.04, mats[(hash + l) % mats.length], top ? 'platform' : 'wall');
+      // Top / bottom rails along the long edges.
+      for (const y of [ya, yb - 0.14]) {
+        if (alongX) {
+          this.box(x0, y, z0, x1, y + 0.14, z0 + 0.12, P.graphite, 'wall');
+          this.box(x0, y, z1 - 0.12, x1, y + 0.14, z1, P.graphite, 'wall');
+        } else {
+          this.box(x0, y, z0, x0 + 0.12, y + 0.14, z1, P.graphite, 'wall');
+          this.box(x1 - 0.12, y, z0, x1, y + 0.14, z1, P.graphite, 'wall');
+        }
+      }
+      // Corrugation ribs on both long faces.
+      for (let t = 0.5; t < run - 0.3; t += 0.9) {
+        if (alongX) {
+          this.box(x0 + t - 0.07, ya + 0.16, z0 - 0.03, x0 + t + 0.07, yb - 0.16, z0 + 0.06, P.metal, 'wall');
+          this.box(x0 + t - 0.07, ya + 0.16, z1 - 0.06, x0 + t + 0.07, yb - 0.16, z1 + 0.03, P.metal, 'wall');
+        } else {
+          this.box(x0 - 0.03, ya + 0.16, z0 + t - 0.07, x0 + 0.06, yb - 0.16, z0 + t + 0.07, P.metal, 'wall');
+          this.box(x1 - 0.06, ya + 0.16, z0 + t - 0.07, x1 + 0.03, yb - 0.16, z0 + t + 0.07, P.metal, 'wall');
+        }
+      }
+    }
+  }
+
+  /** Elevated walkway deck: buildable top, edge girders below, railings (with low colliders) and hazard edges. */
+  private buildBridge(b: Box): void {
+    const P = this.pal;
+    const [x0, y0, z0] = b.min;
+    const [x1, y1, z1] = b.max;
+    const alongX = x1 - x0 >= z1 - z0;
+    this.box(x0, y0, z0, x1, y1, z1, P.graphite, 'platform');
+    const run = alongX ? x1 - x0 : z1 - z0;
+    for (const side of [0, 1]) {
+      const e = side ? (alongX ? z1 : x1) : alongX ? z0 : x0;
+      const inward = side ? -1 : 1;
+      const g0 = e + inward * 0.1;
+      const g1 = e + inward * 0.55;
+      // Girder under the deck edge.
+      if (alongX) this.box(x0, y0 - 0.6, Math.min(g0, g1), x1, y0, Math.max(g0, g1), P.metal, 'wall');
+      else this.box(Math.min(g0, g1), y0 - 0.6, z0, Math.max(g0, g1), y0, z1, P.metal, 'wall');
+      // Railing: posts + top rail; hazard strip on the deck edge.
+      const r0 = e + inward * 0.05;
+      const r1 = e + inward * 0.16;
+      for (let t = 0.2; t <= run - 0.1; t += 2) {
+        if (alongX) this.box(x0 + t, y1, Math.min(r0, r1), x0 + t + 0.1, y1 + 1.05, Math.max(r0, r1), P.metal, null);
+        else this.box(Math.min(r0, r1), y1, z0 + t, Math.max(r0, r1), y1 + 1.05, z0 + t + 0.1, P.metal, null);
+      }
+      if (alongX) {
+        this.box(x0, y1 + 0.98, Math.min(r0, r1), x1, y1 + 1.08, Math.max(r0, r1), P.metal, null);
+        this.box(x0, y1, Math.min(e, e + inward * 0.3), x1, y1 + 0.012, Math.max(e, e + inward * 0.3), P.orangeDim, null);
+        this.collider(new Vector3((x0 + x1) / 2, y1 + 0.55, (r0 + r1) / 2), new Vector3(x1 - x0, 1.1, 0.12));
+      } else {
+        this.box(Math.min(r0, r1), y1 + 0.98, z0, Math.max(r0, r1), y1 + 1.08, z1, P.metal, null);
+        this.box(Math.min(e, e + inward * 0.3), y1, z0, Math.max(e, e + inward * 0.3), y1 + 0.012, z1, P.orangeDim, null);
+        this.collider(new Vector3((r0 + r1) / 2, y1 + 0.55, (z0 + z1) / 2), new Vector3(0.12, 1.1, z1 - z0));
+      }
+    }
+  }
+
   private buildBox(b: Box): void {
     const P = this.pal;
     const [x0, y0, z0] = b.min;
@@ -210,6 +304,15 @@ export class ArenaBuilder {
       }
       case 'block':
         // ArenaDressing builds the pickable cooling plant inside this collision footprint.
+        break;
+      case 'barrier':
+        this.buildBarrier(b);
+        break;
+      case 'container':
+        this.buildContainer(b);
+        break;
+      case 'bridge':
+        this.buildBridge(b);
         break;
       case 'machine': {
         this.box(x0, y0, z0, x1, y1, z1, P.graphite, 'wall');

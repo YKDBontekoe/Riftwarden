@@ -40,7 +40,8 @@ describe('procedural arenas', () => {
         expect(Math.hypot(end.x, end.z)).toBeLessThan(NAV.goalRadius + 1);
         for (const p of pts.slice(1, -1)) {
           for (const b of L.boxes) {
-            if (b.kind === 'wall' || b.kind === 'gate' || b.kind === 'reactor') continue;
+            // Bridges are overhead (enemies walk under them).
+            if (b.kind === 'wall' || b.kind === 'gate' || b.kind === 'reactor' || b.kind === 'bridge') continue;
             expect(distToBoxXZ(p.x, p.z, b)).toBeGreaterThan(0.5);
           }
         }
@@ -50,9 +51,45 @@ describe('procedural arenas', () => {
       expect(nav.walkable(L.playerSpawn.x, L.playerSpawn.z)).toBe(true);
       // structures never overlap the reactor plaza
       for (const b of L.boxes) {
-        if (b.kind === 'block' || b.kind === 'platform' || b.kind === 'machine') expect(distToBoxXZ(0, 0, b)).toBeGreaterThan(15);
+        if (b.kind !== 'wall' && b.kind !== 'gate' && b.kind !== 'reactor') expect(distToBoxXZ(0, 0, b)).toBeGreaterThan(15);
       }
     }
+  });
+});
+
+describe('districts', () => {
+  it('every sector has lane districts, a bastion ring and set pieces; lanes wind', () => {
+    let detour = 0;
+    let n = 0;
+    const seen = new Set<string>();
+    for (let seed = 100; seed < 130; seed++) {
+      const L = generateArena(seed);
+      const f = L.features ?? [];
+      expect(f).toContain('ring');
+      expect(f.filter((t) => ['maze', 'serpentine', 'containers', 'overpass'].includes(t)).length).toBeGreaterThanOrEqual(3);
+      for (const t of f) seen.add(t);
+      for (const g of L.initialGates) {
+        const p = L.routes[g].points;
+        let len = 0;
+        for (let i = 1; i < p.length; i++) len += Math.hypot(p[i].x - p[i - 1].x, p[i].z - p[i - 1].z);
+        detour += len / Math.hypot(p[0].x, p[0].z);
+        n++;
+      }
+    }
+    // Lanes are on average clearly longer than the straight line from the tunnel to the reactor.
+    expect(detour / n).toBeGreaterThan(1.1);
+    for (const t of ['maze', 'serpentine', 'containers', 'overpass', 'redoubt', 'skyway']) expect(seen.has(t)).toBe(true);
+  });
+
+  it('bridges are elevated decks the ground grid ignores; their pylons block', () => {
+    const L = [...Array(20)].map((_, i) => generateArena(200 + i)).find((x) => x.boxes.some((b) => b.kind === 'bridge'))!;
+    const nav = new NavGrid(L, false);
+    const deck = L.boxes.find((b) => b.kind === 'bridge')!;
+    expect(deck.min[1]).toBeGreaterThan(2.5);
+    // Somewhere under the deck (away from pylons) is walkable ground.
+    let open = 0;
+    for (let x = deck.min[0]; x <= deck.max[0]; x += 0.5) for (let z = deck.min[2]; z <= deck.max[2]; z += 0.5) if (nav.walkable(x, z)) open++;
+    expect(open).toBeGreaterThan(0);
   });
 });
 

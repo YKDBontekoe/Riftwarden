@@ -1885,7 +1885,8 @@ export class Game {
     });
     if (this.layout.mazing) {
       this.enemies.nav = new EnemyNavigator(this.layout, {
-        towers: () => this.turrets.turrets.map((t) => ({ id: t.id, x: t.pos.x, z: t.pos.z, radius: t.radius, blocking: t.blocking })),
+        // Towers on decks, bridges and container tops stand above the ground lanes: they never block them.
+        towers: () => this.turrets.turrets.map((t) => ({ id: t.id, x: t.pos.x, z: t.pos.z, radius: t.radius, blocking: t.blocking && t.pos.y < 1 })),
         breach: (id, dmg, by) => this.wear.breach(id, dmg, by),
       });
     }

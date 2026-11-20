@@ -56,6 +56,16 @@ export function LoadingScreen() {
   );
 }
 
+const FEATURE_LABEL: Record<string, string> = {
+  maze: 'Maze',
+  serpentine: 'Chicane',
+  containers: 'Container yard',
+  overpass: 'Overpass',
+  redoubt: 'Redoubt',
+  skyway: 'Skyway',
+  ring: 'Bastion ring',
+};
+
 function SectorCard({ s }: { s: NonNullable<TransitInfo['sector']> }) {
   const st = arenaStats(s.layout);
   return (
@@ -73,6 +83,13 @@ function SectorCard({ s }: { s: NonNullable<TransitInfo['sector']> }) {
         <div><b>{st.lanes}</b><span>OPEN GATES</span></div>
         {s.players ? <div><b>{s.players}</b><span>WARDENS</span></div> : null}
       </div>
+      {!!s.layout.features?.length && (
+        <div className="ls-feats">
+          {[...new Set(s.layout.features)].map((f) => (
+            <span key={f}>{FEATURE_LABEL[f] ?? f}</span>
+          ))}
+        </div>
+      )}
       {s.layout.mazing && <div className="ls-note">Mazing sector: towers block ground lanes and can be breached.</div>}
     </div>
   );

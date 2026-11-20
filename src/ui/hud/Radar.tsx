@@ -43,7 +43,7 @@ export function Radar({ game }: { game: Game }) {
     for (const box of ARENA.boxes) {
       const [x0, , z0] = box.min;
       const [x1, , z1] = box.max;
-      const fill = box.kind === 'platform' ? 'rgba(120,170,190,0.22)' : box.kind === 'wall' || box.kind === 'gate' ? 'rgba(150,200,215,0.42)' : 'rgba(120,150,165,0.32)';
+      const fill = box.kind === 'platform' || box.kind === 'bridge' ? 'rgba(120,170,190,0.22)' : box.kind === 'wall' || box.kind === 'gate' ? 'rgba(150,200,215,0.42)' : 'rgba(120,150,165,0.32)';
       b.fillStyle = fill;
       b.fillRect(X(x0), Y(z1), (x1 - x0) * k, (z1 - z0) * k);
     }
