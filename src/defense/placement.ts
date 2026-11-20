@@ -58,8 +58,8 @@ export const FOOTPRINT_SAMPLES: readonly [number, number][] = [
 ];
 
 /**
- * Rules for free-form tower placement. Lanes are reserved, so construction can
- * never cut enemies off from the reactor.
+ * Rules for free-form tower placement. On the classic arena lanes are reserved, so construction can never cut
+ * enemies off from the reactor; on procedural (mazing) arenas towers may block lanes and get breached.
  */
 export function validatePlacement(layout: ArenaLayout, q: PlacementQuery): PlacementReason {
   if (!BUILDABLE_SURFACES.has(q.surface) || q.normalY < 0.95) return 'bad-surface';
@@ -78,7 +78,8 @@ export function validatePlacement(layout: ArenaLayout, q: PlacementQuery): Place
   const rdz = q.z - layout.reactor.z;
   if (rdx * rdx + rdz * rdz < (layout.reactor.radius + 4.5) ** 2) return 'too-close-reactor';
 
-  if (q.y < 0.5) {
+  // Mazing arenas: towers may stand on lanes (enemies re-route or breach); gate mouths and rifts are reserved.
+  if (q.y < 0.5 && !layout.mazing) {
     for (const route of Object.values(layout.routes)) {
       if (distToPolyline(q.x, q.z, route.points) < layout.laneHalfWidth + q.radius) return 'blocks-route';
     }

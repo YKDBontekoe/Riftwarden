@@ -272,6 +272,20 @@ export function CenterPanel() {
               {inspect.edit && <div className="tc-warn">{inspect.edit}</div>}
             </div>
           )}
+          {inspect.hp && (
+            <div className={`tower-hp ${inspect.hp.wrecked ? 'wrecked' : ''}`} data-testid="tower-hp">
+              <div className="tc-line">
+                <span>{inspect.hp.wrecked ? 'WRECKED · NOT FIRING, NOT BLOCKING' : 'STRUCTURE'}</span>
+                <b>{inspect.hp.wrecked ? '0' : inspect.hp.hp} / {inspect.hp.max}</b>
+              </div>
+              <SegBar value={inspect.hp.wrecked ? 0 : inspect.hp.hp / Math.max(1, inspect.hp.max)} tone={inspect.hp.wrecked || inspect.hp.hp < inspect.hp.max * 0.35 ? 'red' : 'cyan'} segments={16} />
+              {inspect.hp.repair > 0 && (
+                <div className="keys">
+                  <BoundKey action="repair" /> {inspect.hp.wrecked ? 'rebuild' : 'repair'} ◆{inspect.hp.repair}
+                </div>
+              )}
+            </div>
+          )}
           <div className="keys">
             Hold <BoundKey action="recycle" /> to recycle
           </div>

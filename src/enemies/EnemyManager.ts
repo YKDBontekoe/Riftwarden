@@ -14,8 +14,10 @@ import { hasAnyStatus, isBurning, isChilled, isFrozen, isShocked, newStatus, res
 import { unlit } from '../visuals/materials';
 import type { DroneRig, WalkerRig } from '../visuals/models';
 import { buildEliteParts, buildThreatMark, type EliteParts, type ThreatMark } from '../visuals/eliteParts';
-import { ELITE, type EliteModId, eliteName, validMods } from '../survival/elites';
+import { ELITE, ELITE_IDS, type EliteModId, eliteName, validMods } from '../survival/elites';
 import type { ArenaLayout, GateId, Vec2 } from '../world/layout';
+import type { EnemyNavigator } from './navigation';
+import { freshMutationState, type MutationState, mutationDeath, setupMutations, updateMutations } from './mutations';
 import { WalkerMotion } from './walkerMotion';
 
 export interface EnemyContext {
@@ -45,6 +47,10 @@ export interface EnemyContext {
   time: number;
   /** M7 co-op: called before each enemy thinks (the server points `player` at that enemy's target drone). */
   focus?(e: Enemy): void;
+  /** M10: plant a ground hazard patch (molten slag trails). */
+  hazard?(x: number, z: number, r: number, kind: 'frost' | 'slag', life: number): void;
+  /** M10: damage a tower directly (sapper charges). */
+  damageTower?(t: Turret, amount: number): void;
 }
 
 /** M7: lifecycle observers (co-op replication). */
@@ -125,6 +131,17 @@ export class Enemy implements Health {
   flinch = 0;
   stuckT = 0;
   bestDist = Infinity;
+  /** Gate whose wave this enemy belongs to (lane identity even when it came out of a forward rift). */
+  gate: GateId = 'north';
+  /** Navigation field version the current path was planned on (procedural arenas). */
+  navV = -1;
+  /** Breaching: tower being hit and time to the next hit. */
+  breachId = 0;
+  breachT = 0;
+  /** M10 mutation state (enemies/mutations.ts). */
+  mut: MutationState = freshMutationState();
+  /** M10: untargetable and unhittable (burrowed); towers, picking and the HUD skip it. */
+  hidden = false;
   damageMult = 1;
   speedMult = 1;
   /** Remaining path length to the reactor: lower = more dangerous (turret priority). */
@@ -240,6 +257,10 @@ const BLAST: Partial<Record<EnemyKind, [number, number, number]>> = {
   courier: [2.4, 26, 0.6],
   jammer: [1.0, 10, 1.3],
   crawler: [1.9, 20, 0.6],
+  sapper: [1.3, 10, 1],
+  skimmer: [0.55, 4, 1.6],
+  marksman: [1.1, 12, 1],
+  burrower: [1.6, 16, 0.8],
 };
 
 export class EnemyManager {
@@ -263,6 +284,8 @@ export class EnemyManager {
   elitesKilled = 0;
   /** M7: lifecycle observers (replication). */
   hooks: EnemyHooks = {};
+  /** Procedural arenas: nav-grid pathing, forward rifts and tower breaching (null = classic fixed lanes). */
+  nav: EnemyNavigator | null = null;
 
   constructor(scene: Scene, readonly kit: Kit, readonly P: Palette) {
     this.markMats = {
@@ -308,7 +331,7 @@ export class EnemyManager {
       if (!this.pool.has(kind)) this.pool.set(kind, []);
       this.pool.get(kind)!.push(e);
       if (kind === 'walker') {
-        for (const mod of ['overcharged', 'armored', 'accelerated', 'volatile'] as EliteModId[]) e.eliteParts.set(mod, this.kit.flashable(() => this.kit.soft(() => buildEliteParts(this.kit, this.P, e.root, e.def, mod))));
+        for (const mod of ELITE_IDS) e.eliteParts.set(mod, this.kit.flashable(() => this.kit.soft(() => buildEliteParts(this.kit, this.P, e.root, e.def, mod))));
         e.threat = this.kit.flashable(() => this.kit.soft(() => buildThreatMark(this.kit, this.P, e.root, e.def)));
         e.flashVecs = null;
       }
@@ -401,9 +424,20 @@ export class EnemyManager {
     e.dischargeWind = 0;
     e.spawnedAt = performance.now();
     this.applyMods(e, o.mods ?? []);
+    setupMutations(e);
+    e.hidden = false;
     // Offset lane so groups spread out instead of single-file (heavies and bosses stay central).
     const lateral = (Math.random() * 2 - 1) * (def.role === 'boss' ? 0 : def.radius > 1 ? 0.6 : 1.3);
-    e.path = offsetPath(layout.routes[gate].points, lateral);
+    e.gate = gate;
+    e.breachId = 0;
+    if (this.nav) {
+      const from = this.nav.spawnPoint(gate, def.role);
+      e.path = offsetPath(this.nav.pathFrom(kind, from, gate), lateral);
+      e.navV = this.nav.grid(kind).version;
+    } else {
+      e.path = offsetPath(layout.routes[gate].points, lateral);
+      e.navV = -1;
+    }
     const start = e.path[0];
     const dir = { x: e.path[1].x - start.x, z: e.path[1].z - start.z };
     const back = def.role === 'boss' ? 0 : Math.random() * 2;
@@ -463,7 +497,8 @@ export class EnemyManager {
    * reactions) is treated the same.
    */
   damage(e: Enemy, amount: number, type: DamageType, hitPoint: Vector3, fx: Effects, info: Partial<HitInfo> = {}): DamageResult | null {
-    if (!e.alive) return null;
+    // Burrowed enemies are out of reach of every source (towers do not even target them).
+    if (!e.alive || e.hidden) return null;
     const hit: HitInfo = { weak: !!info.weak, from: info.from ?? null, point: hitPoint, dot: !!info.dot };
     if (hit.from) {
       e.hitFromX = hit.from.x;
@@ -536,6 +571,7 @@ export class EnemyManager {
     if (e.elite) this.elitesKilled++;
     const c = e.center(new Vector3());
     if (e.has('volatile')) this.armVolatile(e, c, ctx);
+    if (e.elite) mutationDeath(e, ctx);
     const handled = e.behavior?.death?.(e, ctx, this) ?? false;
     if (typeof handled === 'number' && handled > 0) {
       // Keep the wreck for its destruction sequence; it is already out of play.
@@ -714,6 +750,11 @@ export class EnemyManager {
     const dz = target.z - e.pos.z;
     const dist = Math.hypot(dx, dz);
     const step = speed * hdt;
+    if (this.nav && dist > 1e-4 && this.nav.blocked(e, e.pos.x + (dx / dist) * Math.min(step + 0.3, dist), e.pos.z + (dz / dist) * Math.min(step + 0.3, dist), hdt)) {
+      e.yaw = turnTowards(e.yaw, Math.atan2(dx, dz), hdt * turnRate);
+      e.stuckT = 0;
+      return false;
+    }
     if (dist <= step + 0.05) {
       e.pos.x = target.x;
       e.pos.z = target.z;
@@ -797,6 +838,7 @@ export class EnemyManager {
       this.aiMs = performance.now() - t0;
       return;
     }
+    this.nav?.tick(dt);
     // Separation (n is small; O(n^2) is cheaper than a spatial structure here). Bosses are immovable.
     const list = this.active;
     for (let i = 0; i < list.length; i++) {
@@ -837,9 +879,13 @@ export class EnemyManager {
           e.shield = Math.min(e.maxShield, e.shield + e.maxShield * 0.25 * hdt);
         }
       }
-      if (e.elite) this.updateElite(e, hdt, ctx);
+      if (e.elite) {
+        this.updateElite(e, hdt, ctx);
+        updateMutations(e, hdt, ctx, this);
+      }
       if (e.threat) this.animateThreat(e, ctx.time);
       if (!e.alive) continue;
+      if (this.nav && this.nav.refresh(e)) e.remaining = pathLength(e.path, e.seg, e.pos);
 
       e.behavior.update(e, hdt, ctx, this);
     }

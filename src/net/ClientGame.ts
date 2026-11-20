@@ -17,7 +17,7 @@ import type { EliteModId } from '../survival/elites';
 import { configCost, type TowerSlot } from '../towers/components';
 import { hudStore, uiEvents } from '../ui/store';
 import { buildWardenDrone, type DroneRig, SLOT_CSS } from '../visuals/droneModel';
-import { ARENA, type GateId } from '../world/layout';
+import type { GateId } from '../world/layout';
 import type { ActMsg, ShotClaim } from './protocol';
 import { INPUT_HZ } from './protocol';
 import { spawnFor } from './ServerGame';
@@ -174,8 +174,12 @@ export class ClientGame extends Game {
     this.kitRef = (this as unknown as { kit: Kit }).kit;
     this.palRef = (this as unknown as { pal: Palette }).pal;
     this.player.vitalsLocal = false;
+    // Replicas never path or breach: the server owns navigation and tower damage. Hazards only render here
+    // and slow the local drone; their trails arrive as 'hz' events.
+    this.enemies.nav = null;
+    if (this.hazards) this.hazards.affectEnemies = false;
     // Local drone starts at its team slot.
-    const sp = spawnFor(cfg.slot);
+    const sp = spawnFor(cfg.slot, this.layout);
     (this.player as unknown as { spawn: Vector3 }).spawn.set(sp.x, 0.95, sp.z);
     this.player.reset();
     for (const p of cfg.players) if (p.id !== this.you) this.addRemote(p.id, p.name, p.slot);
@@ -218,7 +222,8 @@ export class ClientGame extends Game {
   private addRemote(id: string, name: string, slot: number): Remote {
     const rig = buildWardenDrone(this.scene, this.kitRef, this.palRef, slot);
     const r: Remote = { id, name, slot, rig, track: new Track(), alive: true, firing: false, family: 'plasma', hp: 100, maxHp: 100, shield: 0, maxShield: 0, respawnT: 0, connected: true, vote: -1, heat: 0, bob: Math.random() * 10 };
-    rig.root.position.set(spawnFor(slot).x, 1, spawnFor(slot).z);
+    const sp = spawnFor(slot, this.layout);
+    rig.root.position.set(sp.x, 1, sp.z);
     this.remotes.set(id, r);
     return r;
   }
@@ -338,14 +343,22 @@ export class ClientGame extends Game {
     const before = this.recycleT;
     if (holding) (this.input as unknown as { downKeys?: Set<string> }).downKeys;
     // Run the inspection part of the base logic without its local recycle.
+    const repairing = controls && this.input.pressed('KeyF');
     const isDown = this.input.isDown.bind(this.input);
+    const pressed = this.input.pressed.bind(this.input);
     (this.input as { isDown: (k: string) => boolean }).isDown = (k) => (k === 'KeyX' ? false : isDown(k));
+    (this.input as { pressed: (k: string) => boolean }).pressed = (k) => (k === 'KeyF' ? false : pressed(k));
     try {
       super.updateInspect(dt, controls);
     } finally {
       (this.input as { isDown: (k: string) => boolean }).isDown = isDown;
+      (this.input as { pressed: (k: string) => boolean }).pressed = pressed;
     }
     const t = this.inspected;
+    if (t && repairing && this.layout.mazing) {
+      const sid = this.serverTowerId(t);
+      if (sid !== null) void this.request({ a: 'repair', tower: sid });
+    }
     if (t && holding) {
       this.recycleT = before + dt / 0.6;
       if (this.recycleT >= 1) {
@@ -466,7 +479,9 @@ export class ClientGame extends Game {
     }
     const hdt = dt * this.tactical.hostileScale;
     this.runTime += dt;
-    this.player.update(dt, input, this.stats.moveSpeedMult, controls);
+    this.hazards?.decay(hdt, this.hostileT);
+    this.hazards?.affectPlayer(0);
+    this.player.update(dt, input, this.stats.moveSpeedMult * (this.hazards?.playerSpeed ?? 1), controls);
     if (this.player.dashedThisFrame) {
       this.player.dashedThisFrame = false;
       this.dashFlag = true;
@@ -692,6 +707,12 @@ export class ClientGame extends Game {
       if (t) {
         t.kills = row[6];
         t.damageDealt = row[7];
+        if (row.length > 10) {
+          t.maxHp = row[9];
+          if (row[10] && !t.wrecked) t.damage(t.hp + 1);
+          else if (!row[10] && t.wrecked) t.repair();
+          t.hp = row[8];
+        }
       }
     }
     for (const [sid, x, y, z] of s.tl as number[][]) {
@@ -871,6 +892,9 @@ export class ClientGame extends Game {
         if (ownerName && ownerName !== this.myName) this.towerNote = { text: `${ownerName} deployed ${t.name}`, t: 2 };
         return;
       }
+      case 'hz':
+        this.hazards?.add(ev[1], ev[2], ev[3], ev[4], ev[5]);
+        break;
       case 'T-': {
         const t = this.towerById.get(ev[1]);
         if (!t) return;
@@ -985,7 +1009,7 @@ export class ClientGame extends Game {
   private spawnReplica(ev: Extract<ReplicatedEvent, readonly ['es', ...unknown[]]>): void {
     const [, id, kind, mods, tag, encounter, maxHp, maxShield, x, z, yaw, seg, gate] = ev as readonly [string, number, EnemyKind, EliteModId[], string | null, number, number, number, number, number, number, number, GateId];
     if (this.byNet.has(id)) return;
-    const e = this.enemies.spawn(kind, gate in ARENA.routes ? gate : 'north', ARENA, 1, 1, 1, { mods, tag: (tag ?? undefined) as Enemy['tag'], encounter, ctx: this.puppet });
+    const e = this.enemies.spawn(kind, gate in this.layout.routes ? gate : 'north', this.layout, 1, 1, 1, { mods, tag: (tag ?? undefined) as Enemy['tag'], encounter, ctx: this.puppet });
     e.netId = id;
     e.maxHp = e.hp = maxHp;
     e.maxShield = e.shield = maxShield;
@@ -995,7 +1019,7 @@ export class ClientGame extends Game {
     e.root.position.copyFrom(e.pos);
     e.motion?.reset(e.pos, e.yaw);
     this.byNet.set(id, e);
-    this.arenaVisuals.gateSpawned(gate);
+    this.arenaVisuals.gateSpawned(gate, { x, z });
   }
 
   private remoteShot(ev: Extract<ReplicatedEvent, readonly ['shot', ...unknown[]]>): void {

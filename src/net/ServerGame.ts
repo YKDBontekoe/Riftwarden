@@ -26,7 +26,7 @@ import { upgradeDef } from '../roguelite/upgrades';
 import { canInstall, configCost, partDef, type TowerConfig } from '../towers/components';
 import type { Turret } from '../defense/Turrets';
 import { uiEvents } from '../ui/store';
-import { ARENA } from '../world/layout';
+import { ARENA, type ArenaLayout } from '../world/layout';
 import type { ActMsg, InputMsg, ShotClaim } from './protocol';
 import { capturePresentation, enterRecorder, patchGlobals, Recorder, withRecorder } from './recorder';
 export { Recorder, type NetEvent } from './recorder';
@@ -92,7 +92,7 @@ export class Avatar {
     loadout: Partial<Record<SlotId, ItemInstance | null>>,
     readonly run: RunLedger,
   ) {
-    const sp = spawnFor(slot);
+    const sp = spawnFor(slot, game.layout);
     this.player = new Player(game.scene, sp);
     this.player.camera.position.set(sp.x, 1.5, sp.z);
     this.inventory = new RunInventory(loadout, run);
@@ -107,8 +107,8 @@ export class Avatar {
 }
 
 /** Spawn points fan out beside the solo spawn so drones never overlap. */
-export function spawnFor(slot: number): { x: number; z: number; yaw: number } {
-  const s = ARENA.playerSpawn;
+export function spawnFor(slot: number, layout: ArenaLayout = ARENA): { x: number; z: number; yaw: number } {
+  const s = layout.playerSpawn;
   const off = [0, 2.2, -2.2, 4.4][slot] ?? 0;
   return { x: s.x + Math.cos(s.yaw) * off, z: s.z - Math.sin(s.yaw) * off, yaw: s.yaw };
 }
@@ -568,6 +568,7 @@ export class ServerGame extends Game {
         if (!this.wallet.spend(cost)) return `Not enough cores (need ${cost})`;
         const t = this.turrets.add(v.point, m.yaw, this.turretCtx, cfg);
         t.paid = cost;
+        t.rescaleHp(this.towerHpScale());
         (t as Turret & { owner?: string }).owner = a.id;
         this.turretsBuilt++;
         this.bumpStats();
@@ -579,7 +580,7 @@ export class ServerGame extends Game {
         const t = this.turrets.byId(m.tower);
         if (!t) return 'Tower no longer exists';
         if (Vector3.Distance(t.pos, a.player.position) > 34) return 'Too far away';
-        const refund = Math.round(t.paid * t.refundRatio);
+        const refund = t.recycleValue;
         this.wallet.earn(refund);
         this.fx.burst('build', t.head, 30);
         this.fx.debrisBurst(t.head, 6, 4, 0.8);
@@ -589,6 +590,12 @@ export class ServerGame extends Game {
         this.rec.push(['u', 'coresGained', refund], a.id);
         sfx.play('recycle');
         return null;
+      }
+      case 'repair': {
+        const t = this.turrets.byId(m.tower);
+        if (!t) return 'Tower no longer exists';
+        if (Vector3.Distance(t.pos, a.player.position) > 34) return 'Too far away';
+        return this.wear.repair(t);
       }
       case 'modify': {
         const t = this.turrets.byId(m.tower);
@@ -760,6 +767,13 @@ export class ServerGame extends Game {
     if (!hold) this.waves.update(dt, hdt);
     this.hostileT += hdt;
     this.enemies.update(hdt, this.enemyCtx, dt);
+    // Hazards: patches and enemies once, the drone effects (slag burns) per avatar.
+    if (this.hazards) {
+      this.hazards.onAdd ??= (x, z, r, kind, life) => this.rec.push(['hz', Math.round(x * 100) / 100, Math.round(z * 100) / 100, r, kind, life]);
+      this.hazards.decay(hdt, this.hostileT);
+      this.hazards.affectEnemyList(dt);
+      for (const a of this.avatars) if (a.active) this.as(a, () => this.hazards!.affectPlayer(dt));
+    }
     this.ordnance.update(hdt, this.ordnanceCtx, this.hostileT);
     this.tele.update(hdt);
     this.dynamics.update(dt, hdt);
@@ -895,7 +909,7 @@ export class ServerGame extends Game {
         a.vote === null ? -1 : a.vote ? 1 : 0,
         a.name,
       ]),
-      tw: this.turrets.turrets.map((t) => [t.id, Math.round(t.yaw * 1000) / 1000, Math.round(t.pitch * 1000) / 1000, t.disabled ? 1 : 0, t.empowered ? 1 : 0, t.building ? 1 : 0, t.kills, Math.round(t.damageDealt)]),
+      tw: this.turrets.turrets.map((t) => [t.id, Math.round(t.yaw * 1000) / 1000, Math.round(t.pitch * 1000) / 1000, t.disabled ? 1 : 0, t.empowered ? 1 : 0, t.building ? 1 : 0, t.kills, Math.round(t.damageDealt), Math.round(t.hp), t.maxHp, t.wrecked ? 1 : 0]),
       tl: this.tele.followed().map((x) => x.map((v) => Math.round(v * 100) / 100)),
       or: this.ordnance.positions().map((x) => x.map((v) => Math.round(v * 100) / 100)),
       sv: enc(this.survival.hud()),
@@ -925,12 +939,8 @@ export class ServerGame extends Game {
 }
 
 function laneOf(e: Enemy): string {
-  for (const [gate, r] of Object.entries(ARENA.routes)) {
-    const p = r.points[r.points.length - 1];
-    const q = e.path[e.path.length - 1];
-    if (q && Math.hypot(p.x - q.x, p.z - q.z) < 3) return gate;
-  }
-  return 'north';
+  // The gate whose wave it belongs to (also for forward-rift spawns).
+  return e.gate;
 }
 
 export function ledgerView(r: RunLedger) {

@@ -341,7 +341,7 @@ export class Director {
       this.statusApplied[status]++;
       this.bus.emit({ type: 'status', chain, source, target: e, gen: e.gen, status, op: 'apply' });
     };
-    if (p.burn && p.burn > 0) {
+    if (p.burn && p.burn > 0 && !e.has('molten')) {
       const b = applyBurn(e.status, p.burn * ep);
       if (b.fresh) emit('burn');
       if (b.fresh && Math.random() < 0.6) this.g.fx.burst('embers', e.center(TMP), 3);
@@ -351,7 +351,7 @@ export class Director {
       if (s.fresh) emit('shock');
       if (s.disrupted) this.g.fx.burst('zap', e.center(TMP), 4);
     }
-    if (p.chill && p.chill > 0) {
+    if (p.chill && p.chill > 0 && !e.has('frostbound')) {
       // Bosses and heavy targets resist crowd control (chill builds slower, so freezes are rare).
       const c = applyChill(e.status, p.chill * ep * e.def.statusResist);
       if (c === 'freeze') {

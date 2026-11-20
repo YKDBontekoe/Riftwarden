@@ -1,12 +1,12 @@
 import { useEffect, useRef } from 'react';
 import type { Game } from '../../core/Game';
-import { ARENA } from '../../world/layout';
 import { useHud } from '../store';
 import { rarity } from '../../loot/rarity';
 
 const RADAR_PX = 156;
 
-const RADAR_RANGE = 57; // metres from center to edge (arena + gate tunnels)
+/** Metres from centre to edge: the arena plus its gate tunnels. */
+const radarRange = (half: number) => half + 13;
 
 /** North-up tactical map: static layout cached once, dynamic blips at ~20 Hz. */
 export function Radar({ game }: { game: Game }) {
@@ -18,7 +18,8 @@ export function Radar({ game }: { game: Game }) {
     const S = RADAR_PX * dpr;
     cv.width = cv.height = S;
     const ctx = cv.getContext('2d')!;
-    const k = (S / 2 - 6 * dpr) / RADAR_RANGE;
+    const ARENA = game.layout;
+    const k = (S / 2 - 6 * dpr) / radarRange(ARENA.half);
     const X = (x: number) => S / 2 + x * k;
     const Y = (z: number) => S / 2 - z * k;
 
@@ -30,7 +31,8 @@ export function Radar({ game }: { game: Game }) {
     b.fillRect(0, 0, S, S);
     b.strokeStyle = 'rgba(80,220,240,0.06)';
     b.lineWidth = 1;
-    for (let g = -48; g <= 48; g += 8) {
+    const step = ARENA.half > 60 ? 16 : 8;
+    for (let g = -Math.ceil(ARENA.half / step) * step; g <= ARENA.half + step; g += step) {
       b.beginPath();
       b.moveTo(X(g), 0);
       b.lineTo(X(g), S);
@@ -41,7 +43,7 @@ export function Radar({ game }: { game: Game }) {
     for (const box of ARENA.boxes) {
       const [x0, , z0] = box.min;
       const [x1, , z1] = box.max;
-      const fill = box.kind === 'platform' ? 'rgba(120,170,190,0.22)' : box.kind === 'wall' || box.kind === 'gate' ? 'rgba(150,200,215,0.42)' : 'rgba(120,150,165,0.32)';
+      const fill = box.kind === 'platform' || box.kind === 'bridge' ? 'rgba(120,170,190,0.22)' : box.kind === 'wall' || box.kind === 'gate' ? 'rgba(150,200,215,0.42)' : 'rgba(120,150,165,0.32)';
       b.fillStyle = fill;
       b.fillRect(X(x0), Y(z1), (x1 - x0) * k, (z1 - z0) * k);
     }
@@ -51,6 +53,14 @@ export function Radar({ game }: { game: Game }) {
       for (const p of points.slice(1)) path.lineTo(X(p.x), Y(p.z));
       return { gate, path, x: X(points[0].x), y: Y(points[0].z) };
     });
+    // Forward rifts
+    b.strokeStyle = 'rgba(255,140,60,0.75)';
+    b.lineWidth = 1.2 * dpr;
+    for (const r of ARENA.rifts ?? []) {
+      b.beginPath();
+      b.arc(X(r.x), Y(r.z), 3.2 * dpr, 0, Math.PI * 2);
+      b.stroke();
+    }
     // Reactor
     b.strokeStyle = 'rgba(159,221,194,0.9)';
     b.lineWidth = 1.5 * dpr;
@@ -89,6 +99,7 @@ export function Radar({ game }: { game: Game }) {
       // Turrets: cyan diamonds with range hint
       ctx.fillStyle = '#adddce';
       for (const t of game.turrets.turrets) {
+        ctx.fillStyle = t.wrecked ? '#6d6d6d' : '#adddce';
         const x = X(t.pos.x);
         const y = Y(t.pos.z);
         ctx.save();

@@ -8,6 +8,7 @@ import type { Kit } from '../visuals/kit';
 import type { Palette } from '../visuals/materials';
 import type { TurretRig } from '../visuals/models';
 import { buildTowerRig } from '../visuals/towers';
+import { recycleRefund, repairCost, towerMaxHp } from '../towers/durability';
 
 export interface TurretContext {
   enemies: readonly Enemy[];
@@ -69,6 +70,55 @@ export class Turret {
   /** Knock the tower offline for `seconds` (longest wins; does not stack). */
   /** M7: boost from the strongest covering Support Amplifier (0 = none; set when stats recompose). */
   amplified = 0;
+  /** Durability (mazing arenas: breaching enemies hit it). A wreck neither fires nor blocks. */
+  hp = 0;
+  maxHp = 0;
+  wrecked = false;
+  /** Damage-flash timer (visual). */
+  hurtT = 0;
+  /** Max HP scale (follows the wave's hostile damage multiplier). */
+  hpScale = 1;
+
+  /** Apply damage; returns true when this hit wrecked the tower. */
+  damage(amount: number): boolean {
+    if (this.wrecked || this.building || !(amount > 0)) return false;
+    this.hp = Math.max(0, this.hp - amount);
+    this.hurtT = 0.25;
+    if (this.hp > 0) return false;
+    this.wrecked = true;
+    this.target = null;
+    this.empowerT = 0;
+    return true;
+  }
+
+  /** Restore to full; returns the cores it costs (0 = nothing to repair). */
+  get repairCost(): number {
+    return repairCost(this.paid, this.hp, this.maxHp, this.wrecked);
+  }
+  get recycleValue(): number {
+    return recycleRefund(this.paid, this.refundRatio, this.wrecked);
+  }
+  repair(): void {
+    this.wrecked = false;
+    this.hp = this.maxHp;
+    this.rig.root.rotation.x = this.rig.root.rotation.z = 0;
+    this.rig.root.position.y = this.pos.y;
+    this.cooldown = Math.max(this.cooldown, 0.5);
+  }
+  /** Re-derive max HP (level / scale change) keeping the current HP fraction. */
+  rescaleHp(scale = this.hpScale): void {
+    const frac = this.maxHp > 0 ? this.hp / this.maxHp : 1;
+    this.hpScale = scale;
+    this.maxHp = towerMaxHp(this.config.base, this.level, scale);
+    if (!this.wrecked) this.hp = Math.max(1, Math.round(this.maxHp * frac));
+  }
+  /** Mend a share of max HP (wave clear); wrecks stay wrecked. */
+  mend(share: number): void {
+    if (!this.wrecked) this.hp = Math.min(this.maxHp, this.hp + this.maxHp * share);
+  }
+  get blocking(): boolean {
+    return !this.wrecked && !this.building;
+  }
 
   disable(seconds: number): void {
     if (!(seconds > 0) || this.building) return;
@@ -81,6 +131,7 @@ export class Turret {
 
   constructor(public config: TowerConfig, public rig: TurretRig, readonly pos: Vector3, scene: Scene, ctx: TurretContext, private rebuildRig: (cfg: TowerConfig, level: number) => TurretRig) {
     this.paid = configCost(config);
+    this.maxHp = this.hp = towerMaxHp(config.base, 1);
     this.st = composeTower(config, 1);
     this.recompose(ctx);
     rig.root.position.copyFrom(pos);
@@ -131,6 +182,7 @@ export class Turret {
     this.target = null;
     this.barrel = 0;
     this.cooldown = Math.max(this.cooldown, 0.3);
+    this.rescaleHp();
     this.recompose(ctx);
   }
 
@@ -139,7 +191,7 @@ export class Turret {
   }
 
   private validTarget(e: Enemy | null, range: number, ctx: TurretContext): boolean {
-    if (!e || !e.alive) return false;
+    if (!e || !e.alive || e.hidden) return false;
     const c = e.center(TMP);
     const dx = c.x - this.pos.x;
     const dz = c.z - this.pos.z;
@@ -151,7 +203,7 @@ export class Turret {
     let best: Enemy | null = null;
     let bestScore = Infinity;
     for (const e of ctx.enemies) {
-      if (!e.alive) continue;
+      if (!e.alive || e.hidden) continue;
       const c = e.center(TMP);
       const dx = c.x - this.pos.x;
       const dz = c.z - this.pos.z;
@@ -169,7 +221,7 @@ export class Turret {
   private anyInRange(range: number, ctx: TurretContext): boolean {
     const r2 = range * range;
     for (const e of ctx.enemies) {
-      if (!e.alive) continue;
+      if (!e.alive || e.hidden) continue;
       const dx = e.pos.x - this.pos.x;
       const dz = e.pos.z - this.pos.z;
       if (dx * dx + dz * dz <= r2) return true;
@@ -179,7 +231,7 @@ export class Turret {
 
   /** Fire immediately regardless of cooldown/aim (network discharge, conductor link). */
   forceFire(ctx: TurretContext, mult = 1): boolean {
-    if (this.building || this.disabledT > 0) return false;
+    if (this.building || this.disabledT > 0 || this.wrecked) return false;
     if (this.st.archetype === 'support') return false;
     if (this.st.archetype === 'cryo') {
       if (!this.anyInRange(this.st.range, ctx)) return false;
@@ -209,6 +261,16 @@ export class Turret {
         r.root.scaling.setAll(1);
         ctx.effects.burst('build', this.head, 30);
       }
+      return;
+    }
+    if (this.hurtT > 0) this.hurtT = Math.max(0, this.hurtT - dt);
+    if (this.wrecked) {
+      // Wreck: slumped, sunk and dark; smoulders until repaired or recycled.
+      r.root.rotation.x += (0.32 - r.root.rotation.x) * Math.min(1, dt * 5);
+      r.root.rotation.z += (-0.18 - r.root.rotation.z) * Math.min(1, dt * 5);
+      r.root.position.y += (this.pos.y - 0.45 - r.root.position.y) * Math.min(1, dt * 5);
+      r.coreGlow.scaling.setAll(Math.random() < 0.05 ? 0.12 : 0.01);
+      if (Math.random() < dt * 3) ctx.effects.burst('zap', this.head, 1, undefined, 0.5);
       return;
     }
     if (this.empowerT > 0) this.empowerT = Math.max(0, this.empowerT - dt);

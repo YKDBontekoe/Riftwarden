@@ -108,15 +108,20 @@ const BOT = () => {
 (async () => {
   const { b, p, errs } = await launch({ viewport: { width: 1280, height: 720 } });
   try {
-    await ev(p, async () => {
+    await ev(p, async ({ proc, seed }) => {
       const R = window.__rift;
+      // ARENA=procedural plays a generated sector (seed ARENA_SEED, default random) instead of the classic arena.
+      if (proc) {
+        R.flow.arenaMode = 'procedural';
+        R.flow.nextArenaSeed = seed || null;
+      }
       await R.flow.devDeploy(1);
-    });
+    }, { proc: process.env.ARENA === 'procedural', seed: Number(process.env.ARENA_SEED || 0) });
     await p.waitForFunction(() => window.__rift.state().location === 'arena' && !window.__rift.state().busy, null, { timeout: 180000 });
     await ev(p, BOT);
     if (process.env.BOT_TOWERS !== '0') await ev(p, async () => {
       const { validatePlacement } = await import('/src/defense/placement.ts');
-      const { ARENA } = await import('/src/world/layout.ts');
+      const ARENA = window.__rift.game.layout;
       const dist = (x, z, pts) => { let b = 1e9; for (let i = 1; i < pts.length; i++) { const a = pts[i - 1], c = pts[i]; const dx = c.x - a.x, dz = c.z - a.z; const t = Math.max(0, Math.min(1, ((x - a.x) * dx + (z - a.z) * dz) / (dx * dx + dz * dz))); b = Math.min(b, Math.hypot(a.x + dx * t - x, a.z + dz * t - z)); } return b; };
       const spots = [];
       for (let x = -15; x <= 15; x += 1.5) for (let z = -15; z <= 15; z += 1.5) {

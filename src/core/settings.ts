@@ -47,6 +47,7 @@ export const ACTIONS: readonly { id: string; label: string; def: string }[] = [
   { id: 'wave', label: 'Start wave', def: 'KeyG' },
   { id: 'inventory', label: 'Inventory', def: 'KeyI' },
   { id: 'recycle', label: 'Recycle tower (hold)', def: 'KeyX' },
+  { id: 'repair', label: 'Repair tower', def: 'KeyF' },
   { id: 'checkpoint', label: 'Checkpoint / vote', def: 'KeyH' },
 ];
 

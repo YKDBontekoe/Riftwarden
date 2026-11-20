@@ -8,7 +8,7 @@ export class Bot {
     this.msgs = []; this.events = []; this.snap = null; this.lobby = null; this.seq = 0; this.actId = 1; this.acts = new Map();
     this.waiters = [];
   }
-  connect(v = 5) {
+  connect(v = 7) {
     return new Promise((res, rej) => {
       this.ws = new WebSocket(this.url);
       this.ws.on('open', () => { this.send({ t: 'hello', v, secret: this.secret, name: this.name }); });

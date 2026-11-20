@@ -64,7 +64,7 @@ export class DevTools {
     const enc = 1;
     const boss = kind === 'colossus' || kind === 'overseer';
     const b = boss ? bossMults(enc, h.cfg.tier) : { hp: 1, damage: 1 };
-    return h.enemies.spawn(kind, gate, ARENA, w.hpMult * b.hp, w.damageMult * b.damage, w.speedMult, {
+    return h.enemies.spawn(kind, gate, h.cfg.layout ?? ARENA, w.hpMult * b.hp, w.damageMult * b.damage, w.speedMult, {
       mods,
       tag: boss ? 'boss' : kind === 'courier' ? 'hvt' : undefined,
       encounter: enc,

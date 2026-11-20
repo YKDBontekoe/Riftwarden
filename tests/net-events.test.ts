@@ -17,6 +17,7 @@ const SAMPLES: Record<string, unknown[]> = {
   t: ['t', 'marker', 4, [{ v: V }]],
   o: ['o', 'lob', 9, [{ v: V }]],
   ev: ['ev', 'routes', 1],
+  hz: ['hz', 12.5, -4, 1.8, 'slag', 5],
   es: ['es', 7, 'walker', [], null, 1, 100, 0, 1, 2, 0.5, 1, 'north'],
   ek: ['ek', 7, 1],
   er: ['er', 7],

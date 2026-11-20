@@ -26,6 +26,10 @@ import type { RunStart } from '../net/protocol';
 import type { RunResult } from '../progression/run';
 import { keyRemap, type Settings, saveSettings } from './settings';
 import { FrameClock } from './frameClock';
+import { hashRunSeed } from '../roguelite/upgrades';
+import { generateArena } from '../world/arenaGen';
+import { ARENA, type ArenaLayout } from '../world/layout';
+import type { TransitInfo } from '../ui/store';
 import { setRarityPalette } from '../loot/rarity';
 
 /** A loaded location. Exactly one exists at a time. */
@@ -78,6 +82,22 @@ export class Flow {
   private loopStopped = false;
   /** Debug/test: seed for the next run's upgrade offers (cleared once used). */
   nextUpgradeSeed: number | null = null;
+  /** Arena for solo runs: a new procedural sector per run, or the hand-built classic arena (legacy suites). */
+  arenaMode: 'procedural' | 'classic' = 'procedural';
+  /** Automation: force the next procedural arena seed. */
+  nextArenaSeed: number | null = null;
+
+  /** Arena seed for a run (0 = classic). Independent of the upgrade/planner seed. */
+  arenaSeedFor(runId: string): number {
+    if (this.arenaMode === 'classic') return 0;
+    if (this.nextArenaSeed !== null) return this.nextArenaSeed >>> 0 || 1;
+    return ((hashRunSeed(runId) ^ 0x2545f491) >>> 0) || 1;
+  }
+
+  /** Layout for an arena seed (0 = classic). */
+  static layoutFor(seed: number): ArenaLayout {
+    return seed ? generateArena(seed) : ARENA;
+  }
   /** Automation: legacy suites skip the mandatory upgrade screen. */
   skipUpgrades = false;
   /** M6: development tools available (URL ?dev or ?test). Never shown in the ordinary player experience. */
@@ -102,7 +122,7 @@ export class Flow {
       this.buildHome(true);
       this.location = 'home';
       return this.home!.scene;
-    });
+    }, { kind: on ? 'visit' : 'hq' });
     await this.home!.takeControl(false);
   }
 
@@ -226,7 +246,8 @@ export class Flow {
       if (!this.devNext) selectTier(d, tierId);
       beginRun(d, runId, tierId);
     });
-    await this.transition(`DEPLOYING · THREAT TIER ${tier.roman}`, `Sector 07 reactor · ${tier.name}`, () => {
+    const layout = Flow.layoutFor(this.arenaSeedFor(runId));
+    await this.transition(`DEPLOYING · THREAT TIER ${tier.roman}`, `${layout.name ?? 'Sector 07 reactor'} · ${tier.name}`, () => {
       const run = new RunLedger(runId, tierId, Date.now());
       this.run = run;
       this.renderQuality = this.settings.quality;
@@ -239,6 +260,7 @@ export class Flow {
         towerTech: [...save.towers.unlocked],
         milestones: [...save.milestones],
         tree: { seed: save.progress.tree.seed, allocated: [...save.progress.tree.allocated] },
+        layout,
         tutorial: this.tutorialHost(),
         hooks: {
           // Reported as secured only once the write succeeded.
@@ -253,7 +275,7 @@ export class Flow {
       if (this.devNext) run.survival.dev = true;
       this.location = 'arena';
       return this.arena.scene;
-    });
+    }, { kind: 'arena', sector: { name: layout.name ?? 'Sector 07 Reactor', code: layout.code ?? 'CLASSIC', layout, tier: tier.roman, tierName: tier.name } });
     this.arena!.start();
     return true;
   }
@@ -330,7 +352,7 @@ export class Flow {
       this.buildHome(true);
       this.location = 'home';
       return this.home!.scene;
-    });
+    }, { kind: 'hq' });
     this.run = null;
     if (then === 'summary') this.home!.setScreen('summary');
     else await this.home!.takeControl(false);
@@ -457,7 +479,8 @@ export class Flow {
     void this.input.requestLock();
     const me = run.players.find((p) => p.id === run.you);
     const net = this.net!;
-    await this.transition(`CO-OP DEPLOYMENT · THREAT TIER ${tier.roman}`, `${run.players.length} wardens · Sector 07 reactor`, () => {
+    const layout = Flow.layoutFor(run.arena ?? 0);
+    await this.transition(`CO-OP DEPLOYMENT · THREAT TIER ${tier.roman}`, `${run.players.length} wardens · ${layout.name ?? 'Sector 07 reactor'}`, () => {
       const ledger = new RunLedger(run.runId, run.tier, Date.now());
       this.run = ledger;
       this.renderQuality = this.settings.quality;
@@ -473,6 +496,7 @@ export class Flow {
           loadout: run.loadout as never,
           run: ledger,
           seed: run.seed,
+          layout,
           towerTech: run.towerTech,
           milestones: run.milestones,
           tree: { seed: this.profile.save.progress.tree.seed, allocated: [...this.profile.save.progress.tree.allocated] },
@@ -488,7 +512,7 @@ export class Flow {
       this.arena = g;
       this.location = 'arena';
       return g.scene;
-    });
+    }, { kind: 'arena', sector: { name: layout.name ?? 'Sector 07 Reactor', code: layout.code ?? 'CLASSIC', layout, tier: tier.roman, tierName: tier.name, players: run.players.length } });
     const g = this.arena as ClientGame;
     g.start();
     g.onEvents(this.netQueue.events);
@@ -534,10 +558,15 @@ export class Flow {
    * Swap worlds behind the transit overlay: paint the overlay, dispose the old scene,
    * build the next one, wait until its shaders are ready (bounded), then reveal.
    */
-  private async transition(title: string, sub: string, build: () => Scene): Promise<void> {
+  private async transition(title: string, sub: string, build: () => Scene, info: Omit<TransitInfo, 'title' | 'sub'> = {}): Promise<void> {
     this.busy = true;
-    hudStore.set({ screen: 'transit', transit: { title, sub } });
+    const shown = performance.now();
+    const stage = (n: number) => hudStore.set({ screen: 'transit', transit: { title, sub, ...info, stage: n } });
+    stage(0);
     try {
+      await nextPaint();
+      // Let the loading screen paint its "building" stage before the synchronous scene build blocks the thread.
+      stage(1);
       await nextPaint();
       const t0 = performance.now();
       this.building = true;
@@ -548,14 +577,19 @@ export class Flow {
       if (this.loopStopped) scene.useConstantAnimationDeltaTime = true;
       this.transitions++;
       const t2 = performance.now();
+      stage(2);
       const ready = await Promise.race([
         Promise.all([scene.whenReadyAsync(), this.arena?.loot.warmup, this.arena?.shaderWarmup]).then(
           () => true,
           () => true,
         ),
-        new Promise<boolean>((r) => setTimeout(() => r(false), 8000)),
+        new Promise<boolean>((r) => setTimeout(r, 8000, false)),
       ]);
       this.lastTransition = { disposeMs: Math.round(t1 - t0), buildMs: Math.round(t2 - t1), readyMs: Math.round(performance.now() - t2), timedOut: !ready };
+      stage(3);
+      // Arena deployments hold the sector briefing on screen for a moment (not in automation).
+      const hold = info.kind === 'arena' && !this.input.forceCapture ? 1400 - (performance.now() - shown) : 0;
+      if (hold > 0) await new Promise((r) => setTimeout(r, hold));
     } finally {
       this.building = false;
       this.busy = false;
@@ -599,6 +633,11 @@ export class Flow {
       advance: (seconds: number) => {
         const n = Math.round(seconds * 60);
         for (let i = 0; i < n; i++) stepOnce();
+      },
+      /** Show the loading screen for an arena seed without loading anything (screenshots / visual checks). */
+      previewLoading: (seed: number, stage = 1) => {
+        const layout = Flow.layoutFor(seed);
+        hudStore.set({ screen: 'transit', transit: { title: 'DEPLOYING · THREAT TIER II', sub: `${layout.name} · Hardened`, kind: 'arena', stage, sector: { name: layout.name ?? '', code: layout.code ?? '', layout, tier: 'II', tierName: 'HARDENED' } } });
       },
       stopLoop: () => {
         flow.engine.stopRenderLoop();

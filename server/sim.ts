@@ -1,3 +1,4 @@
+import { generateArena } from '../src/world/arenaGen';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
@@ -43,6 +44,7 @@ export class CoopSim {
   private evolutions: [string, number][] = [];
   private upgrades: string[] = [];
   readonly seed: number;
+  readonly arenaSeed: number;
   /** Diagnostics. */
   private whyT = 0;
   private whyLast = '{}';
@@ -74,6 +76,9 @@ export class CoopSim {
     this.engine = new NullEngine();
     const tier = getTier(room.tier);
     this.seed = hashRunSeed(this.runId);
+    // Procedural sector per operation; test servers keep the classic arena unless RIFT_ARENA=procedural.
+    const mode = process.env.RIFT_ARENA ?? (process.env.RIFT_TEST === '1' ? 'classic' : 'procedural');
+    this.arenaSeed = mode === 'classic' ? 0 : ((this.seed ^ 0x2545f491) >>> 0) || 1;
     const players: ServerPlayerInit[] = [];
     const tech = new Set<string>();
     let milestones = null as Set<string> | null;
@@ -89,7 +94,7 @@ export class CoopSim {
       this.engine,
       havok,
       players,
-      { tier, runId: this.runId, seed: this.seed, towerTech: [...tech], milestones: [...(milestones ?? [])] },
+      { tier, runId: this.runId, seed: this.seed, layout: this.arenaSeed ? generateArena(this.arenaSeed) : undefined, towerTech: [...tech], milestones: [...(milestones ?? [])] },
       {
         bank: async (id, wave, rewards, bosses) => {
           const p = this.store.get(id);
@@ -141,6 +146,7 @@ export class CoopSim {
       runId: this.runId,
       tier: g.cfg.tier.id,
       seed: this.seed,
+      arena: this.arenaSeed,
       you: a.id,
       players: g.avatars.filter((x) => !x.left).map((x) => ({ id: x.id, name: x.name, slot: x.slot })),
       loadout: a.inventory.loadout && Object.fromEntries(SLOT_IDS.map((s) => [s, a.inventory.equipped(s)])),

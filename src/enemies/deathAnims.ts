@@ -13,6 +13,10 @@ export const DEATH_TIME: Partial<Record<EnemyKind, number>> = {
   artillery: 0.65,
   engineer: 0.55,
   jammer: 0.4,
+  sapper: 0.45,
+  skimmer: 0.3,
+  marksman: 0.6,
+  burrower: 0.6,
 };
 
 /** Initial knock-back speed (m/s) of a wreck away from the killing shot; it bleeds off at `WRECK_DRAG` per second. */
