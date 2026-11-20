@@ -2,6 +2,7 @@ import { traceShot } from '../arena/shotTrace';
 import { hasLost, LIMB_IDS } from '../enemies/limbs';
 import { detachLimb } from '../enemies/limbRuntime';
 import type { WeaponSlot } from '../arena/WeaponSlots';
+import type { AbilitySlot } from '../abilities/defs';
 import { shotOutcome } from '../arena/PlayerCombat';
 import { Color3, type Engine, Vector3 } from '@babylonjs/core';
 import { sfx } from '../audio/Sfx';
@@ -263,6 +264,23 @@ export class ClientGame extends Game {
     return true;
   }
 
+  /** Abilities run on the server; the local slots mirror cooldowns once it accepts (ultimate charge comes in `me.ult`). */
+  override useAbility(slot: AbilitySlot): boolean {
+    const why = this.abilities.blocked(slot);
+    if (why) {
+      if (why !== 'Not available right now') sfx.play('buildDeny');
+      return false;
+    }
+    const o = this.player.eye;
+    const d = this.player.forward(new Vector3());
+    void this.request({ a: 'ability', slot, o: [o.x, o.y, o.z], d: [d.x, d.y, d.z] }).then((ok) => ok && this.abilities.mirrorUse(slot));
+    return true;
+  }
+
+  override chargeUltimate(): void {
+    // The server owns ultimate charge for every warden.
+  }
+
   override startWave(): void {
     void this.request({ a: 'startWave' });
   }
@@ -413,6 +431,9 @@ export class ClientGame extends Game {
       }
       if (input.pressed('KeyZ')) this.swapWeapon();
       if (this.construction.active && input.mousePressed(2)) this.setBuildMode(false);
+      else if (input.mousePressed(2)) this.useAbility('ability');
+      if (input.pressed('KeyF') && !(this.towers.inspected && this.layout.mazing)) this.useAbility('ability2');
+      if (input.pressed('KeyT') && this.waves.phase === 'combat') this.useAbility('ultimate');
       if (input.pressed('KeyH') && this.voteOpen) this.openCheckpoint();
       if (input.pressed('KeyI') || input.pressed('Tab')) return this.openInventory();
       if (input.pressed('KeyU')) return this.openBuildOverview();
@@ -426,6 +447,7 @@ export class ClientGame extends Game {
     }
     const hdt = dt * this.tactical.hostileScale;
     this.runTime += dt;
+    this.abilities.update(dt);
     this.hazards?.decay(hdt, this.hostileT);
     this.hazards?.affectPlayer(0);
     this.player.update(dt, input, this.stats.moveSpeedMult * (this.hazards?.playerSpeed ?? 1), controls);
@@ -438,6 +460,7 @@ export class ClientGame extends Game {
       if (controls && input.mousePressed(0)) this.tryPlace();
     }
     const trigger = controls && input.mouse(0) && !this.construction.active;
+    this.weaponSlots.update(dt);
     this.weapon.update(dt, trigger, this.stats, this.shoot, this.weaponFx);
     this.wfx.update(dt, this.player.camera.position);
     this.updateInspect(dt, controls);
@@ -704,6 +727,7 @@ export class ClientGame extends Game {
   }
 
   private applyPersonal(me: Record<string, unknown>): void {
+    if (typeof me.ult === 'number') this.abilities.ult = Math.max(0, Math.min(1, me.ult));
     const r = me.run as Record<string, number>;
     const run = this.cfg.run;
     run.unsecured.salvage = r.su;

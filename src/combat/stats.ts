@@ -63,6 +63,15 @@ export interface CombatStats {
   elementalPower: number;
   /** M6: multiplies all damage dealt to elites and bosses (boss loot). */
   eliteDamageMult: number;
+  // ---- abilities (ability / ultimate items and their affixes)
+  /** Multiplies ability damage, shield strength and status magnitudes. */
+  abilityPowerMult: number;
+  /** Multiplies ability cooldowns (lower = more often). */
+  abilityCooldownMult: number;
+  /** Multiplies ability blast / effect radius. */
+  abilityRadiusMult: number;
+  /** Multiplies how fast damage dealt charges the ultimate. */
+  ultChargeMult: number;
 }
 
 export type StatKey = keyof CombatStats;
@@ -114,6 +123,10 @@ export const STAT_DEFS: Readonly<Record<StatKey, StatDef>> = {
   coreIncomeMult: { key: 'coreIncomeMult', label: 'Core income', base: 1, min: 0.5, max: 10, kind: 'ratio', better: 'higher', group: 'utility' },
   elementalPower: { key: 'elementalPower', label: 'Elemental power', base: 1, min: 0.25, max: 20, kind: 'ratio', better: 'higher', group: 'offense' },
   eliteDamageMult: { key: 'eliteDamageMult', label: 'Damage vs elites & bosses', base: 1, min: 0.25, max: 20, kind: 'ratio', better: 'higher', group: 'offense' },
+  abilityPowerMult: { key: 'abilityPowerMult', label: 'Ability power', base: 1, min: 0.25, max: 20, kind: 'ratio', better: 'higher', group: 'offense' },
+  abilityCooldownMult: { key: 'abilityCooldownMult', label: 'Ability cooldown', base: 1, min: 0.35, max: 3, kind: 'ratio', better: 'lower', group: 'utility' },
+  abilityRadiusMult: { key: 'abilityRadiusMult', label: 'Ability radius', base: 1, min: 0.5, max: 2.5, kind: 'ratio', better: 'higher', group: 'offense' },
+  ultChargeMult: { key: 'ultChargeMult', label: 'Ultimate charge rate', base: 1, min: 0.25, max: 4, kind: 'ratio', better: 'higher', group: 'utility' },
 };
 
 export const STAT_KEYS = Object.keys(STAT_DEFS) as StatKey[];

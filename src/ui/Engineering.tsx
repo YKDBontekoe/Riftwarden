@@ -77,7 +77,7 @@ function Bench({ flow, save, tab, selW, setSelW }: { flow: Flow; save: SaveData;
   const item = entry?.item ?? null;
   const [preview, setPreview] = useState<ItemInstance | null>(null);
   const shown = preview && item && preview.uid === item.uid ? preview : item;
-  const cats = weaponsOnly ? [] : (['weapon', 'armor', 'shield', 'reactor', 'processor', 'accessory', 'module'] as Category[]);
+  const cats = weaponsOnly ? [] : (['weapon', 'armor', 'shield', 'reactor', 'processor', 'accessory', 'ability', 'ultimate', 'module'] as Category[]);
   return (
     <div className="eng-grid">
       <div className="eng-col">

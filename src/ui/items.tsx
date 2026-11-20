@@ -17,7 +17,7 @@ import { describeEffects } from '../weapons/components';
 import { moduleTypeDef } from '../weapons/modules';
 import { enhanceLevel, enhanceStatMult, maxEnhance } from '../economy/config';
 
-const CATEGORY_ICON: Record<Category, IconKind> = { weapon: 'rifle', armor: 'plate', shield: 'ring', reactor: 'core', processor: 'chip', accessory: 'gem', module: 'cube' };
+const CATEGORY_ICON: Record<Category, IconKind> = { weapon: 'rifle', armor: 'plate', shield: 'ring', reactor: 'core', processor: 'chip', accessory: 'gem', module: 'cube', ability: 'gem', ultimate: 'core' };
 
 /** Inline SVG glyph per base icon kind (matches the pickup holograms). */
 export function ItemGlyph({ item, size = 34 }: { item: Pick<ItemInstance, 'defId' | 'rarity' | 'category'>; size?: number }) {
@@ -404,7 +404,7 @@ type Filter = 'all' | Category | 'unsecured';
 type Sort = 'rarity' | 'level' | 'newest' | 'name';
 type ViewSort = Sort | 'impact';
 
-const FILTERS: Filter[] = ['all', 'weapon', 'armor', 'shield', 'reactor', 'processor', 'accessory', 'module'];
+const FILTERS: Filter[] = ['all', 'weapon', 'armor', 'shield', 'reactor', 'processor', 'accessory', 'ability', 'ultimate', 'module'];
 
 export function sortEntries(list: InvEntry[], sort: Sort): InvEntry[] {
   const r = (e: InvEntry) => rarity(e.item.rarity).index;

@@ -213,6 +213,8 @@ async function profileRows(id) {
       check('F4 swapping to an empty secondary slot is refused', !sw.ok && /no weapon/i.test(sw.reason ?? ''), JSON.stringify(sw));
       const sw1 = await A.act({ a: 'swap', slot: 'weapon' });
       check('F5 swapping to the weapon in hand is accepted as a no-op', sw1.ok, JSON.stringify(sw1));
+      const ab = await A.act({ a: 'ability', slot: 'ultimate', o: [0, 2, 0], d: [0, 0, 1] });
+      check('F6 an ability act without an equipped ability is refused by the server', !ab.ok && /no ability/i.test(ab.reason ?? ''), JSON.stringify(ab));
       // Combat: the heartbeat fires real shot claims; clear wave 1.
       const w1 = A.snap.w[0];
       await A.act({ a: 'startWave' });

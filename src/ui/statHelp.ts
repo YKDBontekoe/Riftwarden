@@ -37,4 +37,8 @@ export const STAT_HELP: Readonly<Record<StatKey, string>> = {
   coreIncomeMult: 'Multiplies cores earned from kills and wave clears in the arena.',
   elementalPower: 'Multiplies elemental status strength (burn, shock, chill) and reaction damage.',
   eliteDamageMult: 'Multiplies damage against elites, bosses and high-value targets.',
+  abilityPowerMult: 'Multiplies ability damage, Aegis shield strength and ability status effects.',
+  abilityCooldownMult: 'Multiplies the cooldown of both ability slots (lower is faster).',
+  abilityRadiusMult: 'Multiplies the blast and effect radius of abilities and the ultimate.',
+  ultChargeMult: 'Multiplies how much ultimate charge each point of damage you deal provides.',
 };

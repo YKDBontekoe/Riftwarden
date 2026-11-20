@@ -1,3 +1,4 @@
+import type { AbilityHudRow } from '../abilities/defs';
 import type { ArenaLayout } from '../world/layout';
 import { DEFAULT_SETTINGS, type Settings } from '../core/settings';
 import { useSyncExternalStore } from 'react';
@@ -185,6 +186,8 @@ export interface HudState {
   weaponName: string;
   /** The holstered weapon (null without a secondary): Z swaps to it. */
   holster: { name: string; heat: number; overheated: boolean; secondary: boolean } | null;
+  /** Ability I/II cooldowns and the ultimate charge (arena). */
+  abilities: AbilityHudRow[];
   heat: number; // 0..1
   overheated: boolean;
   /** Rail charge / cycle progress 0..1 (0 for other mechanisms): reticle charge arc. */
@@ -238,6 +241,7 @@ export const initialHud: HudState = {
   cores: 0,
   weaponName: '',
   holster: null,
+  abilities: [],
   heat: 0,
   overheated: false,
   charge: 0,

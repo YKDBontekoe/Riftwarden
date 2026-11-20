@@ -167,6 +167,78 @@ async function deploy(p) {
       });
       check('B3 a disarmed walker never charges a shot at the drone', b3.charged === 0, JSON.stringify(b3));
       await H.shot(p, 'combat_disarmed_walker', { frames: 3 });
+      await ev(p, () => window.__rift.flow.abandonRun());
+      await H.waitFor(p, () => window.__rift.state().location === 'home' && !window.__rift.state().busy);
+    }
+    if (want('C')) {
+      // Abilities: frag charge (RMB), blink drive (F) and the orbital lance ultimate (T in combat).
+      await ev(p, () => {
+        const R = window.__rift;
+        const frag = R.makeItem({ seed: 91, rarity: 'rare', baseId: 'frag_charge', level: 5 });
+        const blink = R.makeItem({ seed: 92, rarity: 'rare', baseId: 'blink_drive', level: 5 });
+        const lance = R.makeItem({ seed: 93, rarity: 'rare', baseId: 'orbital_lance', level: 5 });
+        R.profile.mutate((d) => { d.items.push(frag, blink, lance); d.loadout.ability = frag.uid; d.loadout.ability2 = blink.uid; d.loadout.ultimate = lance.uid; return true; });
+      });
+      await deploy(p);
+      const c1 = await ev(p, () => {
+        const R = window.__rift;
+        const g = R.game;
+        const pp = g.player.position;
+        R.look(Math.atan2(-pp.x, -pp.z), 0.12);
+        R.advance(1 / 60);
+        const e = R.dev.spawn('walker');
+        const fwd = g.player.forward(new R.V3());
+        e.pos.set(pp.x + fwd.x * 8, 0, pp.z + fwd.z * 8);
+        e.root.position.copyFrom(e.pos);
+        e.shotT = 99;
+        const hp = e.hp;
+        const i = R.flow.input;
+        i.simulateMouse(2, true);
+        R.advance(1 / 60);
+        i.simulateMouse(2, false);
+        for (let k = 0; k < 120; k++) { e.pos.set(pp.x + fwd.x * 8, 0, pp.z + fwd.z * 8); R.advance(1 / 60); }
+        return { used: g.abilities.used, cd: g.abilities.cd.ability, hpBefore: hp, hpAfter: e.alive ? e.hp : 0, rows: g.abilities.hud().map((r) => r.kind) };
+      });
+      check('C1 RMB throws the frag charge: the walker takes blast damage, the slot cools down', c1.used === 1 && c1.cd > 0 && c1.hpAfter < c1.hpBefore, JSON.stringify(c1));
+      await H.shot(p, 'combat_abilities_hud', { frames: 2 });
+      const slots = await p.$$eval('.ab-slot', (els) => els.map((e) => e.textContent));
+      check('C2 HUD lists both abilities and the ultimate', slots.length === 3 && /FRAG/i.test(slots.join(' ')) && /ORBITAL/i.test(slots.join(' ')), JSON.stringify(slots));
+      const c3 = await ev(p, () => {
+        const R = window.__rift;
+        const g = R.game;
+        const before = g.player.position.clone();
+        g.input.simulateKey('KeyF', true);
+        R.advance(1 / 60);
+        g.input.simulateKey('KeyF', false);
+        R.advance(1 / 60);
+        return { moved: R.V3.Distance(before, g.player.position), cd: g.abilities.cd.ability2 };
+      });
+      check('C3 F blinks the drone forward', c3.moved > 3 && c3.cd > 0, JSON.stringify(c3));
+      const c4 = await ev(p, () => {
+        const R = window.__rift;
+        const g = R.game;
+        const notYet = !g.useAbility('ultimate');
+        g.chargeUltimate(1e9);
+        const ready = g.abilities.ult;
+        g.waves.startNow();
+        R.advance(0.1);
+        const e = R.dev.spawn('walker');
+        const pp = g.player.position;
+        const fwd = g.player.forward(new R.V3());
+        const at = () => { e.pos.set(pp.x + fwd.x * 14, 0, pp.z + fwd.z * 14); e.root.position.copyFrom(e.pos); e.shotT = 99; };
+        at();
+        R.look(g.player.yaw, 0.25);
+        R.advance(1 / 60);
+        const hp = e.hp;
+        g.input.simulateKey('KeyT', true);
+        R.advance(1 / 60);
+        g.input.simulateKey('KeyT', false);
+        for (let k = 0; k < 100; k++) { at(); R.advance(1 / 60); }
+        return { notYet, ready, ult: g.abilities.ult, used: g.abilities.used, hp, after: e.alive ? e.hp : 0 };
+      });
+      check('C4 the ultimate needs charge; T in combat calls the orbital lance on the aim point', c4.notYet && c4.ready === 1 && c4.ult === 0 && c4.after < c4.hp, JSON.stringify(c4));
+      await ev(p, () => window.__rift.flow.abandonRun());
+      await H.waitFor(p, () => window.__rift.state().location === 'home' && !window.__rift.state().busy);
     }
     const bad = errs.filter((e) => !/Error compiling effect/.test(e));
     check('Z no page/console errors', bad.length === 0, bad.slice(0, 3).join(' | '));

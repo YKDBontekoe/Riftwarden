@@ -6,7 +6,7 @@
  * rewards, online profiles); clients send intents (movement state, shot claims, actions) which
  * the server validates. Messages are validated structurally here before any game code sees them.
  */
-export const PROTOCOL_VERSION = 8;
+export const PROTOCOL_VERSION = 9;
 export const MAX_PLAYERS = 4;
 export const MAX_MESSAGE_BYTES = 64 * 1024;
 /** Authoritative simulation and snapshot rates (Hz). */
@@ -34,6 +34,8 @@ export type ActMsg =
   | { a: 'equip'; uid: string; slot?: string }
   | { a: 'unequip'; slot: string }
   | { a: 'discard'; uid: string }
+  /** Use ability I / II or the ultimate from the drone's eye `o` along `d`. */
+  | { a: 'ability'; slot: 'ability' | 'ability2' | 'ultimate'; o: V3; d: V3 }
   /** Put the primary ('weapon') or secondary ('weapon2') weapon in hand. */
   | { a: 'swap'; slot: 'weapon' | 'weapon2' }
   /** Test servers only (RIFT_TEST=1): drive the run quickly through the real pipelines. */
@@ -187,6 +189,8 @@ function validAct(o: Record<string, unknown>): boolean {
       return isStr(o.uid, 120);
     case 'swap':
       return o.slot === 'weapon' || o.slot === 'weapon2';
+    case 'ability':
+      return (o.slot === 'ability' || o.slot === 'ability2' || o.slot === 'ultimate') && isV3(o.o) && isV3(o.d);
     case 'test':
       return (o.op === 'killAll' || o.op === 'jump' || o.op === 'boss' || o.op === 'clear' || o.op === 'reactor') && (o.n === undefined || isNum(o.n, 1e6));
     default:

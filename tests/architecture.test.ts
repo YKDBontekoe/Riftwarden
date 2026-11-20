@@ -109,7 +109,7 @@ describe('architecture boundaries', () => {
   });
 
   it('pure modules import no Babylon values (type-only is fine)', () => {
-    const pure = ['loot/roll.ts', 'towers/refit.ts', 'combat/blast.ts', 'ui/hudModel.ts', 'arena/runPhase.ts', 'progression/level.ts', 'progression/skilltree.ts', 'progression/treeOps.ts', 'economy/currencies.ts', 'home/stationInfo.ts', 'loot/loadoutScore.ts', 'ui/statHelp.ts', 'home/roomStyle.ts', 'world/rubblePlan.ts', 'combat/weaponFeel.ts', 'fx/fragmentPlan.ts', 'fx/explosionStyles.ts', 'fx/wounds.ts', 'enemies/hitReact.ts', 'towers/assembly.ts', 'enemies/deathAnims.ts', 'enemies/limbs.ts', 'combat/heat.ts'];
+    const pure = ['loot/roll.ts', 'towers/refit.ts', 'combat/blast.ts', 'ui/hudModel.ts', 'arena/runPhase.ts', 'progression/level.ts', 'progression/skilltree.ts', 'progression/treeOps.ts', 'economy/currencies.ts', 'home/stationInfo.ts', 'loot/loadoutScore.ts', 'ui/statHelp.ts', 'home/roomStyle.ts', 'world/rubblePlan.ts', 'combat/weaponFeel.ts', 'fx/fragmentPlan.ts', 'fx/explosionStyles.ts', 'fx/wounds.ts', 'enemies/hitReact.ts', 'towers/assembly.ts', 'enemies/deathAnims.ts', 'enemies/limbs.ts', 'combat/heat.ts', 'abilities/defs.ts'];
     const bad: string[] = [];
     for (const name of pure) {
       const f = files.find((x) => rel(x) === name);

@@ -40,6 +40,8 @@ const GLYPH: Record<Category, { shape: Shape; scale: [number, number, number]; r
   processor: { shape: 'box', scale: [0.3, 0.3, 0.06] },
   accessory: { shape: 'ico', scale: [0.26, 0.34, 0.26] },
   module: { shape: 'box', scale: [0.22, 0.22, 0.22], rot: [0.6, 0.6, 0] },
+  ability: { shape: 'cyl6', scale: [0.2, 0.3, 0.2] },
+  ultimate: { shape: 'ico', scale: [0.34, 0.34, 0.34] },
 };
 
 /** Create every (shape, rarity) template up front: the scene's mesh set then never depends on stock. */

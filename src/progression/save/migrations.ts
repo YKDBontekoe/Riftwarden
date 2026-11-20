@@ -80,6 +80,12 @@ export const MIGRATIONS: Record<number, (data: Obj) => Obj> = {
    * (secured checkpoints, kills, bosses, elites, milestones) so they do not restart at level 1.
    * The skill tree starts unallocated (seed and validation via sanitize).
    */
+  /** v9 -> v10: two ability slots and an ultimate slot (empty) in the loadout and every preset. */
+  9: (d) => ({
+    ...d,
+    loadout: { ...obj(d.loadout), ability: null, ability2: null, ultimate: null },
+    presets: arr(d.presets).map((p) => ({ ...obj(p), slots: { ...obj(obj(p).slots), ability: null, ability2: null, ultimate: null } })),
+  }),
   /** v8 -> v9: a secondary weapon slot (empty) in the loadout and in every preset. */
   8: (d) => ({
     ...d,

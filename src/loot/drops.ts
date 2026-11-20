@@ -27,7 +27,7 @@ export interface DropSource {
   guaranteedThroughWave?: number;
 }
 
-const ALL: Partial<Record<Category, number>> = { weapon: 3, armor: 3, shield: 2.5, reactor: 2, processor: 2, accessory: 2, module: 1.6 };
+const ALL: Partial<Record<Category, number>> = { weapon: 3, armor: 3, shield: 2.5, reactor: 2, processor: 2, accessory: 2, module: 1.6, ability: 1.8, ultimate: 0.8 };
 
 export const DROP_SOURCES = {
   walker: { id: 'walker', label: 'Strider', chance: 0.085, rolls: 1, levelBonus: 0, luck: 1, categories: ALL },

@@ -54,6 +54,11 @@ export const AFFIXES: readonly AffixDef[] = [
   { id: 'tdmg', stat: 'turretDamageMult', op: 'pct', range: [0.05, 0.1], scaling: 'pct', weights: { processor: 9, accessory: 5, reactor: 3 }, group: 'tdmg', adjective: 'Commanding' },
   { id: 'trange', stat: 'turretRangeMult', op: 'pct', range: [0.03, 0.06], scaling: 'none', weights: { processor: 6, accessory: 4 }, group: 'trange', adjective: 'Long-Range' },
   { id: 'trate', stat: 'turretFireRateMult', op: 'pct', range: [0.03, 0.06], scaling: 'none', weights: { processor: 6, reactor: 3 }, group: 'trate', adjective: 'Synchronized' },
+  // ---- abilities
+  { id: 'apower', stat: 'abilityPowerMult', op: 'pct', range: [0.06, 0.12], scaling: 'pct', weights: { ability: 10, ultimate: 9, processor: 2 }, group: 'apower', adjective: 'Volatile' },
+  { id: 'acool', stat: 'abilityCooldownMult', op: 'pct', range: [-0.04, -0.08], scaling: 'none', weights: { ability: 9, reactor: 2, accessory: 2 }, group: 'acool', adjective: 'Rapid-Cycle' },
+  { id: 'aradius', stat: 'abilityRadiusMult', op: 'pct', range: [0.04, 0.08], scaling: 'none', weights: { ability: 6, ultimate: 6 }, group: 'aradius', adjective: 'Wide-Field' },
+  { id: 'ucharge', stat: 'ultChargeMult', op: 'pct', range: [0.05, 0.1], scaling: 'none', weights: { ultimate: 10, processor: 2, ability: 3 }, group: 'ucharge', adjective: 'Surging' },
 ];
 
 const BY_ID = new Map(AFFIXES.map((a) => [a.id, a]));

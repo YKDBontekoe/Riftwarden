@@ -64,7 +64,7 @@ export function progressLevel(records: Record<string, { bestWave: number }>, unl
   return clampLevel(lvl);
 }
 
-const EQUIPMENT_WEIGHTS: Partial<Record<Category, number>> = { weapon: 3, armor: 2, shield: 2, reactor: 1.5, processor: 1.5, accessory: 1.5 };
+const EQUIPMENT_WEIGHTS: Partial<Record<Category, number>> = { weapon: 3, armor: 2, shield: 2, reactor: 1.5, processor: 1.5, accessory: 1.5, ability: 1.4, ultimate: 0.7 };
 
 function cap(id: RarityId): RarityId {
   return rarity(id).index > rarity(MARKET.maxRarity).index ? MARKET.maxRarity : id;

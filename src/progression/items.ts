@@ -9,7 +9,7 @@ export type { ItemInstance } from '../loot/types';
  * two accessory slots. Upgrade modules have no slot: they are
  * stored until module installation (engineering) exists.
  */
-export type SlotId = 'weapon' | 'weapon2' | 'armor' | 'shield' | 'reactor' | 'processor' | 'accessory' | 'accessory2';
+export type SlotId = 'weapon' | 'weapon2' | 'armor' | 'shield' | 'reactor' | 'processor' | 'accessory' | 'accessory2' | 'ability' | 'ability2' | 'ultimate';
 
 export interface SlotDef {
   id: SlotId;
@@ -28,6 +28,9 @@ export const SLOTS: readonly SlotDef[] = [
   { id: 'processor', label: 'PROCESSOR', accepts: 'processor', required: false },
   { id: 'accessory', label: 'ACCESSORY I', accepts: 'accessory', required: false },
   { id: 'accessory2', label: 'ACCESSORY II', accepts: 'accessory', required: false },
+  { id: 'ability', label: 'ABILITY I', accepts: 'ability', required: false },
+  { id: 'ability2', label: 'ABILITY II', accepts: 'ability', required: false },
+  { id: 'ultimate', label: 'ULTIMATE', accepts: 'ultimate', required: false },
 ];
 
 export const SLOT_IDS: readonly SlotId[] = SLOTS.map((s) => s.id);

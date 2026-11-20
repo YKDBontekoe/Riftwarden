@@ -27,6 +27,8 @@ import { ECONOMY } from '../data/defs';
 import { DevTools } from '../arena/DevTools';
 import { type CombatHost, PlayerCombat } from '../arena/PlayerCombat';
 import { type WeaponSlot, WeaponSlots, type WeaponSlotsHost } from '../arena/WeaponSlots';
+import { Abilities, type AbilityHost } from '../arena/Abilities';
+import type { AbilitySlot } from '../abilities/defs';
 import { type LootHost, LootPickups } from '../arena/LootPickups';
 import { type TowerEdit, type TowerHost, TowerControl } from '../arena/TowerControl';
 import { planBlast } from '../combat/blast';
@@ -215,6 +217,8 @@ export class Game {
   protected readonly combat = new PlayerCombat(this.combatHost());
   /** Primary + secondary weapon: which one is in hand, the holstered one's heat. */
   readonly weaponSlots = new WeaponSlots(this.weaponSlotsHost());
+  /** Ability I/II and the ultimate (the co-op server keeps one per avatar and swaps it in with `as`). */
+  abilities = new Abilities(this.abilityHost());
   protected kills = 0;
   protected turretsBuilt = 0;
   protected defeatT = 0;
@@ -1040,6 +1044,7 @@ export class Game {
 
   protected newRun(): void {
     this.weaponSlots.reset();
+    this.abilities.reset();
     this.enemies.clear();
     this.turrets.clear();
     this.fx.reset();
@@ -1127,6 +1132,10 @@ export class Game {
       }
       if (input.pressed('KeyZ')) this.swapWeapon();
       if (this.construction.active && input.mousePressed(2)) this.setBuildMode(false);
+      else if (input.mousePressed(2)) this.useAbility('ability');
+      // F repairs the tower under the crosshair on mazing arenas; otherwise it fires ability II.
+      if (input.pressed('KeyF') && !(this.towers.inspected && this.layout.mazing)) this.useAbility('ability2');
+      if (input.pressed('KeyT') && this.waves.phase === 'combat') this.useAbility('ultimate');
       if (input.pressed('KeyH') && this.canReturnHome) this.openCheckpoint();
       if (input.pressed('KeyI') || input.pressed('Tab')) {
         this.openInventory();
@@ -1176,6 +1185,7 @@ export class Game {
     // ---- shooting
     const trigger = controls && input.mouse(0) && !this.construction.active;
     this.weaponSlots.update(dt);
+    this.abilities.update(dt);
     this.weapon.update(dt, trigger, this.stats, this.shoot, this.weaponFx);
     if (this.weapon.overheated && !this.wasOverheated) this.director.bus.emit({ type: 'overheat', chain: this.director.bus.newChain(), source: { kind: 'weapon', id: 'heat' }, value: 1 });
     this.wasOverheated = this.weapon.overheated;
@@ -1356,6 +1366,32 @@ export class Game {
       droneSpeed: () => this.droneSpeed(),
       hitstop: (s, k) => this.hitstop(s, k),
       damageEnemy: (...a) => this.damageEnemy(...a),
+    };
+  }
+
+  /** Fire an ability slot (RMB ability I, F ability II, T ultimate in combat). */
+  useAbility(slot: AbilitySlot): boolean {
+    return this.abilities.use(slot);
+  }
+
+  /** Damage dealt by the drone charges its ultimate (the co-op server routes it to the shooter's avatar). */
+  chargeUltimate(dealt: number): void {
+    this.abilities.charge(dealt);
+  }
+
+  private abilityHost(): AbilityHost {
+    const g = this;
+    return {
+      get scene() { return g.scene; }, // prettier-ignore
+      get player() { return g.player; }, // prettier-ignore
+      get director() { return g.director; }, // prettier-ignore
+      get enemies() { return g.enemies; }, // prettier-ignore
+      get fx() { return g.fx; }, // prettier-ignore
+      get wfx() { return g.wfx; }, // prettier-ignore
+      get weapon() { return g.weapon; }, // prettier-ignore
+      get inventory() { return g.inventory; }, // prettier-ignore
+      get stats() { return g.stats; }, // prettier-ignore
+      canAct: () => this.screen === 'playing' && !this.construction.active && this.player.alive,
     };
   }
 
@@ -1924,6 +1960,7 @@ export class Game {
       cores: this.wallet.cores,
       weaponName: this.weapon.def.name,
       holster: this.holsterHud(),
+      abilities: this.abilities.hud(),
       heat: this.weapon.heat / 100,
       overheated: this.weapon.overheated,
       charge: this.weapon.def.mechanism === 'charge' || this.weapon.def.mechanism === 'cycle' ? this.weapon.charge : 0,
