@@ -182,12 +182,13 @@ export const overseerBehavior: Behavior = {
     for (const r of a.rig.rings) for (const p of r.plates) p.position.z += dt * 1.6;
     if (Math.floor(t / 0.25) !== Math.floor((t - dt) / 0.25) && t < 2.9) {
       const p = e.center(new Vector3()).addInPlaceFromFloats((Math.random() - 0.5) * 4, (Math.random() - 0.5) * 3, (Math.random() - 0.5) * 4);
-      ctx.effects.explode(p, { scale: 0.9 + Math.random() * 0.5, debris: 4, color: new Color3(1.6, 0.5, 3.2) });
+      ctx.effects.explode(p, { scale: 0.9 + Math.random() * 0.5, debris: 4, style: 'plasma' });
       sfx.play('explosion', { volume: ctx.panFor(p).volume * 0.8, pitch: 1.1 + Math.random() * 0.3, pan: ctx.panFor(p).pan });
     }
     if (t >= 3 && t - dt < 3) {
       const c = e.center(new Vector3());
-      ctx.effects.explode(c, { scale: 4, debris: 28, color: new Color3(1.8, 0.6, 3.6) });
+      ctx.effects.shatter(e.root, c, 12, 20, 0.7);
+      ctx.effects.explode(c, { scale: 4, debris: 16, color: new Color3(1.8, 0.6, 3.6), style: 'heavy' });
       ctx.effects.ring(new Vector3(c.x, 0.2, c.z), 15, 0.7, new Color3(1.6, 0.5, 3.4), true);
       ctx.effects.flashLight(c, 16, 1.1, new Color3(0.7, 0.4, 1.2));
       sfx.play('explosion', { volume: 1, pitch: 0.5 });

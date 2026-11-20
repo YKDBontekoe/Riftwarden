@@ -8,7 +8,9 @@ import type { Ordnance, Telegraphs } from '../fx/Hostile';
 import type { Player } from '../player/Player';
 import type { Kit } from '../visuals/kit';
 import { FLASH_BUFFER } from '../visuals/hitFlashPlugin';
-import { DEATH_TIME, deathPose, FLYERS, type DeathPose, WRECK_DRAG, wreckKnock } from './deathAnims';
+import { woundSeverity } from '../fx/wounds';
+import { HitLean, hitImpulse } from './hitReact';
+import { BLAST, DEATH_TIME, deathPose, deathStyle, FLYERS, type DeathPose, WRECK_DRAG, wreckKnock } from './deathAnims';
 import type { Palette } from '../visuals/materials';
 import { hasAnyStatus, isBurning, isChilled, isFrozen, isShocked, newStatus, resetStatus, speedFactor, type StatusState } from '../combat/status';
 import { unlit } from '../visuals/materials';
@@ -129,6 +131,8 @@ export class Enemy implements Health {
   chargeT = 0;
   phase = Math.random() * 10;
   flinch = 0;
+  /** Directional hit reaction: local pitch/roll lean (rad) and their spring velocities. */
+  lean = new HitLean();
   stuckT = 0;
   bestDist = Infinity;
   /** Gate whose wave this enemy belongs to (lane identity even when it came out of a forward rift). */
@@ -246,22 +250,6 @@ interface PendingBlast {
   mesh: Mesh;
 }
 
-/** Default explosion size per kind (death). */
-const BLAST: Partial<Record<EnemyKind, [number, number, number]>> = {
-  rusher: [0.8, 6, 1.4],
-  walker: [1, 12, 1],
-  bulwark: [1.6, 18, 0.75],
-  enforcer: [1.7, 20, 0.7],
-  artillery: [1.4, 14, 0.85],
-  engineer: [1.2, 12, 1.1],
-  courier: [2.4, 26, 0.6],
-  jammer: [1.0, 10, 1.3],
-  crawler: [1.9, 20, 0.6],
-  sapper: [1.3, 10, 1],
-  skimmer: [0.55, 4, 1.6],
-  marksman: [1.1, 12, 1],
-  burrower: [1.6, 16, 0.8],
-};
 
 export class EnemyManager {
   readonly active: Enemy[] = [];
@@ -409,6 +397,7 @@ export class EnemyManager {
     e.shotT = def.playerShotInterval * (0.5 + Math.random());
     e.chargeT = 0;
     e.flinch = 0;
+    e.lean.reset();
     e.stuckT = 0;
     e.bestDist = Infinity;
     e.shieldFlash = 0;
@@ -519,6 +508,7 @@ export class EnemyManager {
     const res = applyDamage(e, amount, type);
     const heavy = e.def.role === 'boss' ? 0.08 : e.def.radius > 1.1 ? 0.5 : 1;
     e.flinch = Math.min(1, e.flinch + (res.toHp > 0 ? 0.5 : 0.2) * heavy);
+    if (!hit.dot) this.react(e, hit.from ? hit.from.x : hitPoint.x, hit.from ? hit.from.z : hitPoint.z, (res.toHp + res.toShield) / Math.max(1, e.maxHp + e.maxShield));
     e.shieldRegenT = 4;
     e.lastHit = performance.now();
     e.recentDamage += res.toHp + res.toShield;
@@ -537,7 +527,7 @@ export class EnemyManager {
       }
     }
     if (res.shieldBroken) {
-      fx.burst('shield', e.center(TMP), 40, undefined, 2);
+      fx.shieldBreak(e.center(TMP), Math.max(0.8, e.def.radius));
       sfx.play('shieldHit', { pitch: 0.6 });
       if (e.walker?.shield) e.walker.shield.setEnabled(false);
     }
@@ -551,6 +541,16 @@ export class EnemyManager {
     fx.debrisBurst(c, 8, 6, 1.1);
     fx.burst('sparks', c, 24, undefined, 1.2);
     sfx.play('shieldHit', { pitch: 0.45, volume: 0.9 });
+  }
+
+  /**
+   * Kick the hit-reaction spring: the body leans away from (fromX, fromZ) by an amount that grows with the
+   * damage fraction. Bosses and burrowing rigs ignore it (their rigs pose their own root).
+   */
+  react(e: Enemy, fromX: number, fromZ: number, fraction: number): void {
+    if (e.def.role === 'boss' || e.kind === 'burrower' || e.kind === 'pylon') return;
+    const mass = e.def.radius > 1.1 ? 0.45 : FLYERS.has(e.kind) ? 1.4 : 1;
+    e.lean.kick(e.pos.x - fromX, e.pos.z - fromZ, e.yaw, hitImpulse(fraction) * mass);
   }
 
   /** Heal (engineers). Never above max; never revives. */
@@ -584,8 +584,11 @@ export class EnemyManager {
     }
     const burst = () => {
       const [big, debris, pitch] = BLAST[e.kind] ?? [1, 12, 1];
+      const style = deathStyle(e.kind, e.mods, detonated);
       e.center(c); // the wreck may have been knocked back since the kill
-      fx.explode(c, { scale: detonated ? big * 1.25 : big, debris });
+      // The rig itself comes apart (its plates, limbs and housings fly), then the blast; generic debris is thinned.
+      const pieces = fx.shatter(e.root, c, 5 + big * 2.5, Math.min(14, Math.round(5 + big * 4)), style === 'cryo' ? 0.2 : 1);
+      fx.explode(c, { scale: detonated ? big * 1.25 : big, debris: pieces > 0 ? Math.ceil(debris * 0.45) : debris, style });
       const a = ctx.panFor(c);
       sfx.play('explosion', { volume: a.volume * (detonated ? 1 : 0.8), pan: a.pan, pitch });
     };
@@ -884,10 +887,18 @@ export class EnemyManager {
         updateMutations(e, hdt, ctx, this);
       }
       if (e.threat) this.animateThreat(e, ctx.time);
+      // Damage states: smoke, then spitting sparks, then flames as the machine nears destruction.
+      const sev = e.hidden ? 0 : woundSeverity(e.hp, e.maxHp);
+      if (sev > 0) ctx.effects.wound(e.center(TMP), e.def.radius * e.def.scale, sev);
       if (!e.alive) continue;
       if (this.nav && this.nav.refresh(e)) e.remaining = pathLength(e.path, e.seg, e.pos);
 
       e.behavior.update(e, hdt, ctx, this);
+      if (e.lean.active) {
+        e.lean.step(dt);
+        e.root.rotation.x = e.lean.pitch;
+        e.root.rotation.z = e.lean.roll;
+      }
     }
     const ms = performance.now() - t0;
     this.aiMs = ms;
@@ -985,7 +996,7 @@ export class EnemyManager {
       if (b.t > 0) continue;
       b.mesh.dispose();
       this.blasts.splice(i, 1);
-      ctx.effects.explode(b.pos, { scale: 1.5, color: new Color3(3.2, 0.6, 0.15), debris: 6 });
+      ctx.effects.explode(b.pos, { scale: 1.5, color: new Color3(3.2, 0.6, 0.15), debris: 6, style: 'heavy' });
       sfx.play('explosion', { volume: 1, pitch: 0.7, pan: ctx.panFor(b.pos).pan });
       ctx.hostileBlast(b.pos, b.radius, { player: b.damage, reactor: b.damage * 0.6, disable: 3, enemies: 0.5 * b.damage, color: 'red' });
     }

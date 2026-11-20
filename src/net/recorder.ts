@@ -122,6 +122,9 @@ export function capturePresentation(g: PresentationSource, rec: Recorder): void 
   for (const m of FX_CALLS) {
     fx[m] = (...args: unknown[]) => rec.push(['f', m, enc(args)]);
   }
+  // Purely cosmetic, enemy-driven presentation: replicas derive it from their own kills and replicated HP.
+  fx.shatter = () => 0;
+  fx.wound = () => {};
   const spawnProjectile = fx.spawnProjectile.bind(g.fx);
   fx.spawnProjectile = (...args: unknown[]) => {
     rec.push(['f', 'spawnProjectile', enc([args[0], args[1], 0])]);

@@ -1,5 +1,6 @@
 import { smoothstep } from '../visuals/anim';
 import type { EnemyKind } from '../data/defs';
+import type { ExplosionStyle } from '../fx/explosionStyles';
 
 /**
  * Seconds a destroyed enemy stays as a collapsing wreck before it bursts (kinds absent here burst at once).
@@ -57,3 +58,27 @@ export function deathPose(flying: boolean, k: number, seed: number, out: DeathPo
 
 /** Kinds that hover (they spiral down instead of buckling). */
 export const FLYERS: ReadonlySet<EnemyKind> = new Set<EnemyKind>(['rusher', 'jammer', 'artillery']);
+
+/** Death blast per kind: [scale, debris, sound pitch, style]. */
+export const BLAST: Partial<Record<EnemyKind, [number, number, number, ExplosionStyle?]>> = {
+  rusher: [0.8, 6, 1.4, 'plasma'],
+  walker: [1, 12, 1],
+  bulwark: [1.6, 18, 0.75, 'heavy'],
+  enforcer: [1.7, 20, 0.7, 'heavy'],
+  artillery: [1.4, 14, 0.85],
+  engineer: [1.2, 12, 1.1, 'electric'],
+  courier: [2.4, 26, 0.6, 'plasma'],
+  jammer: [1.0, 10, 1.3, 'electric'],
+  crawler: [1.9, 20, 0.6, 'heavy'],
+  sapper: [1.3, 10, 1, 'heavy'],
+  skimmer: [0.55, 4, 1.6, 'plasma'],
+  marksman: [1.1, 12, 1, 'electric'],
+  burrower: [1.6, 16, 0.8],
+};
+
+/** Death blast identity: mutations override the archetype (frostbound shatters in ice, molten cooks off). */
+export function deathStyle(kind: EnemyKind, mods: readonly string[], detonated: boolean): ExplosionStyle | undefined {
+  if (mods.includes('frostbound')) return 'cryo';
+  if (mods.includes('molten') || mods.includes('volatile') || detonated) return 'heavy';
+  return BLAST[kind]?.[3];
+}

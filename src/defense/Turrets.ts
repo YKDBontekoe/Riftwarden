@@ -1,4 +1,6 @@
-import { type Mesh, MeshBuilder, type Scene, Vector3 } from '@babylonjs/core';
+import { Color3, type Mesh, MeshBuilder, type Scene, Vector3 } from '@babylonjs/core';
+import { assemblyPose } from '../towers/assembly';
+import { woundSeverity } from '../fx/wounds';
 import { sfx } from '../audio/Sfx';
 import type { CombatStats } from '../combat/stats';
 import type { Enemy } from '../enemies/EnemyManager';
@@ -29,6 +31,8 @@ export interface TurretHitboxMeta {
 }
 
 const TMP = new Vector3();
+const POSE = assemblyPose(0);
+const BUILD_RING = new Color3(0.4, 2.2, 2.8);
 let nextTowerId = 1;
 
 /**
@@ -40,6 +44,10 @@ export class Turret {
   readonly id = nextTowerId++;
   building = true;
   buildT = 0;
+  /** Assembly animation: rest height of the head node, rest scale of the core glow, core lit flag. */
+  private yawY0 = 0;
+  private glow0 = new Vector3(1, 1, 1);
+  private lit = false;
   cooldown = 0;
   target: Enemy | null = null;
   retargetT = 0;
@@ -250,20 +258,42 @@ export class Turret {
   update(dt: number, ctx: TurretContext): void {
     const r = this.rig;
     if (this.building) {
+      if (this.buildT === 0) {
+        this.yawY0 = r.yaw.position.y;
+        this.glow0.copyFrom(r.coreGlow.scaling);
+      }
       this.buildT += dt;
       const f = Math.min(1, this.buildT / this.buildTime);
-      const ease = 1 - Math.pow(1 - f, 3);
-      r.root.position.y = this.pos.y - (1 - ease) * 2.3;
-      r.root.scaling.setAll(0.6 + 0.4 * ease);
+      const p = assemblyPose(f, POSE);
+      r.root.position.y = this.pos.y - p.sink;
+      r.root.scaling.set(1, p.stretch, 1);
+      r.yaw.position.y = this.yawY0 + p.headLift / Math.max(0.25, p.stretch);
+      r.yaw.rotation.y = this.yaw + p.headSpin;
+      r.coreGlow.scaling.copyFrom(this.glow0).scaleInPlace(Math.max(0.001, p.glow));
+      // Weld sparks: at the deck while the pedestal prints, at the bearing while the head docks.
+      if (Math.random() < dt * 30) {
+        if (p.stage === 0) ctx.effects.burst('impact', TMP.set(this.pos.x + (Math.random() - 0.5) * 1.6, this.pos.y + 0.1, this.pos.z + (Math.random() - 0.5) * 1.6), 2, undefined, 0.7);
+        else if (p.stage === 1) ctx.effects.burst('zap', TMP.set(this.pos.x, this.head.y - 0.45, this.pos.z), 2, undefined, 0.45);
+      }
+      if (p.stage === 2 && !this.lit) {
+        this.lit = true;
+        ctx.effects.ring(TMP.set(this.pos.x, this.pos.y + 0.1, this.pos.z), this.radius * 3.2, 0.45, BUILD_RING, true);
+      }
       if (f >= 1) {
         this.building = false;
         r.root.position.y = this.pos.y;
         r.root.scaling.setAll(1);
+        r.yaw.position.y = this.yawY0;
+        r.yaw.rotation.y = this.yaw;
+        r.coreGlow.scaling.copyFrom(this.glow0);
         ctx.effects.burst('build', this.head, 30);
       }
       return;
     }
     if (this.hurtT > 0) this.hurtT = Math.max(0, this.hurtT - dt);
+    // Structural damage state: a breached tower smokes, then sparks, and a wreck burns until repaired.
+    const sev = this.wrecked ? 1 : woundSeverity(this.hp, this.maxHp);
+    if (sev > 0) ctx.effects.wound(TMP.set(this.pos.x, this.head.y - 0.5, this.pos.z), this.radius * 1.2, sev);
     if (this.wrecked) {
       // Wreck: slumped, sunk and dark; smoulders until repaired or recycled.
       r.root.rotation.x += (0.32 - r.root.rotation.x) * Math.min(1, dt * 5);

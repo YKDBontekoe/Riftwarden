@@ -188,7 +188,7 @@ src/defense/Construction.ts build mode: engine picks + footprint samples -> vali
 src/defense/Turrets.ts     Sentinel targeting/aiming/firing
 src/waves/waves.ts         wave definitions + endless generator       [pure]
 src/waves/WaveManager.ts   prep/combat/cleared lifecycle, spawn cap   [pure, hooks-based]
-src/fx/Effects.ts          pooled tracers, debris, enemy projectiles, particle bursts, flash light
+src/fx/Effects.ts          pooled tracers, debris, enemy projectiles, particle bursts, flash light, styled explosions (+ Fragments, Smolder)
 src/audio/Sfx.ts           procedural WebAudio bank
 src/ui/Market.tsx          M4 terminals: equipment exchange / module broker (buy, sell, exchange), reclamation, fabricator
 src/ui/Engineering.tsx     M4 engineering workshop: MODULES (M3 ModuleBench) / AFFIXES / ENHANCE / COMPONENTS tabs
@@ -228,6 +228,19 @@ scripts/e2e-m6.cjs         M6 browser acceptance suite (A-L: plans, enemies, eli
 - Browser co-op section X of `e2e-construction-coop.cjs` needs a test server (`RIFT_TEST=1 RIFT_PORT=8787 npx tsx server/main.ts`) and runs both clients with the render loop stopped: two live software-GL render loops starve Playwright's actionability checks and clicks time out. It passes (13/13, including "no replicated event rejected") and is the real test of the client replay path, along with `e2e-coop-protocol.mjs`.
 
 ## Key design decisions
+
+### Destruction + VFX pass (after M10)
+
+- **Mechanical fragmentation** (`fx/Fragments.ts`, choice in `fx/fragmentPlan.ts` [pure]): when a robot bursts, `fx.shatter(root, centre, power, max, heat)` throws its own largest visible solid parts (same kit template, so a walker's shin really flies) as pooled GPU instances per template: thrown outward + up, spun, bounced off the floor/level boxes (`CollisionBoxes`), glowing hot through the hit-flash buffer (cools orange -> red), smoke-trailing while hot (the debris trail picks from them), shrinking out after 2.6-4.2 s. Capped (72 high / 44 low x density; the oldest piece is recycled). Skips unlit/transparent parts, greebles < 8 cm and hulls > 4.5 m. Called from `EnemyManager.kill`'s burst (generic debris is thinned when pieces flew), the crawler death and both boss finales.
+- **Explosion styles** (`fx/explosionStyles.ts` [pure]): `ExplosionOpts.style` = fire (default) / plasma (violet energy ball, no fire) / electric (arcs + delayed crackle bursts) / cryo (frost cloud + ice shards, no fire, no scorch) / heavy (two delayed cook-offs, burning wreckage via `Smolder.linger`, more debris and shake). Death styles per kind in `deathAnims.ts` `BLAST` + `deathStyle` (frostbound -> cryo, molten/volatile/detonated -> heavy). Styles replicate (the style string rides in the `explode` options).
+- **Damage states** (`fx/Smolder.ts`, thresholds in `fx/wounds.ts` [pure]): below 55% HP a machine trails dark smoke, below 35% it spits sparks, below 20% it burns. `EnemyManager.update` and `Turret.update` call `fx.wound(pos, r, severity)` per frame (sources sit on the upper body: emitted inside a rig they are hidden by it); three particle systems for everything, whose emitter hops between the sources frame by frame. Wrecked towers burn until repaired.
+- **Particle rendering gotchas (found in this pass, SwiftShader)**: (1) systems positioned only through `startPositionFunction` rendered nothing in testing, while emitter-positioned systems did; the Smolder systems therefore move their emitter instead (the older Effects debris/plasma trails and `BounceSparks` still use `startPositionFunction`: suspected invisible, now at least anchor their emitter on a live source; not verified). (2) Plain `BLENDMODE_STANDARD` smoke did not show; standard-blend smoke must go through `softenParticles` with the sprite sheet, as Effects' smoke does (that shader linearises colour, so greys come out dark). Additive systems render with the default shader.
+- **Hit reaction** (`enemies/hitReact.ts` [pure]): every non-DoT hit kicks a damped spring that leans the enemy root away from the source (local pitch/roll from the hit direction and the damage share); bosses, burrowers and pylons are excluded (their rigs pose the root). Replicas kick from the local warden on `ed`.
+- **Shield break** (`fx.shieldBreak`): shard burst + plasma + hard ring + flash light. **Tower assembly** (`towers/assembly.ts` [pure]): pedestal prints up from the deck with weld sparks, the head drops onto its bearing with an overshoot while spinning into alignment, the core lights with a ground ring; same `buildTime`. **Muzzle heat** (`fx/MuzzleHeat.ts`): smoke wisps off a hot barrel between shots, a steam jet while locked out.
+- **Co-op**: `shatter` and `wound` are no-ops on the server (recorder); the client's puppet fx lets `burst`, `wound` and `shatter` through (presentation of replicated kills/HP).
+- **Validation**: `tests/destruction.test.ts`; `node scripts/vfx-shots.cjs [A|C|D]` captures wounds, fragmentation, the five styles and tower assembly. Particles only age while rendering: step `advance(1/60)` + `render(1)` together when capturing effects.
+- **Not done yet**: screen-space heat distortion for shockwaves; environmental props are not destructible (rubble is static dressing); HQ structures have no damage states (nothing damages them).
+
 
 ### M10: biomes, factions, hazards, mutations, faction archetypes
 

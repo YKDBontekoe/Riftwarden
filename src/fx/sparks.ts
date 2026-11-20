@@ -136,6 +136,7 @@ export class BounceSparks {
   emit(pos: Vector3, normal: Vector3, count: number, power: number, spread = 0.9): void {
     if (count <= 0) return;
     if (this.ps.getActiveCount() > 1400) count = Math.ceil(count * 0.3);
+    (this.ps.emitter as Vector3).copyFrom(pos); // systems are culled by their emitter
     const r = this.pool.pop() ?? { pos: new Vector3(), normal: new Vector3(), spread, power, count };
     r.pos.copyFrom(pos);
     r.normal.copyFrom(normal);

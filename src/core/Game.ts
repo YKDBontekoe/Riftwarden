@@ -1497,7 +1497,7 @@ export class Game {
         // M7 Pulse Capacitor: bright streak + detonation at the impact.
         this.wfx.rail(from, out.point, 0.7);
         if (out.target !== 'none') {
-          this.fx.explode(out.point, { scale: 0.45, debris: 1, color: this.weapon.rig.energyBase.scale(1.4) });
+          this.fx.explode(out.point, { scale: 0.45, debris: 1, color: this.weapon.rig.energyBase.scale(1.4), style: 'plasma' });
           this.fx.ring(out.point, PULSE_SPLASH, 0.22, this.weapon.rig.energyBase.scale(0.8), false);
         }
         return;
@@ -1847,7 +1847,7 @@ export class Game {
       return;
     }
     const big = i.kind === 'bomb' ? 1.6 : i.kind === 'shell' ? 1.1 : 0.6;
-    this.fx.explode(p, { scale: big, debris: i.kind === 'missile' ? 2 : 6, color: i.kind === 'bomb' ? new Color3(1.6, 0.6, 3.2) : undefined });
+    this.fx.explode(p, { scale: big, debris: i.kind === 'missile' ? 2 : 6, color: i.kind === 'bomb' ? new Color3(1.6, 0.6, 3.2) : undefined, style: i.kind === 'bomb' ? 'plasma' : undefined });
     sfx.play('explosion', { volume: this.panFor(p).volume * 0.8, pitch: i.kind === 'missile' ? 1.4 : 0.9, pan: this.panFor(p).pan });
     this.hostileBlast(p, i.radius, { player: i.damage, reactor: i.reactorDamage, disable: i.disable });
   }
