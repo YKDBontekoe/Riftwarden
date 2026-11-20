@@ -1,6 +1,6 @@
 # Riftwarden: project notes for future sessions
 
-Browser FPS + tower-defense roguelite. Current milestone: **M10** (biomes with factions, ground hazards, enemy mutations, faction archetypes) on top of **M9** (procedural arenas: seeded 170-200 m sectors with districts, nav-grid pathing with tower mazing + breaching, forward rifts, loading screens), M8 and the fast-pace pass (see "Key design decisions"). Read this before changing code.
+Browser FPS + tower-defense roguelite. **Design direction (owner Q&A, wins over older notes): `docs/design-direction.md`** (FPS first, loot chasers, branching run map, two weapons + abilities, six elements; build order: Game.ts refactor -> combat kit -> M11 loot -> map -> enemies). Current milestone: **M10** (biomes with factions, ground hazards, enemy mutations, faction archetypes) on top of **M9** (procedural arenas: seeded 170-200 m sectors with districts, nav-grid pathing with tower mazing + breaching, forward rifts, loading screens), M8 and the fast-pace pass (see "Key design decisions"). Read this before changing code.
 
 ## Stack
 
@@ -86,6 +86,10 @@ src/home/ambientNav.ts     waypoint graph (rooms, doorways, stations) + Dijkstra
 src/home/AmbientDrones.ts  3 cosmetic service drones patrolling between stations (hum emitters follow them)
 src/home/hqVista.ts        3D middle ground outside the observation window (landing deck, dropship, lit towers, blinking beacons), merged, unlit glows only
 src/home/StationFocus.ts   HQ station floor ring under the targeted station + camera push-in while a terminal is open
+src/arena/PlayerCombat.ts  player weapon combat: shoot (hit resolution + damage), legacy damage entry (crit, situational upgrades, signatures, Arc Conductor), kill feel (hitstop/chain/dash refund), per-family shot fx (CombatHost)
+src/arena/shotTrace.ts     traceShot(): hitscan geometry (pierce, weakpoint overlap, beam aim assist) shared by Game and ClientGame (claims); shotOutcome in PlayerCombat
+src/arena/LootPickups.ts   loot landing point (Havok), landing/pickup/refused presentation, pickup targeting (LootHost)
+src/arena/TowerControl.ts  tower inspection (crosshair pick), hold-X recycle, F repair, refit hotkeys, build template, refit/place local rules (TowerHost; ClientGame overrides recycleTower/repairTower/modifyTower/tryPlace)
 src/arena/DevTools.ts      dev lab actions behind `game.dev` (narrow DevHost interface, no Game dependency)
 src/arena/shadows.ts       createSunShadows(): cascaded / single sun shadow generator
 src/loot/roll.ts           rollLoot(): one pure roll+generate for run, team and per-player streams (Game.rollFrom, ServerGame.rollFor)   [pure]
@@ -222,7 +226,7 @@ scripts/e2e-m6.cjs         M6 browser acceptance suite (A-L: plans, enemies, eli
 
 ## Refactoring backlog (not done yet)
 
-- `Game.ts` (~2000 lines) is still the largest hotspot. Done so far: dev tools, shadows, loot rolling, tower refit rules, blast rules, HUD hint/loot/run pieces. Still inside: loot placement/pickup (spawnPickup, groundPoint, collectPickup, updateLootTarget), tower input (`updateInspect`, `towerKeys`, `tryPlace`), the upgrade flow, summon/ordnance impact, the rest of `publishHud`/`snapshot` (reads many `protected` members) and the constructor's scene setup. ServerGame/ClientGame override loot/tower methods, so extract those as systems that the net subclasses inject a strategy into (per-player placement, remote collect) rather than overriding Game methods.
+- `Game.ts` (~1640 lines) is still the largest hotspot. Done so far: dev tools, shadows, loot rolling, tower refit rules, blast rules, HUD hint/loot/run pieces, **player combat** (`arena/PlayerCombat` + shared `shotTrace`, which also replaced ClientGame's copy of the hit scan), **loot pickups** (`arena/LootPickups`), **tower control** (`arena/TowerControl`; ClientGame no longer monkeypatches `Input` to suppress local recycle/repair, it overrides `recycleTower`/`repairTower`), wave lifecycle hooks moved out of the constructor (`waveStarted`/`waveCleared`/`prepStarted`). Systems get a host built by a private `*Host()` method of lazy getters + closures over overridable Game methods, so ServerGame/ClientGame overrides keep working. Still inside: the upgrade flow, summon/ordnance impact, the rest of `publishHud`/`snapshot` and the constructor's scene setup.
 - Presentation is still captured by wrapping `fx/wfx/tele/ordnance/enemies` at runtime (`capturePresentation`). The next step is an observer/sink on `Telegraphs` and `Ordnance` (7 methods, constructor-injected) before touching `fx`/`wfx`, which have hundreds of call sites.
 - UI: `Terminals.tsx` (642) and `items.tsx` (593) could be split per panel; the run-phase booleans on Game (`checkpointOpen`, `upgradeDue`, `screen`) want a small state machine with a transition-table test.
 - Browser co-op section X of `e2e-construction-coop.cjs` needs a test server (`RIFT_TEST=1 RIFT_PORT=8787 npx tsx server/main.ts`) and runs both clients with the render loop stopped: two live software-GL render loops starve Playwright's actionability checks and clicks time out. It passes (13/13, including "no replicated event rejected") and is the real test of the client replay path, along with `e2e-coop-protocol.mjs`.
