@@ -22,6 +22,7 @@ const SAMPLES: Record<string, unknown[]> = {
   ek: ['ek', 7, 1],
   er: ['er', 7],
   ed: ['ed', 7, 0],
+  el: ['el', 7, 3],
   'T+': ['T+', 1, CFG, V, 0.2, 'Alpha', ''],
   'T-': ['T-', 1],
   Tc: ['Tc', 1, CFG, 2],

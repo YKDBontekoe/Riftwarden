@@ -29,6 +29,8 @@ export interface WalkerRig {
   ankleL: TransformNode;
   ankleR: TransformNode;
   cannon: TransformNode;
+  /** Blade arm (left). */
+  armL: TransformNode;
   barrel: TransformNode;
   muzzleGlow: AbstractMesh;
   shield: AbstractMesh | null;
@@ -185,7 +187,7 @@ export function buildWalker(kit: Kit, P: Palette, heavy: boolean): WalkerRig {
     shield = kit.part('sphere', P.shield, root, { pos: [0, 2.05, 0.1], scale: [3.6, 3.9, 3.6], shadow: false });
   }
 
-  return { root, hips, torso, head, thighL: legs[0], thighR: legs[1], kneeL: knees[0], kneeR: knees[1], ankleL: ankles[0], ankleR: ankles[1], cannon, barrel, muzzleGlow, shield };
+  return { root, hips, torso, head, thighL: legs[0], thighR: legs[1], kneeL: knees[0], kneeR: knees[1], ankleL: ankles[0], ankleR: ankles[1], cannon, armL: arm, barrel, muzzleGlow, shield };
 }
 
 export interface DroneRig {

@@ -11,6 +11,7 @@ import type { Turret } from '../defense/Turrets';
 import type { Effects } from '../fx/Effects';
 import type { WeaponFx } from '../fx/WeaponFx';
 import { MOVE, type Player } from '../player/Player';
+import { hasLost, LIMB_IDS } from '../enemies/limbs';
 import { UP } from '../roguelite/upgrades';
 import { uiEvents } from '../ui/store';
 import { arenaDeckWetness } from '../visuals/textures';
@@ -159,11 +160,16 @@ export class PlayerCombat {
       if (sig === 'phase' && (e.shield > 0 || e.armor > 0 || e.kind === 'enforcer' || e.kind === 'crawler')) base *= 1.8;
     }
     const roll = rollDamage(base, crit, weakpoint, Math.random, 'energy', source);
+    const partsBefore = e.limbsLost;
     // Arc Conductor: a player hit may jump to the nearest other enemy (no chains of arcs).
     if (player && family !== 'arc' && stats.arcChance > 0 && Math.random() < stats.arcChance) this.arcFrom(e, point, roll.amount * stats.arcDamage);
     const src = family === 'arc' ? { kind: 'effect' as const, id: 'arc_conductor' } : player ? { kind: 'weapon' as const, id: family ?? 'plasma' } : { kind: 'tower' as const, id: 'sentinel', towerId: turret?.id };
     const res = h.director.deal({ target: e, amount: roll.amount, base, crit: roll.crit, weak: weakpoint, element: 'none', source: src, chain: h.director.bus.newChain(), point, family: family ?? (player ? 'plasma' : 'tower'), from: from ?? (player ? h.player.eye : undefined) });
     if (!player) return;
+    if (e.limbsLost !== partsBefore) {
+      const lost = LIMB_IDS.find((l) => hasLost(e.limbsLost, l) && !hasLost(partsBefore, l));
+      if (lost) uiEvents.emit('limb', lost);
+    }
     if (family !== 'arc') this.signatureAfterHit(e, point, roll.amount, roll.crit, res);
     const kind = res.kind;
     if (res.killed && family !== 'arc') this.kill(e);

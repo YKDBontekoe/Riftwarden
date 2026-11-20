@@ -109,6 +109,65 @@ async function deploy(p) {
       });
       check('A7 the secondary persists after the run and a reload (save v9)', a7.version >= 9 && !!a7.w2 && a7.w2.length > 0, JSON.stringify(a7));
     }
+    if (want('B')) {
+      // Shoot-off parts with the real weapon: hold a walker in front of the drone and aim at its cannon arm.
+      await deploy(p);
+      const b1 = await ev(p, () => {
+        const R = window.__rift;
+        const g = R.game;
+        const e = R.dev.spawn('walker');
+        window.__w = e;
+        const i = R.flow.input;
+        // Face the reactor: open ground between the drop point and the plaza.
+        { const pp = g.player.position; R.look(Math.atan2(-pp.x, -pp.z), 0); R.advance(1 / 60); }
+        const pin = () => {
+          const pp = g.player.position;
+          e.pos.set(pp.x + Math.sin(g.player.yaw) * 9, 0, pp.z + Math.cos(g.player.yaw) * 9);
+          e.root.position.copyFrom(e.pos);
+          e.yaw = g.player.yaw + Math.PI;
+          e.shotT = 99;
+          e.chargeT = 0;
+        };
+        const aim = () => {
+          const n = e.walker.cannon;
+          e.root.computeWorldMatrix(true);
+          n.computeWorldMatrix(true);
+          const t = n.getAbsolutePosition();
+          const eye = g.player.camera.position;
+          const dx = t.x - eye.x, dy = t.y - eye.y, dz = t.z - eye.z;
+          g.player.recoil = 0;
+          g.player.recoilYaw = 0;
+          R.look(Math.atan2(dx, dz), -Math.atan2(dy, Math.hypot(dx, dz)));
+        };
+        let frames = 0;
+        i.simulateMouse(0, true);
+        for (; frames < 900 && e.alive && !(e.limbsLost & 1); frames++) {
+          pin();
+          aim();
+          R.advance(1 / 60);
+          if (g.weapon.overheated) { i.simulateMouse(0, false); R.advance(1.5); i.simulateMouse(0, true); }
+        }
+        i.simulateMouse(0, false);
+        R.advance(1 / 60);
+        return { lost: e.limbsLost, alive: e.alive, cannonShown: e.walker.cannon.isEnabled(), frames, hp: Math.round(e.hp), max: e.maxHp };
+      });
+      const label = await p.$('.limb-label').then((h) => (h ? h.textContent() : null)).catch(() => null);
+      check('B1 firing at a walker cannon knocks it off while the walker lives', (b1.lost & 1) === 1 && b1.alive && !b1.cannonShown, JSON.stringify(b1));
+      check('B2 the HUD calls out the severed part', !!label && /CANNON/.test(label), String(label));
+      const b3 = await ev(p, () => {
+        const R = window.__rift;
+        const g = R.game;
+        const e = window.__w;
+        const pp = g.player.position;
+        e.pos.set(pp.x + Math.sin(g.player.yaw) * 9, 0, pp.z + Math.cos(g.player.yaw) * 9);
+        e.shotT = 0;
+        let charged = 0;
+        for (let k = 0; k < 240; k++) { R.advance(1 / 60); if (e.chargeT > 0) charged++; }
+        return { charged, alive: e.alive };
+      });
+      check('B3 a disarmed walker never charges a shot at the drone', b3.charged === 0, JSON.stringify(b3));
+      await H.shot(p, 'combat_disarmed_walker', { frames: 3 });
+    }
     const bad = errs.filter((e) => !/Error compiling effect/.test(e));
     check('Z no page/console errors', bad.length === 0, bad.slice(0, 3).join(' | '));
   } catch (e) {

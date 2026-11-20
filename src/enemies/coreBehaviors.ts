@@ -6,6 +6,7 @@ import { speedFactor } from '../combat/status';
 import type { Effects } from '../fx/Effects';
 import { buildRusher, buildWalker } from '../visuals/models';
 import { type Behavior, clampAngle, type Enemy, type EnemyContext, type EnemyManager, turnTowards } from './EnemyManager';
+import { hasLost, LIMB_EFFECT } from './limbs';
 
 const TMP = new Vector3();
 const TMP2 = new Vector3();
@@ -56,14 +57,15 @@ export function updateCore(e: Enemy, hdt: number, ctx: EnemyContext, m: EnemyMan
       target.subtractInPlace(muzzle).normalize().scaleInPlace(2.2).addInPlace(muzzle);
       ctx.effects.tracer(muzzle, target.set(ctx.layout.reactor.x, 3 + Math.random(), ctx.layout.reactor.z), 2, 0.12, 0.12);
       ctx.effects.burst('enemySpark', target, 8);
-      ctx.damageReactor(e.dmg(def.reactorDamage), target);
+      ctx.damageReactor(e.dmg(def.reactorDamage) * (hasLost(e.limbsLost, 'cannon') ? LIMB_EFFECT.disarmedReactor : 1), target);
       const a = ctx.panFor(muzzle);
       sfx.play('enemyShot', { volume: a.volume * 0.6, pan: a.pan });
     }
   }
 
   // Walkers fire telegraphed plasma bolts at the player when they have line of sight.
-  if (e.walker && player.alive && def.playerShotInterval > 0) {
+  // A walker that lost its cannon or its sensor head cannot shoot the drone any more.
+  if (e.walker && player.alive && def.playerShotInterval > 0 && !hasLost(e.limbsLost, 'cannon') && !hasLost(e.limbsLost, 'head')) {
     if (e.chargeT > 0) {
       e.chargeT -= adt;
       if (e.chargeT <= 0) {

@@ -1,4 +1,6 @@
 import { traceShot } from '../arena/shotTrace';
+import { hasLost, LIMB_IDS } from '../enemies/limbs';
+import { detachLimb } from '../enemies/limbRuntime';
 import type { WeaponSlot } from '../arena/WeaponSlots';
 import { shotOutcome } from '../arena/PlayerCombat';
 import { Color3, type Engine, Vector3 } from '@babylonjs/core';
@@ -829,6 +831,12 @@ export class ClientGame extends Game {
         if (ev[2]) e.shieldFlash = 1;
         this.enemies.flash(e, ev[2] ? [0.25, 0.7, 1] : [1, 0.92, 0.8]);
         e.lastHit = performance.now();
+        return;
+      }
+      case 'el': {
+        const e = this.byNet.get(ev[1]);
+        if (!e || !e.walker) return;
+        for (const l of LIMB_IDS) if (hasLost(ev[2], l) && !hasLost(e.limbsLost, l)) detachLimb(e, l, this.fx);
         return;
       }
       case 'T+': {

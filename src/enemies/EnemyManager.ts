@@ -10,6 +10,8 @@ import type { Kit } from '../visuals/kit';
 import { FLASH_BUFFER } from '../visuals/hitFlashPlugin';
 import { woundSeverity } from '../fx/wounds';
 import { HitLean, hitImpulse } from './hitReact';
+import { hasLost, LIMB_EFFECT } from './limbs';
+import { detachLimb, hitLimb, restoreLimbs } from './limbRuntime';
 import { BLAST, DEATH_TIME, deathPose, deathStyle, FLYERS, type DeathPose, WRECK_DRAG, wreckKnock } from './deathAnims';
 import type { Palette } from '../visuals/materials';
 import { hasAnyStatus, isBurning, isChilled, isFrozen, isShocked, newStatus, resetStatus, speedFactor, type StatusState } from '../combat/status';
@@ -160,6 +162,9 @@ export class Enemy implements Health {
   /** performance.now() of the last damage taken (drives the HUD health bar). */
   lastHit = 0;
   readonly hitboxes: Mesh[] = [];
+  /** Shoot-off parts (walker frames): hull damage soaked per part (cannon, arm, head) and the lost-part mask. */
+  limbDmg = [0, 0, 0];
+  limbsLost = 0;
   /** M5 elemental statuses (reset on spawn and release, so nothing outlives the enemy). */
   readonly status: StatusState = newStatus();
   /** Spawn generation: pooled enemies are reused, queued events compare this to detect a recycled target. */
@@ -226,7 +231,7 @@ export class Enemy implements Health {
   }
   /** Movement multiplier from tier/wave, elites, buffs and boosts (statuses are applied separately). */
   get moveMult(): number {
-    return this.speedMult * (this.has('accelerated') ? ELITE.speed : 1) * (this.buffT > 0 ? 1.25 : 1) * (this.boostT > 0 ? ELITE.boostMult : 1);
+    return this.speedMult * (this.has('accelerated') ? ELITE.speed : 1) * (this.buffT > 0 ? 1.25 : 1) * (this.boostT > 0 ? ELITE.boostMult : 1) * (hasLost(this.limbsLost, 'head') ? LIMB_EFFECT.headlessSpeed : 1);
   }
   /** Attack recovery multiplier (> 1 = faster). */
   get rateMult(): number {
@@ -438,6 +443,7 @@ export class EnemyManager {
     e.root.rotation.y = e.yaw;
     e.motion?.reset(e.pos, e.yaw);
     e.root.setEnabled(true);
+    restoreLimbs(e);
     if (e.walker?.shield) e.walker.shield.setEnabled(e.maxShield > 0);
     e.remaining = pathLength(e.path, 1, e.pos);
     e.displayName = eliteName(def.name, e.mods);
@@ -494,6 +500,7 @@ export class EnemyManager {
       e.hitFromZ = hit.from.z;
     }
     if (e.behavior?.damageMod) amount = e.behavior.damageMod(e, amount, hit, this);
+    if (hasLost(e.limbsLost, 'head')) amount *= LIMB_EFFECT.headlessVulnerability;
     if (e.armor > 0 && !hit.weak && !hit.dot) {
       const absorbed = Math.min(e.armor, amount * ELITE.armorAbsorb);
       e.armor -= absorbed;
@@ -509,6 +516,8 @@ export class EnemyManager {
     const heavy = e.def.role === 'boss' ? 0.08 : e.def.radius > 1.1 ? 0.5 : 1;
     e.flinch = Math.min(1, e.flinch + (res.toHp > 0 ? 0.5 : 0.2) * heavy);
     if (!hit.dot) this.react(e, hit.from ? hit.from.x : hitPoint.x, hit.from ? hit.from.z : hitPoint.z, (res.toHp + res.toShield) / Math.max(1, e.maxHp + e.maxShield));
+    const lost = e.walker && !hit.dot ? hitLimb(e, hitPoint, res.toHp, !res.killed) : null;
+    if (lost) detachLimb(e, lost, fx);
     e.shieldRegenT = 4;
     e.lastHit = performance.now();
     e.recentDamage += res.toHp + res.toShield;

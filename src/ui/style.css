@@ -252,6 +252,10 @@ b.v { color: var(--violet); }
 .hitmarker.shield span { background: #ffb067; }
 .hitmarker.kill span { background: var(--red); height: 3px; width: 15px; left: -7px; box-shadow: 0 0 6px var(--red); }
 .hitmarker.kill { animation: hmk 0.32s ease-out; }
+.hitmarker.limb span { background: #ff9a3c; height: 3px; width: 13px; left: -6px; box-shadow: 0 0 7px #ff7a1a; }
+.hitmarker.limb { animation: hmk 0.32s ease-out; }
+.hitmarker .limb-label { position: absolute; top: 26px; left: 0; transform: translateX(-50%); white-space: nowrap; font-style: normal; font-family: var(--display); font-size: 11px; font-weight: 700; letter-spacing: 0.16em; color: #ffb36b; text-shadow: 0 0 6px rgba(255, 120, 30, 0.7), 0 1px 2px #000; animation: limbLabel 0.62s ease-out forwards; }
+@keyframes limbLabel { 0% { opacity: 0; transform: translate(-50%, 4px); } 15% { opacity: 1; transform: translate(-50%, 0); } 70% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -3px); } }
 .kill-ring { position: absolute; left: -16px; top: -16px; width: 32px; height: 32px; border: 2px solid var(--red); border-radius: 50%; animation: killring 0.32s ease-out forwards; }
 @keyframes hm { from { transform: scale(1.5); } to { transform: scale(1); } }
 @keyframes hmk { from { transform: scale(1.9) rotate(12deg); } to { transform: scale(1); } }

@@ -334,6 +334,8 @@ type EventMap = {
   alert: { text: string; tone: 'red' | 'orange' | 'blue' | 'white' };
   /** Kill chain length (2+), personal. */
   chain: number;
+  /** The player's hit knocked a part off a walker frame (cannon / arm / head), personal. */
+  limb: 'cannon' | 'arm' | 'head';
 };
 
 export interface LootEvent {
