@@ -31,6 +31,7 @@ export function affixEngineerable(item: ItemInstance): EngineeringCheck {
   const base = baseDef(item.defId);
   if (!base) return { ok: false, reason: 'Unknown item definition' };
   if (!item.affixes.length) return { ok: false, reason: 'This item has no affixes' };
+  if (item.uniqueId) return { ok: false, reason: 'Unique affixes are fixed' };
   if (!affixPool(item.category, new Set(), base.affixes).length) return { ok: false, reason: 'No affixes can roll on this item' };
   return { ok: true };
 }
@@ -193,10 +194,16 @@ export function swapComponent(item: ItemInstance, slot: ComponentSlot, component
     accuracy: clampTo(r2((w.accuracy ?? 1) * ratio('accuracy')), 0.05, 5),
     pierce: clampTo(Math.round((w.pierce ?? t.pierce) + (n.pierce - o.pierce)), 0, 10),
   };
+  // The element is part of the item, not of a component: a refit keeps it.
+  if (w.element) weapon.element = w.element;
   if (build.family === 'rail') weapon.chargeTime = clampTo(r2((w.chargeTime ?? t.chargeTime) * ratio('chargeTime')), 0.05, 10);
   if (build.family === 'beam') {
     weapon.beamWidth = clampTo(r2((w.beamWidth ?? t.beamWidth) * ratio('beamWidth')), 0, 5);
     weapon.rampMax = clampTo(r2((w.rampMax ?? t.rampMax) * ratio('rampMax')), 1, 10);
+  }
+  if (build.family === 'swarm') {
+    weapon.drones = clampTo(Math.round((w.drones ?? t.drones) + (n.drones - o.drones)), 1, 12);
+    weapon.seekCone = clampTo(Math.round((w.seekCone ?? t.seekCone) * ratio('seekCone') * 1000) / 1000, 0.02, 1);
   }
   if (!(weapon.damage > 0)) return null;
   return { build, weapon };

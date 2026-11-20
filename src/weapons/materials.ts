@@ -157,6 +157,8 @@ const SHELL: Record<Finish, [[number, number, number], number, number, number?]>
   slate: [[0.22, 0.29, 0.37], 0.08, 0.42, 0.5],
   gilded: [[0.045, 0.045, 0.05], 0.1, 0.32, 0.8],
   iridescent: [[0.06, 0.06, 0.075], 1, 0.16],
+  /** Ascended: pale pearl ceramic with a heavy clear coat. */
+  ascended: [[0.82, 0.86, 0.9], 0.05, 0.22, 1],
 };
 
 const TRIM: Record<Finish, [[number, number, number], number, number]> = {
@@ -166,6 +168,7 @@ const TRIM: Record<Finish, [[number, number, number], number, number]> = {
   slate: [[0.68, 0.7, 0.72], 1, 0.26],
   gilded: [[1.0, 0.74, 0.36], 1, 0.22],
   iridescent: [[0.62, 0.62, 0.66], 1, 0.18],
+  ascended: [[0.55, 0.9, 1.0], 1, 0.12],
 };
 
 export function weaponMaterials(scene: Scene): WeaponMaterials {

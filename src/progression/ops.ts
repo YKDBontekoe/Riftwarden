@@ -51,6 +51,7 @@ const DEFS: Record<string, OpDef> = {
   rerollAffix: { args: ['str', 'int', 'str'], run: (d, a, tx) => (a[2] === 'stat' || a[2] === 'value' ? TX.rerollAffix(d, a[0] as string, a[1] as number, a[2], tx) : { ok: false, reason: 'Unknown mode' }) },
   rerollUnlocked: { args: ['str'], run: (d, a, tx) => TX.rerollUnlocked(d, a[0] as string, tx) },
   enhanceItem: { args: ['str'], run: (d, a, tx) => TX.enhanceItem(d, a[0] as string, tx) },
+  ascendItem: { args: ['str'], run: (d, a, tx) => TX.ascendOwned(d, a[0] as string, tx) },
   modifyComponent: {
     args: ['str', 'str', 'str'],
     run: (d, a, tx) => ((COMPONENT_SLOTS as readonly string[]).includes(a[1] as string) ? TX.modifyComponent(d, a[0] as string, a[1] as never, a[2] as string, tx) : { ok: false, reason: 'Unknown component slot' }),

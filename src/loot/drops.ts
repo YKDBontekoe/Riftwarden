@@ -1,3 +1,4 @@
+import { ascendDrop } from './ascend';
 import { clampLevel } from './generate';
 import { type RarityId, rollRarity } from './rarity';
 import type { Category } from './types';
@@ -86,6 +87,8 @@ export type DropSourceId = keyof typeof DROP_SOURCES;
 
 export interface LootContext {
   wave: number;
+  /** Threat tier id (Ascended promotion gate); absent = tier I. */
+  tier?: number;
   /** Threat tier loot parameters. */
   tierLevelBonus: number;
   tierLuck: number;
@@ -131,14 +134,12 @@ export function rollDrops(source: DropSource, ctx: LootContext, rand: () => numb
     const category = pickCategory(source.categories, rand);
     const ex = source.exclusive?.find((e) => e.category === category);
     const baseId = ex && rand() < ex.chance ? ex.baseId : undefined;
-    out.push({
-      source: source.id,
-      category,
-      baseId,
-      level: itemLevelFor(ctx, source.levelBonus, rand),
-      rarity: rollRarity(rand, luckFor(source, ctx), source.minRarity),
-      seed: Math.floor(rand() * 4294967296) >>> 0,
-    });
+    const level = itemLevelFor(ctx, source.levelBonus, rand);
+    let r = rollRarity(rand, luckFor(source, ctx), source.minRarity);
+    const seed = Math.floor(rand() * 4294967296) >>> 0;
+    // Ascended: a rare promotion of exotic drops on deep waves / high tiers (decided by the seed: no extra rand).
+    if (r === 'exotic' && ascendDrop(seed, ctx.wave, ctx.tier ?? 1)) r = 'ascended';
+    out.push({ source: source.id, category, baseId, level, rarity: r, seed });
   }
   return out;
 }

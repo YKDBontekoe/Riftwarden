@@ -3,6 +3,7 @@ import { mulberry32 } from '../src/combat/damage';
 import { DROP_SOURCES, type DropSource, rollDrops } from '../src/loot/drops';
 import { generateItem, hashSeed } from '../src/loot/generate';
 import { rollLoot, scaleChance } from '../src/loot/roll';
+import { generateUnique, uniqueForDrop } from '../src/loot/uniques';
 
 const TIER = { lootLevelBonus: 8, lootLuck: 1.3 };
 
@@ -10,9 +11,16 @@ const TIER = { lootLevelBonus: 8, lootLuck: 1.3 };
 function reference(src: DropSource, wave: number, rand: () => number, mult: number, origin: string, counter: { n: number }, prefix: string) {
   const table = mult === 1 ? src : { ...src, chance: Math.min(1, src.chance * mult) };
   const ctx = { wave, tierLevelBonus: TIER.lootLevelBonus, tierLuck: TIER.lootLuck };
-  return rollDrops(table, ctx, rand).map((d) =>
-    generateItem({ uid: `${prefix}.${++counter.n}`, seed: d.seed, level: d.level, rarity: d.rarity, category: d.category, baseId: d.baseId, allowExclusive: d.baseId ? [d.baseId] : [], source: origin }),
-  );
+  // Loot depth: a drop of a unique-listed source may become that unique (seed-decided, at most one per roll).
+  let unique = false;
+  return rollDrops(table, ctx, rand).map((d) => {
+    const u = unique ? null : uniqueForDrop(d.source, d.seed, null);
+    if (u) {
+      unique = true;
+      return generateUnique(u, { uid: `${prefix}.${++counter.n}`, seed: d.seed, level: d.level, source: origin });
+    }
+    return generateItem({ uid: `${prefix}.${++counter.n}`, seed: d.seed, level: d.level, rarity: d.rarity, category: d.category, baseId: d.baseId, allowExclusive: d.baseId ? [d.baseId] : [], source: origin });
+  });
 }
 
 function viaModule(src: DropSource, wave: number, rand: () => number, mult: number, origin: string, counter: { n: number }, prefix: string) {

@@ -16,7 +16,7 @@ import type { EnemyKind } from '../data/defs';
 import type { EliteModId } from '../survival/elites';
 
 export type DamageElement = 'kinetic' | 'thermal' | 'electric' | 'cryo' | 'corrosive' | 'void';
-export type WeaponFamilyId = 'plasma' | 'rail' | 'beam';
+export type WeaponFamilyId = 'plasma' | 'rail' | 'beam' | 'swarm';
 
 export const ELEMENTS: readonly DamageElement[] = ['kinetic', 'thermal', 'electric', 'cryo', 'corrosive', 'void'];
 
@@ -105,13 +105,14 @@ export const affinitySign = (m: number): -1 | 0 | 1 => (m > 1.02 ? 1 : m < 0.98 
 // ------------------------------------------------------------------ weapon rolls
 
 /** Chance that a weapon of this rarity index rolls kinetic (common .. exotic). */
-export const KINETIC_CHANCE = [0.6, 0.45, 0.32, 0.24, 0.18, 0.14];
+export const KINETIC_CHANCE = [0.6, 0.45, 0.32, 0.24, 0.18, 0.14, 0.1];
 
 /** Family leanings for the elemental share. */
 export const FAMILY_ELEMENTS: Record<WeaponFamilyId, Record<Exclude<DamageElement, 'kinetic'>, number>> = {
   plasma: { thermal: 1, electric: 1, cryo: 1, corrosive: 1, void: 0.6 },
   rail: { thermal: 0.6, electric: 1, cryo: 0.8, corrosive: 0.6, void: 1.4 },
   beam: { thermal: 1.4, electric: 1.2, cryo: 1, corrosive: 0.8, void: 0.5 },
+  swarm: { thermal: 0.8, electric: 1.4, cryo: 0.7, corrosive: 1.4, void: 0.6 },
 };
 
 /** Roll a weapon element from its own random stream (so other item rolls do not shift). */

@@ -1,4 +1,4 @@
-// Combat kit browser suite (A two weapons) against a running dev server.
+// Combat kit browser suite (A two weapons ... H loot depth: swarm, salvo, uniques, ascended) against a running dev server.
 // Usage: npm run dev (port 5173), then: node scripts/e2e-combat.cjs [A]
 const H = require('./lib/harness.cjs');
 const { check, S, ev, stats } = H;
@@ -622,6 +622,112 @@ async function deploy(p) {
       await new Promise((r) => setTimeout(r, 300));
       const aff = await p.$eval('[data-testid=ls-affinity]', (e) => e.textContent).catch(() => '');
       check('G5 the sector briefing lists the faction weaknesses and resistances', /WEAK/.test(aff) && /RESISTS/.test(aff) && (aff.match(/KINETIC|THERMAL|ELECTRIC|CRYO|CORROSIVE|VOID/g) || []).length === 4, aff);
+    }
+    if (want('H')) {
+      // Loot depth: Drone Swarm locks + salvo, a unique gear mechanic, Ascended / unique presentation.
+      await ev(p, () => {
+        const R = window.__rift;
+        const w = R.makeItem({ seed: 5150, rarity: 'rare', baseId: 'swarm_hive', level: 3 });
+        w.build.mechanism = 'mc_swarm';
+        const mantle = R.makeUnique('bulwark_mantle', 3, 3);
+        R.profile.mutate((d) => {
+          d.items.push(w, mantle);
+          d.storage.uids.push(d.loadout.weapon);
+          if (d.loadout.armor) d.storage.uids.push(d.loadout.armor);
+          d.loadout.weapon = w.uid;
+          d.loadout.armor = mantle.uid;
+          return true;
+        });
+      });
+      await deploy(p);
+      // Three walkers off the crosshair (inside the lock cone, outside any hitbox on the aim ray).
+      const h1 = await ev(p, () => {
+        const R = window.__rift;
+        const g = R.game;
+        R.look(0, 0);
+        R.advance(1 / 60);
+        const cam = g.player.camera;
+        const f = cam.getDirection(new R.V3(0, 0, 1));
+        const r = cam.getDirection(new R.V3(1, 0, 0));
+        const eye = cam.position;
+        // 11 m out: clear of the classic arena's reactor (seekers need line of sight).
+        const es = [-2, 1.5, 2.6].map((side) => {
+          const e = R.dev.spawn('walker');
+          const at = eye.add(f.scale(11)).add(r.scale(side));
+          e.pos.set(at.x, 0, at.z);
+          e.root.position.copyFrom(e.pos);
+          e.shotT = 99;
+          e.hp = e.maxHp = 400;
+          return e;
+        });
+        R.advance(1 / 60);
+        const hp0 = es.map((e) => e.hp);
+        const i = R.flow.input;
+        const fired0 = g.weapon.shotsFired;
+        i.simulateMouse(0, true);
+        let flying = 0;
+        for (let k = 0; k < 40; k++) {
+          R.advance(1 / 60);
+          flying = Math.max(flying, g.wfx.liveBolts);
+        }
+        i.simulateMouse(0, false);
+        R.advance(0.5);
+        return { fam: g.weapon.def.family, mech: g.weapon.def.mechanism, launches: g.weapon.shotsFired - fired0, flying, dmg: es.map((e, k) => Math.round(hp0[k] - e.hp)), drones: g.weapon.def.drones };
+      });
+      check('H1 a Drone Swarm releases seekers that lock onto machines off the crosshair', h1.fam === 'swarm' && h1.launches >= 1 && h1.flying >= 2 && h1.dmg.filter((d) => d > 0).length >= 2, JSON.stringify(h1));
+      // Salvo Lock: a full lock releases about three times the drones of a tap.
+      const h2 = await ev(p, () => {
+        const R = window.__rift;
+        const g = R.game;
+        const i = R.flow.input;
+        const def = g.weapon.def;
+        g.weapon.setDef({ ...def, mechanism: 'salvo' });
+        const count = (hold) => {
+          g.wfx.reset();
+          g.weapon.heat = 0;
+          i.simulateMouse(0, true);
+          R.advance(hold);
+          i.simulateMouse(0, false);
+          R.advance(1 / 60);
+          const n = g.wfx.liveBolts;
+          R.advance(1.2);
+          return n;
+        };
+        const tap = count(0.15);
+        const full = count(1.6);
+        g.weapon.setDef(def);
+        return { tap, full };
+      });
+      check('H2 Salvo Lock releases more drones the longer it is held', h2.full >= h2.tap * 2 && h2.full >= 6, JSON.stringify(h2));
+      // Unique gear: the Mantle of the Last Bulwark restores hull on kills.
+      const h3 = await ev(p, () => {
+        const R = window.__rift;
+        const g = R.game;
+        const pl = g.player;
+        pl.hp = Math.round(pl.maxHp * 0.5);
+        const before = pl.hp;
+        const e = R.dev.spawn('walker');
+        const at = pl.position.add(new R.V3(6, 0, 6));
+        e.pos.set(at.x, 0, at.z);
+        e.root.position.copyFrom(e.pos);
+        R.advance(1 / 60);
+        g.damageEnemy('player', e, 1e6, e.center(new R.V3()), false);
+        return { before, after: pl.hp, max: pl.maxHp, gear: [...g.equippedUniques()] };
+      });
+      check('H3 a unique gear mechanic applies in combat (Mantle: kills restore 4% hull)', h3.gear.includes('u_mantle') && Math.abs(h3.after - h3.before - h3.max * 0.04) < 0.6, JSON.stringify(h3));
+      // Presentation: an Ascended pickup and the swarm viewmodel.
+      await ev(p, () => {
+        const R = window.__rift;
+        const g = R.game;
+        const pp = g.player.position;
+        R.spawnLoot({ x: pp.x + 3, z: pp.z + 4, rarity: 'ascended', baseId: 'rail_lancer', level: 20, seed: 8 });
+        R.advance(1.2);
+      });
+      await new Promise((r) => setTimeout(r, 400));
+      await H.shot(p, 'loot-depth-arena', { frames: 2 });
+      check('H4 an Ascended pickup and the swarm viewmodel render (screenshot loot-depth-arena)', true);
+      await ev(p, () => window.__rift.flow.abandonRun());
+      await H.waitFor(p, () => window.__rift.state().location === 'home' && !window.__rift.state().busy);
     }
     const bad = errs.filter((e) => !/Error compiling effect/.test(e));
     check('Z no page/console errors', bad.length === 0, bad.slice(0, 3).join(' | '));

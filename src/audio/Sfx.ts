@@ -27,6 +27,7 @@ export type SfxName =
   | 'railCharge'
   | 'chargeReady'
   | 'railFire'
+  | 'swarmLaunch'
   | 'vent'
   | 'arc'
   | 'weaponSwitch'
@@ -592,6 +593,12 @@ export class Sfx {
         this.osc('sine', 110 * p, 38, 0.45, 0.55 * v, out);
         this.osc('square', 2400 * p * j, 300, 0.22, 0.07 * v, out);
         this.noiseBurst(0.5, 0.16 * v, 3200, 400, out, 'bandpass', 1.4, 0.03);
+        break;
+      case 'swarmLaunch':
+        // Pneumatic puff + rising rotor whine per released drone.
+        this.noiseBurst(0.07, 0.32 * v, 2600 * p, 700, out, 'bandpass', 1.1);
+        this.osc('sawtooth', 520 * p * j, 1900 * p * j, 0.16, 0.05 * v, out);
+        this.osc('sine', 180 * p, 90, 0.12, 0.22 * v, out);
         break;
       case 'alarm':
         for (let i = 0; i < 3; i++) {

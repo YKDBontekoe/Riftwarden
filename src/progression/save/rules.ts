@@ -92,6 +92,7 @@ export function bankRewards(data: SaveData, runId: string, wave: number, rewards
   const s = Math.max(0, Math.floor(rewards.salvage));
   const cr = Math.max(0, Math.floor(rewards.credits ?? 0));
   const co = Math.max(0, Math.floor(rewards.components ?? 0));
+  const sh = Math.max(0, Math.floor(rewards.shards ?? 0));
   const xp = Math.max(0, Math.floor(rewards.xp ?? 0));
   a.salvageSecured += s;
   data.progress.xp = Math.min(MAX_XP, data.progress.xp + xp);
@@ -101,6 +102,7 @@ export function bankRewards(data: SaveData, runId: string, wave: number, rewards
   data.resources.salvage = Math.min(MAX_BALANCE, data.resources.salvage + s);
   data.resources.credits = Math.min(MAX_BALANCE, data.resources.credits + cr);
   data.resources.components = Math.min(MAX_BALANCE, data.resources.components + co);
+  data.resources.shards = Math.min(MAX_BALANCE, data.resources.shards + sh);
   data.economy.stats.creditsEarned += cr;
   data.totals.salvageSecured += s;
   data.totals.itemsSecured += incoming.length;

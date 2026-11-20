@@ -24,7 +24,7 @@ export function createDefaultSave(now = Date.now()): SaveData {
   return {
     version: SAVE_VERSION,
     profile: { id: profileId, callsign: 'WARDEN', createdAt: now, lastSavedAt: now },
-    resources: { salvage: 0, credits: STARTING_CREDITS, components: 0 },
+    resources: { salvage: 0, credits: STARTING_CREDITS, components: 0, shards: 0 },
     items: [starter],
     storage: { capacity: STORAGE_CAPACITY, expansions: 0, uids: [] },
     loadout,

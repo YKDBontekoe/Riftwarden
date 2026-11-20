@@ -745,6 +745,8 @@ export class ClientGame extends Game {
     run.secured.credits = r.cs;
     run.unsecured.components = r.ku;
     run.secured.components = r.ks;
+    run.unsecured.shards = r.hu ?? 0;
+    run.secured.shards = r.hs ?? 0;
     run.xpReplica = true;
     run.secured.xp = r.xs ?? 0;
     run.unsecured.xp = r.xu ?? 0;
@@ -1033,9 +1035,10 @@ export class ClientGame extends Game {
     const from = r.rig.muzzle.getAbsolutePosition().clone();
     const a = this.panFor(from);
     if (family === 'plasma') this.wfx.bolt(from, to, 140, 0.3, null);
+    else if (family === 'swarm') this.wfx.seeker(from, to, 38, null);
     else if (family === 'rail') this.wfx.rail(from, to, 1);
     else this.fx.tracer(from, to, 1, 0.06, 0.06);
-    sfx.play(family === 'rail' ? 'railFire' : 'shoot', { volume: a.volume * 0.5, pan: a.pan, pitch: family === 'beam' ? 0.7 : 1 });
+    sfx.play(family === 'rail' ? 'railFire' : family === 'swarm' ? 'swarmLaunch' : 'shoot', { volume: a.volume * 0.5, pan: a.pan, pitch: family === 'beam' ? 0.7 : 1 });
   }
 
   // ------------------------------------------------------------------ HUD

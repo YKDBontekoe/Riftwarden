@@ -1,6 +1,9 @@
 import { useMemo, useState } from 'react';
 import { fmtNum, formatModifier, STAT_DEFS } from '../combat/stats';
 import type { Flow } from '../core/Flow';
+import { ascendBlock, ascendItem } from '../loot/ascend';
+import { ascendCost } from '../economy/transactions';
+import { engineeringRand } from '../economy/engineering';
 import { enhanceCost, enhanceLevel, escalation, maxEnhance, rerollCost, ENHANCE_EFFECT, componentSwapCost } from '../economy/config';
 import { affixValueRange, maxLocks, rerollPool, SWAPPABLE_SLOTS, swapComponent, swapOptions, tierRange } from '../economy/engineering';
 import { affixDef } from '../loot/affixes';
@@ -401,7 +404,50 @@ function EnhanceBench({ save, item, tx, setPreview }: { save: SaveData; item: It
       ) : (
         <div className="prot-note">Maximum enhancement for {rarity(item.rarity).label.toLowerCase()} equipment.</div>
       )}
+      {(item.rarity === 'exotic' || item.rarity === 'ascended') && <AscendBench save={save} item={item} tx={tx} setPreview={setPreview} />}
     </>
+  );
+}
+
+/** Ascension: Exotic -> Ascended for rift shards (the preview is the exact result: the roll is deterministic). */
+function AscendBench({ save, item, tx, setPreview }: { save: SaveData; item: ItemInstance; tx: Tx; setPreview: (i: ItemInstance | null) => void }) {
+  const why = ascendBlock(item);
+  const next = useMemo(() => (why ? null : ascendItem(item, engineeringRand(item, 'ascend'))), [item, why]);
+  const cost = ascendCost(item);
+  return (
+    <div className="ascend-bench" data-testid="ascend-bench">
+      <div className="col-label">ASCENSION</div>
+      <p className="faint small">
+        An Ascended item keeps everything it has, gains stronger rarity multipliers and one extra affix at the top tier with a perfect roll. Rift shards drop from elites, bosses, elite caches,
+        high-value targets and tier III+ checkpoints.
+      </p>
+      {why ? (
+        <div className="prot-note">{why}.</div>
+      ) : (
+        <div className="eng-action">
+          <div className="ea-head">
+            <b>ASCEND</b>
+            <CostLine cost={cost} save={save} />
+          </div>
+          <button
+            className="primary small ascend"
+            data-testid="ascend"
+            onMouseEnter={() => setPreview(next)}
+            onMouseLeave={() => setPreview(null)}
+            onFocus={() => setPreview(next)}
+            onClick={() => {
+              const r = tx.run('ascend', 'ascendItem', [item.uid], () => `${item.name} ascended`);
+              if (r) setPreview(null);
+            }}
+          >
+            ASCEND
+          </button>
+          <button className="mini" onClick={() => setPreview(next)}>
+            PREVIEW
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 

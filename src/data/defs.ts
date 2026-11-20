@@ -1,9 +1,9 @@
 import type { DamageElement } from '../combat/elements';
 /** Data-driven content definitions. */
 
-export type WeaponFamily = 'plasma' | 'rail' | 'beam';
+export type WeaponFamily = 'plasma' | 'rail' | 'beam' | 'swarm';
 /** How the trigger turns into shots. Each family supports a fixed subset (see weapons/families.ts). */
-export type Mechanism = 'auto' | 'burst' | 'charge' | 'cycle' | 'beam' | 'scatter' | 'pulse';
+export type Mechanism = 'auto' | 'burst' | 'charge' | 'cycle' | 'beam' | 'scatter' | 'pulse' | 'swarm' | 'salvo';
 
 export interface WeaponDef {
   id: string;
@@ -40,9 +40,13 @@ export interface WeaponDef {
   boltSpeed: number;
   /** Damage element of the weapon's hits. */
   element: DamageElement;
+  /** Swarm: seeker drones per launch (salvo: at full lock). */
+  drones: number;
+  /** Swarm: lock cone (tangent of the half-angle around the crosshair). */
+  seekCone: number;
 }
 
-const WEAPON_DEFAULTS = { burstCount: 3, chargeTime: 0.8, pierce: 0, beamWidth: 0, rampMax: 1, rampTime: 1, boltSpeed: 130, element: 'kinetic' as DamageElement };
+const WEAPON_DEFAULTS = { burstCount: 3, chargeTime: 0.8, pierce: 0, beamWidth: 0, rampMax: 1, rampTime: 1, boltSpeed: 130, element: 'kinetic' as DamageElement, drones: 0, seekCone: 0 };
 
 export const PLASMA_REPEATER: WeaponDef = {
   ...WEAPON_DEFAULTS,
@@ -109,6 +113,34 @@ export const BEAM_EMITTER: WeaponDef = {
   beamWidth: 0.35,
   rampMax: 2.2,
   rampTime: 1.6,
+};
+
+/**
+ * Seeker hive: every launch releases micro-drones that lock onto the machines nearest the crosshair inside a cone
+ * (no lock = they fly straight). Damage is resolved at launch (hitscan rules); the drones only visualise it.
+ */
+export const SWARM_HIVE: WeaponDef = {
+  ...WEAPON_DEFAULTS,
+  id: 'swarm_hive',
+  name: 'DRONE SWARM',
+  family: 'swarm',
+  mechanism: 'swarm',
+  damage: 10,
+  fireRate: 3.4,
+  range: 72,
+  heatPerShot: 7.5,
+  coolRate: 46,
+  coolDelay: 0.3,
+  overheatRecover: 30,
+  spreadMin: 0.01,
+  spreadMax: 0.04,
+  spreadPerShot: 0.004,
+  spreadRecover: 0.08,
+  recoilPitch: 0.003,
+  chargeTime: 1.1,
+  boltSpeed: 38,
+  drones: 3,
+  seekCone: 0.22,
 };
 
 export type EnemyKind = 'walker' | 'rusher' | 'bulwark' | 'enforcer' | 'artillery' | 'engineer' | 'courier' | 'colossus' | 'overseer' | 'pylon' | 'jammer' | 'crawler' | 'sapper' | 'skimmer' | 'marksman' | 'burrower';

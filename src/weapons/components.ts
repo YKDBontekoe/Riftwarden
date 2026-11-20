@@ -25,6 +25,10 @@ export interface ComponentEffects {
   rampMax?: number;
   /** Additive. */
   pierce?: number;
+  /** Swarm: lock cone multiplier (higher = wider). */
+  seekCone?: number;
+  /** Swarm: additive seeker drones per launch. */
+  drones?: number;
 }
 
 export interface ComponentDef {
@@ -41,7 +45,7 @@ export interface ComponentDef {
   mechanism?: Mechanism;
 }
 
-const ALL: readonly WeaponFamily[] = ['plasma', 'rail', 'beam'];
+const ALL: readonly WeaponFamily[] = ['plasma', 'rail', 'beam', 'swarm'];
 
 export const COMPONENTS: readonly ComponentDef[] = [
   // ---------------------------------------------------------------- barrels / emitters
@@ -54,6 +58,10 @@ export const COMPONENTS: readonly ComponentDef[] = [
   { id: 'be_lens', slot: 'barrel', name: 'Focus Lens', blurb: 'Crystal focusing lens: a tight, long beam.', families: ['beam'], weight: 10, effects: { range: 1.2, beamWidth: 0.7, damage: 1.08 } },
   { id: 'be_array', slot: 'barrel', name: 'Splay Array', blurb: 'Three-prong emitter: a wide, forgiving beam.', families: ['beam'], weight: 7, effects: { beamWidth: 1.6, damage: 0.94, range: 0.9 } },
   { id: 'be_ring', slot: 'barrel', name: 'Resonator Rings', blurb: 'Counter-rotating resonator rings that build intensity.', families: ['beam'], weight: 7, effects: { rampMax: 1.25, heatPerShot: 1.06 } },
+  { id: 'sw_pod', slot: 'barrel', name: 'Hex Launch Pod', blurb: 'Hexagonal launch pod with six drone tubes and a rotating loader.', families: ['swarm'], weight: 10, effects: {} },
+  { id: 'sw_twin', slot: 'barrel', name: 'Twin Racks', blurb: 'Two stacked launch racks that fire alternately.', families: ['swarm'], weight: 7, effects: { fireRate: 1.14, damage: 0.92, heatPerShot: 1.04 } },
+  { id: 'sw_hive', slot: 'barrel', name: 'Hive Cluster', blurb: 'Dense honeycomb cluster: one more drone per launch, each a little weaker.', families: ['swarm'], weight: 6, effects: { drones: 1, damage: 0.8, heatPerShot: 1.1 } },
+  { id: 'sw_uplink', slot: 'barrel', name: 'Long Uplink', blurb: 'Pod with a tracking mast: drones lock from further off the crosshair and fly further.', families: ['swarm'], weight: 7, effects: { seekCone: 1.45, range: 1.25, damage: 0.95 } },
   // ---------------------------------------------------------------- energy cores
   { id: 'co_cell', slot: 'core', name: 'Plasma Cell', blurb: 'Side-loaded energy cell behind a glass window.', families: ALL, weight: 10, effects: {} },
   { id: 'co_ring', slot: 'core', name: 'Toroid Chamber', blurb: 'Ring-shaped containment chamber that sheds heat well.', families: ALL, weight: 8, effects: { coolRate: 1.1, damage: 0.97 } },
@@ -71,6 +79,8 @@ export const COMPONENTS: readonly ComponentDef[] = [
   // M7 firing styles
   { id: 'mc_scatter', slot: 'mechanism', name: 'Scatter Choke', blurb: 'Fires a cone of seven plasma pellets per shot: devastating up close, weak at range.', families: ['plasma'], weight: 6, mechanism: 'scatter', effects: { damage: 0.5, fireRate: 0.2, heatPerShot: 2.6, range: 0.4 } },
   { id: 'mc_pulse', slot: 'mechanism', name: 'Pulse Capacitor', blurb: 'Discharges the emitter as detonating pulses: splash damage around the impact, no ramp.', families: ['beam'], weight: 6, mechanism: 'pulse', effects: { damage: 8.5, fireRate: 0.095, heatPerShot: 6.2, range: 1.15 } },
+  { id: 'mc_swarm', slot: 'mechanism', name: 'Hive Release', blurb: 'Launches seeker drones continuously while the trigger is held.', families: ['swarm'], weight: 10, mechanism: 'swarm', effects: {} },
+  { id: 'mc_salvo', slot: 'mechanism', name: 'Salvo Lock', blurb: 'Hold to paint locks, release to launch a salvo: up to three times the drones at full lock.', families: ['swarm'], weight: 6, mechanism: 'salvo', effects: { damage: 1.12, fireRate: 0.5 } },
   { id: 'mc_beam', slot: 'mechanism', name: 'Continuous Emitter', blurb: 'Sustained beam; damage ramps up while held on one target.', families: ['beam'], weight: 10, mechanism: 'beam', effects: {} },
   // ---------------------------------------------------------------- visual attachments
   { id: 'at_sight', slot: 'attachment', name: 'Holo Sight', blurb: 'Holographic sight housing.', families: ALL, weight: 8, effects: { accuracy: 0.94 } },
@@ -100,6 +110,8 @@ const EFFECT_LABEL: Record<keyof ComponentEffects, [string, 'mult' | 'add', 'hig
   beamWidth: ['beam width', 'mult', 'higher'],
   rampMax: ['ramp ceiling', 'mult', 'higher'],
   pierce: ['pierce', 'add', 'higher'],
+  seekCone: ['lock cone', 'mult', 'higher'],
+  drones: ['drones per launch', 'add', 'higher'],
 };
 
 /** Human readable effects, e.g. [{text:'+12% fire rate', good:true}]. */

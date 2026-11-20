@@ -106,6 +106,13 @@ interface Bolt {
   speed: number;
   active: boolean;
   arrive: (() => void) | null;
+  /** Swarm seeker: quadratic curve start / control / end and progress (0..1) over `dur` seconds. */
+  curve: boolean;
+  a: Vector3;
+  c: Vector3;
+  b: Vector3;
+  u: number;
+  dur: number;
 }
 
 interface Trail {
@@ -165,7 +172,7 @@ export class WeaponFx {
       glow.isPickable = core.isPickable = false;
       glow.setEnabled(false);
       core.setEnabled(false);
-      this.bolts.push({ glow, core, pos: new Vector3(), dir: new Vector3(), left: 0, travelled: 0, width: 0.3, speed: 0, active: false, arrive: null });
+      this.bolts.push({ glow, core, pos: new Vector3(), dir: new Vector3(), left: 0, travelled: 0, width: 0.3, speed: 0, active: false, arrive: null, curve: false, a: new Vector3(), c: new Vector3(), b: new Vector3(), u: 0, dur: 1 });
     }
     for (let i = 0; i < 5; i++) {
       const coreMat = additive(scene, 'railCore', new Color3(), tex);
@@ -257,9 +264,60 @@ export class WeaponFx {
     b.speed = speed;
     b.active = true;
     b.arrive = arrive;
+    b.curve = false;
     b.glow.setEnabled(true);
     b.core.setEnabled(true);
     this.placeBolt(b, width);
+  }
+
+  /**
+   * Swarm seeker drone: flies a curved path (kicked out sideways / up from the pod, then homing in) from the muzzle
+   * to the struck point; `arrive` runs on contact. Damage was already resolved at launch.
+   */
+  seeker(from: Vector3, to: Vector3, speed: number, arrive: (() => void) | null): void {
+    const b = this.bolts.find((x) => !x.active) ?? this.bolts[0];
+    if (b.active && b.arrive) b.arrive();
+    const d = TMP.copyFrom(to).subtractInPlace(from);
+    const dist = d.length();
+    if (dist < 0.05) {
+      arrive?.();
+      return;
+    }
+    // Control point: a third of the way out, thrown sideways and up by up to 35% of the distance.
+    const side = TMP2.set(-d.z, 0, d.x).normalize().scaleInPlace((Math.random() - 0.5) * 0.7 * Math.min(dist, 30));
+    b.a.copyFrom(from);
+    b.b.copyFrom(to);
+    b.c.copyFrom(from).addInPlace(d.scaleInPlace(0.35)).addInPlace(side).addInPlaceFromFloats(0, (0.15 + Math.random() * 0.25) * Math.min(dist, 30), 0);
+    b.u = 0;
+    b.dur = Math.max(0.12, (dist * 1.15) / Math.max(1, speed));
+    b.pos.copyFrom(from);
+    b.dir.copyFrom(b.c).subtractInPlace(from).normalize();
+    b.travelled = 0.3;
+    b.width = 0.16;
+    b.speed = speed;
+    b.left = dist;
+    b.curve = true;
+    b.active = true;
+    b.arrive = arrive;
+    b.glow.setEnabled(true);
+    b.core.setEnabled(true);
+    this.placeBolt(b);
+  }
+
+  /** Advance a seeker along its curve; true when it arrived. */
+  private stepSeeker(b: Bolt, dt: number): boolean {
+    b.u = Math.min(1, b.u + dt / b.dur);
+    const u = b.u;
+    const k = 1 - u;
+    const x = k * k * b.a.x + 2 * k * u * b.c.x + u * u * b.b.x;
+    const y = k * k * b.a.y + 2 * k * u * b.c.y + u * u * b.b.y;
+    const z = k * k * b.a.z + 2 * k * u * b.c.z + u * u * b.b.z;
+    b.dir.set(x - b.pos.x, y - b.pos.y, z - b.pos.z);
+    const step = b.dir.length();
+    if (step > 1e-5) b.dir.scaleInPlace(1 / step);
+    b.pos.set(x, y, z);
+    b.travelled = Math.min(1.4, b.travelled + step);
+    return u >= 1;
   }
 
   private placeBolt(b: Bolt, width = b.width): void {
@@ -346,11 +404,16 @@ export class WeaponFx {
     if (eye) this.eye.copyFrom(eye);
     for (const b of this.bolts) {
       if (!b.active) continue;
-      const step = b.speed * dt;
-      b.left -= step;
-      b.travelled += step;
-      b.pos.addInPlace(TMP.copyFrom(b.dir).scaleInPlace(step));
-      if (b.left <= 0) {
+      let done: boolean;
+      if (b.curve) done = this.stepSeeker(b, dt);
+      else {
+        const step = b.speed * dt;
+        b.left -= step;
+        b.travelled += step;
+        b.pos.addInPlace(TMP.copyFrom(b.dir).scaleInPlace(step));
+        done = b.left <= 0;
+      }
+      if (done) {
         b.active = false;
         b.glow.setEnabled(false);
         b.core.setEnabled(false);

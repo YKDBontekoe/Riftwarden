@@ -117,7 +117,7 @@ function readItems(rows: Relations) {
   for (const row of entries) {
     const { uid, defId, acquiredAt, source, category, level, rarity, name, sockets, signature, seed, gen } = row;
     byKey.set(row.itemKey, {
-      uid, defId, acquiredAt, source, category, level, rarity, name, sockets, signature, seed, gen,
+      uid, defId, acquiredAt, source, category, level, rarity, name, sockets, signature, seed, gen, uniqueId: optional(row.uniqueId),
       locked: optional(row.locked), enhance: optional(row.enhance), rerolls: optional(row.rerolls), mods: optional(row.mods),
       base: [], affixes: [], socketed: Array.from({ length: sockets }, () => null),
     });
@@ -130,10 +130,11 @@ function readItems(rows: Relations) {
   }
   for (const raw of rows.profile_weapon_rolls) {
     type Weapon = NonNullable<ItemInstance['weapon']>;
-    const { itemKey, range, accuracy, pierce, chargeTime, beamWidth, rampMax, element, ...required } = columns<{ itemKey: string } & Weapon>(raw);
+    const { itemKey, range, accuracy, pierce, chargeTime, beamWidth, rampMax, drones, seekCone, element, ...required } = columns<{ itemKey: string } & Weapon>(raw);
     byKey.get(itemKey)!.weapon = {
       ...required, range: optional(range), accuracy: optional(accuracy), pierce: optional(pierce),
-      chargeTime: optional(chargeTime), beamWidth: optional(beamWidth), rampMax: optional(rampMax), element: optional(element),
+      chargeTime: optional(chargeTime), beamWidth: optional(beamWidth), rampMax: optional(rampMax),
+      drones: optional(drones), seekCone: optional(seekCone), element: optional(element),
     };
   }
   for (const raw of rows.profile_weapon_builds) {
@@ -185,7 +186,7 @@ export function readProfile(headerColumns: Row, rows: Relations): { data: SaveDa
     data: {
       version: h.version,
       profile: { id: h.saveId, callsign: h.callsign, createdAt: h.createdAt, lastSavedAt: h.lastSavedAt },
-      resources: { salvage: h.salvage, credits: h.credits, components: h.components },
+      resources: { salvage: h.salvage, credits: h.credits, components: h.components, shards: h.shards ?? 0 },
       items, loadout,
       storage: { capacity: h.storageCapacity, expansions: h.storageExpansions, uids: storageUids },
       presets: positioned(rows.profile_presets.map((raw) => columns<{ position: number; name: string } & SaveData['loadout']>(raw)))

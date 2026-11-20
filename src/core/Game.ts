@@ -37,6 +37,7 @@ import { type TowerEdit, type TowerHost, TowerControl } from '../arena/TowerCont
 import { planBlast } from '../combat/blast';
 import { hintFor, lootTargetInfo, runHud } from '../ui/hudModel';
 import { rollLoot } from '../loot/roll';
+import { gearUniques } from '../loot/uniques';
 import { createSunShadows } from '../arena/shadows';
 import { CORE_BEHAVIORS } from '../enemies/coreBehaviors';
 import { DROP_SOURCES, type DropSourceId } from '../loot/drops';
@@ -189,6 +190,8 @@ export class Game {
   readonly inventory: RunInventory;
   readonly loot: LootField;
   protected lootRand: () => number;
+  /** Rift shard rolls: their own stream, so loot rolls of a run seed never shift. */
+  protected shardRand: () => number;
   protected lootCounter = 0;
   lootTarget: Pickup | null = null;
   /** Loot placement, landing/pickup presentation and targeting. */
@@ -383,6 +386,7 @@ export class Game {
     this.loot.onLand = (p) => this.pickups.landed(p);
     this.inventory = new RunInventory(cfg.loadout, cfg.run);
     this.lootRand = mulberry32(hashSeed(cfg.run.id));
+    this.shardRand = mulberry32((hashSeed(cfg.run.id) ^ 0x51ed27a3) >>> 0);
     this.towerTech = new Set([...STARTER_TECH, ...(cfg.towerTech ?? [])]);
     this.applyTree(cfg.tree);
     this.director = new Director(this, cfg.seed ?? hashRunSeed(cfg.run.id));
@@ -531,7 +535,8 @@ export class Game {
       // Milestone: credits and advanced components (tier scaled).
       const cpCredits = Math.round(RUN_INCOME.checkpointCredits(w.number) * this.cfg.tier.salvageMult);
       const cpComponents = RUN_INCOME.checkpointComponents(w.number, this.cfg.tier.id);
-      this.cfg.run.collect({ items: this.lastCache, credits: cpCredits, components: cpComponents });
+      const cpShards = RUN_INCOME.checkpointShards(w.number, this.cfg.tier.id);
+      this.cfg.run.collect({ items: this.lastCache, credits: cpCredits, components: cpComponents, shards: cpShards });
       uiEvents.emit('creditsGained', cpCredits);
       uiEvents.emit('componentsGained', cpComponents);
       banked = this.cfg.run.bank(w.number);
@@ -542,7 +547,7 @@ export class Game {
       const n = banked.items.length;
       if (this.lastBankSaved) {
         sfx.play('bank');
-        uiEvents.emit('banner', { title: 'CHECKPOINT SECURED', sub: `Wave ${w.number} cleared · ${banked.salvage} salvage · ${banked.credits} cr · ${banked.components} comp${n ? ` · ${n} item${n === 1 ? '' : 's'}` : ''} banked to HQ`, tone: 'cyan' });
+        uiEvents.emit('banner', { title: 'CHECKPOINT SECURED', sub: `Wave ${w.number} cleared · ${banked.salvage} salvage · ${banked.credits} cr · ${banked.components} comp${banked.shards ? ` · ${banked.shards} shards` : ''}${n ? ` · ${n} item${n === 1 ? '' : 's'}` : ''} banked to HQ`, tone: 'cyan' });
       } else if (this.cfg.run.survival.dev) uiEvents.emit('banner', { title: 'CHECKPOINT · DEVELOPMENT SESSION', sub: 'Development tools were used this run: nothing is banked to HQ', tone: 'white' });
       else uiEvents.emit('banner', { title: 'CHECKPOINT · SAVE FAILED', sub: 'Rewards are held by the run but could not be written to storage yet', tone: 'red' });
     } else uiEvents.emit('banner', { title: `WAVE ${w.number} CLEARED`, sub: `+${w.clearReward} cores · +${salvage} salvage · +${credits} cr · reactor repaired`, tone: 'cyan' });
@@ -677,6 +682,7 @@ export class Game {
    * Event-driven (equipment change, upgrade picked, buff gained/expired), never per frame.
    */
   rebuildStats(): void {
+    this.gearEffects = gearUniques(this.inventory.equippedItems(this.weaponSlots.inactive));
     const mods = [...equipmentModifiers(this.inventory.equippedItems(this.weaponSlots.inactive)), ...this.treeMods, ...this.modifiers, ...this.director.build.modifiers(), ...this.director.buffModifiers()];
     Object.assign(this.stats, computeStats(mods));
     this.player.applyStats(this.stats, this.attackerScale);
@@ -733,7 +739,7 @@ export class Game {
   /** The run's own loot stream (single player): one place that knows the uid scheme and the debug chance multiplier. */
   private rollFrom(src: DropSource, wave: number): ItemInstance[] {
     const run = this.cfg.run;
-    return rollLoot({ source: src, wave, tier: this.cfg.tier, rand: this.lootRand, nextUid: () => `${run.id}.${++this.lootCounter}`, originId: run.id, chanceMult: this.dropChanceMult });
+    return rollLoot({ source: src, wave, tier: this.cfg.tier, rand: this.lootRand, nextUid: () => `${run.id}.${++this.lootCounter}`, originId: run.id, chanceMult: this.dropChanceMult, faction: this.director.faction });
   }
 
   /** Roll drops for a source and place them physically around `at`. */
@@ -1380,6 +1386,10 @@ export class Game {
       signature: () => this.weaponSignature(),
       heat: () => this.weaponHeat(),
       droneSpeed: () => this.droneSpeed(),
+      uniques: () => this.equippedUniques(),
+      chargeUlt: (f) => {
+        this.abilities.ult = Math.min(1, this.abilities.ult + f);
+      },
       hitstop: (s, k) => this.hitstop(s, k),
       damageEnemy: (...a) => this.damageEnemy(...a),
     };
@@ -1477,6 +1487,12 @@ export class Game {
     };
   }
 
+  /** Unique gear effects of the drone firing right now (co-op server: the shooter's avatar). */
+  protected gearEffects: ReadonlySet<string> = new Set();
+  protected equippedUniques(): ReadonlySet<string> {
+    return this.gearEffects;
+  }
+
   /** Signature of the weapon firing right now (co-op server: the shooter's). */
   protected weaponSignature(): string | null {
     return this.weaponSlots.item()?.signature ?? null;
@@ -1504,9 +1520,11 @@ export class Game {
     const components = boss
       ? 3 + e.encounter + Math.floor(this.cfg.tier.id / 2)
       : (e.kind === 'bulwark' || e.elite) && this.lootRand() < RUN_INCOME.eliteComponentChance + 0.1 * e.mods.length ? 1 : 0;
-    if (this.cfg.run.collect({ credits, components })) {
+    const shards = boss ? RUN_INCOME.bossShards(this.cfg.tier.id) : e.elite && this.shardRand() < RUN_INCOME.eliteShardChance(e.mods.length) ? 1 : 0;
+    if (this.cfg.run.collect({ credits, components, shards })) {
       if (credits) uiEvents.emit('creditsGained', credits);
       if (components) uiEvents.emit('componentsGained', components);
+      if (shards) uiEvents.emit('alert', { text: `+${shards} RIFT SHARD${shards === 1 ? '' : 'S'}`, tone: 'blue' });
     }
     this.cfg.run.addKill();
     const at = e.center().clone();
@@ -2029,7 +2047,7 @@ export class Game {
       moves: this.movement.hud(),
       heat: this.weapon.heat / 100,
       overheated: this.weapon.overheated,
-      charge: this.weapon.def.mechanism === 'charge' || this.weapon.def.mechanism === 'cycle' ? this.weapon.charge : 0,
+      charge: this.weapon.def.mechanism === 'charge' || this.weapon.def.mechanism === 'cycle' || this.weapon.def.mechanism === 'salvo' ? this.weapon.charge : 0,
       dashCharges: this.player.dashCharges,
       dashMax: MOVE.dashCharges,
       dashRecharge: this.player.dashRecharge,

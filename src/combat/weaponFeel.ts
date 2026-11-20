@@ -28,6 +28,7 @@ const BASE: Record<WeaponFamily, ShotFeel> = {
   plasma: { yawKick: 0.35, punchFov: 0.012, punchRoll: 0.006, trauma: 0, flashTime: 0.06, flashScale: [1.0, 1.5], light: 4.2, recoverFiring: 8, recoverIdle: 16 },
   rail: { yawKick: 0.2, punchFov: 0.045, punchRoll: 0.018, trauma: 0.22, flashTime: 0.09, flashScale: [1.8, 2.6], light: 7, recoverFiring: 6, recoverIdle: 10 },
   beam: { yawKick: 0, punchFov: 0.002, punchRoll: 0.0015, trauma: 0, flashTime: 0.05, flashScale: [0.8, 1.1], light: 2.6, recoverFiring: 12, recoverIdle: 16 },
+  swarm: { yawKick: 0.15, punchFov: 0.008, punchRoll: 0.01, trauma: 0, flashTime: 0.07, flashScale: [0.9, 1.3], light: 3.2, recoverFiring: 10, recoverIdle: 16 },
 };
 
 /** Mechanism tweaks on top of the family profile. */
@@ -36,6 +37,7 @@ const MECH: Partial<Record<Mechanism, Partial<ShotFeel>>> = {
   scatter: { yawKick: 0.5, punchFov: 0.03, punchRoll: 0.014, trauma: 0.12, flashScale: [1.6, 2.2], light: 6 },
   pulse: { punchFov: 0.02, punchRoll: 0.008, trauma: 0.05, light: 4.8 },
   cycle: { punchFov: 0.03, trauma: 0.1 },
+  salvo: { punchFov: 0.024, punchRoll: 0.016, trauma: 0.08, flashScale: [1.3, 1.8], light: 5 },
 };
 
 /** Feel of one shot. `power` is the rail charge / burst factor (0..1+); heavier shots kick harder. */

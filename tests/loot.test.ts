@@ -51,7 +51,7 @@ describe('item generation (scenario B)', () => {
         expect(a.tier).toBeLessThanOrEqual(maxTierFor(it.level));
       }
       expect(new Set(it.affixes.map((a) => affixDef(a.id)!.group)).size).toBe(it.affixes.length);
-      expect(it.affixes.length).toBeLessThanOrEqual(r.affixes[1]);
+      expect(it.affixes.length).toBeLessThanOrEqual(r.affixes[1] + (r.id === 'ascended' ? 1 : 0));
       expect(isValidItem(it)).toBe(true);
     }
   });

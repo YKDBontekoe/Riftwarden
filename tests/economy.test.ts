@@ -66,7 +66,7 @@ function setup(stored: ItemInstance[] = [], res: Partial<SaveData['resources']> 
   const d = createDefaultSave(1);
   d.items.push(...stored);
   d.storage.uids.push(...stored.map((i) => i.uid));
-  d.resources = { salvage: 100000, credits: 100000, components: 1000, ...res };
+  d.resources = { salvage: 100000, credits: 100000, components: 1000, shards: 0, ...res };
   return d;
 }
 
@@ -86,7 +86,7 @@ describe('M4 economy foundation', () => {
   it('fresh profiles have credits, components and generated merchant stock', () => {
     const d = createDefaultSave(1);
     expect(d.version).toBe(SAVE_VERSION);
-    expect(d.resources).toEqual({ salvage: 0, credits: STARTING_CREDITS, components: 0 });
+    expect(d.resources).toEqual({ salvage: 0, credits: STARTING_CREDITS, components: 0, shards: 0 });
     expect(d.market.equipment.length).toBe(8);
     expect(d.market.modules.length).toBe(6);
     for (const e of [...d.market.equipment, ...d.market.modules]) {
@@ -136,7 +136,7 @@ describe('M4 economy foundation', () => {
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.migratedFrom).toBe(3);
-    expect(r.data.resources).toEqual({ salvage: 77, credits: STARTING_CREDITS, components: 0 });
+    expect(r.data.resources).toEqual({ salvage: 77, credits: STARTING_CREDITS, components: 0, shards: 0 });
     expect(r.data.items.find((i) => i.uid === w.uid)).toEqual(w);
     expect(r.data.market.equipment.length).toBe(8);
     expect(r.data.economy.tx).toEqual([]);
@@ -153,7 +153,7 @@ describe('M4 economy foundation', () => {
     const r = parseSave(`{"v":${SAVE_VERSION},"sum":"${checksum(body)}","data":${body}}`);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.data.resources).toEqual({ salvage: 0, credits: 0, components: 0 });
+    expect(r.data.resources).toEqual({ salvage: 0, credits: 0, components: 0, shards: 0 });
     const it = r.data.items[1];
     expect(it.enhance).toBe(MAX_ENHANCE[rarity(it.rarity).index]);
     expect(it.affixes.filter((a) => a.locked).length).toBe(it.affixes.length - 1);
@@ -637,7 +637,7 @@ describe('H: fabrication', () => {
     expect(craft(d, 'nope', 'standard').ok).toBe(false);
     expect(craft(d, 'w_rail', null).ok).toBe(false);
     expect(snap(d)).toBe(before);
-    d.resources = { salvage: 1e5, credits: 1e5, components: 100 };
+    d.resources = { salvage: 1e5, credits: 1e5, components: 100, shards: 0 };
     d.storage.capacity = d.storage.uids.length;
     expect(craft(d, 'w_rail', 'standard').ok).toBe(false); // storage full
     expect(craft(d, 'x_refine', null).ok).toBe(true); // materials need no bay

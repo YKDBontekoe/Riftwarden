@@ -25,6 +25,8 @@ export interface Pickup {
   root: TransformNode;
   holo: TransformNode;
   halo: AbstractMesh | null;
+  /** Ascended: a second, counter-rotating halo crossing the first and an outer ground ring. */
+  halo2: AbstractMesh | null;
   ring: AbstractMesh;
   flightT: number;
   from: Vector3;
@@ -99,6 +101,11 @@ export class LootField {
     k.part('cyl', this.P.graphite, root, { pos: [0, 0.03, 0], scale: [0.7, 0.05, 0.7], shadow: false });
     let halo: AbstractMesh | null = null;
     if (r.index >= 3) halo = k.part('torusThin', glow, holo, { scale: [0.9, 1, 0.9], rot: [Math.PI / 2.4, 0, 0], shadow: false });
+    let halo2: AbstractMesh | null = null;
+    if (r.id === 'ascended') {
+      halo2 = k.part('torusThin', glow, holo, { scale: [1.1, 1, 1.1], rot: [-Math.PI / 2.6, 0, 0.6], shadow: false });
+      k.part('torusThin', glow, root, { pos: [0, 0.04, 0], scale: [1.9, 1, 1.9], shadow: false });
+    }
     if (r.beam > 0) k.part('cyl', this.beam.get(r.id)!, root, { pos: [0, r.beam / 2, 0], scale: [0.12 + r.index * 0.03, r.beam, 0.12 + r.index * 0.03], shadow: false });
     const p: Pickup = {
       id: this.nextId++,
@@ -109,6 +116,7 @@ export class LootField {
       root,
       holo,
       halo,
+      halo2,
       ring,
       flightT: 0,
       from: from.clone(),
@@ -182,6 +190,7 @@ export class LootField {
       p.holo.position.set(0, HOLO_HEIGHT + Math.sin(p.t * 2.1) * 0.08, 0);
       p.holo.rotation.y += dt * 1.3;
       if (p.halo) p.halo.rotation.z += dt * 1.8;
+      if (p.halo2) p.halo2.rotation.z -= dt * 2.6;
       const pulse = 1.1 + Math.sin(p.t * 3) * 0.06;
       p.ring.scaling.set(pulse, 1, pulse);
       // Expiring soon: blink at 3 Hz.

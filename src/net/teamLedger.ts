@@ -4,8 +4,8 @@ import { RunLedger, type Rewards } from '../progression/run';
 export class TeamLedger extends RunLedger {
   members: () => RunLedger[] = () => [];
   override collect(r: Partial<Rewards>): boolean {
-    const res = super.collect({ salvage: r.salvage, credits: r.credits, components: r.components });
-    for (const m of this.members()) m.collect({ salvage: r.salvage, credits: r.credits, components: r.components });
+    const res = super.collect({ salvage: r.salvage, credits: r.credits, components: r.components, shards: r.shards });
+    for (const m of this.members()) m.collect({ salvage: r.salvage, credits: r.credits, components: r.components, shards: r.shards });
     return res;
   }
   override tick(dt: number): void {

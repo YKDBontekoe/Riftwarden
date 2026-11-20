@@ -3,6 +3,8 @@ import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { ProfileDatabase } from '../server/profileDatabase';
 import { bankRewards, beginRun, createDefaultSave, resolveInterruptedRun } from '../src/progression/save';
+import { generateItem } from '../src/loot/generate';
+import { generateUnique, uniqueDef } from '../src/loot/uniques';
 
 const testUrl = process.env.RIFT_TEST_DATABASE_URL;
 
@@ -48,8 +50,12 @@ describe.skipIf(!testUrl)('PostgreSQL profiles', () => {
     const accessory = structuredClone(data.market.equipment[0].item);
     Object.assign(accessory, { uid: 'accessory', category: 'accessory' });
     const stored = { ...structuredClone(data.market.modules[1].item), uid: 'stored-module' };
-    data.items.push(accessory, stored);
-    data.storage.uids.push(stored.uid);
+    // Loot depth: rift shards, a hand-made unique, an Ascended item and a Drone Swarm roll.
+    data.resources.shards = 37;
+    const unique = generateUnique(uniqueDef('crucible_choir')!, { uid: 'unique-choir', seed: 9, level: 14, source: 'test', now: 1 });
+    const ascended = generateItem({ uid: 'ascended-rail', seed: 4, level: 30, rarity: 'ascended', baseId: 'rail_lancer', source: 'test', now: 1 });
+    data.items.push(accessory, stored, unique, ascended);
+    data.storage.uids.push(stored.uid, unique.uid, ascended.uid);
     data.loadout.accessory2 = accessory.uid;
     data.presets[2].slots.accessory2 = accessory.uid;
     data.base.structure.floors['-8,0'] = 'floor';
@@ -71,11 +77,15 @@ describe.skipIf(!testUrl)('PostgreSQL profiles', () => {
     const loaded = await db.load('rich-profile');
     expect(loaded?.revision).toBe(0);
     expect(json(loaded?.data)).toEqual(json(data));
+    expect(loaded?.data.resources.shards).toBe(37);
+    expect(loaded?.data.items.find((i) => i.uid === 'unique-choir')?.uniqueId).toBe('crucible_choir');
+    expect(loaded?.data.items.find((i) => i.uid === 'unique-choir')?.weapon?.drones).toBe(unique.weapon!.drones);
+    expect(loaded?.data.items.find((i) => i.uid === 'ascended-rail')?.rarity).toBe('ascended');
 
     const next = structuredClone(data);
     next.base.placeables.reverse();
     next.storage.uids.length = 0;
-    next.items.pop();
+    next.items = next.items.filter((i) => !data.storage.uids.includes(i.uid));
     next.activeRun = null;
     next.resources.credits -= 4;
     await db.save([{ id: 'rich-profile', revision: 0, data: next, before: data }]);

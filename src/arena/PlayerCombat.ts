@@ -4,7 +4,7 @@ import { rollDamage } from '../combat/damage';
 import { elementPayload, procWeight } from '../combat/elements';
 import type { Director } from '../combat/Director';
 import type { CombatStats } from '../combat/stats';
-import { isChilled, speedFactor } from '../combat/status';
+import { isBurning, isChilled, isFrozen, speedFactor } from '../combat/status';
 import type { ShotOutcome, ShotRequest, SurfaceImpact, Weapon, WeaponFxHooks } from '../combat/Weapon';
 import type { WeaponFamily } from '../data/defs';
 import type { Enemy, EnemyManager } from '../enemies/EnemyManager';
@@ -43,6 +43,10 @@ export interface CombatHost {
   heat(): number;
   /** Current drone speed (m/s); dashes count as fast. */
   droneSpeed(): number;
+  /** Equipped unique gear effects of the drone firing right now (loot/uniques.ts `gear` ids). */
+  uniques(): ReadonlySet<string>;
+  /** Add a fraction (0..1) of a full ultimate charge to the drone firing right now. */
+  chargeUlt(fraction: number): void;
   hitstop(seconds: number, scale: number): void;
   /** Re-enter the (overridable) damage entry, used by Arc Conductor jumps. */
   damageEnemy(source: 'player' | 'turret', e: Enemy, base: number, point: Vector3, weak: boolean, turret?: Turret, family?: WeaponFamily | 'arc', from?: Vector3): void;
@@ -63,6 +67,7 @@ export class PlayerCombat {
   arcs = 0;
   private beamFxT = 0;
   private sigHits = 0;
+  private uHits = 0;
 
   constructor(private h: CombatHost) {}
 
@@ -81,7 +86,8 @@ export class PlayerCombat {
       }
       h.damageEnemy('player', s.enemy, dmg, s.point, s.weak, undefined, r.family);
       if (h.weapon.def.mechanism === 'pulse') this.pulseSplash(s.point, dmg, s.enemy);
-      dmg *= 0.85;
+      // Ninth Gate: pierced machines strengthen the slug instead of weakening it.
+      dmg *= h.signature() === 'u_ninthgate' ? 1.2 : 0.85;
     }
     return out;
   }
@@ -100,7 +106,9 @@ export class PlayerCombat {
         return;
       }
       const impact = () => this.impactFx(family, out, power);
-      if (family === 'plasma') {
+      if (family === 'swarm') {
+        wfx.seeker(from, out.point, speed, out.target === 'none' ? null : impact);
+      } else if (family === 'plasma') {
         wfx.bolt(from, out.point, speed, 0.34, out.target === 'none' ? null : impact);
       } else if (family === 'rail') {
         wfx.rail(from, out.point, power);
@@ -137,6 +145,11 @@ export class PlayerCombat {
         fx.burst('sparks', p, 14, undefined, 0.8);
         fx.debrisBurst(p, 3, 5, 0.6);
       } else if (family === 'beam') fx.burst('enemySpark', p, 4, undefined, 0.8);
+      else if (family === 'swarm') {
+        // Seeker detonation: a small energy pop on the hull.
+        fx.burst('sparks', p, 6, undefined, 0.55);
+        fx.burst('flash', p, 1, undefined, 0.22);
+      }
     }
   }
 
@@ -162,7 +175,9 @@ export class PlayerCombat {
       const sig = family !== 'arc' ? h.signature() : null;
       if (sig === 'overdrive' && h.heat() > 0.7) base *= 1.35;
       if (sig === 'phase' && (e.shield > 0 || e.armor > 0 || e.kind === 'enforcer' || e.kind === 'crawler')) base *= 1.8;
+      if (family !== 'arc') base *= uniqueHitMult(sig, h.uniques(), { weak: weakpoint, chilled: isChilled(e.status, 1), heat: h.heat(), dist: Vector3.Distance(h.player.eye, e.pos) });
     }
+    const wasFrozen = isFrozen(e.status);
     const roll = rollDamage(base, crit, weakpoint, Math.random, 'energy', source);
     const partsBefore = e.limbsLost;
     // Arc Conductor: a player hit may jump to the nearest other enemy (no chains of arcs).
@@ -177,7 +192,10 @@ export class PlayerCombat {
       const lost = LIMB_IDS.find((l) => hasLost(e.limbsLost, l) && !hasLost(partsBefore, l));
       if (lost) uiEvents.emit('limb', lost);
     }
-    if (family !== 'arc') this.signatureAfterHit(e, point, roll.amount, roll.crit, res);
+    if (family !== 'arc') {
+      this.signatureAfterHit(e, point, roll.amount, roll.crit, res);
+      this.uniqueAfterHit(e, point, roll.amount, roll.crit, weakpoint, wasFrozen, res);
+    }
     const kind = res.kind;
     if (res.killed && family !== 'arc') this.kill(e);
     uiEvents.emit('hit', kind);
@@ -203,6 +221,10 @@ export class PlayerCombat {
     p.chainAt = this.h.runTime;
     if (p.chain >= 2) uiEvents.emit('chain', p.chain);
     if (heavy) p.addTrauma(0.2);
+    // Unique gear: kill rewards.
+    const gear = this.h.uniques();
+    if (gear.has('u_mantle')) p.hp = Math.min(p.maxHp, p.hp + p.maxHp * 0.04);
+    if (gear.has('u_tailwind')) p.refundDash(0.5);
     // Kill flash: a white star and a short light where the machine dies.
     const c = e.center(KILL_AT);
     this.h.fx.burst('flash', c, 1, undefined, heavy ? 0.7 : 0.45);
@@ -244,6 +266,37 @@ export class PlayerCombat {
     }
   }
 
+  /** Unique mechanics that react to a landed weapon hit (weapon signatures + equipped gear). */
+  private uniqueAfterHit(e: Enemy, point: Vector3, amount: number, crit: boolean, weak: boolean, wasFrozen: boolean, res: { dealt: number; killed: boolean }): void {
+    const { director: d, player } = this.h;
+    const sig = this.h.signature();
+    const gear = this.h.uniques();
+    if (gear.has('u_lattice') && crit) this.h.chargeUlt(0.015);
+    if (gear.has('u_frostaegis') && res.dealt > 0 && isChilled(e.status, 1) && player.maxShield > 0) player.shield = Math.min(player.maxShield, player.shield + player.maxShield * 0.01);
+    if (!sig?.startsWith('u_')) return;
+    const src = { kind: 'effect' as const, id: `sig:${sig}` };
+    if (sig === 'u_heartbreaker' && weak && e.alive) {
+      for (let i = 0; i < 2; i++) d.inflict(e, { corrode: amount * 0.08 }, src, d.bus.newChain(), point);
+    } else if (sig === 'u_prismgaze' && ++this.uHits % 8 === 0) {
+      d.chainLightning({ from: point, first: null, skip: [e], count: 3, amount: amount * 1.2, falloff: 0.85, source: src, chain: d.bus.newChain(), shock: false });
+    } else if (sig === 'u_choir' && isBurning(e.status)) {
+      for (const o of d.enemiesNear(point, 3.5)) if (o !== e) d.inflict(o, { burn: Math.max(1, amount * 0.15) }, src, d.bus.newChain(), o.center(new Vector3()));
+      this.h.fx.ring(point, 3.5, 0.25, new Color3(3, 1.1, 0.2), false);
+    } else if (sig === 'u_juryrig' && this.h.heat() > 0.5 && Math.random() < 0.25) {
+      d.chainLightning({ from: point, first: null, skip: [e], count: 2, amount: amount * 0.6, falloff: 0.8, source: src, chain: d.bus.newChain() });
+    } else if (sig === 'u_rimebreath' && res.killed && wasFrozen) {
+      d.blast(point, 4, amount * 0.8, 'cryo', src, d.bus.newChain(), { falloff: 0.35, exclude: e, apply: { chill: 40 } });
+      d.explosionFx(point, 4, 'cryo');
+    } else if (sig === 'u_hivemother' && res.killed) {
+      const near = d.enemiesNear(point, 14).filter((o) => o !== e).sort((a, b) => Vector3.DistanceSquared(a.pos, point) - Vector3.DistanceSquared(b.pos, point)).slice(0, 2);
+      for (const o of near) {
+        const c = o.center(new Vector3());
+        this.h.wfx.seeker(point, c, 34, null);
+        d.deal({ target: o, amount: amount * 0.5, base: amount * 0.5, element: this.h.weapon.def.element, source: src, chain: d.bus.newChain(), point: c, from: point.clone() });
+      }
+    }
+  }
+
   /** Arc to the nearest other living enemy within ARC_RANGE of the struck one. */
   private arcFrom(src: Enemy, point: Vector3, amount: number): void {
     if (amount <= 0) return;
@@ -265,6 +318,19 @@ export class PlayerCombat {
     sfx.play('arc', { volume: 0.7 });
     this.h.damageEnemy('player', best, amount, to, false, undefined, 'arc');
   }
+}
+
+/**
+ * Damage multiplier of unique mechanics on one weapon hit (pure): Heartbreaker weakpoints, Rime Warden's Breath on
+ * chilled targets, Colossus Reactor Heart above 60% heat, Marksman's Monocle beyond 30 m.
+ */
+export function uniqueHitMult(sig: string | null, gear: ReadonlySet<string>, c: { weak: boolean; chilled: boolean; heat: number; dist: number }): number {
+  let k = 1;
+  if (sig === 'u_heartbreaker' && c.weak) k *= 1.7;
+  if (sig === 'u_rimebreath' && c.chilled) k *= 1.4;
+  if (gear.has('u_reactorheart') && c.heat > 0.6) k *= 1.3;
+  if (gear.has('u_monocle') && c.dist > 30) k *= 1.35;
+  return k;
 }
 
 /** The visible outcome of a traced shot: first enemy struck, else the wall, else the end of range. */

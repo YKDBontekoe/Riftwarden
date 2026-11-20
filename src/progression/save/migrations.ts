@@ -55,7 +55,7 @@ export const MIGRATIONS: Record<number, (data: Obj) => Obj> = {
   3: (d) => {
     const out: Obj = { ...d };
     const res = obj(d.resources);
-    out.resources = { salvage: res.salvage, credits: STARTING_CREDITS, components: 0 };
+    out.resources = { salvage: res.salvage, credits: STARTING_CREDITS, components: 0, shards: 0 };
     delete out.market;
     delete out.economy;
     return out;

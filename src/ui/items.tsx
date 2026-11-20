@@ -10,6 +10,7 @@ import { ImpactBanner, ImpactChips, statTooltip, useScore, VerdictTag } from './
 import { STAT_HELP } from './statHelp';
 import type { StatKey } from '../combat/stats';
 import { RARITIES, rarity } from '../loot/rarity';
+import { uniqueDef, uniqueSourceText } from '../loot/uniques';
 import { CATEGORY_LABEL, type Category, type ItemInstance } from '../loot/types';
 import { getSlot, type SlotId, SLOTS, slotsFor, defaultSlot } from '../progression/items';
 import { fmtNum } from '../combat/stats';
@@ -176,6 +177,7 @@ export function ItemDetail({ item, status }: { item: ItemInstance; status?: Entr
                 ENHANCED +{enhanceLevel(item)}/{maxEnhance(item)}
               </span>
             )}
+            {item.uniqueId && <span className="unique-tag">UNIQUE</span>}
             {item.locked && <span className="lock-tag">LOCKED</span>}
             {item.source === 'crafted' && <span className="src-tag">FABRICATED</span>}
             {item.source === 'merchant' && <span className="src-tag">MERCHANT STOCK</span>}
@@ -200,7 +202,15 @@ export function ItemDetail({ item, status }: { item: ItemInstance; status?: Entr
           })}
         </div>
       )}
-      {signatureDef(item.signature) && (
+      {uniqueDef(item.uniqueId) && (
+        <div className="id-block unique" data-testid="item-unique">
+          <div className="id-label">UNIQUE EFFECT</div>
+          <div className="sig-text">{uniqueDef(item.uniqueId)!.effect}</div>
+          <div className="unique-flavour">“{uniqueDef(item.uniqueId)!.flavour}”</div>
+          <div className="faint small">Drops from: {uniqueSourceText(uniqueDef(item.uniqueId)!)}</div>
+        </div>
+      )}
+      {signatureDef(item.signature) && !item.uniqueId && (
         <div className="id-block signature" data-testid="item-signature">
           <div className="id-label">SIGNATURE · {signatureDef(item.signature)!.exotic ? 'EXOTIC' : 'LEGENDARY'}</div>
           <div className="sig-name">{signatureDef(item.signature)!.name}</div>
@@ -231,7 +241,7 @@ export function ItemDetail({ item, status }: { item: ItemInstance; status?: Entr
   );
 }
 
-const MECH_LABEL: Record<string, string> = { auto: 'AUTOMATIC', burst: '3-ROUND BURST', charge: 'CHARGE & RELEASE', cycle: 'AUTO-CYCLE', beam: 'CONTINUOUS BEAM' };
+const MECH_LABEL: Record<string, string> = { auto: 'AUTOMATIC', burst: '3-ROUND BURST', charge: 'CHARGE & RELEASE', cycle: 'AUTO-CYCLE', beam: 'CONTINUOUS BEAM', scatter: 'SCATTER', pulse: 'PULSE', swarm: 'HIVE RELEASE', salvo: 'SALVO LOCK' };
 
 /** Weapon readout: family, firing mechanism, effective numbers, generated components and sockets. */
 export function WeaponBlock({ item, compact }: { item: ItemInstance; compact?: boolean }) {
@@ -247,7 +257,7 @@ export function WeaponBlock({ item, compact }: { item: ItemInstance; compact?: b
           {fam.label.toUpperCase()} · {MECH_LABEL[w.mechanism] ?? w.mechanism} <ElementTag element={w.element} long />
         </div>
         <div className="id-row">
-          <span>{w.mechanism === 'pulse' ? 'Damage / pulse (splash 60%) · pulses/s' : w.mechanism === 'scatter' ? 'Damage / pellet ×7 · shots/s' : w.family === 'beam' ? 'Damage / tick · ticks/s' : w.family === 'rail' && w.mechanism === 'charge' ? 'Damage (full charge) · cycle' : 'Damage / shot · fire rate'}</span>
+          <span>{w.mechanism === 'pulse' ? 'Damage / pulse (splash 60%) · pulses/s' : w.mechanism === 'scatter' ? 'Damage / pellet ×7 · shots/s' : w.mechanism === 'salvo' ? 'Damage / drone · salvos/s' : w.family === 'swarm' ? 'Damage / drone · launches/s' : w.family === 'beam' ? 'Damage / tick · ticks/s' : w.family === 'rail' && w.mechanism === 'charge' ? 'Damage (full charge) · cycle' : 'Damage / shot · fire rate'}</span>
           <b>
             {fmtNum(w.damage)} · {fmtNum(w.fireRate)}/s
           </b>
@@ -276,6 +286,14 @@ export function WeaponBlock({ item, compact }: { item: ItemInstance; compact?: b
             <b>
               {w.mechanism === 'charge' ? `${fmtNum(w.chargeTime)} s · ` : ''}
               {w.pierce} extra target{w.pierce === 1 ? '' : 's'}
+            </b>
+          </div>
+        )}
+        {w.family === 'swarm' && (
+          <div className="id-row">
+            <span>{w.mechanism === 'salvo' ? 'Drones (tap → full lock) · lock cone' : 'Drones / launch · lock cone'}</span>
+            <b>
+              {w.mechanism === 'salvo' ? `${Math.max(1, Math.round(w.drones * 0.6))} → ${w.drones * 3}` : w.drones} · {fmtNum(ws.lockCone)}°
             </b>
           </div>
         )}

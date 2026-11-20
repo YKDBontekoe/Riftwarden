@@ -96,7 +96,8 @@ export interface SaveData {
   version: number;
   profile: { id: string; callsign: string; createdAt: number; lastSavedAt: number };
   /** Persistent resources (M4: credits = trade currency, components = advanced components). */
-  resources: { salvage: number; credits: number; components: number };
+  /** shards: rift shards (Ascended crafting); absent in older saves = 0 (sanitize fills it, no version bump). */
+  resources: { salvage: number; credits: number; components: number; shards: number };
   /** Every owned item. Each uid is either equipped (loadout) or in storage, never both. */
   items: ItemInstance[];
   /** Storage holds every owned item that is not equipped. `expansions` were bought with salvage. */

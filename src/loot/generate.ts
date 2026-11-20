@@ -5,7 +5,7 @@ import { AFFIXES, type AffixDef, affixPool, MAX_TIER, type Scaling, TIER_MULT } 
 import { type BaseDef, baseDef, BASES, basesFor } from './bases';
 import { type RarityDef, type RarityId, rarity } from './rarity';
 import type { Category, ItemInstance, RolledAffix, RolledStat, WeaponRoll } from './types';
-import { buildEffects, rollBuild } from '../weapons/build';
+import { buildEffects, DEFAULT_PARTS, rollBuild } from '../weapons/build';
 import { rollElement } from '../combat/elements';
 
 /**
@@ -146,10 +146,10 @@ export function generateItem(spec: GenSpec): ItemInstance {
       build = rollBuild(mulberry32((spec.seed ^ 0x5bd1e995) >>> 0), w.family, base.id, fixed === undefined ? r.index : 0, sockets);
       if (fixed !== undefined) {
         // Starter-grade kit: plain default components.
-        build.barrel = w.family === 'plasma' ? 'pb_single' : w.family === 'rail' ? 'rb_open' : 'be_lens';
+        build.barrel = DEFAULT_PARTS[w.family].barrel;
         build.core = 'co_cell';
         build.cooling = 'cl_fins';
-        build.mechanism = w.family === 'plasma' ? 'mc_auto' : w.family === 'rail' ? 'mc_charge' : 'mc_beam';
+        build.mechanism = DEFAULT_PARTS[w.family].mechanism;
         build.attachments = [];
         build.finish = 'arctic';
         build.params = { length: 0.5, bulk: 0.5, hue: 0.5 };
@@ -164,6 +164,10 @@ export function generateItem(spec: GenSpec): ItemInstance {
       weapon.accuracy = Math.round(e.accuracy * 100) / 100;
       weapon.pierce = t.pierce + e.pierce;
       if (w.family === 'rail') weapon.chargeTime = Math.round(t.chargeTime * e.chargeTime * 100) / 100;
+      if (w.family === 'swarm') {
+        weapon.drones = t.drones + e.drones;
+        weapon.seekCone = Math.round(t.seekCone * e.seekCone * 1000) / 1000;
+      }
       if (w.family === 'beam') {
         weapon.beamWidth = Math.round(t.beamWidth * e.beamWidth * 100) / 100;
         weapon.rampMax = Math.round(t.rampMax * e.rampMax * 100) / 100;
@@ -195,6 +199,13 @@ export function generateItem(spec: GenSpec): ItemInstance {
       tier = Math.min(maxTier, Math.max(1, tier));
       affixes.push(rollAffix(a, tier, qualityRoll(rand, r), level, r));
     }
+  }
+
+  // Ascended: one extra affix at the level's top tier with a perfect roll (consumes the stream only for ascended).
+  if (fixed === undefined && r.id === 'ascended') {
+    const used = new Set<string>([...base.implicit.map((s) => groupOfStat(s.stat)), ...affixes.map((a) => AFFIXES.find((x) => x.id === a.id)?.group ?? '')]);
+    const a = pickWeighted(affixPool(base.category, used, base.affixes), (x) => x.weights[base.category] ?? 0, rand);
+    if (a) affixes.push(rollAffix(a, maxTierFor(level), 1, level, r));
   }
 
   const item: ItemInstance = {
@@ -271,7 +282,7 @@ export function nameItem(item: ItemInstance, base: BaseDef, rand: () => number):
       return `${maker} ${adj ? `${adj} ` : ''}${noun} Mk ${ROMAN[Math.min(4, (top?.tier ?? 1) - 1)]}`;
     default: {
       const ep = EPITHETS[Math.floor(rand() * EPITHETS.length)];
-      return `${adj ? `${adj} ` : ''}${noun} "${ep}"`;
+      return `${r.id === 'ascended' ? 'Ascended ' : ''}${adj ? `${adj} ` : ''}${noun} "${ep}"`;
     }
   }
 }

@@ -57,6 +57,17 @@ export const CURRENCIES: Record<CurrencyKey, CurrencyInfo> = {
     spent: 'Advanced work: affix rerolls, component refits, higher fabrication grades, tower research.',
     banking: 'Unsecured during an operation: banked at every 5-wave checkpoint, lost on defeat.',
   },
+  shards: {
+    key: 'shards',
+    name: 'Rift Shards',
+    short: 'shards',
+    icon: '⟡',
+    cls: 'res-sh',
+    persistent: true,
+    earned: 'Elites, bosses, elite caches, high-value targets and checkpoints on threat tier III and above.',
+    spent: 'Ascension: turning an Exotic into an Ascended item at the engineering workshop.',
+    banking: 'Unsecured during an operation: banked at every 5-wave checkpoint, lost on defeat.',
+  },
   xp: {
     key: 'xp',
     name: 'Warden XP',
