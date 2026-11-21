@@ -5,6 +5,8 @@ import { getTier } from '@riftwarden/rules/progression/tiers';
 import { type BannerEvent, uiEvents } from '@riftwarden/game/ui/store';
 import { useHud } from '../useHud';
 import { BoundKey, Key, SegBar, fmtClock } from './widgets';
+import { LiveBar, LiveText, useLiveStyle } from './live';
+import type { HudState } from '@riftwarden/game/ui/store';
 
 export function Overlays() {
   const tactical = useHud((s) => s.tacticalActive);
@@ -40,19 +42,19 @@ export function Overlays() {
   );
 }
 
+const reactorOf = (s: HudState) => s.reactorHp / s.reactorMax;
+const hullOf = (s: HudState) => s.playerHp / Math.max(1, s.playerMax);
+const phaseDetail = (s: HudState) => (s.phase === 'prep' ? fmtClock(Math.ceil(s.phaseTimer)) : s.phase === 'combat' ? `${s.enemiesLeft} HOSTILE${s.enemiesLeft === 1 ? '' : 'S'}` : '—');
+
 export function TopCenter() {
   const wave = useHud((s) => s.wave);
   const phase = useHud((s) => s.phase);
-  const timer = useHud((s) => Math.ceil(s.phaseTimer));
-  const left = useHud((s) => s.enemiesLeft);
-  const reactor = useHud((s) => s.reactorHp / s.reactorMax);
+  const critical = useHud((s) => s.reactorHp / s.reactorMax < 0.3);
   const hit = useHud((s) => s.reactorUnderAttack);
   const survival = useHud((s) => s.mode === 'survival');
-  const hull = useHud((s) => s.playerHp / Math.max(1, s.playerMax));
   const phaseText = phase === 'prep' ? 'PREPARATION' : phase === 'combat' ? 'ENGAGED' : 'SECURED';
-  const tone = reactor < 0.3 ? 'red' : reactor < 0.6 ? 'amber' : 'cyan';
   return (
-    <div className={`top-center ${hit ? 'hit' : ''} ${reactor < 0.3 ? 'critical' : ''}`}>
+    <div className={`top-center ${hit ? 'hit' : ''} ${critical ? 'critical' : ''}`}>
       <div className="wave-row">
         <div className="wave-tag">
           <span>WAVE</span>
@@ -61,25 +63,25 @@ export function TopCenter() {
         <div className={`phase-pill ${phase}`}>
           <i />
           {phaseText}
-          <em>{phase === 'prep' ? fmtClock(timer) : phase === 'combat' ? `${left} HOSTILE${left === 1 ? '' : 'S'}` : '—'}</em>
+          <LiveText as="em" select={phaseDetail} />
         </div>
       </div>
       {survival ? (
         <div className="reactor survival-mode" data-testid="survival-banner">
           <div className="reactor-label">
             <span>SURVIVAL · HUNTED · ONE LIFE</span>
-            <b>{Math.ceil(hull * 100)}%</b>
+            <LiveText as="b" select={(s) => `${Math.ceil(hullOf(s) * 100)}%`} />
           </div>
-          <SegBar value={hull} tone={hull < 0.3 ? 'red' : hull < 0.6 ? 'amber' : 'white'} segments={30} className="big" />
+          <LiveBar select={(s) => ({ value: hullOf(s), tone: hullOf(s) < 0.3 ? 'red' : hullOf(s) < 0.6 ? 'amber' : 'white' })} segments={30} className="big" />
         </div>
       ) : (
       <div className="reactor">
         <div className="reactor-label">
           <span>REACTOR INTEGRITY</span>
           {hit && <span className="alert">▲ UNDER ATTACK</span>}
-          <b>{Math.ceil(reactor * 100)}%</b>
+          <LiveText as="b" select={(s) => `${Math.ceil(reactorOf(s) * 100)}%`} />
         </div>
-        <SegBar value={reactor} tone={tone} segments={30} className="big" />
+        <LiveBar select={(s) => ({ value: reactorOf(s), tone: reactorOf(s) < 0.3 ? 'red' : reactorOf(s) < 0.6 ? 'amber' : 'cyan' })} segments={30} className="big" />
       </div>
       )}
     </div>
@@ -87,7 +89,6 @@ export function TopCenter() {
 }
 
 export function Cores() {
-  const cores = useHud((s) => s.cores);
   const [gains, setGains] = useState<{ id: number; v: number }[]>([]);
   const [bump, setBump] = useState(0);
   useEffect(() => {
@@ -106,9 +107,7 @@ export function Cores() {
         <path d="M3 9 H21 M12 2 L8 9 L12 22 L16 9 Z" className="facet" />
       </svg>
       <div className="cores-text">
-        <div key={bump} className="value">
-          {Math.floor(cores)}
-        </div>
+        <LiveText key={bump} as="div" className="value" select={(s) => Math.floor(s.cores)} />
         <div className="label">CORES</div>
       </div>
       <div className="gains">
@@ -178,31 +177,29 @@ export function RunPanel() {
 }
 
 export function PlayerPanel() {
-  const hp = useHud((s) => s.playerHp);
-  const max = useHud((s) => s.playerMax);
-  const sh = useHud((s) => s.playerShield);
-  const shMax = useHud((s) => s.playerShieldMax);
+  const low = useHud((s) => s.playerHp / s.playerMax < 0.35);
+  const max = useHud((s) => Math.round(s.playerMax));
+  const hasShield = useHud((s) => s.playerShieldMax > 0);
   const charges = useHud((s) => s.dashCharges);
   const dashMax = useHud((s) => s.dashMax);
-  const rech = useHud((s) => s.dashRecharge);
-  const f = hp / max;
+  const recharge = useLiveStyle((s) => s.dashRecharge, (st, v) => (st.transform = `scaleX(${v})`));
   return (
-    <div className={`bottom-left panel-frame ${f < 0.35 ? 'low' : ''}`}>
+    <div className={`bottom-left panel-frame ${low ? 'low' : ''}`}>
       <div className="vitals">
         <div className="hp-num">
-          <b>{Math.ceil(hp)}</b>
-          <span>/{Math.round(max)}</span>
+          <LiveText as="b" select={(s) => Math.ceil(s.playerHp)} />
+          <span>/{max}</span>
         </div>
         <div className="vitals-right">
           <div className="label">DRONE INTEGRITY</div>
-          <SegBar value={f} tone={f < 0.35 ? 'red' : 'white'} segments={10} className="big" />
+          <LiveBar select={(s) => ({ value: s.playerHp / s.playerMax, tone: s.playerHp / s.playerMax < 0.35 ? 'red' : 'white' })} segments={10} className="big" />
         </div>
       </div>
-      {shMax > 0 && (
+      {hasShield && (
         <div className="shield-row">
           <span className="label">SHIELD</span>
-          <SegBar value={sh / shMax} tone="cyan" segments={12} />
-          <b>{Math.ceil(sh)}</b>
+          <LiveBar select={(s) => ({ value: s.playerShield / Math.max(1, s.playerShieldMax), tone: 'cyan' })} segments={12} />
+          <LiveText as="b" select={(s) => Math.ceil(s.playerShield)} />
         </div>
       )}
       <div className="dash">
@@ -212,7 +209,7 @@ export function PlayerPanel() {
         <div className="chevrons">
           {Array.from({ length: dashMax }, (_, i) => (
             <span key={i} className={`chev ${i < charges ? 'full' : ''}`}>
-              {i === charges && <i style={{ transform: `scaleX(${rech})` }} />}
+              {i === charges && <i ref={recharge} />}
             </span>
           ))}
         </div>
@@ -223,28 +220,35 @@ export function PlayerPanel() {
 }
 
 /** Grapple and ground pound cooldowns (slide and wall-run have no cooldown worth showing). */
-function MoveRow() {
-  const m = useHud((s) => s.moves);
-  const chip = (label: string, action: string, cd: number, max: number, on: boolean) => (
-    <span className={`mv-chip ${on ? 'active' : cd > 0 ? 'cooling' : 'ready'}`}>
+function MoveChip({ label, action, kind }: { label: string; action: string; kind: 'grapple' | 'pound' }) {
+  const max = (s: HudState) => (kind === 'grapple' ? s.moves.grappleMax : s.moves.poundMax);
+  const cd = (s: HudState) => (kind === 'grapple' ? s.moves.grapple : s.moves.pound);
+  const state = useHud((s) => (s.moves.state === kind ? 'active' : cd(s) > 0 ? 'cooling' : 'ready'));
+  const fill = useLiveStyle((s) => (max(s) > 0 ? Math.max(0, Math.min(1, 1 - cd(s) / max(s))) : 1), (st, v) => (st.transform = `scaleX(${v})`));
+  return (
+    <span className={`mv-chip ${state}`}>
       <BoundKey action={action} /> {label}
-      <i style={{ transform: `scaleX(${max > 0 ? Math.max(0, Math.min(1, 1 - cd / max)) : 1})` }} />
+      <i ref={fill} />
     </span>
   );
+}
+
+function MoveRow() {
+  const state = useHud((s) => s.moves.state);
   return (
     <div className="move-row">
-      {chip('GRAPPLE', 'grapple', m.grapple, m.grappleMax, m.state === 'grapple')}
-      {chip('POUND', 'slide', m.pound, m.poundMax, m.state === 'pound')}
-      {m.state === 'slide' && <b className="mv-state">SLIDE</b>}
-      {m.state === 'wall' && <b className="mv-state">WALL-RUN</b>}
+      <MoveChip label="GRAPPLE" action="grapple" kind="grapple" />
+      <MoveChip label="POUND" action="slide" kind="pound" />
+      {state === 'slide' && <b className="mv-state">SLIDE</b>}
+      {state === 'wall' && <b className="mv-state">WALL-RUN</b>}
     </div>
   );
 }
 
 export function CenterPanel() {
-  const tac = useHud((s) => s.tactical);
   const active = useHud((s) => s.tacticalActive);
   const min = useHud((s) => s.tacticalMin);
+  const low = useHud((s) => s.tactical < s.tacticalMin);
   const build = useHud((s) => s.buildMode);
   const valid = useHud((s) => s.buildValid);
   const msg = useHud((s) => s.buildMessage);
@@ -326,13 +330,13 @@ export function CenterPanel() {
           {inspect.recycle > 0 && <SegBar value={inspect.recycle} tone="amber" segments={12} />}
         </div>
       )}
-      <div className={`tactical ${active ? 'active' : ''} ${tac < min && !active ? 'low' : ''}`}>
+      <div className={`tactical ${active ? 'active' : ''} ${low && !active ? 'low' : ''}`}>
         <div className="tac-label">
           <BoundKey action="tactical" />
           <span>TACTICAL</span>
-          <em>{active ? 'TIME DILATED' : tac < min ? 'RECHARGING' : 'READY'}</em>
+          <em>{active ? 'TIME DILATED' : low ? 'RECHARGING' : 'READY'}</em>
         </div>
-        <SegBar value={tac} tone="violet" segments={24} marker={min} />
+        <LiveBar select={(s) => ({ value: s.tactical, tone: 'violet' })} segments={24} marker={min} />
       </div>
     </div>
   );
@@ -340,24 +344,49 @@ export function CenterPanel() {
 
 const ABILITY_KEY = { ability: 'RMB', ability2: 'F', ultimate: 'T' } as const;
 
+type AbilityRow = HudState['abilities'][number];
+
+/** One ability slot: structure from React (name, slot), cooldown text and fill from the live snapshot. */
+function AbilitySlot({ slot, name }: { slot: AbilityRow['slot']; name: string }) {
+  const ult = slot === 'ultimate';
+  const row = (s: HudState) => s.abilities.find((r) => r.slot === slot);
+  const state = useHud((s) => {
+    const r = row(s);
+    return !r ? 'cooling' : r.active > 0 ? 'active' : r.ready ? 'ready' : 'cooling';
+  });
+  const fill = useLiveStyle(
+    (s) => {
+      const r = row(s);
+      return r ? Math.max(0, Math.min(1, ult ? r.cd : r.max > 0 ? 1 - r.cd / r.max : 1)) : 0;
+    },
+    (st, v) => (st.transform = `scaleX(${v})`),
+  );
+  return (
+    <div className={`ab-slot ${ult ? 'ult' : ''} ${state}`} title={name}>
+      <kbd>{ABILITY_KEY[slot]}</kbd>
+      <span className="ab-name">{name}</span>
+      <LiveText
+        className="ab-state"
+        select={(s) => {
+          const r = row(s);
+          return !r ? '' : r.active > 0 ? `${r.active.toFixed(1)}s` : r.ready ? 'READY' : ult ? `${Math.floor(r.cd * 100)}%` : `${r.cd.toFixed(1)}s`;
+        }}
+      />
+      <i className="ab-fill" ref={fill} />
+    </div>
+  );
+}
+
 /** Ability I/II cooldowns and the ultimate charge, stacked above the weapon card. */
 function AbilityBar() {
-  const rows = useHud((s) => s.abilities);
-  if (!rows.length) return null;
+  // Re-renders only when the set of slots (or their names) changes.
+  const slots = useHud((s) => s.abilities.map((r) => `${r.slot}:${r.name}`).join('|'));
+  if (!slots) return null;
   return (
     <div className="ability-bar">
-      {rows.map((r) => {
-        const ult = r.slot === 'ultimate';
-        const fill = ult ? r.cd : r.max > 0 ? 1 - r.cd / r.max : 1;
-        const state = r.active > 0 ? 'active' : r.ready ? 'ready' : 'cooling';
-        return (
-          <div key={r.slot} className={`ab-slot ${ult ? 'ult' : ''} ${state}`} title={r.name}>
-            <kbd>{ABILITY_KEY[r.slot]}</kbd>
-            <span className="ab-name">{r.name}</span>
-            <span className="ab-state">{r.active > 0 ? `${r.active.toFixed(1)}s` : r.ready ? 'READY' : ult ? `${Math.floor(r.cd * 100)}%` : `${r.cd.toFixed(1)}s`}</span>
-            <i className="ab-fill" style={{ transform: `scaleX(${Math.max(0, Math.min(1, fill))})` }} />
-          </div>
-        );
+      {slots.split('|').map((k) => {
+        const [slot, ...name] = k.split(':');
+        return <AbilitySlot key={slot} slot={slot as AbilityRow['slot']} name={name.join(':')} />;
       })}
     </div>
   );
@@ -368,7 +397,6 @@ export function WeaponPanel() {
   const holster = useHud((s) => s.holster);
   const element = useHud((s) => s.weaponElement);
   const aff = useHud((s) => s.weaponAff);
-  const heat = useHud((s) => s.heat);
   const hot = useHud((s) => s.overheated);
   const build = useHud((s) => s.buildMode);
   const survival = useHud((s) => s.mode === 'survival');
@@ -382,8 +410,8 @@ export function WeaponPanel() {
           {aff !== 0 && <span className={`el-aff ${aff > 0 ? 'weak' : 'resist'}`} title={aff > 0 ? 'This sector\'s faction is weak to this element' : 'This sector\'s faction resists this element'}>{aff > 0 ? '▲ WEAK' : '▼ RESIST'}</span>}
           <span className="ammo">∞</span>
         </div>
-        <SegBar value={heat} tone={hot ? 'red' : heat > 0.7 ? 'amber' : 'heat'} segments={20} />
-        <div className={`label heat-label ${hot ? 'warn' : ''}`}>{hot ? 'OVERHEATED · VENTING' : `HEAT ${Math.round(heat * 100)}%`}</div>
+        <LiveBar select={(s) => ({ value: s.heat, tone: s.overheated ? 'red' : s.heat > 0.7 ? 'amber' : 'heat' })} segments={20} />
+        <LiveText as="div" className={`label heat-label ${hot ? 'warn' : ''}`} select={(s) => (s.overheated ? 'OVERHEATED · VENTING' : `HEAT ${Math.round(s.heat * 100)}%`)} />
         {holster && (
           <div className={`wc-holster ${holster.overheated ? 'warn' : ''}`}>
             <BoundKey action="swap" />
@@ -447,10 +475,10 @@ export function Hint() {
 }
 
 export function Respawn() {
-  const t = useHud((s) => s.respawnIn);
+  const down = useHud((s) => s.respawnIn > 0);
   const survival = useHud((s) => s.mode === 'survival');
   const team = useHud((s) => !!s.coop);
-  if (t <= 0) return null;
+  if (!down) return null;
   if (survival)
     return (
       <div className="respawn">
@@ -466,7 +494,7 @@ export function Respawn() {
         DRONE DISABLED
       </div>
       <div className="reboot">
-        REBOOTING <b>{t.toFixed(1)}s</b>
+        REBOOTING <LiveText as="b" select={(s) => `${s.respawnIn.toFixed(1)}s`} />
       </div>
       <small>Turrets remain online</small>
     </div>

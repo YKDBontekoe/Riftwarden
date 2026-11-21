@@ -1,11 +1,12 @@
 import { LoadingScreen } from './LoadingScreen';
 import { AccountPanel } from '../account/AccountPanel';
 import { BoundKey } from './hud/widgets';
-import { CoopPanel, urlJoinCode } from './Coop';
+import { CoopPanel } from './Coop';
+import { MENU_SECTIONS, type MenuSection, useMenuSection } from './router';
 import { SettingsPanel } from './SettingsPanel';
 import { ConstructionPanel } from './Construction';
 import { ClientGame } from '@riftwarden/game/net/ClientGame';
-import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { Flow } from '../core/Flow';
 import type { Game } from '@riftwarden/game/core/Game';
 import type { RunResult } from '@riftwarden/rules/progression/run';
@@ -136,20 +137,14 @@ function Controls() {
   );
 }
 
-const MENU_SECTIONS = {
-  briefing: 'Briefing',
-  'co-op': 'Co-op',
-  account: 'Account',
-  settings: 'Settings',
-  controls: 'Controls',
-} as const;
-
 function MainMenu({ flow }: { flow: Flow }) {
-  const [tab, setTab] = useState<keyof typeof MENU_SECTIONS | null>(urlJoinCode() ? 'co-op' : null);
+  const [tab, setTab] = useMenuSection();
   const save = useSave(flow);
   const tier = getTier(save.threat.selected);
+  const close = useRef(setTab);
+  close.current = setTab;
   useEffect(() => {
-    const dismiss = (event: KeyboardEvent) => { if (event.key === 'Escape') setTab(null); };
+    const dismiss = (event: KeyboardEvent) => { if (event.key === 'Escape') close.current(null); };
     document.addEventListener('keydown', dismiss);
     return () => document.removeEventListener('keydown', dismiss);
   }, []);
@@ -160,7 +155,7 @@ function MainMenu({ flow }: { flow: Flow }) {
           <Insignia /><span>Sector 07</span>
         </button>
         <nav className="menu-nav" aria-label="Main menu">
-          {(Object.keys(MENU_SECTIONS) as (keyof typeof MENU_SECTIONS)[]).map((section) => (
+          {(Object.keys(MENU_SECTIONS) as MenuSection[]).map((section) => (
             <button key={section} aria-pressed={tab === section} onClick={() => setTab(tab === section ? null : section)}>
               {MENU_SECTIONS[section].toUpperCase()}
             </button>

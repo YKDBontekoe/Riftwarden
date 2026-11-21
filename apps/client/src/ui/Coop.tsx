@@ -8,6 +8,7 @@ import { rarity } from '@riftwarden/rules/loot/rarity';
 import { THREAT_TIERS } from '@riftwarden/rules/progression/tiers';
 import { SLOT_CSS } from '@riftwarden/game/visuals/droneModel';
 import { useSave } from './App';
+import { inviteCode } from './router';
 import { useAccount } from '../account/store';
 
 function useNet(flow: Flow): NetState | null {
@@ -30,9 +31,9 @@ function useNet(flow: Flow): NetState | null {
   return s;
 }
 
-/** Join code from the page URL (?join=CODE), used once. */
+/** Join code from an invite link (#/join/CODE or ?join=CODE). */
 export function urlJoinCode(): string {
-  return normalizeCode(new URLSearchParams(location.search).get('join') ?? '');
+  return normalizeCode(inviteCode());
 }
 
 /**
@@ -109,7 +110,7 @@ export function CoopPanel({ flow, compact }: { flow: Flow; compact?: boolean }) 
     );
   }
 
-  const link = `${location.origin}${location.pathname}?join=${lobby.code}`;
+  const link = `${location.origin}${location.pathname}#/join/${lobby.code}`;
   const allReady = lobby.players.filter((p) => p.connected && !p.host).every((p) => p.ready);
   const tier = THREAT_TIERS.find((t) => t.id === lobby.tier) ?? THREAT_TIERS[0];
   return (

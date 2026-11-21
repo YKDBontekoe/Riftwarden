@@ -7,13 +7,13 @@ import { Engine } from '@babylonjs/core/Engines/engine';
 import { createRoot } from 'react-dom/client';
 import { Flow } from './core/Flow';
 import { loadSettings } from '@riftwarden/game/core/settings';
-import { App } from './ui/App';
+import { createAppRouter, Root } from './ui/router';
 
 // The game: Babylon, Havok, the simulation and the React app. Loaded by main.tsx right after the shell.
 export async function boot(): Promise<void> {
   const root = createRoot(document.getElementById('ui')!);
   let flow: Flow | null = null;
-  root.render(<App getFlow={() => flow} />);
+  root.render(<Root router={createAppRouter(() => flow)} />);
 
   const canvas = document.getElementById('game') as HTMLCanvasElement;
   const engine = new Engine(canvas, true, { stencil: true, preserveDrawingBuffer: false, powerPreference: 'high-performance' });

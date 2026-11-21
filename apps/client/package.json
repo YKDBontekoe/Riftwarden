@@ -19,10 +19,14 @@
     "@riftwarden/protocol": "workspace:*",
     "@riftwarden/rules": "workspace:*",
     "react": "catalog:",
-    "react-dom": "catalog:"
+    "react-dom": "catalog:",
+    "@preact/signals-core": "catalog:",
+    "@tanstack/react-router": "catalog:"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "catalog:",
-    "vite": "catalog:"
+    "vite": "catalog:",
+    "tailwindcss": "catalog:",
+    "@tailwindcss/vite": "catalog:"
   }
 }

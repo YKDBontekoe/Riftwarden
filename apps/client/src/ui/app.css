@@ -1,0 +1,43 @@
+/* Styles entry (architecture v2 section 11). Tailwind v4 without preflight: the existing panels were designed on
+   browser defaults, which preflight would reset. Layer order: Tailwind's theme, the hand-written component styles
+   (style.css, migrated to utilities panel by panel), then utilities, so a utility always wins over a component rule. */
+@layer theme, components, utilities;
+@import 'tailwindcss/theme.css' layer(theme);
+@import './style.css' layer(components);
+@import 'tailwindcss/utilities.css' layer(utilities);
+
+/* Design tokens: the colours and fonts of style.css's :root, usable as utilities (text-cyan, bg-glass, font-mono...). */
+@theme inline {
+  --color-cyan: var(--cyan);
+  --color-cyan-2: var(--cyan-2);
+  --color-cyan-dim: var(--cyan-dim);
+  --color-orange: var(--orange);
+  --color-amber: var(--amber);
+  --color-red: var(--red);
+  --color-violet: var(--violet);
+  --color-ink: var(--white);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-glass: var(--glass);
+  --color-line: var(--line);
+  --color-ok: #7ee2a8;
+  --color-bad: #ff8a7a;
+  --color-gold: #f0b85a;
+  --font-sans: var(--font);
+  --font-display: var(--display);
+  --font-mono: var(--mono);
+}
+
+/* Shared control look for account forms (inputs are styled per panel in style.css elsewhere). */
+@utility field-input {
+  background: rgb(0 0 0 / 0.35);
+  border: 1px solid rgb(255 255 255 / 0.18);
+  color: inherit;
+  padding: 8px 10px;
+  font: inherit;
+}
+
+@utility caps {
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}

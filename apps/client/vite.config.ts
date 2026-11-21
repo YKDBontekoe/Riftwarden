@@ -1,4 +1,5 @@
 import { fileURLToPath } from 'node:url';
+import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 
@@ -8,7 +9,7 @@ const gateway = process.env.RIFT_GATEWAY ?? 'http://localhost:8090';
 
 export default defineConfig({
   base: './',
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   optimizeDeps: { exclude: ['@babylonjs/havok'] },
   // Co-op: the dev server proxies /ws and /war to the co-op server (pnpm server) so the client always uses same-origin URLs.
   server: { proxy: { '/ws': { target: `ws://localhost:${port}`, ws: true }, '/war': { target: gateway }, '/auth': { target: gateway }, '/session': { target: gateway.replace(/^http/, 'ws'), ws: true } } },
