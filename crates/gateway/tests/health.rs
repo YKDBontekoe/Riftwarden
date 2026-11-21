@@ -8,14 +8,7 @@ use tower::ServiceExt;
 fn test_config() -> Option<Config> {
     let database_url = std::env::var("RIFT_TEST_DATABASE_URL").ok()?;
     let redis_url = std::env::var("RIFT_TEST_REDIS_URL").ok()?;
-    Some(Config {
-        listen: "127.0.0.1:0".parse().unwrap(),
-        database_url,
-        database_max_connections: 2,
-        redis_url,
-        build: "test".into(),
-        json_logs: false,
-    })
+    Some(Config::for_tests(database_url, redis_url))
 }
 
 #[tokio::test]

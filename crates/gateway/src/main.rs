@@ -1,7 +1,7 @@
 //! Gateway binary: configuration, telemetry, serve, graceful shutdown.
 
 use anyhow::{Context, Result};
-use riftwarden_gateway::{Config, connect, router, telemetry::Telemetry};
+use riftwarden_gateway::{Config, connect, router, spawn_maintenance, telemetry::Telemetry};
 use tokio::net::TcpListener;
 
 #[tokio::main]
@@ -11,8 +11,11 @@ async fn main() -> Result<()> {
     tracing::info!(build = %config.build, listen = %config.listen, "gateway starting");
 
     let state = connect(config).await?;
+    spawn_maintenance(state.clone());
     let listener = TcpListener::bind(state.config.listen).await.context("bind")?;
-    axum::serve(listener, router(state)).with_graceful_shutdown(shutdown_signal()).await?;
+    axum::serve(listener, router(state).into_make_service_with_connect_info::<std::net::SocketAddr>())
+        .with_graceful_shutdown(shutdown_signal())
+        .await?;
     tracing::info!("gateway stopped");
     telemetry.shutdown();
     Ok(())

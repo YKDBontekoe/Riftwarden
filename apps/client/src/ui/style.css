@@ -1901,3 +1901,23 @@ button.inv-slot { position: relative; }
 .deploy-grid.war { grid-template-columns: minmax(0, 1.75fr) minmax(280px, 1fr); }
 .deploy-grid.war .dm-war { grid-template-columns: 150px minmax(0, 1fr); }
 .deploy-grid.war .war-map { max-height: 380px; }
+
+/* ---- account (passkeys) ---- */
+.acct-panel { display: grid; gap: 14px; max-width: 560px; }
+.acct { display: grid; gap: 10px; }
+.acct-lead { opacity: 0.8; margin: 0; }
+.acct-tabs, .acct-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.acct-form { display: grid; gap: 10px; }
+.acct-field { display: grid; gap: 4px; }
+.acct-field span { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; opacity: 0.7; }
+.acct-field input, .acct-row input { background: rgba(0, 0, 0, 0.35); border: 1px solid rgba(255, 255, 255, 0.18); color: inherit; padding: 8px 10px; font: inherit; }
+.acct-field em { font-style: normal; font-size: 12px; }
+.acct-field em.ok { color: #7ee2a8; }
+.acct-field em.bad, .acct-error { color: #ff8a7a; }
+.acct-who strong { font-size: 18px; }
+.acct h3 { margin: 6px 0 0; font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.7; }
+.acct-keys { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.acct-keys li { display: flex; gap: 10px; align-items: baseline; }
+.acct-keys small { opacity: 0.6; flex: 1; }
+.acct-code { border: 1px solid #f0b85a; background: rgba(240, 184, 90, 0.08); padding: 12px; display: grid; gap: 8px; }
+.acct-code code { font-size: 20px; letter-spacing: 0.12em; user-select: all; }

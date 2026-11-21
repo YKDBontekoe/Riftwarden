@@ -1,4 +1,5 @@
 import { LoadingScreen } from './LoadingScreen';
+import { AccountPanel } from '../account/AccountPanel';
 import { BoundKey } from './hud/widgets';
 import { CoopPanel, urlJoinCode } from './Coop';
 import { SettingsPanel } from './SettingsPanel';
@@ -138,6 +139,7 @@ function Controls() {
 const MENU_SECTIONS = {
   briefing: 'Briefing',
   'co-op': 'Co-op',
+  account: 'Account',
   settings: 'Settings',
   controls: 'Controls',
 } as const;
@@ -182,6 +184,7 @@ function MainMenu({ flow }: { flow: Flow }) {
             <li><b>Bank your salvage</b><p>Every five waves, a checkpoint secures your haul. Return home or stay for another wave. Losing the reactor costs your unsecured cargo.</p></li>
           </ol>}
           {tab === 'co-op' && <CoopPanel flow={flow} compact />}
+          {tab === 'account' && <AccountPanel />}
           {tab === 'settings' && <SettingsPanel flow={flow} />}
           {tab === 'controls' && <Controls />}
         </section>

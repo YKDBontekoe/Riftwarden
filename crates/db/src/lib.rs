@@ -2,6 +2,8 @@
 //!
 //! Game rules never live here: profile documents are stored as JSON owned by `packages/rules`.
 
+pub mod accounts;
+
 use std::time::Duration;
 
 pub use sqlx::PgPool;
@@ -16,6 +18,9 @@ pub enum DbError {
     Sqlx(#[from] sqlx::Error),
     #[error("migration: {0}")]
     Migrate(#[from] sqlx::migrate::MigrateError),
+    /// A unique constraint was violated (taken name, duplicate credential).
+    #[error("conflict")]
+    Conflict,
 }
 
 /// Connect a pool and bring the schema up to date.

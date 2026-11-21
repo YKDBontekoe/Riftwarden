@@ -3,6 +3,7 @@
 use std::net::SocketAddr;
 
 use anyhow::{Context, Result};
+use url::Url;
 
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -14,11 +15,26 @@ pub struct Config {
     pub build: String,
     /// JSON logs (production) or human-readable (development).
     pub json_logs: bool,
+    /// WebAuthn relying party id (the client's registrable domain, e.g. `riftwarden.ykdbonte.dev`).
+    pub rp_id: String,
+    /// Origins allowed to run passkey ceremonies and call the API with credentials (the client's origins).
+    pub client_origins: Vec<Url>,
+    /// `Secure` session cookies (off only for plain-http local development).
+    pub cookie_secure: bool,
+    /// Cookie domain shared by the client and the API (e.g. `.riftwarden.ykdbonte.dev`); none = host-only.
+    pub cookie_domain: Option<String>,
+    /// Take the client address from `CF-Connecting-IP` (behind the Cloudflare tunnel).
+    pub trust_cf_ip: bool,
+    /// Test servers: relaxed rate limits.
+    pub test_mode: bool,
 }
 
 impl Config {
     pub fn from_env() -> Result<Self> {
         let var = |k: &str| std::env::var(k).ok().filter(|v| !v.is_empty());
+        let origins = var("RIFT_CLIENT_ORIGINS").unwrap_or_else(|| "http://localhost:5173".into());
+        let client_origins =
+            origins.split(',').map(|o| Url::parse(o.trim()).with_context(|| format!("RIFT_CLIENT_ORIGINS: {o}"))).collect::<Result<_>>()?;
         Ok(Self {
             listen: var("RIFT_LISTEN").unwrap_or_else(|| "0.0.0.0:8080".into()).parse().context("RIFT_LISTEN")?,
             database_url: var("DATABASE_URL").context("DATABASE_URL is required")?,
@@ -26,6 +42,30 @@ impl Config {
             redis_url: var("REDIS_URL").unwrap_or_else(|| "redis://127.0.0.1:6379".into()),
             build: var("RIFT_BUILD").unwrap_or_else(|| "dev".into()),
             json_logs: var("RIFT_LOG_FORMAT").is_none_or(|v| v != "pretty"),
+            rp_id: var("RIFT_RP_ID").unwrap_or_else(|| "localhost".into()),
+            client_origins,
+            cookie_secure: var("RIFT_COOKIE_SECURE").is_none_or(|v| v != "0"),
+            cookie_domain: var("RIFT_COOKIE_DOMAIN"),
+            trust_cf_ip: var("RIFT_TRUST_CF_IP").is_some_and(|v| v == "1"),
+            test_mode: var("RIFT_TEST").is_some_and(|v| v == "1"),
         })
+    }
+
+    /// A local configuration for integration tests (plain http on localhost).
+    pub fn for_tests(database_url: String, redis_url: String) -> Self {
+        Self {
+            listen: "127.0.0.1:0".parse().expect("addr"),
+            database_url,
+            database_max_connections: 4,
+            redis_url,
+            build: "test".into(),
+            json_logs: false,
+            rp_id: "localhost".into(),
+            client_origins: vec![Url::parse("http://localhost:5173").expect("url")],
+            cookie_secure: false,
+            cookie_domain: None,
+            trust_cf_ip: false,
+            test_mode: true,
+        }
     }
 }
