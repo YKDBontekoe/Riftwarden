@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { FrameClock } from '../src/core/frameClock';
-import { DEATH_TIME, wreckKnock } from '../src/enemies/deathAnims';
-import { ENEMIES } from '../src/data/defs';
-import { HEAT_PACE } from '../src/combat/heat';
-import { weaponSummary } from '../src/loot/equipment';
-import { PLASMA_REPEATER } from '../src/data/defs';
+import { FrameClock } from '@riftwarden/game/core/frameClock';
+import { DEATH_TIME, wreckKnock } from '@riftwarden/game/enemies/deathAnims';
+import { ENEMIES } from '@riftwarden/rules/data/defs';
+import { HEAT_PACE } from '@riftwarden/rules/combat/heat';
+import { weaponSummary } from '@riftwarden/rules/loot/equipment';
+import { PLASMA_REPEATER } from '@riftwarden/rules/data/defs';
 
 describe('frame clock', () => {
   it('smooths jitter around a steady rate without losing time', () => {
@@ -63,8 +63,8 @@ describe('fast-paced tuning', () => {
 
 describe('TTK pass', () => {
   it('the starter repeater kills a basic walker in about 0.3 s (3 bolts) and every family stays fast', async () => {
-    const { DAMAGE_PACE } = await import('../src/combat/heat');
-    const { RAILGUN, BEAM_EMITTER } = await import('../src/data/defs');
+    const { DAMAGE_PACE } = await import('@riftwarden/rules/combat/heat');
+    const { RAILGUN, BEAM_EMITTER } = await import('@riftwarden/rules/data/defs');
     const hp = ENEMIES.walker.hp;
     const shots = Math.ceil(hp / (PLASMA_REPEATER.damage * DAMAGE_PACE));
     expect(shots).toBeLessThanOrEqual(3);

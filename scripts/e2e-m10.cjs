@@ -287,8 +287,8 @@ const SPAWN = () => {
 
   if (want('E')) {
     const e = await p.evaluate(async () => {
-      const { SurvivalPlanner } = await import('/src/survival/plan.ts');
-      const { BIOMES } = await import('/src/world/biomes.ts');
+      const { SurvivalPlanner } = await import('/@id/@riftwarden/rules/survival/plan');
+      const { BIOMES } = await import('/@id/@riftwarden/rules/world/biomes');
       const count = (f) => {
         const pl = new SurvivalPlanner(777, 2, f);
         const c = {};

@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_FRAGMENT, MIN_FRAGMENT, pickFragments } from '../src/fx/fragmentPlan';
-import { STYLES, styleMix } from '../src/fx/explosionStyles';
-import { SEV_FIRE, SEV_SPARKS, WOUND, woundSeverity } from '../src/fx/wounds';
-import { HitLean, hitImpulse, LEAN } from '../src/enemies/hitReact';
-import { assemblyPose } from '../src/towers/assembly';
-import { BLAST, deathStyle } from '../src/enemies/deathAnims';
-import { ENEMIES } from '../src/data/defs';
+import { MAX_FRAGMENT, MIN_FRAGMENT, pickFragments } from '@riftwarden/game/fx/fragmentPlan';
+import { STYLES, styleMix } from '@riftwarden/game/fx/explosionStyles';
+import { SEV_FIRE, SEV_SPARKS, WOUND, woundSeverity } from '@riftwarden/game/fx/wounds';
+import { HitLean, hitImpulse, LEAN } from '@riftwarden/game/enemies/hitReact';
+import { assemblyPose } from '@riftwarden/game/towers/assembly';
+import { BLAST, deathStyle } from '@riftwarden/game/enemies/deathAnims';
+import { ENEMIES } from '@riftwarden/rules/data/defs';
 
 describe('mechanical fragmentation plan', () => {
   const c = (id: string, sx: number, sy: number, sz: number) => ({ item: id, sx, sy, sz });

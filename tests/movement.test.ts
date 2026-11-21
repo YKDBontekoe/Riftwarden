@@ -1,6 +1,6 @@
 import { Vector3 } from '@babylonjs/core';
 import { describe, expect, it } from 'vitest';
-import { type KitBody, MoveKit, type ProbeHit } from '../src/player/MoveKit';
+import { type KitBody, MoveKit, type ProbeHit } from '@riftwarden/game/player/MoveKit';
 import {
   canPound,
   canSlide,
@@ -16,8 +16,8 @@ import {
   wallRollFor,
   wallRunnable,
   wallRunVelocity,
-} from '../src/player/movement';
-import { MOVE } from '../src/player/Player';
+} from '@riftwarden/rules/player/movement';
+import { MOVE } from '@riftwarden/game/player/Player';
 
 describe('slide rules', () => {
   it('starts only grounded, fast enough and off cooldown', () => {

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_PLACEABLES } from '../src/home/placeables';
-import type { ItemInstance } from '../src/progression/items';
-import { generateItem } from '../src/loot/generate';
-import { RunLedger } from '../src/progression/run';
+import { DEFAULT_PLACEABLES } from '@riftwarden/rules/home/placeables';
+import type { ItemInstance } from '@riftwarden/rules/progression/items';
+import { generateItem } from '@riftwarden/rules/loot/generate';
+import { RunLedger } from '@riftwarden/rules/progression/run';
 import {
   BACKUP_KEY,
   CORRUPT_KEY,
@@ -24,9 +24,9 @@ import {
   unequipToStorage,
   writeSave,
   type KeyValueStorage,
-} from '../src/progression/save';
-import { getTier, isCheckpointWave, nextCheckpoint, THREAT_TIERS } from '../src/progression/tiers';
-import { getWave } from '../src/waves/waves';
+} from '@riftwarden/rules/progression/save';
+import { getTier, isCheckpointWave, nextCheckpoint, THREAT_TIERS } from '@riftwarden/rules/progression/tiers';
+import { getWave } from '@riftwarden/rules/waves/waves';
 
 class MemStorage implements KeyValueStorage {
   map = new Map<string, string>();

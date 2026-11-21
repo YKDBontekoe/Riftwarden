@@ -1,14 +1,14 @@
 // Shoot-off parts: pure rules + a real walker on a NullEngine scene (as the co-op server runs it).
-import '../server/headless';
+import '../apps/server/headless';
 import { NullEngine, Scene, Vector3 } from '@babylonjs/core';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { CORE_BEHAVIORS } from '../src/enemies/coreBehaviors';
-import { type EnemyContext, EnemyManager } from '../src/enemies/EnemyManager';
-import { bit, hasLost, LIMB_EFFECT, LIMBS, limbDamage, limbForHit } from '../src/enemies/limbs';
-import { limbNode } from '../src/enemies/limbRuntime';
-import { Kit } from '../src/visuals/kit';
-import { createPalette } from '../src/visuals/materials';
-import { ARENA } from '../src/world/layout';
+import { CORE_BEHAVIORS } from '@riftwarden/game/enemies/coreBehaviors';
+import { type EnemyContext, EnemyManager } from '@riftwarden/game/enemies/EnemyManager';
+import { bit, hasLost, LIMB_EFFECT, LIMBS, limbDamage, limbForHit } from '@riftwarden/rules/enemies/limbs';
+import { limbNode } from '@riftwarden/game/enemies/limbRuntime';
+import { Kit } from '@riftwarden/game/visuals/kit';
+import { createPalette } from '@riftwarden/game/visuals/materials';
+import { ARENA } from '@riftwarden/rules/world/layout';
 
 describe('limb rules', () => {
   it('a hit goes to the nearest intact part within reach', () => {
@@ -123,7 +123,7 @@ describe('walker parts in the enemy pipeline', () => {
 
 describe('legs', () => {
   it('the right leg is a fourth part: hits near it count for it, and losing it slows the frame to a crawl', async () => {
-    const { LIMB_EFFECT, LIMB_IDS } = await import('../src/enemies/limbs');
+    const { LIMB_EFFECT, LIMB_IDS } = await import('@riftwarden/rules/enemies/limbs');
     expect(LIMB_IDS).toContain('leg');
     expect(limbForHit({ cannon: 2, arm: 2, head: 2, leg: 0.4 }, 0)).toBe('leg');
     expect(limbForHit({ cannon: 2, arm: 2, head: 2, leg: 0.4 }, bit('leg'))).toBeNull();

@@ -19,7 +19,7 @@ const check = (n, ok, info = '') => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${n}
 
 let server = null;
 function startServer() {
-  const child = spawn(process.execPath, ['--import', 'tsx', 'server/main.ts'], {
+  const child = spawn(process.execPath, ['--import', 'tsx', 'apps/server/main.ts'], {
     env: { ...process.env, RIFT_PORT: String(PORT), DATABASE_URL: databaseUrl.href, RIFT_TEST: '1', RIFT_MAP: '1' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -114,7 +114,7 @@ async function clearWave(bots, actor) {
     const badVote = await A.act({ a: 'mapVote', choice: 'a9r9c9' });
     check('M6 unreachable nodes are refused', !badVote.ok, badVote.reason);
     // Reachable nodes: from the map seed (same pure generator as the server).
-    const { reachable } = await import('../src/war/world.ts');
+    const { reachable } = await import('../packages/rules/src/war/world.ts');
     const warNow = (await (await fetch(`http://localhost:${PORT}/war`)).json()).war;
     check('W1 the co-op team secured r0n0: the shared war counted it (trusted, per warden)', warNow.secured >= 1 && warNow.regions[0].nodes.r0n0.lib > war0.war.regions[0].nodes.r0n0.lib, JSON.stringify({ before: war0.war.regions[0].nodes.r0n0, after: warNow.regions[0].nodes.r0n0 }));
     const next = reachable(run0.node.map, warNow, run0.node.id)[0];

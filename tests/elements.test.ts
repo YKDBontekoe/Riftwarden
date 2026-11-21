@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { applyDamage, mulberry32 } from '../src/combat/damage';
+import { applyDamage, mulberry32 } from '@riftwarden/rules/combat/damage';
 import {
   AFFINITY_MAX, AFFINITY_MIN, ELEMENTS, FACTION_AFFINITY, RESIST, WEAK,
   affinity, affinitySign, elementPayload, procWeight, rollElement, sectorAffinity,
-} from '../src/combat/elements';
-import { applyCorrode, CORRODE_SHRED, CORRODE_TIME, hasAnyStatus, MAX_CORRODE, newStatus, tickStatus, vulnerability } from '../src/combat/status';
-import { generateItem } from '../src/loot/generate';
-import { weaponDefFor } from '../src/loot/equipment';
-import { sanitizeItem } from '../src/progression/save/sanitize';
-import { composeTower } from '../src/towers/components';
-import { BIOMES } from '../src/world/biomes';
+} from '@riftwarden/rules/combat/elements';
+import { applyCorrode, CORRODE_SHRED, CORRODE_TIME, hasAnyStatus, MAX_CORRODE, newStatus, tickStatus, vulnerability } from '@riftwarden/rules/combat/status';
+import { generateItem } from '@riftwarden/rules/loot/generate';
+import { weaponDefFor } from '@riftwarden/rules/loot/equipment';
+import { sanitizeItem } from '@riftwarden/rules/progression/save/sanitize';
+import { composeTower } from '@riftwarden/rules/towers/components';
+import { BIOMES } from '@riftwarden/rules/world/biomes';
 
 const walker = { kind: 'walker' as const, mods: [] };
 

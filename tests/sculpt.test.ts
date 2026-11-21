@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { chamferRatio, loftData } from '../src/visuals/sculpt';
+import { chamferRatio, loftData } from '@riftwarden/game/visuals/sculpt';
 
 const box = [
   { t: -0.5, w: 0.5, h: 0.3, n: 5 },

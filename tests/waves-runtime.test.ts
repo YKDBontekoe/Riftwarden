@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { DEFAULT_SETTINGS, loadSettings, sanitizeSettings } from '../src/core/settings';
-import { MAX_ACTIVE_ENEMIES, WaveManager } from '../src/waves/WaveManager';
-import { getWave } from '../src/waves/waves';
-import { PACE, earlyCallBonus, prepTime } from '../src/waves/pace';
+import { DEFAULT_SETTINGS, loadSettings, sanitizeSettings } from '@riftwarden/game/core/settings';
+import { MAX_ACTIVE_ENEMIES, WaveManager } from '@riftwarden/game/waves/WaveManager';
+import { getWave } from '@riftwarden/rules/waves/waves';
+import { PACE, earlyCallBonus, prepTime } from '@riftwarden/rules/waves/pace';
 
 function harness() {
   let alive = 0;
@@ -98,7 +98,7 @@ describe('settings persistence', () => {
     expect(v2).toMatchObject({ quality: 'medium', shadows: 'high', uiScale: 1.3, shake: 0, renderScale: 0.5, colorblind: 'off', reduceMotion: true });
   });
   it('M7: key bindings never contain duplicates and remap physical keys', async () => {
-    const { keyRemap } = await import('../src/core/settings');
+    const { keyRemap } = await import('@riftwarden/game/core/settings');
     const s = sanitizeSettings({ keys: { dash: 'KeyC', jump: 'KeyC' } }, 2);
     expect(s.keys.jump).toBe('KeyC');
     expect(s.keys.dash).toBe('ShiftLeft');

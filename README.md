@@ -4,13 +4,17 @@ A first-person sci-fi action tower-defense roguelite for the browser. You are a 
 
 **Status: Milestone M7: online co-op for 2-4 players (authoritative server), HQ construction, new weapons/towers/enemies/upgrades/signatures, onboarding, settings and audio overhaul.**
 
+## Repository layout
+
+A pnpm workspace: `packages/rules` (pure gameplay and economy rules), `packages/game` (simulation and Babylon presentation), `apps/client` (browser entry and React UI), `apps/server` (the current Node co-op server). The migration to a Rust backend is planned in [docs/architecture-v2.md](docs/architecture-v2.md).
+
 ## Run it
 
-Use Node 24 (the version used in CI) and a desktop browser with WebGL2.
+Use Node 24 (the version used in CI), pnpm 10 (`corepack enable` picks the pinned version) and a desktop browser with WebGL2.
 
 ```bash
-npm install
-npm run dev            # single player: http://localhost:5173
+pnpm install
+pnpm dev                # single player: http://localhost:5173
 ```
 
 Click **ENTER HEADQUARTERS**, walk to the launch bay and press **E** at the deployment terminal. A first-time profile gets a short onboarding tutorial (skip with F10 or in Settings).
@@ -24,23 +28,23 @@ docker run -d --name riftwarden-dev-db -p 127.0.0.1:5432:5432 \
   -e POSTGRES_DB=riftwarden -e POSTGRES_USER=riftwarden -e POSTGRES_PASSWORD=riftwarden-dev \
   -v riftwarden_dev_db:/var/lib/postgresql postgres:18
 export DATABASE_URL=postgresql://riftwarden:riftwarden-dev@127.0.0.1:5432/riftwarden
-npm run serve          # builds the client, then serves it AND the co-op server on http://<host>:8787
+pnpm serve          # builds the client, then serves it AND the co-op server on http://<host>:8787
 ```
 
 Every player opens `http://<host>:8787`, chooses **CO-OP** in the menu (or the *Co-op* tab of the deployment terminal), connects and creates a fresh online profile. The host clicks **CREATE SESSION** and shares the 5-letter code or the invite link (`?join=CODE`); the others join, press **READY**, and the host picks the threat tier (every player must have unlocked it) and deploys. A host can also deploy alone with their online profile. While waiting in the lobby, guests can **VISIT HOST HQ** (read-only; only the owner can construct).
 
-For development run `npm run server` (co-op server on :8787, overridable with `RIFT_PORT`) next to `npm run dev`; the dev server proxies `/ws`. The server creates the database tables on first startup. It accepts either `DATABASE_URL` or the standard PostgreSQL connection variables `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, and `PGPASSWORD`. A different game server can be chosen with `?server=ws://host:port/ws`.
+For development run `pnpm server` (co-op server on :8787, overridable with `RIFT_PORT`) next to `pnpm dev`; the dev server proxies `/ws`. The server creates the database tables on first startup. It accepts either `DATABASE_URL` or the standard PostgreSQL connection variables `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, and `PGPASSWORD`. A different game server can be chosen with `?server=ws://host:port/ws`.
 
 In a co-op run the server owns enemies, waves, the reactor, towers, loot, rewards and profiles. Each player keeps their own equipment and loot drops (ownership per player), banks individually at every 5th wave, and the team votes unanimously at checkpoints to continue or return. Towers, cores, tactical time and the reactor are shared. Disconnected players keep their slot for 120 s and rejoin the running operation.
 
 | Command | Purpose |
 | --- | --- |
-| `npm run dev` | Dev server with hot reload |
-| `npm run build` | Typecheck + production build into `dist/` |
-| `npm run preview` | Serve the production build locally (proxies `/ws` like dev) |
-| `npm run server` | Co-op server (WebSocket `/ws`, also serves `dist/`) |
-| `npm run serve` | Build + co-op server: a complete deployment on one port |
-| `npm test` | Unit tests (Vitest) |
+| `pnpm dev` | Dev server with hot reload |
+| `pnpm build` | Typecheck + production build into `dist/` |
+| `pnpm preview` | Serve the production build locally (proxies `/ws` like dev) |
+| `pnpm server` | Co-op server (WebSocket `/ws`, also serves `dist/`) |
+| `pnpm serve` | Build + co-op server: a complete deployment on one port |
+| `pnpm test` | Unit tests (Vitest) |
 | `node scripts/e2e-m1.cjs` … `e2e-m6.cjs` | Browser acceptance suites per earlier milestone (Playwright; `RIFT_URL` selects the client) |
 | `node scripts/e2e-construction-coop.cjs [G,H,I,J,X]` | Browser suite: HQ construction, decorations, station relocation, blueprints, real browser co-op |
 | `node scripts/e2e-coop-protocol.mjs` | Co-op protocol suite (starts its own server and uses an isolated schema in `RIFT_TEST_DATABASE_URL`) |

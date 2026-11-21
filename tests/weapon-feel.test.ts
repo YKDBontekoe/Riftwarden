@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { shotFeel, yawPattern } from '../src/combat/weaponFeel';
+import { shotFeel, yawPattern } from '@riftwarden/game/combat/weaponFeel';
 
 describe('shot feel', () => {
   it('heavier shots punch harder, within bounds', () => {

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { weaponDefFor } from '../src/loot/equipment';
-import { generateItem } from '../src/loot/generate';
-import { RunInventory, RUN_CARGO_CAPACITY } from '../src/loot/runInventory';
-import type { Category, ItemInstance } from '../src/loot/types';
-import { RunLedger } from '../src/progression/run';
+import { weaponDefFor } from '@riftwarden/rules/loot/equipment';
+import { generateItem } from '@riftwarden/rules/loot/generate';
+import { RunInventory, RUN_CARGO_CAPACITY } from '@riftwarden/rules/loot/runInventory';
+import type { Category, ItemInstance } from '@riftwarden/rules/loot/types';
+import { RunLedger } from '@riftwarden/rules/progression/run';
 import {
   applyLoadout,
   bankRewards,
@@ -23,7 +23,7 @@ import {
   serializeSave,
   STORAGE_CAPACITY,
   storedItems,
-} from '../src/progression/save';
+} from '@riftwarden/rules/progression/save';
 
 let n = 0;
 const item = (category: Category = 'weapon', rarity: ItemInstance['rarity'] = 'rare', level = 7): ItemInstance =>

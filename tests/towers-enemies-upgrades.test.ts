@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { canInstall, composeTower, DEFAULT_CONFIG } from '../src/towers/components';
-import { UPGRADES } from '../src/roguelite/upgrades';
-import { ENEMY_COST, ENEMY_UNLOCK, SurvivalPlanner } from '../src/survival/plan';
+import { canInstall, composeTower, DEFAULT_CONFIG } from '@riftwarden/rules/towers/components';
+import { UPGRADES } from '@riftwarden/rules/roguelite/upgrades';
+import { ENEMY_COST, ENEMY_UNLOCK, SurvivalPlanner } from '@riftwarden/rules/survival/plan';
 
 describe('missile/support towers, jammer/crawler enemies, new upgrades', () => {
   it('missile and support towers compose valid stats and are compatible where documented', () => {

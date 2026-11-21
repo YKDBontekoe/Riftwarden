@@ -1,6 +1,6 @@
 // M3 acceptance scenarios (A-I: weapon families, procedural generation, module install/remove/incompatible,
 // visual variation, loot integration, save migration, regression + leaks) against a running dev server.
-// Usage: npm run dev (port 5173), then: node scripts/e2e-m3.cjs   (needs `playwright` + Chromium).
+// Usage: pnpm dev (port 5173), then: node scripts/e2e-m3.cjs   (needs `playwright` + Chromium).
 // Runs in ?test mode: fixed-step simulation, low graphics preset, no real pointer lock.
 // Screenshots go to $E2E_OUT (default: OS temp dir). Exit code 0 = all checks passed.
 const H = require('./lib/harness.cjs');

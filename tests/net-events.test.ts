@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { EVENT_TAGS, parseEvent } from '../src/net/events';
-import { mulberry32 } from '../src/combat/damage';
+import { EVENT_TAGS, parseEvent } from '@riftwarden/game/net/events';
+import { mulberry32 } from '@riftwarden/rules/combat/damage';
 
 const read = (p: string) => readFileSync(resolve(__dirname, '..', p), 'utf8');
 const CFG = { base: 'standard', weapon: 'autocannon', core: 'standard_core', modifier: 'none' };
@@ -49,7 +49,7 @@ describe('replicated events', () => {
 
   it('every tag the server emits is part of the union', () => {
     const emitted = new Set<string>();
-    for (const f of ['src/net/recorder.ts', 'src/net/ServerGame.ts', 'server/sim.ts']) {
+    for (const f of ['packages/game/src/net/recorder.ts', 'packages/game/src/net/ServerGame.ts', 'apps/server/sim.ts']) {
       for (const m of read(f).matchAll(/(?:push|pushExcept)\(\s*\[\s*'([A-Za-z+-]+)'/g)) emitted.add(m[1]);
     }
     expect(emitted.size).toBeGreaterThan(15);
@@ -57,7 +57,7 @@ describe('replicated events', () => {
   });
 
   it('every tag in the union has a handler in ClientGame', () => {
-    const src = read('src/net/ClientGame.ts');
+    const src = read('packages/game/src/net/ClientGame.ts');
     const handled = new Set([...src.matchAll(/case '([A-Za-z+-]+)'/g)].map((m) => m[1]));
     expect(EVENT_TAGS.filter((t) => !handled.has(t))).toEqual([]);
   });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BASE_FOG, blendMood, calmMood, moodFor, type MoodInput } from '../src/visuals/mood';
+import { BASE_FOG, blendMood, calmMood, moodFor, type MoodInput } from '@riftwarden/game/visuals/mood';
 
 const base: MoodInput = { tier: 1, boss: false, event: null, reactorFrac: 1, time: 0 };
 const finite = (m: ReturnType<typeof moodFor>) => [...m.fog, ...m.sunTint, m.fogMul, m.exposureAdd, m.contrastAdd, m.vignetteAdd, m.tension, m.flicker].every(Number.isFinite);

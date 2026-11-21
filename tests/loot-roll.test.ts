@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { mulberry32 } from '../src/combat/damage';
-import { DROP_SOURCES, type DropSource, rollDrops } from '../src/loot/drops';
-import { generateItem, hashSeed } from '../src/loot/generate';
-import { rollLoot, scaleChance } from '../src/loot/roll';
-import { generateUnique, uniqueForDrop } from '../src/loot/uniques';
+import { mulberry32 } from '@riftwarden/rules/combat/damage';
+import { DROP_SOURCES, type DropSource, rollDrops } from '@riftwarden/rules/loot/drops';
+import { generateItem, hashSeed } from '@riftwarden/rules/loot/generate';
+import { rollLoot, scaleChance } from '@riftwarden/rules/loot/roll';
+import { generateUnique, uniqueForDrop } from '@riftwarden/rules/loot/uniques';
 
 const TIER = { lootLevelBonus: 8, lootLuck: 1.3 };
 

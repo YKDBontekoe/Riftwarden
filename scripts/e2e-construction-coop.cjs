@@ -1,5 +1,5 @@
 // Browser acceptance (construction, persistence, co-op clients, tutorial, settings).
-// Usage: npm run dev (5173) [+ npm run server for co-op sections], then node scripts/e2e-construction-coop.cjs [G,H,I,J,K,L,M,O,P,X]
+// Usage: pnpm dev (5173) [+ pnpm server for co-op sections], then node scripts/e2e-construction-coop.cjs [G,H,I,J,K,L,M,O,P,X]
 const H = require('./lib/harness.cjs');
 const { chromium, OUT, check } = H;
 const FILTER = process.argv[2] || '';

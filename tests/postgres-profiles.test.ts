@@ -1,11 +1,11 @@
-import { emptyCarry } from '../src/runmap/carry';
+import { emptyCarry } from '@riftwarden/rules/runmap/carry';
 import { randomBytes } from 'node:crypto';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { ProfileDatabase } from '../server/profileDatabase';
-import { bankRewards, beginRun, createDefaultSave, resolveInterruptedRun } from '../src/progression/save';
-import { generateItem } from '../src/loot/generate';
-import { generateUnique, uniqueDef } from '../src/loot/uniques';
+import { ProfileDatabase } from '../apps/server/profileDatabase';
+import { bankRewards, beginRun, createDefaultSave, resolveInterruptedRun } from '@riftwarden/rules/progression/save';
+import { generateItem } from '@riftwarden/rules/loot/generate';
+import { generateUnique, uniqueDef } from '@riftwarden/rules/loot/uniques';
 
 const testUrl = process.env.RIFT_TEST_DATABASE_URL;
 

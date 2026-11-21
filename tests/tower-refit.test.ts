@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { BASES, canInstall, CORES, DEFAULT_CONFIG, levelCost, MAX_TOWER_LEVEL, MODIFIERS, STARTER_TECH, swapCost, TECH_LIST, type TowerConfig, type TowerSlot, WEAPONS } from '../src/towers/components';
-import { planBuildConfig, planRefit, type RefitInput } from '../src/towers/refit';
+import { BASES, canInstall, CORES, DEFAULT_CONFIG, levelCost, MAX_TOWER_LEVEL, MODIFIERS, STARTER_TECH, swapCost, TECH_LIST, type TowerConfig, type TowerSlot, WEAPONS } from '@riftwarden/rules/towers/components';
+import { planBuildConfig, planRefit, type RefitInput } from '@riftwarden/rules/towers/refit';
 
 const ALL_TECH = new Set(TECH_LIST.map((t) => `${t.slot}:${t.id}`));
 const NO_TECH = new Set<string>();

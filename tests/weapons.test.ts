@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { computeStats } from '../src/combat/stats';
-import { BASES } from '../src/loot/bases';
-import { equipmentModifiers, itemModifiers, weaponDefFor, weaponStatRows, weaponSummary, withSocket } from '../src/loot/equipment';
-import { generateItem, isValidItem } from '../src/loot/generate';
-import { RARITIES, type RarityId } from '../src/loot/rarity';
-import type { ItemInstance } from '../src/loot/types';
-import { allOwnedUids, checksum, createDefaultSave, installModule, parseSave, type SaveData, scrapItem, serializeSave, transferModule, uninstallModule } from '../src/progression/save';
-import { buildEffects, FAMILIES, isValidBuild } from '../src/weapons/build';
-import { componentDef, COMPONENTS } from '../src/weapons/components';
-import { canInstall, MODULE_TYPES, moduleTypeDef, removalCost } from '../src/weapons/modules';
+import { computeStats } from '@riftwarden/rules/combat/stats';
+import { BASES } from '@riftwarden/rules/loot/bases';
+import { equipmentModifiers, itemModifiers, weaponDefFor, weaponStatRows, weaponSummary, withSocket } from '@riftwarden/rules/loot/equipment';
+import { generateItem, isValidItem } from '@riftwarden/rules/loot/generate';
+import { RARITIES, type RarityId } from '@riftwarden/rules/loot/rarity';
+import type { ItemInstance } from '@riftwarden/rules/loot/types';
+import { allOwnedUids, checksum, createDefaultSave, installModule, parseSave, type SaveData, scrapItem, serializeSave, transferModule, uninstallModule } from '@riftwarden/rules/progression/save';
+import { buildEffects, FAMILIES, isValidBuild } from '@riftwarden/rules/weapons/build';
+import { componentDef, COMPONENTS } from '@riftwarden/rules/weapons/components';
+import { canInstall, MODULE_TYPES, moduleTypeDef, removalCost } from '@riftwarden/rules/weapons/modules';
 
 let n = 0;
 const gen = (baseId: string, rarity: RarityId = 'epic', seed = 1000 + ++n, level = 8): ItemInstance =>

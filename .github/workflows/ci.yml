@@ -41,12 +41,13 @@ jobs:
         with:
           node-version: '24'
           package-manager-cache: false
-      - run: npm ci --ignore-scripts
-      - run: npm run lint
-      - run: npm test
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm test
         env:
           RIFT_TEST_DATABASE_URL: postgresql://riftwarden:test-only@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/riftwarden
-      - run: npm run build
+      - run: pnpm build
       - if: github.ref == 'refs/heads/main'
         run: printf '%s\n' "$GITHUB_SHA" > dist/build.txt
       - if: github.ref == 'refs/heads/main'

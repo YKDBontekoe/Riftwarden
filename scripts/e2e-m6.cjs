@@ -1,6 +1,6 @@
 // M6 acceptance (browser): advanced enemies, elite modifiers, events, arena evolution, bosses, scheduling,
 // threat tiers, high-wave scaling, banking, records, performance, dev-session isolation.
-// Usage: npm run dev (5173), then node scripts/e2e-m6.cjs [filter]
+// Usage: pnpm dev (5173), then node scripts/e2e-m6.cjs [filter]
 const H = require('./lib/harness.cjs');
 const { OUT, check, S, ev } = H;
 const FILTER = process.argv[2] || '';

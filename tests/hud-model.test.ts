@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { hintFor, type HintState, lootTargetInfo, runHud } from '../src/ui/hudModel';
-import { expiresAfterWave } from '../src/loot/lifetime';
-import { nextCheckpoint } from '../src/progression/tiers';
+import { hintFor, type HintState, lootTargetInfo, runHud } from '@riftwarden/game/ui/hudModel';
+import { expiresAfterWave } from '@riftwarden/rules/loot/lifetime';
+import { nextCheckpoint } from '@riftwarden/rules/progression/tiers';
 
 /** The inline logic from Game.publishHud this module replaced, kept as the reference. */
 function oldHint(s: HintState): string {

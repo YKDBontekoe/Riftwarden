@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { mulberry32 } from '../src/combat/damage';
-import { BASE_STATS, computeStats, mitigation, STAT_DEFS } from '../src/combat/stats';
-import { AFFIXES, affixDef } from '../src/loot/affixes';
-import { BASES, baseDef } from '../src/loot/bases';
-import { DROP_SOURCES, itemLevelFor, rollDrops } from '../src/loot/drops';
-import { compareItems, equipmentModifiers, itemModifiers, statPreview, weaponDefFor } from '../src/loot/equipment';
-import { flatScale, generateItem, isValidItem, MAX_ITEM_LEVEL, maxTierFor, pctScale, starterWeapon } from '../src/loot/generate';
-import { RARITIES, rarity, rarityOdds, rollRarity } from '../src/loot/rarity';
-import { CATEGORIES, type Category, type ItemInstance } from '../src/loot/types';
+import { mulberry32 } from '@riftwarden/rules/combat/damage';
+import { BASE_STATS, computeStats, mitigation, STAT_DEFS } from '@riftwarden/rules/combat/stats';
+import { AFFIXES, affixDef } from '@riftwarden/rules/loot/affixes';
+import { BASES, baseDef } from '@riftwarden/rules/loot/bases';
+import { DROP_SOURCES, itemLevelFor, rollDrops } from '@riftwarden/rules/loot/drops';
+import { compareItems, equipmentModifiers, itemModifiers, statPreview, weaponDefFor } from '@riftwarden/rules/loot/equipment';
+import { flatScale, generateItem, isValidItem, MAX_ITEM_LEVEL, maxTierFor, pctScale, starterWeapon } from '@riftwarden/rules/loot/generate';
+import { RARITIES, rarity, rarityOdds, rollRarity } from '@riftwarden/rules/loot/rarity';
+import { CATEGORIES, type Category, type ItemInstance } from '@riftwarden/rules/loot/types';
 
 const gen = (seed: number, o: Partial<Parameters<typeof generateItem>[0]> = {}) =>
   generateItem({ uid: `u${seed}`, seed, level: 10, rarity: 'rare', category: 'weapon', source: 'test', now: 1, ...o });
@@ -229,7 +229,7 @@ describe('equipment stats', () => {
   });
 });
 
-import { convertsToSalvage, expiresAfterWave, HARD_LIMIT, isExpired, LOW_GRADE_LIMIT } from '../src/loot/lifetime';
+import { convertsToSalvage, expiresAfterWave, HARD_LIMIT, isExpired, LOW_GRADE_LIMIT } from '@riftwarden/rules/loot/lifetime';
 
 describe('physical loot rules (scenario G)', () => {
   it('a drop from wave W survives W, W+1, W+2 and expires when W+2 is cleared', () => {

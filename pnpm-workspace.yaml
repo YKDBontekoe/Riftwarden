@@ -1,0 +1,27 @@
+packages:
+  - packages/*
+  - apps/*
+
+# One version of every shared dependency across the workspace.
+catalog:
+  '@babylonjs/core': ^8.56.2
+  '@babylonjs/havok': ^1.3.14
+  '@babylonjs/loaders': 8.56.2
+  react: ^18.3.1
+  react-dom: ^18.3.1
+  '@types/react': ^18.3.31
+  '@types/react-dom': ^18.3.7
+  '@types/node': ^26.6.6
+  pg: ^8.23.1
+  '@types/pg': ^8.23.1
+  ws: ^8.23.0
+  '@types/ws': ^8.18.2
+  tsx: ^4.23.15
+  typescript: '5.9'
+  vite: ^7.3.8
+  vitest: ^5.1.1
+  '@vitejs/plugin-react': ^5.2.0
+
+# Never run install scripts (the old npm ci used --ignore-scripts); esbuild works from its platform package.
+ignoredBuiltDependencies:
+  - esbuild

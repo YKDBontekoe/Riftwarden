@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeCode, parseClientMsg, PROTOCOL_VERSION, RateLimiter } from '../src/net/protocol';
-import { opError, runOp } from '../src/progression/ops';
-import { createDefaultSave } from '../src/progression/save';
+import { normalizeCode, parseClientMsg, PROTOCOL_VERSION, RateLimiter } from '@riftwarden/game/net/protocol';
+import { opError, runOp } from '@riftwarden/rules/progression/ops';
+import { createDefaultSave } from '@riftwarden/rules/progression/save';
 
 const rich = () => {
   const d = createDefaultSave(1);

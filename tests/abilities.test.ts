@@ -1,19 +1,19 @@
 // Abilities: definitions, scaling rules, loot integration, save v10 and the arena runtime (with fakes, no scene).
-import '../server/headless';
+import '../apps/server/headless';
 import { NullEngine, Scene, Vector3 } from '@babylonjs/core';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { ABILITIES, ABILITY_KINDS, abilityCooldown, abilityPower, abilityRadius, blinkDistance, BLINK_MARGIN, THROW, ultChargeNeeded, ultGain } from '../src/abilities/defs';
-import { Abilities, type AbilityHost } from '../src/arena/Abilities';
-import { BASE_STATS, computeStats, STAT_KEYS } from '../src/combat/stats';
-import { itemModifiers } from '../src/loot/equipment';
-import { BASES } from '../src/loot/bases';
-import { generateItem } from '../src/loot/generate';
-import { RunInventory } from '../src/loot/runInventory';
-import type { ItemInstance } from '../src/loot/types';
-import { fitsSlot } from '../src/progression/items';
-import { RunLedger } from '../src/progression/run';
-import { createDefaultSave, migrate, SAVE_VERSION, sanitizeSave } from '../src/progression/save';
-import { STAT_HELP } from '../src/ui/statHelp';
+import { ABILITIES, ABILITY_KINDS, abilityCooldown, abilityPower, abilityRadius, blinkDistance, BLINK_MARGIN, THROW, ultChargeNeeded, ultGain } from '@riftwarden/rules/abilities/defs';
+import { Abilities, type AbilityHost } from '@riftwarden/game/arena/Abilities';
+import { BASE_STATS, computeStats, STAT_KEYS } from '@riftwarden/rules/combat/stats';
+import { itemModifiers } from '@riftwarden/rules/loot/equipment';
+import { BASES } from '@riftwarden/rules/loot/bases';
+import { generateItem } from '@riftwarden/rules/loot/generate';
+import { RunInventory } from '@riftwarden/rules/loot/runInventory';
+import type { ItemInstance } from '@riftwarden/rules/loot/types';
+import { fitsSlot } from '@riftwarden/rules/progression/items';
+import { RunLedger } from '@riftwarden/rules/progression/run';
+import { createDefaultSave, migrate, SAVE_VERSION, sanitizeSave } from '@riftwarden/rules/progression/save';
+import { STAT_HELP } from '@riftwarden/client/ui/statHelp';
 
 const gen = (baseId: string, o: Partial<Parameters<typeof generateItem>[0]> = {}): ItemInstance =>
   generateItem({ uid: `u_${baseId}_${o.seed ?? 1}`, seed: o.seed ?? 1, level: 10, rarity: 'rare', baseId, source: 'test', now: 1, ...o });
@@ -183,9 +183,9 @@ describe('ability runtime', () => {
 
 describe('deployables and ability modifiers', () => {
   it('every deployable kind has a base, a positive cooldown and finite power', async () => {
-    const { ABILITIES, DEPLOYABLE_KINDS, abilityPower, deployDistance } = await import('../src/abilities/defs');
-    const { BASES } = await import('../src/loot/bases');
-    const { BASE_STATS } = await import('../src/combat/stats');
+    const { ABILITIES, DEPLOYABLE_KINDS, abilityPower, deployDistance } = await import('@riftwarden/rules/abilities/defs');
+    const { BASES } = await import('@riftwarden/rules/loot/bases');
+    const { BASE_STATS } = await import('@riftwarden/rules/combat/stats');
     for (const k of DEPLOYABLE_KINDS) {
       expect(BASES.some((b) => b.ability === k)).toBe(true);
       expect(ABILITIES[k].cooldown).toBeGreaterThan(0);
@@ -204,7 +204,7 @@ describe('deployables and ability modifiers', () => {
   });
 
   it('ability run upgrades are offered only with an ability equipped', async () => {
-    const { RunBuild, UPGRADES } = await import('../src/roguelite/upgrades');
+    const { RunBuild, UPGRADES } = await import('@riftwarden/rules/roguelite/upgrades');
     const ids = new Set(UPGRADES.filter((u) => u.needs?.abilities).map((u) => u.id));
     expect(ids.size).toBeGreaterThanOrEqual(3);
     const seen = (abilities: number) => {

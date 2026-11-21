@@ -1,6 +1,6 @@
 // M4 acceptance scenarios (A-K: salvaging, protection, merchants, stock rotation, affix rerolls, locks,
 // enhancement, fabrication, failed transactions, exploits, regression + leaks) against a running dev server.
-// Usage: npm run dev (port 5173), then: node scripts/e2e-m4.cjs   (needs `playwright` + Chromium).
+// Usage: pnpm dev (port 5173), then: node scripts/e2e-m4.cjs   (needs `playwright` + Chromium).
 // Runs in ?test mode: fixed-step simulation, low graphics preset, no real pointer lock. UI actions are real
 // DOM clicks on the HQ terminals; state is verified through the save (window.__rift.profile) and reloads.
 // Screenshots go to $E2E_OUT (default: OS temp dir). Exit code 0 = all checks passed.

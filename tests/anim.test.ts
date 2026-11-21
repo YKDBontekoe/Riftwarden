@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Spring, damp, impulse, smoothstep } from '../src/visuals/anim';
+import { Spring, damp, impulse, smoothstep } from '@riftwarden/game/visuals/anim';
 
 describe('anim helpers', () => {
   it('spring settles to target and stays finite for huge dt', () => {

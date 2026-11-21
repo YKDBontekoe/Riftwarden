@@ -22,7 +22,7 @@ const check = (n, ok, info = '') => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${n}
 
 let server = null;
 function startServer() {
-  const child = spawn(process.execPath, ['--import', 'tsx', 'server/main.ts'], {
+  const child = spawn(process.execPath, ['--import', 'tsx', 'apps/server/main.ts'], {
     env: { ...process.env, RIFT_PORT: String(PORT), DATABASE_URL: databaseUrl.href, RIFT_TEST: '1' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });

@@ -1,0 +1,16 @@
+{
+  "name": "@riftwarden/server",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Legacy Node co-op server (replaced by the Rust gateway + workers, see docs/architecture-v2.md).",
+  "dependencies": {
+    "@babylonjs/core": "catalog:",
+    "@babylonjs/havok": "catalog:",
+    "@riftwarden/game": "workspace:*",
+    "@riftwarden/rules": "workspace:*",
+    "pg": "catalog:",
+    "tsx": "catalog:",
+    "ws": "catalog:"
+  }
+}

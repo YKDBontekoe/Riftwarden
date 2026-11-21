@@ -1,0 +1,1098 @@
+import { Color3, type Mesh, MeshBuilder, type Scene, type TransformNode, Vector3 } from '@babylonjs/core';
+import { sfx } from '../audio/Sfx';
+import { applyDamage, type DamageResult, type DamageType, type Health } from '@riftwarden/rules/combat/damage';
+import { ENEMIES, type EnemyDef, type EnemyKind } from '@riftwarden/rules/data/defs';
+import type { Turret } from '../defense/Turrets';
+import type { Effects } from '../fx/Effects';
+import type { Ordnance, Telegraphs } from '../fx/Hostile';
+import type { Player } from '../player/Player';
+import type { Kit } from '../visuals/kit';
+import { FLASH_BUFFER } from '../visuals/hitFlashPlugin';
+import { woundSeverity } from '../fx/wounds';
+import { HitLean, hitImpulse } from './hitReact';
+import { hasLost, LIMB_EFFECT } from '@riftwarden/rules/enemies/limbs';
+import { detachLimb, hitLimb, restoreLimbs } from './limbRuntime';
+import { BLAST, DEATH_TIME, deathPose, deathStyle, FLYERS, type DeathPose, WRECK_DRAG, wreckKnock } from './deathAnims';
+import type { Palette } from '../visuals/materials';
+import { hasAnyStatus, isBurning, isChilled, isFrozen, isShocked, newStatus, resetStatus, speedFactor, type StatusState } from '@riftwarden/rules/combat/status';
+import { unlit } from '../visuals/materials';
+import type { DroneRig, WalkerRig } from '../visuals/models';
+import { buildEliteParts, buildThreatMark, type EliteParts, type ThreatMark } from '../visuals/eliteParts';
+import { ELITE, ELITE_IDS, type EliteModId, eliteName, validMods } from '@riftwarden/rules/survival/elites';
+import type { ArenaLayout, GateId, Vec2 } from '@riftwarden/rules/world/layout';
+import type { EnemyNavigator } from '@riftwarden/rules/enemies/navigation';
+import { freshMutationState, type MutationState, mutationDeath, setupMutations, updateMutations } from './mutations';
+import { WalkerMotion } from './walkerMotion';
+
+export interface EnemyContext {
+  player: Player;
+  effects: Effects;
+  layout: ArenaLayout;
+  damageReactor(amount: number, at: Vector3): void;
+  /** Line of sight against static level geometry. */
+  los(a: Vector3, b: Vector3): boolean;
+  /** Pan for positional audio. */
+  panFor(p: Vector3): { pan: number; volume: number };
+  // ---- M6
+  towers: readonly Turret[];
+  tele: Telegraphs;
+  ordnance: Ordnance;
+  /** All hostile damage to the drone goes through here (statistics, feedback). */
+  hurtPlayer(amount: number, from: Vector3): void;
+  /** Hostile area blast: damages the drone (falloff), the reactor if inside, suppresses towers, optionally hurts enemies. */
+  hostileBlast(center: Vector3, radius: number, o: { player: number; reactor?: number; disable?: number; enemies?: number; owner?: Enemy | null; color?: 'orange' | 'blue' | 'red' | 'violet' }): void;
+  /** Reinforcements (bosses/events). Null when the arena is saturated. */
+  summon(kind: EnemyKind, at: Vector3, o?: { mods?: EliteModId[]; gate?: GateId }): Enemy | null;
+  /** Short HUD warning (rate limited by the HUD). */
+  alert(text: string, tone: 'red' | 'orange' | 'blue' | 'white'): void;
+  /** An enemy left the arena alive (escaping high-value target). */
+  escaped(e: Enemy): void;
+  /** Hostile time since the run started (animation phase). */
+  time: number;
+  /** M7 co-op: called before each enemy thinks (the server points `player` at that enemy's target drone). */
+  focus?(e: Enemy): void;
+  /** M10: plant a ground hazard patch (molten slag trails). */
+  hazard?(x: number, z: number, r: number, kind: 'frost' | 'slag', life: number): void;
+  /** M10: damage a tower directly (sapper charges). */
+  damageTower?(t: Turret, amount: number): void;
+}
+
+/** M7: lifecycle observers (co-op replication). */
+export interface EnemyHooks {
+  spawned?(e: Enemy): void;
+  killed?(e: Enemy, detonated: boolean): void;
+  released?(e: Enemy): void;
+}
+
+export interface EnemyHitboxMeta {
+  enemy: Enemy;
+  weak: boolean;
+  /** Named part (boss components). */
+  part?: string;
+}
+
+/** Context of one damage instance, for behaviours (directional shields, weakpoints, immunity). */
+export interface HitInfo {
+  weak: boolean;
+  /** Where the attack came from (player eye / tower muzzle); null for area, status or reaction damage. */
+  from: Vector3 | null;
+  point: Vector3;
+  dot: boolean;
+  /** Damage element ('none' = untyped). Void pierces shields; corrosive strips elite plating twice as fast. */
+  element: string;
+}
+
+/** Plug-in AI for every archetype (core walker/rusher in coreBehaviors.ts, the rest in behaviors.ts / bosses/). Per-enemy state lives in `e.ai`. */
+export interface Behavior {
+  /** Rig for archetypes that use the shared walker/drone rigs (default: the kit template named after the kind). */
+  rig?(m: EnemyManager): { root: TransformNode; walker?: WalkerRig | null; drone?: DroneRig | null };
+  /** Build extra rig parts / hitboxes (called once per pooled enemy object). */
+  create?(e: Enemy, m: EnemyManager): void;
+  /** Reset per-spawn state. */
+  spawn(e: Enemy, ctx: EnemyContext | null, m: EnemyManager): void;
+  /** Movement, decisions, attacks and animation (hostile time, already status-scaled where relevant). */
+  update(e: Enemy, hdt: number, ctx: EnemyContext, m: EnemyManager): void;
+  /** Adjust incoming damage (returns the amount that should apply). */
+  damageMod?(e: Enemy, amount: number, info: HitInfo, m: EnemyManager): number;
+  /**
+   * Death presentation beyond the default explosion. Return true to suppress the default, or a number of
+   * seconds to keep the (no longer targetable) wreck animating through `dying` before it is released.
+   */
+  death?(e: Enemy, ctx: EnemyContext, m: EnemyManager): boolean | number;
+  /** Destruction sequence frames (wreck is not in `active`, cannot be hit or targeted). */
+  dying?(e: Enemy, dt: number, t: number, ctx: EnemyContext, m: EnemyManager): void;
+  /** Released (killed, escaped or cleared): drop telegraphs, children, etc. */
+  release?(e: Enemy, m: EnemyManager): void;
+  /** Boss health-bar details (phase, state, current attack). */
+  hud?(e: Enemy): Partial<import('../ui/store').BossHud>;
+}
+
+let nextId = 1;
+
+const DEATH_POSE: DeathPose = { pitch: 0, roll: 0, sink: 0, flash: 0 };
+
+/** Hit-flash tints (additive HDR). */
+const HIT_FLASH: [number, number, number] = [1, 0.92, 0.8];
+const HOT_FLASH: [number, number, number] = [1, 0.5, 0.15];
+const SHIELD_FLASH: [number, number, number] = [0.25, 0.7, 1];
+
+export class Enemy implements Health {
+  readonly id = nextId++;
+  /** M7 co-op replicas: the server's id for this enemy (0 = local). */
+  netId = 0;
+  hp = 0;
+  maxHp = 0;
+  shield = 0;
+  maxShield = 0;
+  alive = false;
+  state: 'move' | 'attack' = 'move';
+  path: Vec2[] = [];
+  seg = 1;
+  readonly pos = new Vector3();
+  yaw = 0;
+  attackT = 0;
+  shotT = 0;
+  chargeT = 0;
+  phase = Math.random() * 10;
+  flinch = 0;
+  /** Directional hit reaction: local pitch/roll lean (rad) and their spring velocities. */
+  lean = new HitLean();
+  stuckT = 0;
+  bestDist = Infinity;
+  /** Gate whose wave this enemy belongs to (lane identity even when it came out of a forward rift). */
+  gate: GateId = 'north';
+  /** Navigation field version the current path was planned on (procedural arenas). */
+  navV = -1;
+  /** Breaching: tower being hit and time to the next hit. */
+  breachId = 0;
+  breachT = 0;
+  /** M10 mutation state (enemies/mutations.ts). */
+  mut: MutationState = freshMutationState();
+  /** M10: untargetable and unhittable (burrowed); towers, picking and the HUD skip it. */
+  hidden = false;
+  damageMult = 1;
+  speedMult = 1;
+  /** Remaining path length to the reactor: lower = more dangerous (turret priority). */
+  remaining = 0;
+  shieldFlash = 0;
+  /** Additive hit flash 0..1 (decays quickly) and its tint; written to the per-instance flash buffer. */
+  hitFlash = 0;
+  flashRgb: [number, number, number] = [1, 1, 1];
+  /** Cached per-part flash vectors (rebuilt when elite hardware / marks are added). */
+  flashVecs: { set(x: number, y: number, z: number, w: number): unknown }[] | null = null;
+  shieldRegenT = 0;
+  /** performance.now() of the last damage taken (drives the HUD health bar). */
+  lastHit = 0;
+  readonly hitboxes: Mesh[] = [];
+  /** Shoot-off parts (walker frames): hull damage soaked per part (cannon, arm, head, leg) and the lost-part mask. */
+  limbDmg = [0, 0, 0, 0];
+  limbsLost = 0;
+  /** M5 elemental statuses (reset on spawn and release, so nothing outlives the enemy). */
+  readonly status: StatusState = newStatus();
+  /** Spawn generation: pooled enemies are reused, queued events compare this to detect a recycled target. */
+  gen = 0;
+  mark: Mesh | null = null;
+  markKind = '';
+  readonly motion: WalkerMotion | null;
+
+  // ---- M6
+  /** Elite modifiers (empty = regular). */
+  mods: EliteModId[] = [];
+  /** Built lazily per pooled object, toggled per spawn. */
+  readonly eliteParts = new Map<EliteModId, EliteParts>();
+  threat: ThreatMark | null = null;
+  /** Armored: damage budget the plating still absorbs. */
+  armor = 0;
+  boostT = 0;
+  boostCd = 0;
+  dischargeCd = 0;
+  dischargeWind = 0;
+  dischargeMark = 0;
+  /** Engineer empowerment (seconds). */
+  buffT = 0;
+  /** Encounter role from the wave plan. */
+  tag: 'boss' | 'hvt' | 'squad' | 'swarm' | 'summon' | undefined;
+  /** Boss repeat-encounter index. */
+  encounter = 1;
+  /** Behaviour state (new archetypes, bosses). */
+  ai: Record<string, unknown> & { rig?: unknown } = {};
+  /** Recent damage window (interrupts, repositioning). */
+  recentDamage = 0;
+  /** Damage taken from the player / towers (statistics are kept by the director; this is per-enemy). */
+  spawnedAt = 0;
+  /** Recorded so death effects can run without the dead object. */
+  displayName = '';
+  /** Where the last hit came from (x/z), for the wreck's knock-back; NaN = unknown. */
+  hitFromX = Number.NaN;
+  hitFromZ = Number.NaN;
+  /** Wreck velocity (m/s) while collapsing. */
+  knockX = 0;
+  knockZ = 0;
+
+  constructor(
+    readonly def: EnemyDef,
+    readonly root: TransformNode,
+    readonly walker: WalkerRig | null,
+    readonly drone: DroneRig | null,
+    readonly behavior: Behavior,
+  ) {
+    this.motion = walker ? new WalkerMotion(walker, def.scale) : null;
+  }
+
+  get kind(): EnemyKind {
+    return this.def.kind;
+  }
+  get elite(): boolean {
+    return this.mods.length > 0;
+  }
+  has(m: EliteModId): boolean {
+    return this.mods.includes(m);
+  }
+  center(out = new Vector3()): Vector3 {
+    return out.set(this.pos.x, this.pos.y + this.def.bodyY, this.pos.z);
+  }
+  /** Movement multiplier from tier/wave, elites, buffs and boosts (statuses are applied separately). */
+  get moveMult(): number {
+    return this.speedMult * (this.has('accelerated') ? ELITE.speed : 1) * (this.buffT > 0 ? 1.25 : 1) * (this.boostT > 0 ? ELITE.boostMult : 1) * (hasLost(this.limbsLost, 'head') ? LIMB_EFFECT.headlessSpeed : 1) * (hasLost(this.limbsLost, 'leg') ? LIMB_EFFECT.leglessSpeed : 1);
+  }
+  /** Attack recovery multiplier (> 1 = faster). */
+  get rateMult(): number {
+    return (this.has('accelerated') ? ELITE.attackRate : 1) * (this.buffT > 0 ? 1.2 : 1);
+  }
+  /** Outgoing damage scale. */
+  dmg(base: number): number {
+    return base * this.damageMult * (this.buffT > 0 ? 1.3 : 1);
+  }
+}
+
+const TMP = new Vector3();
+const TMP2 = new Vector3();
+
+interface PendingBlast {
+  pos: Vector3;
+  t: number;
+  radius: number;
+  damage: number;
+  marker: number;
+  mesh: Mesh;
+}
+
+
+export class EnemyManager {
+  readonly active: Enemy[] = [];
+  private pool = new Map<EnemyKind, Enemy[]>();
+  private hitboxTemplate: Mesh;
+  private markMats: Record<string, ReturnType<typeof unlit>>;
+  private markTemplate: Mesh;
+  private behaviors: Partial<Record<EnemyKind, Behavior>> = {};
+  private blasts: PendingBlast[] = [];
+  /** Pool pre-warm queue: rigs are built ahead of need, one per frame, so spawns never hitch. */
+  private warmQueue: EnemyKind[] = [];
+  /** Wrecks playing a destruction sequence (bosses). */
+  private wrecks: { e: Enemy; t: number; dur: number; finish?: () => void; spark: number }[] = [];
+  private blastTemplate: Mesh;
+  private aiAcc = 0;
+  /** Diagnostics: last frame's AI update time (ms) and a smoothed average. */
+  aiMs = 0;
+  aiAvg = 0;
+  /** Statistics for the run (kept by the manager because escapes/volatiles happen here). */
+  elitesKilled = 0;
+  /** M7: lifecycle observers (replication). */
+  hooks: EnemyHooks = {};
+  /** Procedural arenas: nav-grid pathing, forward rifts and tower breaching (null = classic fixed lanes). */
+  nav: EnemyNavigator | null = null;
+
+  constructor(scene: Scene, readonly kit: Kit, readonly P: Palette) {
+    this.markMats = {
+      burn: unlit(scene, 'markBurn', [3.2, 0.9, 0.12], { additive: true }),
+      shock: unlit(scene, 'markShock', [0.7, 1.8, 4.2], { additive: true }),
+      chill: unlit(scene, 'markChill', [1.4, 2.3, 2.8], { additive: true }),
+      freeze: unlit(scene, 'markFreeze', [2.4, 3.2, 3.6], { additive: true }),
+    };
+    this.markTemplate = MeshBuilder.CreateIcoSphere('statusMark', { radius: 0.5, subdivisions: 1, flat: true }, scene);
+    this.markTemplate.isVisible = false;
+    this.markTemplate.isPickable = false;
+    this.markTemplate.setEnabled(false);
+    this.hitboxTemplate = MeshBuilder.CreateSphere('hitbox', { diameter: 1, segments: 6 }, scene);
+    this.hitboxTemplate.isVisible = false;
+    this.hitboxTemplate.isPickable = false;
+    this.hitboxTemplate.setEnabled(false);
+    this.blastTemplate = MeshBuilder.CreateSphere('volatileCharge', { diameter: 1, segments: 12 }, scene);
+    this.blastTemplate.material = unlit(scene, 'volatileChargeMat', [3.2, 0.35, 0.12], { additive: true });
+    this.blastTemplate.isPickable = false;
+    this.blastTemplate.setEnabled(false);
+  }
+
+  /**
+   * Make sure the pool can serve `counts` simultaneous enemies per kind without building rigs mid-combat.
+   * Work is spread over frames (one object per update call).
+   */
+  prewarm(counts: Partial<Record<EnemyKind, number>>): void {
+    for (const [kind, n] of Object.entries(counts) as [EnemyKind, number][]) {
+      const have = (this.pool.get(kind)?.length ?? 0) + this.active.filter((e) => e.kind === kind).length + this.warmQueue.filter((k) => k === kind).length;
+      for (let i = have; i < n; i++) this.warmQueue.push(kind);
+    }
+  }
+
+  /**
+   * Build one pooled object of each kind now (arena construction), and attach every elite modifier's hardware to
+   * a walker, so all rig templates exist before shaders are compiled behind the deployment transition.
+   */
+  prebuild(kinds: EnemyKind[]): void {
+    for (const kind of kinds) {
+      if (this.pool.get(kind)?.length) continue;
+      const e = this.create(kind);
+      e.root.setEnabled(false);
+      if (!this.pool.has(kind)) this.pool.set(kind, []);
+      this.pool.get(kind)!.push(e);
+      if (kind === 'walker') {
+        for (const mod of ELITE_IDS) e.eliteParts.set(mod, this.kit.flashable(() => this.kit.soft(() => buildEliteParts(this.kit, this.P, e.root, e.def, mod))));
+        e.threat = this.kit.flashable(() => this.kit.soft(() => buildThreatMark(this.kit, this.P, e.root, e.def)));
+        e.flashVecs = null;
+      }
+    }
+  }
+
+  get warming(): number {
+    return this.warmQueue.length;
+  }
+
+  private warmOne(): void {
+    const kind = this.warmQueue.shift();
+    if (!kind) return;
+    const e = this.create(kind);
+    e.root.setEnabled(false);
+    if (!this.pool.has(kind)) this.pool.set(kind, []);
+    this.pool.get(kind)!.push(e);
+  }
+
+  /** Register the AI for an archetype (Game wires every M6 behaviour at construction). */
+  register(kind: EnemyKind, b: Behavior): void {
+    this.behaviors[kind] = b;
+  }
+
+  /** Add a hit sphere (body/weakpoint/boss part) to an enemy. */
+  addHitbox(e: Enemy, parent: TransformNode, y: number, z: number, r: number, weak: boolean, part?: string, x = 0): Mesh {
+    const h = this.hitboxTemplate.clone('hb', parent)!;
+    h.setEnabled(true);
+    h.isVisible = false;
+    h.isPickable = true;
+    h.position.set(x, y, z);
+    h.scaling.setAll(r * 2);
+    h.metadata = { enemy: e, weak, part } satisfies EnemyHitboxMeta;
+    e.hitboxes.push(h);
+    return h;
+  }
+
+  private create(kind: EnemyKind): Enemy {
+    const def = ENEMIES[kind];
+    const b = this.behaviors[kind];
+    if (!b) throw new Error(`No behaviour registered for enemy kind '${kind}'`);
+    const r = this.kit.flashable(() => this.kit.soft(() => b.rig?.(this) ?? { root: this.kit.node(kind, null) }));
+    const e = new Enemy(def, r.root, r.walker ?? null, r.drone ?? null, b);
+    b.create?.(e, this);
+    if (!e.hitboxes.length) {
+      this.addHitbox(e, e.root, def.bodyY, 0, def.bodyR, false);
+      this.addHitbox(e, e.root, def.weakY, def.weakForward, def.weakR, true);
+    }
+    const mk = this.markTemplate.clone('mark', e.root)!;
+    mk.isVisible = true;
+    mk.isPickable = false;
+    mk.position.set(0, def.weakY + 0.75, 0);
+    mk.scaling.setAll(0.34);
+    mk.setEnabled(false);
+    e.mark = mk;
+    return e;
+  }
+
+  spawn(kind: EnemyKind, gate: GateId, layout: ArenaLayout, hpMult: number, dmgMult: number, speedMult = 1, o: { mods?: EliteModId[]; tag?: Enemy['tag']; encounter?: number; ctx?: EnemyContext | null } = {}): Enemy {
+    const free = this.pool.get(kind);
+    const e = free && free.length ? free.pop()! : this.create(kind);
+    const def = e.def;
+    const hp = Number.isFinite(hpMult) && hpMult > 0 ? hpMult : 1;
+    e.maxHp = e.hp = def.hp * hp;
+    e.maxShield = e.shield = def.shield * hp;
+    e.damageMult = Number.isFinite(dmgMult) && dmgMult > 0 ? dmgMult : 1;
+    e.speedMult = speedMult;
+    e.alive = true;
+    e.gen++;
+    resetStatus(e.status);
+    e.mark?.setEnabled(false);
+    e.markKind = '';
+    e.state = 'move';
+    e.attackT = def.attackInterval * Math.random();
+    e.shotT = def.playerShotInterval * (0.5 + Math.random());
+    e.chargeT = 0;
+    e.flinch = 0;
+    e.lean.reset();
+    e.stuckT = 0;
+    e.bestDist = Infinity;
+    e.shieldFlash = 0;
+    this.setFlash(e, 0);
+    e.lastHit = 0;
+    e.recentDamage = 0;
+    e.tag = o.tag;
+    e.encounter = o.encounter ?? 1;
+    e.buffT = 0;
+    e.boostT = 0;
+    e.boostCd = ELITE.boostEvery * Math.random();
+    e.dischargeCd = 1 + ELITE.dischargeEvery * Math.random();
+    e.dischargeWind = 0;
+    e.spawnedAt = performance.now();
+    this.applyMods(e, o.mods ?? []);
+    setupMutations(e);
+    e.hidden = false;
+    // Offset lane so groups spread out instead of single-file (heavies and bosses stay central).
+    const lateral = (Math.random() * 2 - 1) * (def.role === 'boss' ? 0 : def.radius > 1 ? 0.6 : 1.3);
+    e.gate = gate;
+    e.breachId = 0;
+    if (this.nav) {
+      const from = this.nav.spawnPoint(gate, def.role);
+      e.path = offsetPath(this.nav.pathFrom(kind, from, gate), lateral);
+      e.navV = this.nav.grid(kind).version;
+    } else {
+      e.path = offsetPath(layout.routes[gate].points, lateral);
+      e.navV = -1;
+    }
+    const start = e.path[0];
+    const dir = { x: e.path[1].x - start.x, z: e.path[1].z - start.z };
+    const back = def.role === 'boss' ? 0 : Math.random() * 2;
+    const dl = Math.hypot(dir.x, dir.z);
+    e.pos.set(start.x - (dir.x / dl) * back, 0, start.z - (dir.z / dl) * back);
+    e.seg = 1;
+    e.yaw = Math.atan2(dir.x, dir.z);
+    e.root.position.copyFrom(e.pos);
+    e.root.rotation.y = e.yaw;
+    e.motion?.reset(e.pos, e.yaw);
+    e.root.setEnabled(true);
+    restoreLimbs(e);
+    if (e.walker?.shield) e.walker.shield.setEnabled(e.maxShield > 0);
+    e.remaining = pathLength(e.path, 1, e.pos);
+    e.displayName = eliteName(def.name, e.mods);
+    e.ai = { ...(e.ai.rig ? { rig: e.ai.rig } : {}) };
+    e.behavior?.spawn(e, o.ctx ?? null, this);
+    this.active.push(e);
+    this.hooks.spawned?.(e);
+    return e;
+  }
+
+  /** Configure elite hardware, threat marker and modifier state for a (re)spawned enemy. */
+  private applyMods(e: Enemy, mods: EliteModId[]): void {
+    // Keep only compatible modifiers (allowed kind, no contradictions, no duplicates), in order.
+    e.mods = [];
+    for (const m of mods) if (validMods(e.kind, [...e.mods, m])) e.mods.push(m);
+    for (const [id, parts] of e.eliteParts) parts.node.setEnabled(e.mods.includes(id));
+    for (const id of e.mods) {
+      let parts = e.eliteParts.get(id);
+      if (!parts) {
+        parts = this.kit.flashable(() => this.kit.soft(() => buildEliteParts(this.kit, this.P, e.root, e.def, id)));
+        e.eliteParts.set(id, parts);
+        e.flashVecs = null;
+      }
+      parts.node.setEnabled(true);
+      for (const p of parts.plates) p.setEnabled(true);
+    }
+    e.armor = e.has('armored') ? e.maxHp * ELITE.armorBreak : 0;
+    const support = e.def.role === 'support' && e.kind !== 'pylon';
+    const marked = e.mods.length > 0 || support;
+    if (marked && !e.threat) {
+      e.threat = this.kit.flashable(() => this.kit.soft(() => buildThreatMark(this.kit, this.P, e.root, e.def)));
+      e.flashVecs = null;
+    }
+    if (e.threat) {
+      e.threat.node.setEnabled(marked);
+      e.threat.diamond.setEnabled(e.mods.length > 0);
+      e.threat.support.setEnabled(support);
+      for (const [id, pip] of e.threat.pips) pip.setEnabled(e.mods.includes(id));
+      e.threat.buff.setEnabled(false);
+    }
+  }
+
+  /**
+   * Apply damage. Returns null if the enemy was already dead. Elite plating and behaviour modifiers (directional
+   * shields, phase immunity, boss weakpoints) are resolved here so every source (weapon, towers, statuses,
+   * reactions) is treated the same.
+   */
+  damage(e: Enemy, amount: number, type: DamageType, hitPoint: Vector3, fx: Effects, info: Partial<HitInfo> = {}): DamageResult | null {
+    // Burrowed enemies are out of reach of every source (towers do not even target them).
+    if (!e.alive || e.hidden) return null;
+    const hit: HitInfo = { weak: !!info.weak, from: info.from ?? null, point: hitPoint, dot: !!info.dot, element: info.element ?? 'none' };
+    if (hit.from) {
+      e.hitFromX = hit.from.x;
+      e.hitFromZ = hit.from.z;
+    }
+    if (e.behavior?.damageMod) amount = e.behavior.damageMod(e, amount, hit, this);
+    if (hasLost(e.limbsLost, 'head')) amount *= LIMB_EFFECT.headlessVulnerability;
+    if (e.armor > 0 && !hit.weak && !hit.dot) {
+      const absorbed = Math.min(e.armor, amount * ELITE.armorAbsorb);
+      e.armor -= hit.element === 'corrosive' ? absorbed * 2 : absorbed;
+      amount -= absorbed;
+      if (Math.random() < 0.3) fx.burst('sparks', hitPoint, 3, undefined, 0.5);
+      if (e.armor <= 0) this.breakArmor(e, fx);
+    }
+    if (!(amount > 0)) {
+      e.lastHit = performance.now();
+      return { toShield: 0, toHp: 0, shieldBroken: false, killed: false };
+    }
+    const res = applyDamage(e, amount, type, hit.element === 'void');
+    const heavy = e.def.role === 'boss' ? 0.08 : e.def.radius > 1.1 ? 0.5 : 1;
+    e.flinch = Math.min(1, e.flinch + (res.toHp > 0 ? 0.5 : 0.2) * heavy);
+    if (!hit.dot) this.react(e, hit.from ? hit.from.x : hitPoint.x, hit.from ? hit.from.z : hitPoint.z, (res.toHp + res.toShield) / Math.max(1, e.maxHp + e.maxShield));
+    const lost = e.walker && !hit.dot ? hitLimb(e, hitPoint, res.toHp, !res.killed, fx) : null;
+    if (lost) detachLimb(e, lost, fx);
+    e.shieldRegenT = 4;
+    e.lastHit = performance.now();
+    e.recentDamage += res.toHp + res.toShield;
+    if (e.def.role !== 'boss' || res.toHp > 0) this.flash(e, res.toShield > 0 && res.toHp <= 0 ? SHIELD_FLASH : type === 'explosive' ? HOT_FLASH : HIT_FLASH);
+    if (res.toShield > 0) {
+      e.shieldFlash = 1;
+      fx.burst('shield', hitPoint, 6);
+      if (e.walker?.shield) {
+        const center = e.center(TMP);
+        const normal = TMP2.copyFrom(hitPoint).subtractInPlace(center);
+        if (normal.lengthSquared() > 0.0001) {
+          normal.normalize();
+          center.addInPlaceFromFloats(normal.x * 1.83, normal.y * 1.98, normal.z * 1.83);
+          fx.shieldRipple(center, normal);
+        }
+      }
+    }
+    if (res.shieldBroken) {
+      fx.shieldBreak(e.center(TMP), Math.max(0.8, e.def.radius));
+      sfx.play('shieldHit', { pitch: 0.6 });
+      if (e.walker?.shield) e.walker.shield.setEnabled(false);
+    }
+    return res;
+  }
+
+  private breakArmor(e: Enemy, fx: Effects): void {
+    const parts = e.eliteParts.get('armored');
+    if (parts) for (const p of parts.plates) p.setEnabled(false);
+    const c = e.center(TMP);
+    fx.debrisBurst(c, 8, 6, 1.1);
+    fx.burst('sparks', c, 24, undefined, 1.2);
+    sfx.play('shieldHit', { pitch: 0.45, volume: 0.9 });
+  }
+
+  /**
+   * Kick the hit-reaction spring: the body leans away from (fromX, fromZ) by an amount that grows with the
+   * damage fraction. Bosses and burrowing rigs ignore it (their rigs pose their own root).
+   */
+  react(e: Enemy, fromX: number, fromZ: number, fraction: number): void {
+    if (e.def.role === 'boss' || e.kind === 'burrower' || e.kind === 'pylon') return;
+    const mass = e.def.radius > 1.1 ? 0.45 : FLYERS.has(e.kind) ? 1.4 : 1;
+    e.lean.kick(e.pos.x - fromX, e.pos.z - fromZ, e.yaw, hitImpulse(fraction) * mass);
+  }
+
+  /** Heal (engineers). Never above max; never revives. */
+  heal(e: Enemy, hp: number, shield = 0): void {
+    if (!e.alive) return;
+    if (hp > 0) e.hp = Math.min(e.maxHp, e.hp + hp);
+    if (shield > 0 && e.maxShield > 0) {
+      if (e.shield <= 0 && e.walker?.shield) e.walker.shield.setEnabled(true);
+      e.shield = Math.min(e.maxShield, e.shield + shield);
+    }
+  }
+
+  /** Remove the enemy from play with destruction effects. */
+  kill(e: Enemy, fx: Effects, ctx: EnemyContext, detonated = false): void {
+    if (!e.alive && !this.active.includes(e)) return;
+    this.hooks.killed?.(e, detonated);
+    e.alive = false;
+    if (e.elite) this.elitesKilled++;
+    const c = e.center(new Vector3());
+    if (e.has('volatile')) this.armVolatile(e, c, ctx);
+    if (e.elite) mutationDeath(e, ctx);
+    const handled = e.behavior?.death?.(e, ctx, this) ?? false;
+    if (typeof handled === 'number' && handled > 0) {
+      // Keep the wreck for its destruction sequence; it is already out of play.
+      e.alive = false;
+      const i = this.active.indexOf(e);
+      if (i >= 0) this.active.splice(i, 1);
+      for (const h of e.hitboxes) h.isPickable = false;
+      this.wrecks.push({ e, t: 0, dur: handled, spark: 0 });
+      return;
+    }
+    const burst = () => {
+      const [big, debris, pitch] = BLAST[e.kind] ?? [1, 12, 1];
+      const style = deathStyle(e.kind, e.mods, detonated);
+      e.center(c); // the wreck may have been knocked back since the kill
+      // The rig itself comes apart (its plates, limbs and housings fly), then the blast; generic debris is thinned.
+      const pieces = fx.shatter(e.root, c, 5 + big * 2.5, Math.min(14, Math.round(5 + big * 4)), style === 'cryo' ? 0.2 : 1);
+      fx.explode(c, { scale: detonated ? big * 1.25 : big, debris: pieces > 0 ? Math.ceil(debris * 0.45) : debris, style });
+      const a = ctx.panFor(c);
+      sfx.play('explosion', { volume: a.volume * (detonated ? 1 : 0.8), pan: a.pan, pitch });
+    };
+    const dur = DEATH_TIME[e.kind];
+    if (!handled && dur && e.def.role !== 'boss') {
+      // Collapse first, burst at the end (through the same fx the kill used, so replicas show it too).
+      e.alive = false;
+      const i = this.active.indexOf(e);
+      if (i >= 0) this.active.splice(i, 1);
+      for (const h of e.hitboxes) h.isPickable = false;
+      // Statuses end with the enemy (nothing ticks on a wreck).
+      resetStatus(e.status);
+      e.mark?.setEnabled(false);
+      e.markKind = '';
+      this.flash(e, [1, 0.55, 0.2]);
+      // Immediate kill pop (the full burst follows when the wreck is done) and knock-back away from the shooter.
+      const flying = FLYERS.has(e.kind);
+      fx.burst('sparks', c, flying ? 8 : 12, undefined, 0.8);
+      fx.debrisBurst(c, flying ? 2 : 4, 6, 0.55 * e.def.scale);
+      fx.burst('flash', c, 1, undefined, 0.28 * e.def.scale);
+      const kx = e.pos.x - e.hitFromX;
+      const kz = e.pos.z - e.hitFromZ;
+      const kl = Math.hypot(kx, kz);
+      const k = kl > 0.01 ? wreckKnock(e.kind, e.def.scale, flying) / kl : 0;
+      e.knockX = k > 0 ? kx * k : 0;
+      e.knockZ = k > 0 ? kz * k : 0;
+      this.wrecks.push({ e, t: 0, dur, finish: () => burst(), spark: 0 });
+      return;
+    }
+    if (!handled) burst();
+    this.release(e);
+  }
+
+  /** Volatile: the core goes critical, telegraphed by a swelling sphere and a ground ring, then blasts. */
+  private armVolatile(e: Enemy, c: Vector3, ctx: EnemyContext): void {
+    const mesh = this.blastTemplate.clone('volatile')!;
+    mesh.position.copyFrom(c);
+    mesh.setEnabled(true);
+    const ground = new Vector3(c.x, Math.max(0, e.pos.y), c.z);
+    const marker = ctx.tele.marker(ground, ELITE.volatileRadius, ELITE.volatileDelay, 'red');
+    this.blasts.push({ pos: c, t: ELITE.volatileDelay, radius: ELITE.volatileRadius, damage: e.dmg(ELITE.volatileDamage), marker, mesh });
+    sfx.play('beep', { pitch: 1.2, pan: ctx.panFor(c).pan });
+  }
+
+  /** The enemy leaves the arena alive (no kill rewards). */
+  escape(e: Enemy, ctx: EnemyContext): void {
+    if (!e.alive) return;
+    e.alive = false;
+    ctx.escaped(e);
+    this.release(e);
+  }
+
+  /** Remove without kill rewards (owned parts of a dead boss, debug). */
+  despawn(e: Enemy, fx: Effects | null = null): void {
+    if (!this.active.includes(e)) return;
+    if (fx) fx.burst('sparks', e.center(TMP), 12, undefined, 0.8);
+    this.release(e);
+  }
+
+  /** Default collapse animation for a destroyed enemy: buckle/spiral, flicker, sparks. Presentation only. */
+  private collapse(w: { e: Enemy; t: number; dur: number; spark: number }, dt: number, ctx: EnemyContext): void {
+    const e = w.e;
+    const k = w.t / w.dur;
+    const pose = deathPose(FLYERS.has(e.kind), k, e.netId || e.gen, DEATH_POSE);
+    if (e.knockX !== 0 || e.knockZ !== 0) {
+      // Keep wrecks inside the arena walls; wrecks already in a gate tunnel just slide (no snap to the wall line).
+      const lim = ctx.layout.half - 1.5;
+      const inside = Math.abs(e.pos.x) <= lim && Math.abs(e.pos.z) <= lim;
+      const nx = e.pos.x + e.knockX * dt;
+      const nz = e.pos.z + e.knockZ * dt;
+      e.pos.x = inside ? Math.max(-lim, Math.min(lim, nx)) : nx;
+      e.pos.z = inside ? Math.max(-lim, Math.min(lim, nz)) : nz;
+      const drag = Math.exp(-dt * WRECK_DRAG);
+      e.knockX *= drag;
+      e.knockZ *= drag;
+    }
+    e.root.position.set(e.pos.x, e.pos.y - pose.sink, e.pos.z);
+    e.root.rotation.set(pose.pitch, e.yaw, pose.roll);
+    this.setFlash(e, pose.flash * 0.8);
+    w.spark -= dt;
+    if (w.spark <= 0) {
+      w.spark = 0.09;
+      ctx.effects.burst(FLYERS.has(e.kind) ? 'puff' : 'sparks', e.center(TMP), 2, undefined, 0.5);
+    }
+  }
+
+  /** Start a hit flash with a tint (also used by replicas for remote damage). */
+  flash(e: Enemy, rgb: [number, number, number]): void {
+    e.flashRgb = rgb;
+    this.setFlash(e, 1);
+  }
+
+  /** Write the flash strength to every flashable part of this enemy (no-op when nothing changes). */
+  private setFlash(e: Enemy, k: number): void {
+    if (e.hitFlash === 0 && k === 0) return;
+    e.hitFlash = k;
+    if (!e.flashVecs) {
+      e.flashVecs = [];
+      for (const m of e.root.getChildMeshes(false)) {
+        const v = m.instancedBuffers?.[FLASH_BUFFER] as { set(x: number, y: number, z: number, w: number): unknown } | undefined;
+        if (v) e.flashVecs.push(v);
+      }
+    }
+    const [r, g, b] = e.flashRgb;
+    const a = k * k * 0.55;
+    for (const v of e.flashVecs) v.set(r, g, b, a);
+  }
+
+  private release(e: Enemy): void {
+    e.alive = false;
+    e.knockX = e.knockZ = 0;
+    e.hitFromX = e.hitFromZ = Number.NaN;
+    this.hooks.released?.(e);
+    for (const h of e.hitboxes) h.isPickable = !!(h.metadata as EnemyHitboxMeta | null)?.enemy;
+    resetStatus(e.status);
+    e.mark?.setEnabled(false);
+    e.markKind = '';
+    this.setFlash(e, 0);
+    e.root.rotation.x = 0;
+    e.root.rotation.z = 0;
+    e.behavior?.release?.(e, this);
+    e.root.setEnabled(false);
+    const i = this.active.indexOf(e);
+    if (i >= 0) this.active.splice(i, 1);
+    if (!this.pool.has(e.kind)) this.pool.set(e.kind, []);
+    this.pool.get(e.kind)!.push(e);
+  }
+
+  clear(): void {
+    for (const e of [...this.active]) this.release(e);
+    for (const w of this.wrecks) this.release(w.e);
+    this.wrecks.length = 0;
+    for (const b of this.blasts) b.mesh.dispose();
+    this.blasts.length = 0;
+  }
+
+  /** Status indicator above the head: colour = dominant status (freeze > burn > shock > chill), pulses. */
+  updateMarks(t: number): void {
+    for (const e of this.active) {
+      const m = e.mark;
+      if (!m) continue;
+      const st = e.status;
+      const kind = !hasAnyStatus(st) ? '' : isFrozen(st) ? 'freeze' : isBurning(st) ? 'burn' : isShocked(st) ? 'shock' : isChilled(st) ? 'chill' : '';
+      if (kind !== e.markKind) {
+        e.markKind = kind;
+        if (kind) m.material = this.markMats[kind];
+        m.setEnabled(!!kind);
+      }
+      if (kind) {
+        const pulse = kind === 'shock' ? 0.28 + 0.12 * Math.sin(t * 40 + e.id) : kind === 'burn' ? 0.3 + 0.08 * Math.sin(t * 14 + e.id) : 0.3 + 0.04 * Math.sin(t * 5 + e.id);
+        m.scaling.setAll(pulse * e.def.scale);
+        m.rotation.y = t * 3;
+      }
+    }
+  }
+
+  /** Move along the path at `speed` m/s. Returns true when the end was reached this step. */
+  /**
+   * Survival: the hunted drone moves, so a machine that reached its goal (attacking) and is now out of range goes
+   * back to the chase. The behaviour's "reactor" is the hunted drone (the context layout follows it).
+   */
+  huntRange: number | null = null;
+
+  private pursue(e: Enemy, ctx: EnemyContext): void {
+    if (e.state !== 'attack' || e.def.role === 'boss' || e.hidden) return;
+    const R = ctx.layout.reactor;
+    const d = Math.hypot(e.pos.x - R.x, e.pos.z - R.z);
+    if (d <= this.huntRange!) return;
+    e.state = 'move';
+    const here = { x: e.pos.x, z: e.pos.z };
+    if (this.nav) {
+      // A one-point path: the navigator re-plans from here on this frame (navV differs).
+      e.path = [here, { ...here }];
+      e.seg = 1;
+      e.navV = -1;
+    } else {
+      const k = Math.max(0, d - 4) / d;
+      e.path = [here, { x: e.pos.x + (R.x - e.pos.x) * k, z: e.pos.z + (R.z - e.pos.z) * k }];
+      e.seg = 1;
+    }
+    e.bestDist = Infinity;
+    e.remaining = pathLength(e.path, e.seg, e.pos);
+  }
+
+  follow(e: Enemy, speed: number, hdt: number, turnRate = 5): boolean {
+    const target = e.path[e.seg];
+    if (!target) return true;
+    const dx = target.x - e.pos.x;
+    const dz = target.z - e.pos.z;
+    const dist = Math.hypot(dx, dz);
+    const step = speed * hdt;
+    if (this.nav && dist > 1e-4 && this.nav.blocked(e, e.pos.x + (dx / dist) * Math.min(step + 0.3, dist), e.pos.z + (dz / dist) * Math.min(step + 0.3, dist), hdt)) {
+      e.yaw = turnTowards(e.yaw, Math.atan2(dx, dz), hdt * turnRate);
+      e.stuckT = 0;
+      return false;
+    }
+    if (dist <= step + 0.05) {
+      e.pos.x = target.x;
+      e.pos.z = target.z;
+      e.seg++;
+      e.bestDist = Infinity;
+      e.stuckT = 0;
+      e.remaining = pathLength(e.path, e.seg, e.pos);
+      return e.seg >= e.path.length;
+    }
+    e.pos.x += (dx / dist) * step;
+    e.pos.z += (dz / dist) * step;
+    e.yaw = turnTowards(e.yaw, Math.atan2(dx, dz), hdt * turnRate);
+    if (dist < e.bestDist - 0.1) {
+      e.bestDist = dist;
+      e.stuckT = 0;
+    } else {
+      e.stuckT += hdt;
+      if (e.stuckT > 5) {
+        e.pos.x = target.x;
+        e.pos.z = target.z;
+        e.stuckT = 0;
+      }
+    }
+    e.remaining = pathLength(e.path, e.seg, e.pos);
+    return false;
+  }
+
+  /** Point `back` metres behind the enemy along its own path (retreat/repositioning stays on the lane). */
+  pointBehind(e: Enemy, back: number, out = new Vector3()): Vector3 {
+    let x = e.pos.x;
+    let z = e.pos.z;
+    let left = back;
+    for (let i = e.seg - 1; i >= 0 && left > 0; i--) {
+      const p = e.path[i];
+      const d = Math.hypot(p.x - x, p.z - z);
+      if (d >= left) {
+        x += ((p.x - x) / d) * left;
+        z += ((p.z - z) / d) * left;
+        left = 0;
+        break;
+      }
+      x = p.x;
+      z = p.z;
+      left -= d;
+    }
+    return out.set(x, 0, z);
+  }
+
+  /** Step back along the path by `dist` metres at `speed`. Returns true when done. */
+  retreat(e: Enemy, speed: number, hdt: number): void {
+    const prev = e.path[Math.max(0, e.seg - 1)];
+    const dx = prev.x - e.pos.x;
+    const dz = prev.z - e.pos.z;
+    const d = Math.hypot(dx, dz);
+    const step = Math.min(d, speed * hdt);
+    if (d < 0.05) {
+      if (e.seg > 1) e.seg--;
+      return;
+    }
+    e.pos.x += (dx / d) * step;
+    e.pos.z += (dz / d) * step;
+    e.remaining = pathLength(e.path, e.seg, e.pos);
+  }
+
+  update(hdt: number, ctx: EnemyContext, dt = hdt): void {
+    const t0 = performance.now();
+    if (this.warmQueue.length) this.warmOne();
+    this.updateBlasts(hdt, ctx);
+    for (let i = this.wrecks.length - 1; i >= 0; i--) {
+      const w = this.wrecks[i];
+      w.t += dt;
+      if (w.finish) this.collapse(w, dt, ctx);
+      else w.e.behavior?.dying?.(w.e, dt, w.t, ctx, this);
+      if (w.t >= w.dur) {
+        this.wrecks.splice(i, 1);
+        w.finish?.();
+        this.release(w.e);
+      }
+    }
+    if (hdt <= 0) {
+      this.aiMs = performance.now() - t0;
+      return;
+    }
+    this.nav?.tick(dt);
+    // Separation (n is small; O(n^2) is cheaper than a spatial structure here). Bosses are immovable.
+    const list = this.active;
+    for (let i = 0; i < list.length; i++) {
+      const a = list[i];
+      for (let j = i + 1; j < list.length; j++) {
+        const b = list[j];
+        if (Math.abs(a.pos.y - b.pos.y) > 2.5) continue;
+        const dx = b.pos.x - a.pos.x;
+        const dz = b.pos.z - a.pos.z;
+        const min = a.def.radius + b.def.radius;
+        const d2 = dx * dx + dz * dz;
+        if (d2 < min * min && d2 > 1e-6) {
+          const d = Math.sqrt(d2);
+          const push = ((min - d) / d) * 0.5 * Math.min(1, hdt * 8);
+          const wa = a.def.role === 'boss' ? 0 : b.def.role === 'boss' ? 2 : 1;
+          const wb = b.def.role === 'boss' ? 0 : a.def.role === 'boss' ? 2 : 1;
+          a.pos.x -= dx * push * wa;
+          a.pos.z -= dz * push * wa;
+          b.pos.x += dx * push * wb;
+          b.pos.z += dz * push * wb;
+        }
+      }
+    }
+
+    for (let i = list.length - 1; i >= 0; i--) {
+      const e = list[i];
+      if (!e.alive) continue;
+      ctx.focus?.(e);
+      e.flinch = Math.max(0, e.flinch - hdt * 4);
+      e.shieldFlash = Math.max(0, e.shieldFlash - hdt * 5);
+      if (e.hitFlash > 0) this.setFlash(e, Math.max(0, e.hitFlash - dt * 9));
+      e.recentDamage *= Math.exp(-hdt / 2.5);
+      if (e.buffT > 0) e.buffT = Math.max(0, e.buffT - hdt);
+      if (e.maxShield > 0) {
+        e.shieldRegenT -= hdt;
+        if (e.shieldRegenT <= 0 && e.shield < e.maxShield) {
+          if (e.shield <= 0 && e.walker?.shield) e.walker.shield.setEnabled(true);
+          e.shield = Math.min(e.maxShield, e.shield + e.maxShield * 0.25 * hdt);
+        }
+      }
+      if (e.elite) {
+        this.updateElite(e, hdt, ctx);
+        updateMutations(e, hdt, ctx, this);
+      }
+      if (e.threat) this.animateThreat(e, ctx.time);
+      // Damage states: smoke, then spitting sparks, then flames as the machine nears destruction.
+      const sev = e.hidden ? 0 : woundSeverity(e.hp, e.maxHp);
+      if (sev > 0) ctx.effects.wound(e.center(TMP), e.def.radius * e.def.scale, sev);
+      if (!e.alive) continue;
+      if (this.huntRange !== null) this.pursue(e, ctx);
+      if (this.nav && this.nav.refresh(e)) e.remaining = pathLength(e.path, e.seg, e.pos);
+
+      e.behavior.update(e, hdt, ctx, this);
+      if (e.lean.active) {
+        e.lean.step(dt);
+        e.root.rotation.x = e.lean.pitch;
+        e.root.rotation.z = e.lean.roll;
+      }
+    }
+    const ms = performance.now() - t0;
+    this.aiMs = ms;
+    this.aiAcc = this.aiAcc * 0.95 + ms * 0.05;
+    this.aiAvg = this.aiAcc;
+  }
+
+  /** Elite mechanics shared by every archetype (hostile time). */
+  private updateElite(e: Enemy, hdt: number, ctx: EnemyContext): void {
+    const sf = speedFactor(e.status);
+    // Accelerated: periodic thruster boost (flames flare, short dash along the lane).
+    if (e.has('accelerated')) {
+      if (e.boostT > 0) e.boostT = Math.max(0, e.boostT - hdt);
+      e.boostCd -= hdt * sf;
+      if (e.boostCd <= 0 && e.state === 'move' && sf > 0.5) {
+        e.boostCd = ELITE.boostEvery;
+        e.boostT = ELITE.boostTime;
+        ctx.effects.burst('puff', e.center(TMP), 4, undefined, 0.8);
+      }
+      const parts = e.eliteParts.get('accelerated');
+      if (parts) for (const f of parts.flames) f.scaling.set(0.28, (e.boostT > 0 ? 1.6 : 0.6) + 0.15 * Math.sin(ctx.time * 40 + e.id), 0.28);
+    }
+    // Overcharged: telegraphed electrical discharge at the drone and nearby towers.
+    if (e.has('overcharged')) {
+      const parts = e.eliteParts.get('overcharged');
+      if (parts?.spin) parts.spin.rotation.y += hdt * (e.dischargeWind > 0 ? 14 : 3);
+      if (e.dischargeWind > 0) {
+        if (isFrozen(e.status) || isShocked(e.status)) {
+          // Disrupted mid-charge (elemental counterplay).
+          e.dischargeWind = 0;
+          ctx.tele.cancel(e.dischargeMark);
+          ctx.effects.burst('zap', e.center(TMP), 6);
+        } else {
+          e.dischargeWind -= hdt;
+          if (Math.random() < hdt * 20) ctx.effects.burst('zap', e.center(TMP), 2, undefined, 0.8);
+          if (e.dischargeWind <= 0) this.discharge(e, ctx);
+        }
+      } else {
+        e.dischargeCd -= hdt * sf;
+        if (e.dischargeCd <= 0) {
+          e.dischargeCd = ELITE.dischargeEvery / e.rateMult;
+          const c = e.center(TMP);
+          const r2 = (ELITE.dischargeRange + 3) ** 2;
+          const near = (ctx.player.alive && Vector3.DistanceSquared(c, ctx.player.position) < r2) || ctx.towers.some((t) => !t.building && (t.pos.x - c.x) ** 2 + (t.pos.z - c.z) ** 2 < r2);
+          if (near) {
+            e.dischargeWind = ELITE.dischargeWindup;
+            e.dischargeMark = ctx.tele.marker(new Vector3(e.pos.x, 0, e.pos.z), ELITE.dischargeRange, ELITE.dischargeWindup, 'blue', () => (e.alive ? TMP2.set(e.pos.x, 0, e.pos.z) : null));
+            sfx.play('charge', { pitch: 2, volume: 0.6, pan: ctx.panFor(c).pan });
+          }
+        }
+      }
+    }
+    if (e.has('volatile')) {
+      const parts = e.eliteParts.get('volatile');
+      const f = e.maxHp > 0 ? e.hp / e.maxHp : 1;
+      if (parts?.core) parts.core.scaling.setAll(0.42 + 0.08 * Math.sin(ctx.time * (6 + (1 - f) * 18) + e.id));
+    }
+  }
+
+  private discharge(e: Enemy, ctx: EnemyContext): void {
+    const c = e.center(new Vector3());
+    const r = ELITE.dischargeRange;
+    const fx = ctx.effects;
+    fx.burst('zap', c, 24, undefined, 1.4);
+    fx.ring(new Vector3(c.x, 0.15, c.z), r, 0.3, new Color3(0.5, 1.4, 3.6), true);
+    sfx.play('arc', { volume: 1, pitch: 0.8, pan: ctx.panFor(c).pan });
+    const pe = ctx.player.eye;
+    if (ctx.player.alive && Vector3.DistanceSquared(c, ctx.player.position) < r * r && ctx.los(c, pe)) {
+      ctx.tele.line(c, pe, 0.12, 'blue', 0.08);
+      ctx.hurtPlayer(e.dmg(ELITE.dischargeDamage), c);
+    }
+    for (const t of ctx.towers) {
+      if ((t.pos.x - c.x) ** 2 + (t.pos.z - c.z) ** 2 > r * r || t.building) continue;
+      ctx.tele.line(c, t.head, 0.12, 'blue', 0.06);
+      t.disable(ELITE.towerShortTime);
+    }
+  }
+
+  private animateThreat(e: Enemy, t: number): void {
+    const m = e.threat!;
+    m.node.rotation.y = t * 1.6;
+    m.node.position.y = e.def.topY + 0.15 + Math.sin(t * 2.4 + e.id) * 0.08;
+    const buffed = e.buffT > 0;
+    if (m.buff.isEnabled() !== buffed) m.buff.setEnabled(buffed);
+    if (buffed) m.buff.rotation.y = t * 4;
+  }
+
+  /** Volatile death charges -> blasts (hostile time). */
+  private updateBlasts(hdt: number, ctx: EnemyContext): void {
+    for (let i = this.blasts.length - 1; i >= 0; i--) {
+      const b = this.blasts[i];
+      b.t -= hdt;
+      const f = 1 - Math.max(0, b.t) / ELITE.volatileDelay;
+      b.mesh.scaling.setAll(0.6 + f * 2.2 + 0.2 * Math.sin(f * 40));
+      if (b.t > 0) continue;
+      b.mesh.dispose();
+      this.blasts.splice(i, 1);
+      ctx.effects.explode(b.pos, { scale: 1.5, color: new Color3(3.2, 0.6, 0.15), debris: 6, style: 'heavy' });
+      sfx.play('explosion', { volume: 1, pitch: 0.7, pan: ctx.panFor(b.pos).pan });
+      ctx.hostileBlast(b.pos, b.radius, { player: b.damage, reactor: b.damage * 0.6, disable: 3, enemies: 0.5 * b.damage, color: 'red' });
+    }
+  }
+
+  get dyingCount(): number {
+    return this.wrecks.length;
+  }
+
+  get pendingBlasts(): number {
+    return this.blasts.length;
+  }
+
+  muzzlePos(e: Enemy, out: Vector3): Vector3 {
+    if (e.walker) {
+      e.walker.muzzleGlow.computeWorldMatrix(true);
+      return out.copyFrom(e.walker.muzzleGlow.getAbsolutePosition());
+    }
+    return e.center(out);
+  }
+
+  /** For HUD/debug: counts by kind. */
+  get count(): number {
+    return this.active.length;
+  }
+}
+
+export function turnTowards(cur: number, target: number, maxStep: number): number {
+  let d = target - cur;
+  while (d > Math.PI) d -= Math.PI * 2;
+  while (d < -Math.PI) d += Math.PI * 2;
+  if (Math.abs(d) <= maxStep) return target;
+  return cur + Math.sign(d) * maxStep;
+}
+
+export function clampAngle(a: number, lim: number): number {
+  while (a > Math.PI) a -= Math.PI * 2;
+  while (a < -Math.PI) a += Math.PI * 2;
+  return Math.max(-lim, Math.min(lim, a));
+}
+
+function offsetPath(pts: Vec2[], lateral: number): Vec2[] {
+  return pts.map((p, i) => {
+    const a = pts[Math.max(0, i - 1)];
+    const b = pts[Math.min(pts.length - 1, i + 1)];
+    const dx = b.x - a.x;
+    const dz = b.z - a.z;
+    const l = Math.hypot(dx, dz) || 1;
+    // The final point stays closer to the lane end so walkers ring the reactor.
+    const k = i === pts.length - 1 ? 1.4 : 1;
+    return { x: p.x + (dz / l) * lateral * k, z: p.z - (dx / l) * lateral * k };
+  });
+}
+
+export function pathLength(path: Vec2[], seg: number, pos: Vector3): number {
+  if (seg >= path.length) return 0;
+  let len = Math.hypot(path[seg].x - pos.x, path[seg].z - pos.z);
+  for (let i = seg; i < path.length - 1; i++) len += Math.hypot(path[i + 1].x - path[i].x, path[i + 1].z - path[i].z);
+  return len;
+}
