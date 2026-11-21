@@ -53,6 +53,9 @@ jobs:
         env:
           RIFT_TEST_DATABASE_URL: postgresql://riftwarden:test-only@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/riftwarden
       - run: pnpm build
+        env:
+          # The production client talks to the gateway on its own host (Cloudflare Pages serves the client).
+          VITE_API_URL: ${{ github.ref == 'refs/heads/main' && 'https://api.riftwarden.ykdbonte.dev' || '' }}
       - if: github.ref == 'refs/heads/main'
         run: printf '%s\n' "$GITHUB_SHA" > dist/build.txt
       - if: github.ref == 'refs/heads/main'
@@ -108,13 +111,82 @@ jobs:
         env:
           RIFT_TEST_DATABASE_URL: postgresql://riftwarden:test-only@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/riftwarden
           RIFT_TEST_REDIS_URL: redis://127.0.0.1:${{ job.services.redis.ports['6379'] }}
+      # Co-op through the real stack (scripts/lib/stack.mjs: fresh database, rules + sim workers, gateway).
+      - name: Co-op protocol suites
+        run: |
+          node --import tsx scripts/e2e-coop-protocol.mjs
+          node --import tsx scripts/e2e-coop-map.mjs
+        env:
+          RIFT_TEST_DATABASE_URL: postgresql://riftwarden:test-only@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/riftwarden
+          RIFT_TEST_REDIS_URL: redis://127.0.0.1:${{ job.services.redis.ports['6379'] }}
+
+  e2e:
+    name: Browser suites
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: riftwarden
+          POSTGRES_USER: riftwarden
+          POSTGRES_PASSWORD: test-only
+        ports:
+          - 5432/tcp
+        options: >-
+          --health-cmd "pg_isready -U riftwarden -d riftwarden"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 15
+      redis:
+        image: redis:8
+        ports:
+          - 6379/tcp
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 15
+    env:
+      RIFT_TEST_DATABASE_URL: postgresql://riftwarden:test-only@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/riftwarden
+      RIFT_TEST_REDIS_URL: redis://127.0.0.1:${{ job.services.redis.ports['6379'] }}
+      E2E_OUT: e2e-out
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: rustup show active-toolchain || rustup toolchain install
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - run: corepack enable && pnpm install --frozen-lockfile && mkdir -p e2e-out
+      # The suites require('playwright') (preinstalled in development containers; global here).
+      - name: Playwright
+        run: |
+          npm install --global playwright@1.55.0
+          playwright install --with-deps chromium
+          echo "NODE_PATH=$(npm root --global)" >> "$GITHUB_ENV"
+      # Accounts, offline sync, the run map / war, and real browser co-op (headless SwiftShader).
+      - run: node --import tsx scripts/with-stack.mjs node scripts/e2e-accounts.cjs
+      - run: node --import tsx scripts/with-stack.mjs node scripts/e2e-sync.cjs
+      - run: node --import tsx scripts/with-stack.mjs node scripts/e2e-runmap.cjs
+      # Section X starts its own stack on :8090; it only needs the dev server.
+      - run: node --import tsx scripts/with-stack.mjs --vite-only node --import tsx scripts/e2e-construction-coop.cjs X
+      - if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-screenshots
+          path: e2e-out/
+          if-no-files-found: ignore
+          retention-days: 7
 
   deploy:
     name: Deploy to production
     if: github.ref == 'refs/heads/main'
-    needs: [build-and-test, rust]
+    needs: [build-and-test, rust, e2e]
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
     environment:
       name: production
       url: https://riftwarden.ykdbonte.dev
@@ -122,7 +194,7 @@ jobs:
       contents: read
       packages: write
     env:
-      IMAGE: ghcr.io/ykdbontekoe/riftwarden
+      REGISTRY: ghcr.io/ykdbontekoe
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -135,20 +207,26 @@ jobs:
         with:
           node-version: '24'
           package-manager-cache: false
-      - name: Build and smoke-test the image
+      - name: Build the images
         run: |
-          docker build --file deploy/Dockerfile --label "org.opencontainers.image.revision=$GITHUB_SHA" \
-            --tag "$IMAGE:$GITHUB_SHA" .
-          export RIFTWARDEN_IMAGE="$IMAGE:$GITHUB_SHA"
-          RIFT_POSTGRES_PASSWORD="$(openssl rand -hex 24)"
-          export RIFT_POSTGRES_PASSWORD
-          trap 'docker compose -f deploy/compose.yml down --volumes >/dev/null 2>&1 || true' EXIT
-          if ! docker compose -f deploy/compose.yml up --detach --wait --wait-timeout 45; then
-            docker compose -f deploy/compose.yml logs
-            exit 1
-          fi
-          node scripts/smoke-coop.mjs http://127.0.0.1:18084 "$GITHUB_SHA"
-      - name: Publish the current main build
+          for image in gateway worker; do
+            docker build --file "deploy/$image.Dockerfile" --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+              --tag "$REGISTRY/riftwarden-$image:$GITHUB_SHA" .
+          done
+      - name: Smoke-test the stack
+        run: |
+          cd deploy
+          { echo "RIFT_POSTGRES_PASSWORD=$(openssl rand -hex 24)"; echo "RIFT_CLICKHOUSE_PASSWORD=$(openssl rand -hex 24)"
+            echo "RIFT_GRAFANA_PASSWORD=$(openssl rand -hex 24)"; echo RIFT_COOKIE_SECURE=0; echo RIFT_TRUST_CF_IP=0; } > .env
+          { echo "RIFT_GATEWAY_IMAGE=$REGISTRY/riftwarden-gateway:$GITHUB_SHA"; echo "RIFT_BUILD=$GITHUB_SHA"
+            for k in RULES SIM_BLUE SIM_GREEN; do echo "RIFT_${k}_IMAGE=$REGISTRY/riftwarden-worker:$GITHUB_SHA"; done; } > images.env
+          compose=(docker compose --env-file .env --env-file images.env -f compose.yml)
+          trap '"${compose[@]}" down --volumes >/dev/null 2>&1 || true' EXIT
+          if ! "${compose[@]}" up --detach --wait --wait-timeout 180; then "${compose[@]}" logs --tail 80; exit 1; fi
+          for _ in $(seq 1 30); do curl -fs http://127.0.0.1:18084/health | grep -q '"sims":2' && break; sleep 2; done
+          node ../scripts/smoke-stack.mjs http://127.0.0.1:18084 "$GITHUB_SHA"
+          docker exec riftwarden-gateway /usr/local/bin/riftwarden-gateway admin status
+      - name: Publish the images
         id: publish
         env:
           GH_TOKEN: ${{ github.token }}
@@ -158,23 +236,40 @@ jobs:
             echo 'A newer main commit is available. Skipping this deployment.'
             exit 0
           fi
-
           printf '%s' "$GH_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
           trap 'docker logout ghcr.io >/dev/null' EXIT
-          docker push "$IMAGE:$GITHUB_SHA"
-          docker tag "$IMAGE:$GITHUB_SHA" "$IMAGE:production"
-          docker push "$IMAGE:production"
+          for image in gateway worker; do
+            docker push "$REGISTRY/riftwarden-$image:$GITHUB_SHA"
+            docker tag "$REGISTRY/riftwarden-$image:$GITHUB_SHA" "$REGISTRY/riftwarden-$image:production"
+            docker push "$REGISTRY/riftwarden-$image:production"
+          done
           echo 'published=true' >> "$GITHUB_OUTPUT"
-      - name: Verify the live build through Cloudflare
+      # The server's deploy timer pulls the images (deploy/deploy.sh drains co-op); wait for the new build.
+      - name: Verify the live API
         if: steps.publish.outputs.published == 'true'
         run: |
+          for ((attempt = 1; attempt <= 60; attempt++)); do
+            if node scripts/smoke-stack.mjs https://api.riftwarden.ykdbonte.dev "$GITHUB_SHA"; then exit 0; fi
+            sleep 15
+          done
+          echo "api.riftwarden.ykdbonte.dev did not serve $GITHUB_SHA in time." >&2
+          exit 1
+      # Static client on Cloudflare Pages, after the API it calls is live (needs the CLOUDFLARE_API_TOKEN and
+      # CLOUDFLARE_ACCOUNT_ID secrets; skipped until they exist).
+      - name: Publish the client to Cloudflare Pages
+        if: steps.publish.outputs.published == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [[ -z "$CLOUDFLARE_API_TOKEN" || -z "$CLOUDFLARE_ACCOUNT_ID" ]]; then
+            echo '::warning::CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID are not set: the client was not published.'
+            exit 0
+          fi
+          npx --yes wrangler@4.40.0 pages deploy dist --project-name riftwarden --branch main --commit-hash "$GITHUB_SHA"
           for ((attempt = 1; attempt <= 24; attempt++)); do
-            if live=$(curl --fail --silent --max-time 5 "https://riftwarden.ykdbonte.dev/build.txt") && [[ "$live" == "$GITHUB_SHA" ]]; then
-              if node scripts/smoke-coop.mjs https://riftwarden.ykdbonte.dev "$GITHUB_SHA"; then
-                exit 0
-              fi
-            fi
+            if [[ "$(curl --fail --silent --max-time 5 https://riftwarden.ykdbonte.dev/build.txt)" == "$GITHUB_SHA" ]]; then exit 0; fi
             sleep 10
           done
-          echo "The production hostname did not pass the co-op smoke test for $GITHUB_SHA in time." >&2
+          echo "riftwarden.ykdbonte.dev did not serve $GITHUB_SHA in time." >&2
           exit 1

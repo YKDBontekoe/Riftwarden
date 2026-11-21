@@ -50,9 +50,13 @@ export class SimHost {
     this.send(toBinary(SimUpSchema, create(SimUpSchema, init)));
   }
 
+  /** A gateway (re)connected: introduce the worker and tell it which rooms and players live here (a restarted
+   * gateway knows nothing, and players reconnecting into a running operation must be routed back here). */
   hello(build: string, capacity: number): void {
     this.up({ msg: { case: 'hello', value: { build, capacity } } });
-    this.reportLoad();
+    this.bound.clear();
+    for (const p of this.players.values()) this.syncBinding(p);
+    this.reportLoad(true);
   }
 
   /** One message from the gateway. */
@@ -256,23 +260,28 @@ export class SimHost {
     this.up({ msg: { case: 'bind', value: { account: p.id, code } } });
   }
 
-  private reportLoad(): void {
+  private lastLoad = '';
+
+  /** Rooms and running operations (the gateway routes and drains by them); sent when they change. */
+  private reportLoad(force = false): void {
     const running = [...this.rooms.values()].filter((r) => r.sim).length;
-    this.up({ msg: { case: 'load', value: { codes: [...this.rooms.keys()], running } } });
+    const codes = [...this.rooms.keys()];
+    const key = `${running}|${codes.join(',')}`;
+    if (!force && key === this.lastLoad) return;
+    this.lastLoad = key;
+    this.up({ msg: { case: 'load', value: { codes, running } } });
   }
 
   private housekeeping(): void {
-    let changed = false;
     for (const [code, r] of this.rooms) {
       r.tick();
       if (r.empty) {
         this.rooms.delete(code);
         this.log(`room ${code} closed`);
-        changed = true;
       }
     }
     for (const p of this.players.values()) this.syncBinding(p);
-    if (changed) this.reportLoad();
+    this.reportLoad();
     // Forget players who are in no room and no longer connected.
     for (const [id, p] of this.players) if (!p.attached && !p.room) this.players.delete(id);
   }

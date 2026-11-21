@@ -62,10 +62,13 @@ export async function startStack({ port = 8799, simEnv = {}, gatewayEnv = {} } =
 
   const rulesAddr = `127.0.0.1:${port + 1}`;
   const simAddr = `127.0.0.1:${port + 2}`;
-  const worker = (role, listen, env = {}) => proc(role, process.execPath, ['--import', 'tsx', 'apps/worker/src/main.ts'], { RIFT_WORKER_ROLE: role, RIFT_WORKER_LISTEN: listen, RIFT_TEST: '1', ...env });
+  // RIFT_WORKER_BUNDLE=1 runs the production bundle (node apps/worker/build.mjs) instead of the sources.
+  const entry = process.env.RIFT_WORKER_BUNDLE ? ['apps/worker/dist/main.mjs'] : ['--import', 'tsx', 'apps/worker/src/main.ts'];
+  const worker = (role, listen, env = {}) => proc(role, process.execPath, entry, { RIFT_WORKER_ROLE: role, RIFT_WORKER_LISTEN: listen, RIFT_TEST: '1', ...env });
   const s = {
     url: `http://127.0.0.1:${port}`,
     ws: `ws://127.0.0.1:${port}/session`,
+    dbUrl: dbUrl.href,
     db: new pg.Pool({ connectionString: dbUrl.href }),
     rules: worker('rules', rulesAddr),
     sim: worker('sim', simAddr, simEnv),
@@ -111,8 +114,8 @@ export async function startStack({ port = 8799, simEnv = {}, gatewayEnv = {} } =
   try {
     await waitFor(async () => {
       const h = await s.health();
-      return h.ok && h.sims === 1;
-    }, 60000, 'the gateway and its sim worker');
+      return h.ok && h.sims >= 1 && s.rules.log.includes('worker ready') && s.sim.log.includes('worker ready');
+    }, 60000, 'the gateway and its workers');
   } catch (e) {
     console.log(s.log());
     await s.stop();

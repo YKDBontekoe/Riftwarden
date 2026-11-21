@@ -1,0 +1,38 @@
+# Deploying Riftwarden
+
+The backend runs on one server with Docker Compose; the static client is on Cloudflare Pages. Design and reasoning:
+[docs/architecture-v2.md](../docs/architecture-v2.md), sections 9-10.
+
+## One-time setup on the server
+
+1. Copy this directory to `~/stacks/riftwarden` and create `.env` from `.env.example` (long random passwords).
+2. Log Docker in to GHCR for the deploy script: `DOCKER_CONFIG=~/stacks/riftwarden/.docker docker login ghcr.io`.
+3. Install the systemd user units from `systemd/` (`riftwarden-deploy.timer`, `riftwarden-deploy.service`,
+   `riftwarden-tunnel.service`) and `systemctl --user enable --now riftwarden-deploy.timer riftwarden-tunnel.service`.
+4. Point the tunnel at the gateway and Grafana (`cloudflared.example.yml`), and put `grafana.riftwarden.ykdbonte.dev`
+   behind a Cloudflare Access application.
+5. Cloudflare Pages: create the project `riftwarden` (custom domain `riftwarden.ykdbonte.dev`) and add the repository
+   secrets `CLOUDFLARE_API_TOKEN` (Pages: edit) and `CLOUDFLARE_ACCOUNT_ID`. Until they exist the deploy job skips
+   the client with a warning.
+
+The first run of `deploy.sh` starts everything; later runs roll the stack (below). The previous Node image and its
+`profiles` volume are no longer used (everyone starts fresh; `docker volume rm riftwarden_profiles` once happy).
+
+## What a deploy does
+
+`deploy.sh` (every minute, one at a time) pulls `riftwarden-gateway:production` and `riftwarden-worker:production` and,
+when they changed: updates the infrastructure, the rules worker, then the gateway (rolled back with the rules worker
+if it is not healthy on the new build; a failed build is not retried), then drains and replaces each sim slot in turn,
+so running co-op operations finish on the old version (up to `DRAIN_TIMEOUT`, 30 min by default).
+
+## Operating
+
+| Task | Command (in `~/stacks/riftwarden`) |
+| --- | --- |
+| Status of sim workers and rooms | `docker exec riftwarden-gateway riftwarden-gateway admin status` |
+| Stop new rooms on a slot | `docker exec riftwarden-gateway riftwarden-gateway admin drain sim-blue:7201 on` (`off` to resume) |
+| Logs | `docker compose --env-file .env --env-file images.env logs -f gateway sim-blue` or Grafana |
+| Force a retry of a failed build | `rm .failed-build` |
+| Health | `curl -s 127.0.0.1:18084/health` |
+
+Grafana: `https://grafana.riftwarden.ykdbonte.dev` (admin password from `.env`), dashboard *Riftwarden overview*.

@@ -341,8 +341,12 @@ async fn exchange(state: &State, idx: usize, link: &SimLink, rx: &mut mpsc::Unbo
     stream.set_nodelay(true).ok();
     let (mut reader, mut writer) = stream.into_split();
     link.up.store(true, Ordering::Relaxed);
-    // A (re)connected worker needs the war and fresh profile attachments.
+    // A (re)connected worker needs its drain state, the war and fresh profile attachments. The first frame also
+    // tells the worker that this connection is the gateway (health probes only open the port).
     link.attached.lock().expect("attached").clear();
+    let drain = down(sim_down::Msg::Drain(link.draining.load(Ordering::Relaxed)));
+    writer.write_u32(drain.len() as u32).await?;
+    writer.write_all(&drain).await?;
     if let Ok(json) = state.war.snapshot(state).await {
         let war = serde_json::from_str::<serde_json::Value>(&json)
             .ok()
