@@ -1,0 +1,15 @@
+[package]
+name = "riftwarden-db"
+description = "PostgreSQL access for the gateway: pool, migrations, queries."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+sqlx = { version = "0.9.1", default-features = false, features = ["runtime-tokio", "tls-rustls-ring-webpki", "postgres", "macros", "migrate", "uuid", "chrono", "json"] }
+thiserror = "2.0.21"
+tracing = "0.1.44"

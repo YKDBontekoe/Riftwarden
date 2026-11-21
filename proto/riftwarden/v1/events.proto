@@ -1,0 +1,199 @@
+syntax = "proto3";
+
+package riftwarden.v1;
+
+import "riftwarden/v1/coop.proto";
+import "riftwarden/v1/common.proto";
+
+// Replicated events (server -> clients): one message per tag of the old tuple union (net/events.ts).
+
+message Event {
+  oneof ev {
+    // Presentation calls: effect / weapon-fx / UI event, by replicated call name (net/replicated.ts).
+    Call fx = 1;
+    Call wfx = 2;
+    Call ui = 3;
+    Sound sound = 4;
+    IdCall telegraph = 5;
+    IdCall ordnance = 6;
+    Evolution evolution = 7;
+    Hazard hazard = 8;
+    EnemySpawn enemy_spawn = 9;
+    EnemyKill enemy_kill = 10;
+    EnemyRef enemy_release = 11;
+    EnemyDamage enemy_damage = 12;
+    EnemyLimbs enemy_limbs = 13;
+    TowerAdd tower_add = 14;
+    EnemyRef tower_remove = 15;
+    TowerChange tower_change = 16;
+    Deployable deployable = 17;
+    LootAdd loot_add = 18;
+    LootRemove loot_remove = 19;
+    UpgradePicked upgrade = 20;
+    UpgradeOffer offer = 21;
+    VoteState vote = 22;
+    Bank bank = 23;
+    Defeat defeat = 24;
+    Hurt hurt = 25;
+    Knock knock = 26;
+    Move move = 27;
+    Left left = 28;
+    RemoteShot shot = 29;
+  }
+}
+
+message Call {
+  string name = 1;
+  ValueList args = 2;
+}
+
+message IdCall {
+  string op = 1;
+  uint32 id = 2;
+  ValueList args = 3;
+}
+
+message Sound {
+  string name = 1;
+  optional float volume = 2;
+  optional float pitch = 3;
+  Vec3 at = 4;
+}
+
+message Evolution {
+  string id = 1;
+  bool instant = 2;
+}
+
+message Hazard {
+  float x = 1;
+  float z = 2;
+  float r = 3;
+  string kind = 4;
+  float life = 5;
+}
+
+message EnemySpawn {
+  uint32 id = 1;
+  string kind = 2;
+  repeated string mods = 3;
+  string variant = 4;
+  float x = 5;
+  float y = 6;
+  float z = 7;
+  float yaw = 8;
+  float hp_mult = 9;
+  float max_hp = 10;
+  uint32 seg = 11;
+  string gate = 12;
+}
+
+message EnemyKill {
+  uint32 id = 1;
+  bool effects = 2;
+}
+
+message EnemyRef {
+  uint32 id = 1;
+}
+
+message EnemyDamage {
+  uint32 id = 1;
+  bool shield = 2;
+}
+
+message EnemyLimbs {
+  uint32 id = 1;
+  uint32 mask = 2;
+}
+
+message TowerAdd {
+  uint32 id = 1;
+  TowerConfig cfg = 2;
+  Vec3 p = 3;
+  float yaw = 4;
+  string owner = 5;
+  string flags = 6;
+}
+
+message TowerChange {
+  uint32 id = 1;
+  TowerConfig cfg = 2;
+  uint32 level = 3;
+}
+
+message Deployable {
+  string kind = 1;
+  Vec3 at = 2;
+  float yaw = 3;
+  float seconds = 4;
+  float size = 5;
+}
+
+message LootAdd {
+  uint32 id = 1;
+  Doc item = 2;
+  Vec3 from = 3;
+  Vec3 to = 4;
+  uint32 wave = 5;
+}
+
+message LootRemove {
+  uint32 id = 1;
+  bool collected = 2;
+}
+
+message UpgradePicked {
+  string id = 1;
+  string by = 2;
+}
+
+message UpgradeOffer {
+  repeated string ids = 1;
+  optional string chooser = 2;
+  string source = 3;
+  uint32 seconds = 4;
+}
+
+message VoteState {
+  // 0 closed, 1 checkpoint vote opened, 2 run-map vote opened.
+  uint32 state = 1;
+  bool extract = 2;
+}
+
+message Bank {
+  uint32 wave = 1;
+  bool ok = 2;
+  uint32 salvage = 3;
+  uint32 credits = 4;
+  uint32 components = 5;
+  uint32 items = 6;
+}
+
+message Defeat {}
+
+message Hurt {
+  float amount = 1;
+  bool shield = 2;
+  Vec3 from = 3;
+}
+
+message Knock {
+  Vec3 impulse = 1;
+  float trauma = 2;
+}
+
+message Move {
+  Vec3 p = 1;
+}
+
+message Left {
+  string id = 1;
+  string name = 2;
+}
+
+message RemoteShot {
+  string id = 1;
+  string family = 2;
+  Vec3 dir = 3;
+}

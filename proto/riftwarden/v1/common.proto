@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+package riftwarden.v1;
+
+// Shared value types. Hot paths (enemy / avatar rows) use quantised integers instead (see snapshot.proto).
+
+message Vec3 {
+  float x = 1;
+  float y = 2;
+  float z = 3;
+}
+
+message Color {
+  float r = 1;
+  float g = 2;
+  float b = 3;
+}
+
+// A dynamically shaped value: effect-call arguments, behaviour AI fields, HUD blobs.
+// Replaces the old JSON tagging ({v: [...]}, {c: [...]}) with real types.
+message Value {
+  oneof kind {
+    bool null = 1;
+    double num = 2;
+    string str = 3;
+    bool flag = 4;
+    Vec3 vec = 5;
+    Color color = 6;
+    ValueList list = 7;
+    ValueMap map = 8;
+  }
+}
+
+message ValueList {
+  repeated Value items = 1;
+}
+
+message ValueMap {
+  map<string, Value> fields = 1;
+}
+
+// A document whose shape is owned by the TypeScript rules (SaveData, ItemInstance, run carry, ledgers).
+// JSON bytes, so a rule change never needs a schema change on the backend.
+message Doc {
+  bytes json = 1;
+}
+
+enum GameMode {
+  GAME_MODE_UNSPECIFIED = 0;
+  GAME_MODE_DEFENSE = 1;
+  GAME_MODE_SURVIVAL = 2;
+}
+
+message Error {
+  string code = 1;
+  string msg = 2;
+}

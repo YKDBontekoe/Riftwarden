@@ -1,0 +1,206 @@
+syntax = "proto3";
+
+package riftwarden.v1;
+
+import "riftwarden/v1/common.proto";
+
+// ---- realtime upstream (client -> server)
+
+message ShotHit {
+  uint32 enemy = 1;
+  bool weak = 2;
+  Vec3 point = 3;
+}
+
+message ShotClaim {
+  // Family of the firing weapon (must match the server's view of the loadout).
+  string family = 1;
+  // Eye / muzzle origin and normalised direction.
+  Vec3 origin = 2;
+  Vec3 dir = 3;
+  // Charge power (rail) 0..1, beam tick = 1.
+  float power = 4;
+  // Weapon heat 0..1 when fired.
+  float heat = 5;
+  // Claimed enemy hits in order (max 12).
+  repeated ShotHit hits = 6;
+}
+
+message Input {
+  uint32 seq = 1;
+  Vec3 p = 2;
+  float yaw = 3;
+  float pitch = 4;
+  // Horizontal speed (m/s).
+  float speed = 5;
+  // 1 dashing, 2 sprinting, 4 firing, 8 build mode.
+  uint32 flags = 6;
+  float heat = 7;
+  repeated ShotClaim shots = 8;
+}
+
+message TowerConfig {
+  string base = 1;
+  string weapon = 2;
+  string core = 3;
+  string modifier = 4;
+}
+
+enum TowerPart {
+  TOWER_PART_UNSPECIFIED = 0;
+  TOWER_PART_LEVEL = 1;
+  TOWER_PART_WEAPON = 2;
+  TOWER_PART_CORE = 3;
+  TOWER_PART_MODIFIER = 4;
+}
+
+enum AbilitySlot {
+  ABILITY_SLOT_UNSPECIFIED = 0;
+  ABILITY_SLOT_ABILITY = 1;
+  ABILITY_SLOT_ABILITY2 = 2;
+  ABILITY_SLOT_ULTIMATE = 3;
+}
+
+enum WeaponSlot {
+  WEAPON_SLOT_UNSPECIFIED = 0;
+  WEAPON_SLOT_PRIMARY = 1;
+  WEAPON_SLOT_SECONDARY = 2;
+}
+
+enum TestOp {
+  TEST_OP_UNSPECIFIED = 0;
+  TEST_OP_KILL_ALL = 1;
+  TEST_OP_JUMP = 2;
+  TEST_OP_BOSS = 3;
+  TEST_OP_CLEAR = 4;
+  TEST_OP_REACTOR = 5;
+  TEST_OP_DOWN = 6;
+}
+
+// An intent with a reply (ActResult with the same id).
+message Act {
+  uint32 id = 1;
+  oneof act {
+    Place place = 2;
+    TowerRef recycle = 3;
+    TowerRef repair = 4;
+    Modify modify = 5;
+    Empty tactical = 6;
+    Empty start_wave = 7;
+    Collect collect = 8;
+    Upgrade upgrade = 9;
+    Vote vote = 10;
+    MapVote map_vote = 11;
+    Station station = 12;
+    Equip equip = 13;
+    Unequip unequip = 14;
+    Discard discard = 15;
+    Ability ability = 16;
+    Swap swap = 17;
+    Pound pound = 18;
+    // Test servers only (RIFT_TEST=1).
+    Test test = 19;
+  }
+
+  message Empty {}
+  message Place {
+    TowerConfig cfg = 1;
+    Vec3 p = 2;
+    float yaw = 3;
+  }
+  message TowerRef {
+    uint32 tower = 1;
+  }
+  message Modify {
+    uint32 tower = 1;
+    TowerPart what = 2;
+    string part = 3;
+  }
+  message Collect {
+    uint32 pickup = 1;
+  }
+  message Upgrade {
+    string pick = 1;
+  }
+  message Vote {
+    bool home = 1;
+  }
+  message MapVote {
+    string choice = 1;
+  }
+  message Station {
+    string station = 1;
+    string opt = 2;
+  }
+  message Equip {
+    string uid = 1;
+    // Empty = default slot.
+    string slot = 2;
+  }
+  message Unequip {
+    string slot = 1;
+  }
+  message Discard {
+    string uid = 1;
+  }
+  message Ability {
+    AbilitySlot slot = 1;
+    Vec3 origin = 2;
+    Vec3 dir = 3;
+  }
+  message Swap {
+    WeaponSlot slot = 1;
+  }
+  message Pound {
+    Vec3 p = 1;
+    float fall = 2;
+  }
+  message Test {
+    TestOp op = 1;
+    optional double n = 2;
+  }
+}
+
+message ActResult {
+  uint32 id = 1;
+  bool ok = 2;
+  string reason = 3;
+}
+
+// ---- run lifecycle (server -> client)
+
+message RunPlayer {
+  string id = 1;
+  string name = 2;
+  uint32 slot = 3;
+}
+
+message RunNodeStart {
+  string id = 1;
+  uint32 map = 2;
+  repeated string path = 3;
+  uint32 cleared = 4;
+  uint32 acts = 5;
+  Doc carry = 6;
+}
+
+message RunStart {
+  string run_id = 1;
+  uint32 tier = 2;
+  uint32 seed = 3;
+  // Procedural arena seed (0 = the classic arena).
+  uint32 arena = 4;
+  string you = 5;
+  repeated RunPlayer players = 6;
+  Doc loadout = 7;
+  repeated string tower_tech = 8;
+  repeated string milestones = 9;
+  bool rejoin = 10;
+  GameMode mode = 11;
+  RunNodeStart node = 12;
+}
+
+message RunEnd {
+  Doc result = 1;
+  Doc save = 2;
+}

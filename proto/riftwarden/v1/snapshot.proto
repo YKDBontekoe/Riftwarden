@@ -1,0 +1,160 @@
+syntax = "proto3";
+
+package riftwarden.v1;
+
+import "riftwarden/v1/common.proto";
+
+// Co-op world snapshot (20 Hz, server -> each client). Positions in hot rows are centimetres,
+// angles milliradians, so they travel as small varints.
+
+message EnemyStatus {
+  uint32 burn_stacks = 1;
+  uint32 chill = 2;
+  bool frozen = 3;
+  bool shocked = 4;
+}
+
+message EnemyRow {
+  uint32 id = 1;
+  sint32 x_cm = 2;
+  sint32 y_cm = 3;
+  sint32 z_cm = 4;
+  sint32 yaw_mrad = 5;
+  uint32 hp = 6;
+  uint32 max_hp = 7;
+  uint32 shield = 8;
+  uint32 armor = 9;
+  bool attacking = 10;
+  float charge_t = 11;
+  float buff_t = 12;
+  float boost_t = 13;
+  float discharge_wind = 14;
+  EnemyStatus status = 15;
+  // Behaviour state fields that changed since the previous snapshot (all of them in a full snapshot).
+  map<string, Value> ai = 16;
+  uint32 seg = 17;
+}
+
+message AvatarRow {
+  string id = 1;
+  sint32 x_cm = 2;
+  sint32 y_cm = 3;
+  sint32 z_cm = 4;
+  sint32 yaw_mrad = 5;
+  sint32 pitch_mrad = 6;
+  uint32 hp = 7;
+  uint32 max_hp = 8;
+  uint32 shield = 9;
+  uint32 max_shield = 10;
+  bool alive = 11;
+  // Seconds until respawn; absent while alive or when out for good (survival).
+  optional float respawn_t = 12;
+  uint32 respawns = 13;
+  uint32 flags = 14;
+  float heat = 15;
+  string family = 16;
+  bool connected = 17;
+  float speed = 18;
+  // Checkpoint vote: absent = not voted.
+  optional bool vote_home = 19;
+  string name = 20;
+}
+
+message TowerRow {
+  uint32 id = 1;
+  sint32 yaw_mrad = 2;
+  sint32 pitch_mrad = 3;
+  bool disabled = 4;
+  bool empowered = 5;
+  bool building = 6;
+  uint32 kills = 7;
+  uint32 damage = 8;
+  uint32 hp = 9;
+  uint32 max_hp = 10;
+  bool wrecked = 11;
+}
+
+message WaveState {
+  uint32 number = 1;
+  string phase = 2;
+  float timer = 3;
+  uint32 enemies_left = 4;
+  uint32 remaining_to_spawn = 5;
+}
+
+message Tactical {
+  uint32 energy = 1;
+  bool active = 2;
+  float hostile_scale = 3;
+}
+
+message Checkpoint {
+  bool open = 1;
+  bool at_checkpoint = 2;
+  bool vote_open = 3;
+  uint32 vote_seconds = 4;
+}
+
+message Offer {
+  repeated string ids = 1;
+  string chooser = 2;
+  uint32 seconds = 3;
+}
+
+// A followed telegraph / ordnance position: server id + current point.
+message Tracked {
+  uint32 id = 1;
+  Vec3 p = 2;
+}
+
+message LedgerView {
+  uint32 salvage_unsecured = 1;
+  uint32 salvage_secured = 2;
+  uint32 credits_unsecured = 3;
+  uint32 credits_secured = 4;
+  uint32 components_unsecured = 5;
+  uint32 components_secured = 6;
+  uint32 shards_unsecured = 7;
+  uint32 shards_secured = 8;
+  uint32 xp_secured = 9;
+  uint32 xp_unsecured = 10;
+  uint32 items_unsecured = 11;
+  uint32 items_secured = 12;
+  uint32 waves_cleared = 13;
+  uint32 last_banked_wave = 14;
+  uint32 kills = 15;
+  uint32 duration = 16;
+}
+
+// The block only the receiving player gets.
+message Personal {
+  uint32 seq = 1;
+  LedgerView run = 2;
+  float ult = 3;
+  // Run inventory + stats, only when they changed (shapes owned by the rules).
+  Doc inventory = 4;
+  Doc stats = 5;
+}
+
+message Snapshot {
+  double t = 1;
+  WaveState wave = 2;
+  uint32 reactor = 3;
+  uint32 cores = 4;
+  Tactical tactical = 5;
+  repeated EnemyRow enemies = 6;
+  repeated AvatarRow avatars = 7;
+  repeated TowerRow towers = 8;
+  repeated Tracked telegraphs = 9;
+  repeated Tracked ordnance = 10;
+  // HUD blobs built by the simulation for its own HUD code (survival, boss, run node, map vote).
+  Value survival = 11;
+  Value boss = 12;
+  Checkpoint checkpoint = 13;
+  Offer offer = 14;
+  uint32 upgrades = 15;
+  Value node = 16;
+  Value map_vote = 17;
+  float hostile_t = 18;
+  Personal me = 19;
+}

@@ -1,0 +1,12 @@
+version: v2
+modules:
+  - path: .
+lint:
+  use:
+    - STANDARD
+  except:
+    # Field names follow the existing wire vocabulary where it reads better (e.g. `p`, `yaw`).
+    - FIELD_LOWER_SNAKE_CASE
+breaking:
+  use:
+    - WIRE_JSON
