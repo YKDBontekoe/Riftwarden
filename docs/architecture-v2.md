@@ -1,6 +1,6 @@
 # Riftwarden architecture v2 (prototype -> production)
 
-Status: **draft for owner approval**. Nothing in this document is implemented yet. Once approved, this file is the plan for the "Architecture v2" milestone and wins over older notes in CLAUDE.md where they conflict.
+Status: **approved 2026-11-21**; implementation in progress (see section 13). Once approved, this file is the plan for the "Architecture v2" milestone and wins over older notes in CLAUDE.md where they conflict.
 
 ## 1. Owner decisions (Q&A, 2026-11)
 
@@ -10,14 +10,14 @@ Status: **draft for owner approval**. Nothing in this document is implemented ye
 | "Single API" | Both: **one protocol** for every client <-> server exchange **and** the server is the **source of truth** for player data. |
 | Backend | **Option A**: Rust owns the backend (the only public service). Gameplay rules stay in **one TypeScript copy**, executed server-side by internal Node workers. |
 | Offline | **Offline play stays.** The browser keeps simulating solo runs; results (loot, stats, progress) **sync** to the server, which validates them. |
-| Accounts | **Passkeys** (WebAuthn). Everyone starts fresh: no migration of existing local or online profiles. |
+| Accounts | **Passkeys** (WebAuthn) + a one-time **recovery code** shown at sign-up. **Unique display names**. Everyone starts fresh: no migration of existing local or online profiles. |
 | Data | PostgreSQL (kept) + Redis (new). Migrations with the Rust tool (`sqlx`). No backups for now. |
 | Protocol | Binary, schema-first (Protobuf); transport WebSocket (best performance and stability across browsers today). |
 | Networking | Add lag compensation and better prediction for co-op. |
-| Scale | Hundreds of concurrent players, one machine for now; topology must not block more later. |
+| Scale | Hundreds of concurrent players, one machine for now (4 cores, **4 GB RAM allocated** to the stack); topology must not block more later. |
 | Hosting | The owner's personal server (Docker Compose, Cloudflare Tunnel, pull-based deploy timer kept). Static client on Cloudflare (CDN). API at `api.riftwarden.ykdbonte.dev`. No staging. |
 | Deploys | Running co-op sessions are **drained**, not dropped. |
-| Observability | Yes: Sentry, structured logs, metrics + dashboards. |
+| Observability | OpenTelemetry traces, logs and metrics stored in **ClickHouse**, viewed in **Grafana** (no Sentry). Grafana behind Cloudflare Access. |
 | Frontend | Vite + React 19 + TanStack Router (chosen over Next.js: the game is one canvas, no SSR, no website), Tailwind v4 with design tokens keeping the current look, lighter in-game HUD, Babylon **WebGPU** with WebGL2 fallback. |
 | Repo | Monorepo (Cargo + pnpm workspaces). |
 | Process | Feature freeze. One PR on `claude/dreamy-euler-ca3v9i`, many sessions, every step leaves the game working. Small gameplay differences are acceptable. All tests stay green (legacy suites rebuilt where the architecture removes what they drove). Dev tools kept for admin accounts and test servers. |
@@ -42,10 +42,10 @@ Status: **draft for owner approval**. Nothing in this document is implemented ye
                                                                     │  └─ Unix sockets (protobuf frames)
                                                                     ├──► rules workers (Node, N=cores/2)
                                                                     └──► sim workers   (Node, rooms)
-                                                     prometheus + grafana (local), Sentry (SaaS)
+                                    otel-collector ──► ClickHouse ◄── Grafana (grafana.riftwarden.ykdbonte.dev, Cloudflare Access)
 ```
 
-- **gateway** (Rust): the only process reachable from outside. HTTP for passkey ceremonies, `/health`, `/metrics` (local only), `/war` snapshot for caching; one WebSocket per client for everything else.
+- **gateway** (Rust): the only process reachable from outside. HTTP for passkey ceremonies, `/health`, `/war` snapshot for caching, `/telemetry` (browser errors and client metrics, rate limited); one WebSocket per client for everything else.
 - **rules workers** (Node, stateless): execute TypeScript rules on demand: replay profile ops and run journals, tick the war, compute derived fields. Pure CPU, no Babylon, no Havok.
 - **sim workers** (Node, stateful): run co-op operations (`ServerGame` + Havok + NullEngine, as today). Each hosts several rooms. Players never connect to them; the gateway routes frames.
 - **PostgreSQL**: accounts, passkeys, sessions, profile documents + sync log, run records, war state.
@@ -95,7 +95,8 @@ The split follows the boundary the architecture tests already enforce (pure modu
 - **Passkeys only** (`webauthn-rs`): register (create account + display name + first passkey), sign in, add/remove passkeys from settings. RP ID `riftwarden.ykdbonte.dev`, allowed origin `https://riftwarden.ykdbonte.dev` (+ localhost in dev).
 - **Session**: opaque random token, stored hashed in Postgres, cached in Redis; delivered as an `HttpOnly; Secure; SameSite=Lax` cookie scoped to `.riftwarden.ykdbonte.dev` (client and API are same-site), so the WebSocket upgrade carries it. Sliding expiry 30 days, revocable.
 - **Guest play**: playing without an account works fully offline on a local profile. Creating a passkey creates the account and uploads the local log as the first sync (replayed from an empty profile, so it is validated like any other).
-- Recovery: a lost device without a synced passkey loses access (passkeys usually sync via iCloud/Google). See open questions.
+- **Recovery code**: 16 random characters (grouped, Crockford base32) shown once at sign-up and regenerable from settings; stored as an Argon2id hash. Redeeming it signs in once and requires registering a new passkey; the code is then consumed and a new one shown. Rate limited per account and IP.
+- **Display names**: unique, case-insensitive (`lower(name)` unique index), 3-18 characters from the current allowed set, checked live at sign-up; renaming allowed with a cooldown.
 
 ## 7. Profiles and offline sync
 
@@ -137,7 +138,7 @@ Secured sectors ride in the run journal. A report counts toward liberation only 
 ## 9. Deployment
 
 - **Images**: `gateway` (Rust, distroless, static binary), `worker` (node:24-slim + one esbuild bundle + Havok wasm). Built in CI, pushed to GHCR (as today).
-- **Compose services**: `gateway`, `worker-rules`, `worker-sim` (replicas), `postgres`, `redis`, `prometheus`, `grafana`. `cloudflared` stays a systemd unit pointing at the gateway port.
+- **Compose services**: `gateway`, `worker-rules`, `worker-sim` (replicas), `postgres`, `redis`, `otel-collector`, `clickhouse`, `grafana`. `cloudflared` stays a systemd unit, routing `api.` to the gateway and `grafana.` to Grafana. Every service has a memory limit (section 14).
 - **Pull-based deploy kept**: the systemd timer runs `deploy.sh`, which now:
   1. pulls the new images and runs migrations (`sqlx migrate run`, from the gateway binary on start; migrations are additive-only within a release);
   2. starts new-version sim workers, marks old ones **draining** in Redis (no new rooms; existing rooms run to their end, capped at 3 h);
@@ -146,11 +147,15 @@ Secured sectors ride in the run journal. A report counts toward liberation only 
 - **Static client**: CI builds and uploads to Cloudflare Pages (hashed assets immutable, `index.html` no-cache). The client checks the gateway's protocol version on connect and asks to reload when it is behind.
 - **CI**: Rust (`fmt`, `clippy -D warnings`, `cargo test` with the Postgres + Redis services), `buf lint/breaking`, TS (lint, typecheck, Vitest), build, a Playwright smoke suite on every PR, the full browser suites nightly (they take ~1 h in SwiftShader), image smoke test (as today) and the live verification after deploy.
 
-## 10. Observability
+## 10. Observability (OpenTelemetry -> ClickHouse -> Grafana)
 
-- **Sentry** (sentry.io): browser (`@sentry/browser`, source maps uploaded from CI), gateway (`sentry` crate), workers (`@sentry/node`), with release = git sha.
-- **Logs**: `tracing` JSON logs in the gateway with request/room/account ids; workers log JSON lines to stdout; Docker keeps rotated logs.
-- **Metrics**: gateway `/metrics` (Prometheus): connections, RPC latency/errors per method, sync entries accepted/rejected, rejected runs by reason, rooms, worker queue depth, sim tick time p50/p99 per room (reported by workers), DB pool, Redis latency. A provisioned Grafana dashboard + alert rules (gateway down, error rate, tick time).
+- **One pipeline for traces, logs and metrics**: every process emits OTLP to an **OpenTelemetry Collector** (contrib build, `clickhouse` exporter), which batches into **ClickHouse** (`otel_traces`, `otel_logs`, `otel_metrics_*` tables, TTL 14 days for traces/logs, 90 days for metrics). No Prometheus, no Sentry.
+- **Gateway**: `tracing` + `tracing-opentelemetry` + `opentelemetry-otlp`: a span per RPC / sync / room event with account, room and request ids; logs are `tracing` events exported as OTLP logs (and JSON to stdout as a fallback); metrics via the OTel metrics API.
+- **Workers**: `@opentelemetry/sdk-node` (traces + logs + metrics); a rules replay or a room tick is a span; sim tick time p50/p99 per room as histograms.
+- **Browser**: no third-party SDK. Uncaught errors, unhandled rejections and a few client metrics (FPS buckets, load time, renderer backend) are posted to the gateway's `/telemetry` endpoint (batched, sampled, size-capped, rate limited), which forwards them to the collector as logs/metrics tagged with release = git sha. Source maps are kept as a CI artifact for manual symbolication (a Grafana link opens them later).
+- **Metrics tracked**: connections, RPC latency/errors per method, sync entries accepted/rejected, rejected runs by reason, rooms, worker queue depth, sim tick time per room, DB pool, Redis latency, client errors per release.
+- **Grafana** with the ClickHouse data source plugin, provisioned dashboards (overview, RPC, co-op rooms, sync/anti-cheat, client errors) and alert rules (gateway down, error rate, tick time). Exposed as `grafana.riftwarden.ykdbonte.dev` through the existing Cloudflare Tunnel, protected by Cloudflare Access (the owner configures the Access policy), Grafana's own login kept as a second layer.
+- **Memory budget (4 GB total)**: ClickHouse is tuned for small hosts (`max_server_memory_usage` ~900 MB, low mark cache, `max_threads` 2) and the collector uses a memory limiter. See section 14.
 
 ## 11. Frontend
 
@@ -174,12 +179,12 @@ Secured sectors ride in the run journal. A report counts toward liberation only 
 | --- | --- | --- |
 | 1 | **Monorepo** restructure (pnpm + Cargo workspaces, `packages/rules` / `game` / `apps/client` / `apps/worker`), no behaviour change | all current tests and suites pass from the new paths |
 | 2 | **Protocol schema** in `proto/`, TS codegen; the existing Node server + client switch from JSON to protobuf frames | co-op protocol suites pass over protobuf |
-| 3 | **Gateway skeleton**: config, tracing, Sentry, metrics, health, sqlx migrations (new schema), Redis, CI Rust jobs | gateway serves `/health`, migrations run in CI |
+| 3 | **Gateway skeleton**: config, OTel tracing/logs/metrics, health, sqlx migrations (new schema), Redis, CI Rust jobs | gateway serves `/health`, migrations run in CI, spans reach the collector |
 | 4 | **Passkeys + sessions** + client sign-in/sign-up screens | Playwright virtual-authenticator suite passes |
 | 5 | **Rules worker + sync**: IndexedDB store, log, `Sync` RPC, profile ops through the gateway, run journals + loot re-roll validation | offline -> online sync suite; forged-item tests reject |
 | 6 | **War** moves behind the gateway (storage, schedule, samples in Rust/Redis; rules in the worker) | war suites (W*) pass against the gateway |
 | 7 | **Co-op through the gateway**: lobby in Rust, sim workers, routing, lag compensation, smooth corrections | rebuilt co-op suites pass; old `server/` deleted |
-| 8 | **Deploy**: images, compose, `deploy.sh` with draining, Cloudflare Pages, Prometheus/Grafana | a deploy during a running co-op test room keeps the room alive |
+| 8 | **Deploy**: images, compose, `deploy.sh` with draining, Cloudflare Pages, collector + ClickHouse + Grafana dashboards | a deploy during a running co-op test room keeps the room alive |
 | 9 | **Frontend**: React 19, TanStack Router, Tailwind tokens, signal HUD, terminal split, deep imports, service worker | UI suites pass, bundle target met, screenshots match the current look |
 | 10 | **WebGPU** with WebGL2 fallback, WGSL ports | both backends render the HQ and an arena; suites pass on WebGL2 |
 | 11 | **Docs**: README, CLAUDE.md, this file marked done | |
@@ -189,13 +194,24 @@ Steps 9-10 do not depend on 3-8 and can be interleaved when a session is blocked
 ## 14. Capacity notes (to measure, not assumed)
 
 - Solo players cost the server only sync traffic and rules-worker replays (milliseconds per run), so hundreds of solo players are cheap.
-- A co-op room costs ~2-9 ms of CPU per 60 Hz tick today (SwiftShader-era measurement of the headless sim), i.e. roughly 2-6 heavy rooms per core. The personal server's core count sets the co-op ceiling; the room directory and worker registry already allow a second sim host later.
+- A co-op room costs ~2-9 ms of CPU per 60 Hz tick today (SwiftShader-era measurement of the headless sim), i.e. roughly 2-6 heavy rooms per core.
+- **The server: 4 cores, 4 GB allocated.** Plan: 2 sim workers (one core each, ~4-10 concurrent co-op rooms in total), 1 rules worker, the gateway and the databases sharing the rest. Starting memory limits:
 
-## 15. Open questions (do not block steps 1-3)
+  | service | limit |
+  | --- | --- |
+  | gateway | 128 MB |
+  | worker-rules (1) | 256 MB |
+  | worker-sim (2) | 2 x 512 MB |
+  | postgres | 512 MB (`shared_buffers` 128 MB) |
+  | redis | 96 MB (`maxmemory`, `allkeys-lru` for caches only) |
+  | clickhouse | 1 GB |
+  | otel-collector | 128 MB |
+  | grafana | 192 MB |
+  | **total** | ~3.3 GB (headroom for spikes) |
 
-1. **Sentry**: is there a sentry.io account/project, or should one be created? (A DSN is needed before step 3 ships errors.)
-2. **Cloudflare Pages**: CI needs a Cloudflare API token (Pages edit) as a GitHub secret before step 8.
-3. **Lost passkeys**: acceptable that an account without any synced passkey cannot be recovered, or add an optional recovery code shown once at sign-up?
-4. **Display names**: unique per account, or free text like today?
-5. **Server hardware**: how many cores / how much RAM does the personal server have (sets worker counts and the co-op ceiling)?
-6. **Grafana access**: local only (via SSH tunnel), or behind Cloudflare Access on a subdomain?
+  Measured on the box in step 8; the gateway refuses new co-op rooms when every sim worker is at capacity ("servers full", solo unaffected). The room directory and worker registry allow a second sim host later.
+
+## 15. Open questions (do not block steps 1-7)
+
+1. **Cloudflare Pages**: CI needs a Cloudflare API token (Pages edit) as a GitHub secret before step 8 (owner adds it later).
+2. **Cloudflare Access** policy for `grafana.` (owner configures it in step 8).
