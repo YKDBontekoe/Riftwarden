@@ -1,3 +1,4 @@
+import { shaderLanguageFor } from '../visuals/wgsl';
 import { Effect } from '@babylonjs/core/Materials/effect';
 import { type ParticleSystem } from '@babylonjs/core/Particles/particleSystem';
 import { GeometryBufferRenderer } from '@babylonjs/core/Rendering/geometryBufferRenderer';
@@ -26,7 +27,7 @@ export function softenParticles(scene: Scene, ps: ParticleSystem, range: number)
   const renderer = scene.geometryBufferRenderer;
   if (!renderer?.isSupported) return;
   const engine = scene.getEngine();
-  const effect = engine.createEffectForParticles('rwSoftParticle', ['inverseViewport', 'fadeDistance'], ['worldDepth'], '', undefined, undefined, undefined, ps);
+  const effect = engine.createEffectForParticles('rwSoftParticle', ['inverseViewport', 'fadeDistance'], ['worldDepth'], '', undefined, undefined, undefined, ps, shaderLanguageFor(scene));
   ps.setCustomEffect(effect);
   ps.onBeforeDrawParticlesObservable.add((boundEffect) => {
     if (!boundEffect) return;

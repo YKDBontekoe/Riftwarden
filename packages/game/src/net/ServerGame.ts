@@ -1,7 +1,7 @@
 import { treeModifiers, treeRules } from '@riftwarden/rules/progression/skilltree';
 import { TeamLedger } from '@riftwarden/rules/net/teamLedger';
 import { SCATTER_PELLETS } from '../combat/Weapon';
-import { type Engine } from '@babylonjs/core/Engines/engine';
+import { type AbstractEngine as Engine } from '@babylonjs/core/Engines/abstractEngine';
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { sfx } from '../audio/Sfx';
 import { mulberry32 } from '@riftwarden/rules/combat/damage';

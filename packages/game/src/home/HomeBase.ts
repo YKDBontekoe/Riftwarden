@@ -5,7 +5,7 @@ import { levelForXp } from '@riftwarden/rules/progression/level';
 import { freePoints } from '@riftwarden/rules/progression/skilltree';
 import { placeScan } from '../visuals/scannedProps';
 import { loftData } from '../visuals/sculpt';
-import { type Engine } from '@babylonjs/core/Engines/engine';
+import { type AbstractEngine as Engine } from '@babylonjs/core/Engines/abstractEngine';
 import { SceneInstrumentation } from '@babylonjs/core/Instrumentation/sceneInstrumentation';
 import { DirectionalLight } from '@babylonjs/core/Lights/directionalLight';
 import { HemisphericLight } from '@babylonjs/core/Lights/hemisphericLight';

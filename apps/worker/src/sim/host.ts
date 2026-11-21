@@ -32,6 +32,8 @@ export class SimHost {
   private havok: unknown = null;
   private bound = new Map<string, string>();
   draining = false;
+  /** Operations this worker runs at most (RIFT_SIM_CAPACITY). */
+  private capacity = 6;
   private timers: NodeJS.Timeout[] = [];
 
   constructor(private send: (up: Uint8Array) => void, private log: (m: string) => void) {
@@ -53,6 +55,7 @@ export class SimHost {
   /** A gateway (re)connected: introduce the worker and tell it which rooms and players live here (a restarted
    * gateway knows nothing, and players reconnecting into a running operation must be routed back here). */
   hello(build: string, capacity: number): void {
+    this.capacity = capacity;
     this.up({ msg: { case: 'hello', value: { build, capacity } } });
     this.bound.clear();
     for (const p of this.players.values()) this.syncBinding(p);
@@ -230,6 +233,9 @@ export class SimHost {
       }
       case 'start': {
         if (!me.room) return fail('start', 'Not in a session');
+        if (!me.room.sim && [...this.rooms.values()].filter((r) => r.sim).length >= this.capacity) {
+          return fail('full', 'Co-op servers are full right now: try again in a few minutes (solo play is unaffected)');
+        }
         const why = await me.room.start(me.id);
         if (why) fail('start', why);
         this.reportLoad();

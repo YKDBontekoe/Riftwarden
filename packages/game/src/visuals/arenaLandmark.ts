@@ -1,4 +1,5 @@
 import { Constants } from '@babylonjs/core/Engines/constants';
+import { shaderLanguageFor } from './wgsl';
 import { Effect } from '@babylonjs/core/Materials/effect';
 import { type Material } from '@babylonjs/core/Materials/material';
 import { PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial';
@@ -151,6 +152,7 @@ export class ArenaLandmark {
   private energy(name: string, width: number, height: number, x: number, y: number, z: number, color: Color3, flow: 'rift' | 'fall' | 'rise' = 'rift'): void {
     const scene = this.h.scene;
     const mat = new ShaderMaterial(name, scene, 'rwLandmark', {
+      shaderLanguage: shaderLanguageFor(scene),
       attributes: ['position', 'uv'],
       uniforms: ['worldViewProjection', 'energy', 'flow', 'seed', 'time'],
       needAlphaBlending: true,

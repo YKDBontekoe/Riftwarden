@@ -95,6 +95,7 @@ export function SettingsPanel({ flow, compact }: { flow: Flow; compact?: boolean
           <Seg label="Particles" value={s.particles} options={[['low', 'LOW'], ['medium', 'MEDIUM'], ['high', 'HIGH']]} onChange={(v) => update({ particles: v })} />
           <Seg label="Bloom" value={s.bloom ? 'on' : 'off'} options={[['on', 'ON'], ['off', 'OFF']]} onChange={(v) => update({ bloom: v === 'on' })} />
           <Slider label="Render resolution" min={0.5} max={1} step={0.05} value={s.renderScale} fmt={pct} onChange={(v) => update({ renderScale: v })} />
+          <Seg label={`Renderer · ${flow.backend === 'webgpu' ? 'WebGPU' : 'WebGL2'} now, applies on restart`} value={s.renderer} options={[['webgl', 'WEBGL2'], ['webgpu', 'WEBGPU (BETA)']]} onChange={(v) => update({ renderer: v })} />
         </>
       )}
       {tab === 'audio' && (

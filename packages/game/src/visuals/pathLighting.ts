@@ -1,4 +1,5 @@
 import { Constants } from '@babylonjs/core/Engines/constants';
+import { shaderLanguageFor } from './wgsl';
 import { Effect } from '@babylonjs/core/Materials/effect';
 import { ShaderMaterial } from '@babylonjs/core/Materials/shaderMaterial';
 import { type Color3 } from '@babylonjs/core/Maths/math.color';
@@ -111,6 +112,8 @@ export function createPathLight(
   mesh.freezeWorldMatrix();
 
   const material = new ShaderMaterial(name, scene, 'rwPath', {
+
+    shaderLanguage: shaderLanguageFor(scene),
     attributes: ['position', 'uv'],
     uniforms: ['worldViewProjection', 'signalColor', 'travel', 'activity', 'flash', 'warning', 'pathLength'],
     needAlphaBlending: true,

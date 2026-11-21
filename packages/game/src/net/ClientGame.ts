@@ -9,7 +9,7 @@ import { detachLimb } from '../enemies/limbRuntime';
 import type { WeaponSlot } from '../arena/WeaponSlots';
 import type { AbilitySlot } from '@riftwarden/rules/abilities/defs';
 import { shotOutcome } from '../arena/PlayerCombat';
-import { type Engine } from '@babylonjs/core/Engines/engine';
+import { type AbstractEngine as Engine } from '@babylonjs/core/Engines/abstractEngine';
 import { Color3 } from '@babylonjs/core/Maths/math.color';
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { sfx } from '../audio/Sfx';

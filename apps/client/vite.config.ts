@@ -2,6 +2,7 @@ import { fileURLToPath } from 'node:url';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
+import { serviceWorker } from './sw-plugin';
 
 const port = process.env.RIFT_PORT ?? 8787;
 // The Rust gateway (accounts, and from step 5 on everything else) in development.
@@ -9,7 +10,7 @@ const gateway = process.env.RIFT_GATEWAY ?? 'http://localhost:8090';
 
 export default defineConfig({
   base: './',
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), serviceWorker()],
   optimizeDeps: { exclude: ['@babylonjs/havok'] },
   // Co-op: the dev server proxies /ws and /war to the co-op server (pnpm server) so the client always uses same-origin URLs.
   server: { proxy: { '/ws': { target: `ws://localhost:${port}`, ws: true }, '/war': { target: gateway }, '/auth': { target: gateway }, '/session': { target: gateway.replace(/^http/, 'ws'), ws: true } } },

@@ -10,3 +10,8 @@ function fatal(err: unknown): void {
 }
 
 import('./boot').then((m) => m.boot()).catch(fatal);
+
+// Offline play: production builds cache the app (apps/client/sw-plugin.ts). Not under automation (?test).
+if (import.meta.env.PROD && 'serviceWorker' in navigator && !new URLSearchParams(location.search).has('test')) {
+  window.addEventListener('load', () => void navigator.serviceWorker.register('./sw.js').catch(() => {}));
+}

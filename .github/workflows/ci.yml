@@ -167,6 +167,8 @@ jobs:
           npm install --global playwright@1.55.0
           playwright install --with-deps chromium
           echo "NODE_PATH=$(npm root --global)" >> "$GITHUB_ENV"
+      # WebGPU shaders compile with the browser's WGSL compiler (headless cannot present WebGPU frames).
+      - run: node --import tsx scripts/check-wgsl.mjs
       # Accounts, offline sync, the run map / war, and real browser co-op (headless SwiftShader).
       - run: node --import tsx scripts/with-stack.mjs node scripts/e2e-accounts.cjs
       - run: node --import tsx scripts/with-stack.mjs node scripts/e2e-sync.cjs

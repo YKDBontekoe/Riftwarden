@@ -1,4 +1,5 @@
 import { Constants } from '@babylonjs/core/Engines/constants';
+import { shaderLanguageFor } from './wgsl';
 import { Effect } from '@babylonjs/core/Materials/effect';
 import { ShaderMaterial } from '@babylonjs/core/Materials/shaderMaterial';
 import { Color3 } from '@babylonjs/core/Maths/math.color';
@@ -76,6 +77,7 @@ export class RiftMist {
       const entry: GateMist = { mats: [], meshes: [] };
       for (const [y, strength, size] of [[0.07, 1.15, 30], [0.75, 0.45, 24]] as const) {
         const mat = new ShaderMaterial(`riftMist:${g.id}:${y}`, scene, 'rwMist', {
+          shaderLanguage: shaderLanguageFor(scene),
           attributes: ['position'],
           uniforms: ['world', 'viewProjection', 'time', 'color', 'mouth', 'inward', 'halfWidth', 'strength', 'cameraPosition'],
         });

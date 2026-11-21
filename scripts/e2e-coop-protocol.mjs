@@ -118,7 +118,7 @@ async function profileRows(id) {
       const notReady = await a.waitNew((m) => m.t === 'error');
       check('B3 host cannot deploy before everyone is ready', /not ready/i.test(notReady.msg), notReady.msg);
       b.send({ t: 'ready', ready: true });
-      await a.wait((m) => m.t === 'lobby' && m.lobby?.players.every((p) => p.host || p.ready));
+      await a.wait((m) => m.t === 'lobby' && m.lobby?.players.length === 2 && m.lobby.players.every((p) => p.host || p.ready));
       const started = [a, b].map((x) => x.waitNew((m) => m.t === 'runStart', 40000));
       a.send({ t: 'start' });
       await Promise.all(started);
@@ -383,6 +383,34 @@ async function profileRows(id) {
       const again = await bots2[0].pull();
       check('S13 the player can open a new session on the restarted worker', !again.activeRun && (await (async () => { bots2[0].send({ t: 'create', tier: 1 }); return bots2[0].waitNew((m) => m.t === 'lobby' && m.lobby, 10000).then(() => true, () => false); })()));
       for (const b of bots2) b.close();
+    }
+    // ------------------------------------------------------------ K: capacity (own stack, one operation slot)
+    if (want('K')) {
+      const main = stack;
+      stack = await startStack({ port: 8780, simEnv: { RIFT_SIM_CAPACITY: '1' } });
+      try {
+        const busy = await team(2, 1, ['Kappa1', 'Kappa2']);
+        const late = await bot('Kappa3');
+        late.send({ t: 'create', tier: 1 });
+        const full = await late.waitNew((m) => m.t === 'error' || (m.t === 'lobby' && m.lobby), 10000);
+        check('K1 a new session is refused while every sim worker is at capacity', full.t === 'error' && full.code === 'full', JSON.stringify(full));
+        const health = await stack.health();
+        check('K2 health reports the running operation', health.running === 1, JSON.stringify(health));
+        // The slot frees when the operation ends.
+        for (const b of busy) b.send({ t: 'leave' });
+        await Promise.all(busy.map((b) => b.waitNew((m) => m.t === 'runEnd', 15000).catch(() => null)));
+        let opened = null;
+        for (let i = 0; i < 20 && !opened; i++) {
+          await sleep(500);
+          late.send({ t: 'create', tier: 1 });
+          opened = await late.waitNew((m) => (m.t === 'lobby' && m.lobby) || m.t === 'error', 5000).then((m) => (m.t === 'lobby' ? m : null), () => null);
+        }
+        check('K3 sessions open again once the slot is free', !!opened, opened?.lobby?.code);
+        for (const b of [...busy, late]) b.close();
+      } finally {
+        await stack.stop();
+        stack = main;
+      }
     }
   } catch (e) {
     console.error(e);

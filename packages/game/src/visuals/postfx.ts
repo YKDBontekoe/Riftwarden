@@ -1,6 +1,6 @@
 import { type Camera } from '@babylonjs/core/Cameras/camera';
 import { Constants } from '@babylonjs/core/Engines/constants';
-import { type Engine } from '@babylonjs/core/Engines/engine';
+import { type AbstractEngine as Engine } from '@babylonjs/core/Engines/abstractEngine';
 import { ColorCurves } from '@babylonjs/core/Materials/colorCurves';
 import { ImageProcessingConfiguration } from '@babylonjs/core/Materials/imageProcessingConfiguration';
 import { CubeTexture } from '@babylonjs/core/Materials/Textures/cubeTexture';
@@ -47,7 +47,8 @@ export class PostFx {
   mood = { exposure: 0, contrast: 0, vignette: 0 };
 
   constructor(scene: Scene, engine: Engine, camera: Camera, high: boolean, wetReflections = false) {
-    const supportsGBuffer = engine.getCaps().drawBuffersExtension && engine.webGLVersion >= 2;
+    // WebGPU always has multiple render targets; WebGL needs version 2 with draw buffers.
+    const supportsGBuffer = engine.isWebGPU || (engine.getCaps().drawBuffersExtension && (engine as { webGLVersion?: number }).webGLVersion! >= 2);
     if (high && supportsGBuffer) {
       try {
         const ssao = new SSAO2RenderingPipeline('ssao', scene, { ssaoRatio: 0.5, blurRatio: 1 }, [camera], true, Constants.TEXTURETYPE_HALF_FLOAT);

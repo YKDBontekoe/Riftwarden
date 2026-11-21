@@ -1,6 +1,6 @@
 # Riftwarden architecture v2 (prototype -> production)
 
-Status: **approved 2026-11-21**; implementation in progress (see section 13). Once approved, this file is the plan for the "Architecture v2" milestone and wins over older notes in CLAUDE.md where they conflict.
+Status: **approved 2026-11-21, implemented** (steps 1-11, section 13; the open items are listed under "Owner actions" in section 15). Once approved, this file is the plan for the "Architecture v2" milestone and wins over older notes in CLAUDE.md where they conflict.
 
 ## 1. Owner decisions (Q&A, 2026-11)
 
@@ -161,12 +161,15 @@ As built in step 8:
 
 ## 11. Frontend
 
-- **Shell**: Vite 7, React 19, TanStack Router for the out-of-game screens (title, sign-in, settings, co-op join `/join/:code`); the Babylon canvas lives outside the router and survives navigation.
-- **Styling**: Tailwind v4 with the current colours, fonts and terminal accents as design tokens (`--acc`, verdict colours, rarity palettes incl. colour-vision variants). Migrate `style.css` panel by panel; the look stays the same. Split `Terminals.tsx` / `items.tsx` per panel while migrating.
-- **HUD**: an imperative DOM layer bound to the 20 Hz HUD snapshot through fine-grained signals (`@preact/signals-core`), so per-frame/20 Hz updates never re-render React. React keeps menus, terminals, panels and the run map.
-- **Rendering**: `WebGPUEngine` when supported, WebGL2 `Engine` otherwise (one factory in `main.tsx`). Port the custom shaders (`atmosphere`, `riftMist`, `reactorField`, `pathLighting`, `arenaLandmark`, `softParticles`) and the `hitFlashPlugin` material plugin to WGSL alongside their GLSL, verify Havok/picking/particles/post-processing on both backends, and keep the SwiftShader (WebGL2) path for automated tests.
-- **Bundle**: deep imports from `@babylonjs/core` (side-effect imports where Babylon needs them) and route-level code splitting, target < 0.6 MB gzip JS for first load (today ~1.4 MB).
-- **Offline**: a service worker caches the app shell and assets so the game starts without a network.
+As built in steps 9-10:
+
+- **Shell and routes**: `apps/client/src/main.tsx` is a 1 KB shell (styles + a boot splash in `index.html`) that loads the game chunk (`boot.tsx`: engine, Havok, Flow, React). React 19; TanStack Router with hash history (`#/account`, `#/settings`, `#/co-op`, `#/join/CODE`; automation query strings survive, static hosting needs no fallback) decides the main-menu sheet; the Babylon canvas and the in-game screens stay outside routing. Old `?join=CODE` links still work.
+- **Styling**: Tailwind v4 (`apps/client/src/ui/app.css`): theme + utilities layers without preflight (the panels were designed on browser defaults), `style.css` as the components layer, design tokens mapped from the existing `:root` colours and fonts (`text-cyan`, `bg-glass`, `font-mono`, ...). The account panel is migrated to utilities with identical rendering (screenshot comparison); the other panels keep their component classes and move to utilities when they are next touched.
+- **HUD**: `ui/hud/live.tsx`: the HUD snapshot is a `@preact/signals-core` signal; `LiveText`, `LiveBar` and `useLiveStyle` write timers, bars, heat, cooldowns, cores and respawn time straight into their DOM nodes, so 20 Hz values never re-render React. React renders structure only (a panel appears, an ability slot fills).
+- **Splits**: `Terminals.tsx` -> `ui/terminals/` (Deploy, Loadout, Storage, ModuleBench, Command) and `items.tsx` -> `ui/inventory/` (glyphs, entry, detail, compare, InventoryView); the old files are barrels (`scripts/split-module.py` did it mechanically, pruning unused imports with the compiler).
+- **Bundle**: deep Babylon imports everywhere (`scripts/babylon-deep-imports.mjs`; side effects in `packages/game/src/babylonSideEffects.ts`), shaders and the glTF loader load on demand. First load 31 KB gzip (was 1.87 MB); the game chunk behind the splash 994 KB gzip.
+- **Offline**: a service worker generated at build time (`apps/client/sw-plugin.ts`: hashed assets cache-first, `index.html` network-first, other origins untouched, old caches dropped). Verified: with the network cut, a reload starts the menu and the HQ from the cache.
+- **Rendering**: `apps/client/src/core/engine.ts` creates WebGL2 or, when the settings (Renderer: WebGPU beta) or `?webgpu` ask, Babylon's `WebGPUEngine` with its extensions (falls back to WebGL2 when unavailable). Every custom shader has a WGSL twin (`packages/game/src/visuals/wgsl.ts`: sky, rift portal, lamp beams, lane paths, landmark energy, gate mist, reactor plasma, soft particles) chosen per engine (`shaderLanguageFor`), and the hit-flash material plugin injects WGSL on WebGPU, so WebGPU never downloads Babylon's GLSL translator. `scripts/check-wgsl.mjs` compiles all 15 WGSL shaders with the browser's real WGSL compiler (Tint) in CI. **WebGPU is opt-in** until it has been checked on real GPUs: headless SwiftShader cannot present WebGPU frames (a bare WebGPU device that renders to a canvas is destroyed within seconds there, an idle one is not), so its frames could not be verified end to end in this environment.
 
 ## 12. Testing
 
@@ -174,6 +177,7 @@ As built in step 8:
 - **Rules worker**: Vitest for sync replay (accept/reject, idempotent replays, multi-device conflicts), run validation (genuine journals pass, forged/edited items and impossible rewards fail), war ticking parity.
 - **Browser suites**: solo still simulates in the browser, so `?test`, `window.__rift` and the solo suites (m1-m10, combat, runmap, arenas, polish, progression) keep working with path updates. The co-op suites (`e2e-coop-protocol`, `e2e-coop-map`, construction X, bot client) are rebuilt against the gateway + workers (the bot speaks protobuf). New suites: passkey sign-in (virtual authenticator in Playwright), offline play -> reconnect -> sync, draining deploy.
 - Architecture tests extended: `packages/rules` imports nothing from `packages/game`; no Rust crate contains game rules (review rule); generated code is never edited.
+- As built: the co-op suites start a real stack (`scripts/lib/stack.mjs`); the browser suites that need accounts run through `scripts/with-stack.mjs`; CI runs both, plus `scripts/check-wgsl.mjs`.
 
 ## 13. Steps (one PR, each step keeps the game working)
 
@@ -187,9 +191,9 @@ As built in step 8:
 | 6 | **War** moves behind the gateway (storage, schedule, samples in Rust/Redis; rules in the worker) | **done**: `packages/rules/src/war/service.ts` (stored document, population samples, steps, reports), worker war call, gateway `war.rs` (document in memory + `war_state` row, 30 s tick, public `GET /war`, signed-in `POST /war/report` with Redis limits per account, online = open session sockets); `WarClient` targets the gateway (`apiBase`, credentials; guests get a sign-in note). Co-op operations still use the legacy server's war until step 7. Tests: Rust war 1/1, e2e-sync F1-F2, e2e-runmap 54/54 (twice; the W4 setup no longer depends on the random local war seed) |
 | 7 | **Co-op through the gateway**: sim workers (lobby + operations), routing, lag compensation, smooth corrections | **done**: see section 8; `apps/server` deleted (its PostgreSQL tables with it); protocol v13 (no guest identity, no online-profile messages); gateway test login (`POST /auth/test-login`, RIFT_TEST=1 only), Origin check on `/session`, `/health` reports sim workers, 2 KB cap on war reports; suites run against a real stack (`scripts/lib/stack.mjs`: fresh database, rules + sim workers, gateway). Tests: unit 512/512, co-op protocol 52/52 (B-S incl. the sim worker crash S11-S13), co-op map 28/28, browser co-op X 13/13 (0 of ~2400 events rejected), Rust tests, lint unchanged (6 warnings) |
 | 8 | **Deploy**: images, compose, `deploy.sh` with draining, Cloudflare Pages, collector + ClickHouse + Grafana dashboards | **done**: see sections 9-10. A rolling deploy during a running co-op operation kept it alive: the gateway restarted, both players rejoined the same operation, and its sim slot was replaced only once the operation ended. Fixed on the way: a health probe on a sim worker's port used to take over the gateway stream (connections now become the gateway with their first frame); workers re-send room bindings to a restarted gateway and report load whenever it changes. Pages publishing waits for the Cloudflare token |
-| 9 | **Frontend**: React 19, TanStack Router, Tailwind tokens, signal HUD, terminal split, deep imports, service worker | UI suites pass, bundle target met, screenshots match the current look |
-| 10 | **WebGPU** with WebGL2 fallback, WGSL ports | both backends render the HQ and an arena; suites pass on WebGL2 |
-| 11 | **Docs**: README, CLAUDE.md, this file marked done | |
+| 9 | **Frontend**: React 19, TanStack Router, Tailwind tokens, signal HUD, terminal split, deep imports, service worker | **done**: see section 11. First load 31 KB gzip (target < 0.6 MB). UI suites: accounts 19/19, sync 14/14, run map 54/54, m4 39/39 (terminals), m2 51/54 (known C8/C9/I4), combat 37/37, arenas 16/16, m1 69/70 (known Z); account panel screenshot identical; offline start verified |
+| 10 | **WebGPU** with WebGL2 fallback, WGSL ports | **done, opt-in**: engine factory, WebGPU extensions, WGSL twins of every custom shader + the hit-flash plugin, all 15 shaders compile with Tint (CI); suites pass on WebGL2. Rendering frames on WebGPU could not be verified headless (see section 11): WebGPU stays a beta setting until a real-GPU check |
+| 11 | **Docs**: README, CLAUDE.md, this file marked done | **done** |
 
 Steps 9-10 do not depend on 3-8 and can be interleaved when a session is blocked on something else.
 
@@ -211,9 +215,12 @@ Steps 9-10 do not depend on 3-8 and can be interleaved when a session is blocked
   | grafana | 192 MB |
   | **total** | ~3.3 GB (headroom for spikes) |
 
-  Measured on the box in step 8; the gateway refuses new co-op rooms when every sim worker is at capacity ("servers full", solo unaffected). The room directory and worker registry allow a second sim host later.
+  Idle stack measured at ~0.5 GB (step 8). The gateway refuses new co-op sessions when every sim worker is at capacity (`RIFT_SIM_CAPACITY` operations each; "servers full", solo unaffected; co-op protocol K1-K3). The room directory and worker links allow a second sim host later.
 
-## 15. Open questions (do not block steps 1-7)
+## 15. Owner actions (what the code cannot do)
 
-1. **Cloudflare Pages**: CI needs a Cloudflare API token (Pages edit) as a GitHub secret before step 8 (owner adds it later).
-2. **Cloudflare Access** policy for `grafana.` (owner configures it in step 8).
+1. **Cloudflare Pages**: create the project `riftwarden` with the custom domain `riftwarden.ykdbonte.dev`, add the repository secrets `CLOUDFLARE_API_TOKEN` (Pages: edit) and `CLOUDFLARE_ACCOUNT_ID`. Until then the deploy job publishes the API and skips the client with a warning.
+2. **Server**: install the new `deploy/` files in `~/stacks/riftwarden` (`.env` from `.env.example`, systemd units, tunnel ingress from `cloudflared.example.yml`: `api.` and `grafana.`), see `deploy/README.md`. Everyone starts fresh (the old `profiles` volume is no longer used).
+3. **Cloudflare Access** application for `grafana.riftwarden.ykdbonte.dev`.
+4. **Real-GPU check of WebGPU** (Settings > Renderer > WebGPU beta, or `?webgpu`): the HQ and an arena on Chrome/Edge with a real GPU. If it looks and plays right, make WebGPU the default in `packages/game/src/core/settings.ts` (`renderer`).
+5. **Backups**: none yet (owner decision); `pg_dump` of the `riftwarden` database is the first thing to schedule when that changes.

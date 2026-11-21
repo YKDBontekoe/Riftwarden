@@ -1,7 +1,7 @@
 import '../babylonSideEffects';
 import { sectorAffinity } from '@riftwarden/rules/combat/elements';
 import { Ray } from '@babylonjs/core/Culling/ray.core';
-import { type Engine } from '@babylonjs/core/Engines/engine';
+import { type AbstractEngine as Engine } from '@babylonjs/core/Engines/abstractEngine';
 import { SceneInstrumentation } from '@babylonjs/core/Instrumentation/sceneInstrumentation';
 import { DirectionalLight } from '@babylonjs/core/Lights/directionalLight';
 import { PointLight } from '@babylonjs/core/Lights/pointLight';

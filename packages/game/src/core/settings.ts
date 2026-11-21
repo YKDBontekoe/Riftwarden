@@ -26,6 +26,9 @@ export interface Settings {
   bloom: boolean;
   /** Render resolution scale (0.5..1). */
   renderScale: number;
+  /** Graphics backend (applies on the next start): WebGL2, or WebGPU where the browser supports it (beta until it
+   * has been checked on real GPUs; it falls back to WebGL2 when WebGPU is unavailable). */
+  renderer: 'webgl' | 'webgpu';
   /** M7: key bindings (action -> KeyboardEvent.code). */
   keys: Record<string, string>;
 }
@@ -73,6 +76,7 @@ export const DEFAULT_SETTINGS: Settings = {
   reduceMotion: false,
   colorblind: 'off',
   ...PRESETS.high,
+  renderer: 'webgl',
   keys: Object.fromEntries(ACTIONS.map((a) => [a.id, a.def])),
 };
 
@@ -111,6 +115,7 @@ export function sanitizeSettings(raw: unknown, version = VERSION): Settings {
     shadows: v1 ? preset.shadows : pick(r.shadows, ['off', 'low', 'high'] as const, preset.shadows),
     bloom: v1 ? preset.bloom : typeof r.bloom === 'boolean' ? r.bloom : preset.bloom,
     renderScale: v1 ? preset.renderScale : clampNum(r.renderScale, 0.5, 1, preset.renderScale),
+    renderer: pick(r.renderer, ['webgl', 'webgpu'] as const, 'webgl'),
     keys,
   };
 }

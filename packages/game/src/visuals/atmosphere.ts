@@ -1,4 +1,5 @@
 import { Constants } from '@babylonjs/core/Engines/constants';
+import { shaderLanguageFor } from './wgsl';
 import { HemisphericLight } from '@babylonjs/core/Lights/hemisphericLight';
 import { PointLight } from '@babylonjs/core/Lights/pointLight';
 import { SpotLight } from '@babylonjs/core/Lights/spotLight';
@@ -205,6 +206,7 @@ void main(){
 /** A shared energy membrane with scene-specific color and a different flow field at each gate. */
 export function createRiftMaterial(scene: Scene, name: string, color: Color3, seed: number): ShaderMaterial {
   const material = new ShaderMaterial(name, scene, 'rwRift', {
+    shaderLanguage: shaderLanguageFor(scene),
     attributes: ['position', 'uv'],
     uniforms: ['worldViewProjection', 'time', 'seed', 'energyColor'],
   });
@@ -276,6 +278,7 @@ export class Atmosphere {
 
   constructor(private scene: Scene, private P: Palette, private layout: ArenaLayout) {
     const sky = new ShaderMaterial('sky', scene, 'rwSky', {
+      shaderLanguage: shaderLanguageFor(scene),
       attributes: ['position'],
       uniforms: ['worldViewProjection', 'time', 'flash', 'riftDir', 'sunDir', 'horizonColor', 'skyBiome'],
       samplers: ['mountains'],
@@ -310,6 +313,7 @@ export class Atmosphere {
     fill.intensity = 0.26;
 
     this.beamMat = new ShaderMaterial('lampBeam', scene, 'rwBeam', {
+      shaderLanguage: shaderLanguageFor(scene),
       attributes: ['position', 'normal', 'uv'],
       uniforms: ['world', 'viewProjection', 'cameraPosition', 'color', 'time'],
       needAlphaBlending: true,

@@ -106,11 +106,13 @@ impl Coop {
     }
 
     /// Workers that accept new rooms, least loaded first.
-    fn pick(&self) -> Option<usize> {
+    /// `new_room`: only workers with a free operation slot (capacity reported in their hello) qualify.
+    fn pick(&self, new_room: bool) -> Option<usize> {
         self.links
             .iter()
             .enumerate()
             .filter(|(_, l)| l.up.load(Ordering::Relaxed) && !l.draining.load(Ordering::Relaxed))
+            .filter(|(_, l)| !new_room || l.running.load(Ordering::Relaxed) < l.capacity.load(Ordering::Relaxed))
             .min_by_key(|(_, l)| l.running.load(Ordering::Relaxed))
             .map(|(i, _)| i)
     }
@@ -146,7 +148,20 @@ impl Coop {
                 Some(w) => Some(w),
                 None => return self.reply(account, error_frame("join", "No session with that code")),
             },
-            _ => bound.or_else(|| self.pick()),
+            Some(client_frame::Msg::Create(_)) => match bound
+                .filter(|b| self.links[*b].running.load(Ordering::Relaxed) < self.links[*b].capacity.load(Ordering::Relaxed))
+                .or_else(|| self.pick(true))
+            {
+                Some(w) => Some(w),
+                None if self.pick(false).is_some() => {
+                    return self.reply(
+                        account,
+                        error_frame("full", "Co-op servers are full right now: try again in a few minutes (solo play is unaffected)"),
+                    );
+                }
+                None => None,
+            },
+            _ => bound.or_else(|| self.pick(false)),
         };
         let Some(target) = target else {
             return self.reply(account, error_frame("offline", "Co-op servers are unavailable, try again shortly"));

@@ -1,4 +1,4 @@
-import { type Engine } from '@babylonjs/core/Engines/engine';
+import { type AbstractEngine as Engine } from '@babylonjs/core/Engines/abstractEngine';
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { type Scene } from '@babylonjs/core/scene';
 import { buildWeaponModel } from '@riftwarden/game/weapons/model';
@@ -150,6 +150,8 @@ export class Flow {
   net: NetClient | null = null;
   /** Co-op run in progress (server run id). */
   coopRun: RunStart | null = null;
+  /** Graphics backend this session runs on (engine.ts). */
+  backend: 'webgpu' | 'webgl' = 'webgl';
   private netQueue: { snaps: Record<string, unknown>[]; events: unknown[][] } = { snaps: [], events: [] };
 
   constructor(

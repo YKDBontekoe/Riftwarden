@@ -1,4 +1,5 @@
 import { Effect } from '@babylonjs/core/Materials/effect';
+import { shaderLanguageFor } from './wgsl';
 import { ShaderMaterial } from '@babylonjs/core/Materials/shaderMaterial';
 import { Color3 } from '@babylonjs/core/Maths/math.color';
 import { Vector2 } from '@babylonjs/core/Maths/math.vector';
@@ -75,6 +76,7 @@ void main() {
 /** Integrates plasma emission through the existing two-metre core cylinder. */
 export function createReactorField(scene: Scene, bottom: number, top: number): ShaderMaterial {
   const material = new ShaderMaterial('reactorField', scene, 'rwReactorField', {
+    shaderLanguage: shaderLanguageFor(scene),
     attributes: ['position'],
     uniforms: ['world', 'worldViewProjection', 'cameraPosition', 'energy', 'chamber', 'time'],
   });

@@ -1,5 +1,6 @@
 import { type Material } from '@babylonjs/core/Materials/material';
 import { MaterialPluginBase } from '@babylonjs/core/Materials/materialPluginBase';
+import { ShaderLanguage } from '@babylonjs/core/Materials/shaderLanguage';
 import { Vector4 } from '@babylonjs/core/Maths/math.vector';
 import { type AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh';
 import { type Mesh } from '@babylonjs/core/Meshes/mesh';
@@ -34,7 +35,25 @@ export class HitFlashPlugin extends MaterialPluginBase {
     if (this.on) attributes.push(FLASH_BUFFER);
   }
 
-  override getCustomCode(shaderType: string): Record<string, string> | null {
+  /** Both backends: GLSL for WebGL2, WGSL for WebGPU. */
+  override isCompatible(_shaderLanguage: ShaderLanguage): boolean {
+    return true;
+  }
+
+  override getCustomCode(shaderType: string, shaderLanguage?: ShaderLanguage): Record<string, string> | null {
+    if (shaderLanguage === ShaderLanguage.WGSL) {
+      if (shaderType === 'vertex') {
+        return {
+          CUSTOM_VERTEX_DEFINITIONS: `#ifdef HITFLASH\nattribute ${FLASH_BUFFER}: vec4f;\nvarying vHitFlash: vec4f;\n#endif`,
+          CUSTOM_VERTEX_MAIN_END: `#ifdef HITFLASH\nvertexOutputs.vHitFlash = vertexInputs.${FLASH_BUFFER};\n#endif`,
+        };
+      }
+      return {
+        CUSTOM_FRAGMENT_DEFINITIONS: `#ifdef HITFLASH\nvarying vHitFlash: vec4f;\n#endif`,
+        // WGSL cannot assign a multi-component swizzle: rebuild the colour.
+        CUSTOM_FRAGMENT_BEFORE_FRAGCOLOR: `#ifdef HITFLASH\nfinalColor = vec4f(finalColor.rgb + fragmentInputs.vHitFlash.rgb * fragmentInputs.vHitFlash.a, finalColor.a);\n#endif`,
+      };
+    }
     if (shaderType === 'vertex') {
       return {
         CUSTOM_VERTEX_DEFINITIONS: `#ifdef HITFLASH\nattribute vec4 ${FLASH_BUFFER};\nvarying vec4 vHitFlash;\n#endif`,

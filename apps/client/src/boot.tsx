@@ -3,7 +3,7 @@ import HavokPhysics from '@babylonjs/havok';
 import { startAccountSync } from './account/sync';
 import { refreshAccount } from './account/store';
 import havokWasmUrl from '@babylonjs/havok/lib/esm/HavokPhysics.wasm?url';
-import { Engine } from '@babylonjs/core/Engines/engine';
+import { createEngine } from './core/engine';
 import { createRoot } from 'react-dom/client';
 import { Flow } from './core/Flow';
 import { loadSettings } from '@riftwarden/game/core/settings';
@@ -16,11 +16,13 @@ export async function boot(): Promise<void> {
   root.render(<Root router={createAppRouter(() => flow)} />);
 
   const canvas = document.getElementById('game') as HTMLCanvasElement;
-  const engine = new Engine(canvas, true, { stencil: true, preserveDrawingBuffer: false, powerPreference: 'high-performance' });
+  const settings = loadSettings();
+  const { engine, backend } = await createEngine(canvas, settings.renderer);
   const havok = await HavokPhysics({ locateFile: () => havokWasmUrl });
   // In-world screens and signs are drawn to canvases: make sure the UI fonts are ready (bounded wait).
   await Promise.race([document.fonts?.ready ?? Promise.resolve(), new Promise((r) => setTimeout(r, 2500))]);
-  flow = new Flow(engine, canvas, havok, loadSettings());
+  flow = new Flow(engine, canvas, havok, settings);
+  flow.backend = backend;
 
   const params = new URLSearchParams(location.search);
   flow.devTools = params.has('dev') || params.has('test');

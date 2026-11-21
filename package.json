@@ -15,7 +15,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "proto": "buf lint proto && buf generate proto --template proto/buf.gen.yaml && cargo fmt -p riftwarden-proto",
-    "worker": "tsx apps/worker/src/main.ts"
+    "worker": "tsx apps/worker/src/main.ts",
+    "backend": "node --import tsx scripts/dev-stack.mjs"
   },
   "devDependencies": {
     "@babylonjs/core": "catalog:",

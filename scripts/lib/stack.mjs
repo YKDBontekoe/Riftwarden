@@ -44,17 +44,18 @@ async function waitFor(fn, ms, what) {
   throw new Error(`timed out waiting for ${what}`);
 }
 
-export async function startStack({ port = 8799, simEnv = {}, gatewayEnv = {} } = {}) {
-  if (!process.env.RIFT_TEST_DATABASE_URL) throw new Error('Set RIFT_TEST_DATABASE_URL to a PostgreSQL test database');
+/** `databaseUrl`: use (and keep) this database instead of a fresh throwaway one (development). */
+export async function startStack({ port = 8799, simEnv = {}, gatewayEnv = {}, databaseUrl = null } = {}) {
+  if (!databaseUrl && !process.env.RIFT_TEST_DATABASE_URL) throw new Error('Set RIFT_TEST_DATABASE_URL to a PostgreSQL test database');
   if (!process.env.RIFT_TEST_REDIS_URL) throw new Error('Set RIFT_TEST_REDIS_URL to a Redis test instance');
   // A leftover stack (a crashed suite) would answer our health checks with its own database: refuse.
   const busy = await fetch(`http://127.0.0.1:${port}/health`).then(() => true, () => false);
   if (busy) throw new Error(`port ${port} is already serving (a stack left over from an earlier run?)`);
-  const admin = new pg.Pool({ connectionString: process.env.RIFT_TEST_DATABASE_URL, max: 1 });
+  const admin = databaseUrl ? null : new pg.Pool({ connectionString: process.env.RIFT_TEST_DATABASE_URL, max: 1 });
   const name = `rift_e2e_${randomBytes(6).toString('hex')}`;
-  await admin.query(`CREATE DATABASE ${name}`);
-  const dbUrl = new URL(process.env.RIFT_TEST_DATABASE_URL);
-  dbUrl.pathname = `/${name}`;
+  if (admin) await admin.query(`CREATE DATABASE ${name}`);
+  const dbUrl = new URL(databaseUrl ?? process.env.RIFT_TEST_DATABASE_URL);
+  if (admin) dbUrl.pathname = `/${name}`;
 
   const bin = process.env.RIFT_GATEWAY_BIN ?? 'target/debug/riftwarden-gateway';
   if (!process.env.RIFT_GATEWAY_BIN) execFileSync('cargo', ['build', '-q', '-p', 'riftwarden-gateway'], { stdio: 'inherit' });
@@ -90,8 +91,10 @@ export async function startStack({ port = 8799, simEnv = {}, gatewayEnv = {} } =
     async stop() {
       await Promise.all([stop(s.gateway), stop(s.sim), stop(s.rules)]);
       await s.db.end();
-      await admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`).catch(() => {});
-      await admin.end();
+      if (admin) {
+        await admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`).catch(() => {});
+        await admin.end();
+      }
     },
   };
   // Never leave the stack behind when the suite dies.
