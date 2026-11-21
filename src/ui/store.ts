@@ -218,6 +218,8 @@ export interface HudState {
   /** Run map: current node chip (arena) and the map screen view. */
   node?: import('../runmap/view').NodeHud | null;
   runMap?: import('../runmap/view').RunMapView | null;
+  /** Game mode of the current run (survival hides the reactor and shows the one-life state). */
+  mode?: 'defense' | 'survival';
 }
 
 export const initialHud: HudState = {

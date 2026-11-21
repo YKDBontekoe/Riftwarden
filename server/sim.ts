@@ -12,7 +12,8 @@ import { RunLedger, type RunOutcome } from '../src/progression/run';
 import { applyLoadout, bankNodeRewards, bankRewards, equippedItem, recordRun } from '../src/progression/save';
 import { getTier, type ThreatTier } from '../src/progression/tiers';
 import { actEffects, type RunCarry } from '../src/runmap/carry';
-import { findNode, type MapNode, mapSeedFor, nodeEffect, pathCode, reachable, segmentTier } from '../src/runmap/map';
+import { combineEffects, findNode, type MapNode, mapSeedFor, nodeEffect, pathCode, reachable, segmentTier } from '../src/runmap/map';
+import { MODE_EFFECT } from '../src/runmap/defs';
 import { newMapState, type RunMapState } from '../src/runmap/state';
 import type { SlotId } from '../src/progression/items';
 import type { ItemInstance } from '../src/loot/types';
@@ -63,6 +64,8 @@ export class CoopSim {
   private readonly carried = new Map<string, Partial<Record<SlotId, ItemInstance | null>>>();
   private readonly trees = new Map<string, { seed: number; allocated: readonly string[] }>();
   private traveling = false;
+  /** Defense or survival (fixed for the operation). */
+  private readonly mode: 'defense' | 'survival';
   private nodeStep = 0;
   /** Diagnostics. */
   private whyT = 0;
@@ -73,7 +76,7 @@ export class CoopSim {
     const players = room.connected.map((m) => ({ id: m.id, name: m.name, profile: store.get(m.id)! }));
     const runId = newUid('run');
     const mapSeed = coopMapMode() ? mapSeedFor(hashRunSeed(runId)) : 0;
-    if (!await store.startRun(players.map((p) => p.profile), runId, room.tier, mapSeed)) throw new Error('Could not save operation start');
+    if (!await store.startRun(players.map((p) => p.profile), runId, room.tier, mapSeed, room.mode)) throw new Error('Could not save operation start');
     try {
       return new CoopSim(room, store, havok, log, runId, players);
     } catch (error) {
@@ -95,6 +98,7 @@ export class CoopSim {
   ) {
     this.engine = new NullEngine();
     this.tier = getTier(room.tier);
+    this.mode = room.mode;
     this.seed = hashRunSeed(this.runId);
     // Procedural sector per operation; test servers keep the classic arena unless RIFT_ARENA=procedural.
     const mode = process.env.RIFT_ARENA ?? (process.env.RIFT_TEST === '1' ? 'classic' : 'procedural');
@@ -112,7 +116,9 @@ export class CoopSim {
       const loadout = Object.fromEntries(SLOT_IDS.map((s) => [s, structuredClone(equippedItem(p.data, s))]));
       this.carried.set(id, loadout);
       this.trees.set(id, structuredClone(p.data.progress.tree));
-      players.push({ id, name, slot: slot++, loadout: structuredClone(loadout), ledger: new RunLedger(this.runId, this.tier.id, Date.now()), tree: structuredClone(p.data.progress.tree) });
+      const ledger = new RunLedger(this.runId, this.tier.id, Date.now());
+      ledger.survivalMode = this.mode === 'survival';
+      players.push({ id, name, slot: slot++, loadout: structuredClone(loadout), ledger, tree: structuredClone(p.data.progress.tree) });
     }
     this.tech = [...tech];
     this.milestones = [...(milestones ?? [])];
@@ -128,11 +134,11 @@ export class CoopSim {
 
   /** Build the authoritative game for the operation's arena (classic) or a map node. */
   private createGame(node: MapNode | null, carry: RunCarry | null, players: ServerPlayerInit[]): ServerGame {
-    let tier = this.tier;
+    let tier = this.mode === 'survival' ? segmentTier(this.tier, combineEffects(MODE_EFFECT.survival)) : this.tier;
     let setup = undefined;
     const ms = this.mapState;
     if (node && ms) {
-      const effect = nodeEffect(node, actEffects(carry ?? { curses: [], blessings: [] }));
+      const effect = nodeEffect(node, [...actEffects(carry ?? { curses: [], blessings: [] }), MODE_EFFECT[this.mode]]);
       tier = segmentTier(this.tier, effect);
       setup = { node, mapSeed: ms.seed, carry, effect };
       this.arenaSeed = this.classicArena ? 0 : node.seed;
@@ -145,7 +151,7 @@ export class CoopSim {
       this.engine,
       this.havok,
       players,
-      { tier, runId: this.runId, seed: this.seed, layout: this.arenaSeed ? generateArena(this.arenaSeed) : undefined, towerTech, milestones: this.milestones, node: setup },
+      { tier, runId: this.runId, seed: this.seed, layout: this.arenaSeed ? generateArena(this.arenaSeed) : undefined, towerTech, milestones: this.milestones, node: setup, mode: this.mode },
       {
         bank: async (id, wave, rewards, bosses) => {
           const p = this.store.get(id);
@@ -244,8 +250,11 @@ export class CoopSim {
       const connected = new Map(stay.map((a) => [a.id, a.connected]));
       ms.carry = carry;
       ms.next = next.id;
+      const teamState = g.team.exportState();
       g.dispose();
       this.game = this.createGame(next, carry, inits);
+      // The team ledger (waves, checkpoints, survival statistics) continues across arenas.
+      this.game.team.restore(teamState);
       for (const a of this.game.avatars) {
         a.connected = connected.get(a.id) ?? false;
         a.run.map = this.mapSummary();
@@ -280,6 +289,7 @@ export class CoopSim {
       towerTech: [...g.towerTech],
       milestones: [...(g.cfg.milestones ?? [])],
       rejoin,
+      mode: this.mode,
       node: this.mapState && g.node ? { id: g.node.node.id, map: this.mapState.seed, path: [...this.mapState.path], cleared: this.mapState.cleared, acts: this.mapState.actsCleared, carry: g.node.setup.carry ? { ...g.node.setup.carry, loadout: { ...a.inventory.loadout }, ult: a.abilities.ult } : null } : null,
     };
     peer.send({ t: 'runStart', run });

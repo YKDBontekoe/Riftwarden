@@ -4,15 +4,22 @@ import type { SaveData } from '../progression/save';
 import { findNode } from '../runmap/map';
 import { NODE_KINDS } from '../runmap/defs';
 import { resumable } from '../runmap/state';
+import type { RunMode } from '../runmap/defs';
 import { DeployMapPreview, KIND_COLOR } from './RunMap';
 
 /** Deployment terminal, map runs: the next run's first act (choose an entry sector) and the map codex. */
 export function DeployMapPanel({ flow, save, entry, onEntry }: { flow: Flow; save: SaveData; entry: string | null; onEntry: (id: string) => void }) {
   const seed = flow.mapSeedPreview();
+  const [mode, setMode] = useState<RunMode>(flow.runMode);
+  const pick = (m: RunMode) => {
+    flow.runMode = m;
+    setMode(m);
+  };
   const paths = save.history.filter((h) => h.path?.length).slice(0, 5);
   const rec = save.records[String(save.threat.selected)];
   return (
     <div className="dm-panel">
+      <ModeSwitch mode={mode} onPick={pick} />
       <div className="operation-heading"><h2>Rift map · Act 1</h2><span>Choose an entry sector</span></div>
       <DeployMapPreview seed={seed} entry={entry} onEntry={onEntry} />
       <p>Each node is a sector: five waves to secure it, or a hub visit. At every node you bank and choose the next one, or extract. Towers stay behind (half their cost refunds); cores, upgrades and cargo carry on. Act bosses lift curses and open the next, harder act.</p>
@@ -20,13 +27,14 @@ export function DeployMapPanel({ flow, save, entry, onEntry }: { flow: Flow; sav
         <span>Deepest act <b>{rec?.deepestAct ?? 0}</b></span>
         <span>Most nodes <b>{rec?.bestNodes ?? 0}</b></span>
         <span>Act bosses <b>{save.totals.actsCleared}</b></span>
+        {mode === 'survival' && <span data-testid="dm-survival-rec">Survival best <b>{rec?.survivalBestWave ?? 0} waves · {rec?.survivalBestNodes ?? 0} nodes</b></span>}
       </div>
       {paths.length > 0 && (
         <details className="field-notes" data-testid="dm-codex">
           <summary>Map codex · recent paths</summary>
           {paths.map((h) => (
             <div key={h.id} className="dm-path">
-              <span>T{h.tier} · {h.outcome}</span>
+              <span>T{h.tier}{h.mode === 'survival' ? ' · SURV' : ''} · {h.outcome}</span>
               <b>{h.path!.map((c, i) => <i key={i} className={c.endsWith('*') ? 'boss' : ''}>{c}</i>)}</b>
             </div>
           ))}
@@ -53,6 +61,25 @@ export function ResumeCard({ flow, save }: { flow: Flow; save: SaveData }) {
         <button className="primary" data-testid="dm-resume-go" disabled={busy} onClick={() => { setBusy(true); void flow.resumeRun().then((ok) => !ok && setBusy(false)); }}>RESUME OPERATION</button>
         <button className="home-btn" data-testid="dm-resume-end" disabled={busy} onClick={() => flow.endSuspendedRun()}>END OPERATION</button>
       </div>
+    </div>
+  );
+}
+
+const MODES: { id: RunMode; name: string; text: string }[] = [
+  { id: 'defense', name: 'DEFENSE', text: 'Hold the reactor. Build towers along the lanes. The drone respawns.' },
+  { id: 'survival', name: 'SURVIVAL', text: 'No reactor, no towers: every machine hunts you. One life. Smaller waves, +25% income, +20% loot luck.' },
+];
+
+/** Game mode switch for solo map runs. */
+export function ModeSwitch({ mode, onPick }: { mode: RunMode; onPick: (m: RunMode) => void }) {
+  return (
+    <div className="mode-switch" role="group" aria-label="Game mode">
+      {MODES.map((m) => (
+        <button key={m.id} className={`mode-opt ${mode === m.id ? 'on' : ''} m-${m.id}`} aria-pressed={mode === m.id} data-testid={`mode-${m.id}`} onClick={() => onPick(m.id)}>
+          <b>{m.name}</b>
+          <span>{m.text}</span>
+        </button>
+      ))}
     </div>
   );
 }

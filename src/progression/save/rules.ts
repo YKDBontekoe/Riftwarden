@@ -57,6 +57,7 @@ export function resolveInterruptedRun(data: SaveData, now = Date.now(), opts: { 
     milestones: [],
     records: [],
     dev: false,
+    ...(a.mode === 'survival' ? { mode: 'survival' as const } : {}),
     ...(a.map ? { act: a.map.act, nodes: a.map.cleared, path: pathCode(a.map.path, a.map.seed) } : {}),
   };
   const rec = record(data, a.tier);
@@ -72,13 +73,14 @@ export function resolveInterruptedRun(data: SaveData, now = Date.now(), opts: { 
   return entry;
 }
 
-export function beginRun(data: SaveData, runId: string, tier: number, now = Date.now(), opts: { mapSeed?: number } = {}): void {
+export function beginRun(data: SaveData, runId: string, tier: number, now = Date.now(), opts: { mapSeed?: number; mode?: 'defense' | 'survival' } = {}): void {
   resolveInterruptedRun(data, now);
   data.activeRun = { id: runId, tier, startedAt: now, bankedThroughWave: 0, salvageSecured: 0, itemsSecured: 0, creditsSecured: 0, componentsSecured: 0 };
   if (opts.mapSeed) {
     data.activeRun.map = newMapState(opts.mapSeed);
     data.activeRun.nodeBank = 0;
   }
+  if (opts.mode === 'survival') data.activeRun.mode = 'survival';
 }
 
 /** Store the run map progress (node entered / completed, resume point). Only for the live run. */
@@ -205,6 +207,12 @@ export function recordRun(data: SaveData, result: RunResult): boolean {
       t.reactorDamage = Math.min(1e300, t.reactorDamage + sv.reactorDamage);
       for (const m of sv.milestones) if (!data.milestones.includes(m)) data.milestones.push(m);
     }
+    if (result.mode === 'survival') {
+      const r1 = record(data, result.tier);
+      r1.survivalRuns++;
+      r1.survivalBestWave = beat('Survival waves', r1.survivalBestWave, result.wavesCleared);
+      r1.survivalBestNodes = Math.max(r1.survivalBestNodes, result.map?.nodes ?? 0);
+    }
     if (result.map) {
       const r0 = record(data, result.tier);
       if (result.map.act > r0.deepestAct && r0.deepestAct > 0) broken.push('Deepest act');
@@ -249,6 +257,7 @@ export function recordRun(data: SaveData, result: RunResult): boolean {
     milestones: [...(sv?.milestones ?? [])],
     records: broken,
     dev,
+    ...(result.mode === 'survival' ? { mode: 'survival' as const } : {}),
     ...(result.map ? { act: result.map.act, nodes: result.map.nodes, path: [...result.map.path] } : {}),
   });
   data.history = data.history.slice(0, HISTORY_LIMIT);

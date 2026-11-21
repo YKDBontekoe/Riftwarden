@@ -86,12 +86,12 @@ export class ProfileStore {
   }
 
   /** Reserve and persist the entire operation before sending any run start to players. */
-  startRun(profiles: OnlineProfile[], id: string, tier: number, mapSeed = 0): Promise<boolean> {
+  startRun(profiles: OnlineProfile[], id: string, tier: number, mapSeed = 0, mode: 'defense' | 'survival' = 'defense'): Promise<boolean> {
     return this.enqueue(async () => {
       if (profiles.some((p) => p.inRun || p.data.threat.unlocked < tier || deployBlocker(p.data))) return false;
       const changes = profiles.map((profile) => {
         const data = structuredClone(profile.data);
-        beginRun(data, id, tier, Date.now(), { mapSeed });
+        beginRun(data, id, tier, Date.now(), { mapSeed, mode });
         return { profile, data };
       });
       if (!await this.tryCommit(changes)) return false;

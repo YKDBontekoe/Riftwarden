@@ -46,6 +46,12 @@ export interface TierRecord {
   bestNodes: number;
   /** Act bosses defeated (all runs). */
   actsCleared: number;
+  // ---- survival mode (no towers, hunted, one life)
+  survivalRuns: number;
+  /** Most waves cleared in one survival run. */
+  survivalBestWave: number;
+  /** Most map nodes completed in one survival run. */
+  survivalBestNodes: number;
 }
 
 export type HistoryOutcome = RunOutcome | 'interrupted';
@@ -81,6 +87,8 @@ export interface RunHistoryEntry {
   records: string[];
   /** Development session (not record eligible). */
   dev: boolean;
+  /** Survival mode run (absent = defense). */
+  mode?: 'survival';
   /** Run map: act reached, nodes completed and the compact path (e.g. "1C", "1E", "1B*"). */
   act?: number;
   nodes?: number;
@@ -101,6 +109,8 @@ export interface ActiveRun {
   map?: RunMapState | null;
   /** Hub-node banking guard: nodes whose extra rewards were committed. */
   nodeBank?: number;
+  /** Survival mode run (absent = defense). */
+  mode?: 'survival';
 }
 
 export interface LoadoutPreset {

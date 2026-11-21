@@ -84,6 +84,10 @@ export interface NodeHost {
   openPanel(): void;
   screenPlaying(): boolean;
   tacticalRefill(): void;
+  /** Survival mode: no reactor, no towers (stations adapt). */
+  readonly survival: boolean;
+  /** Restore the drone's hull and shield (survival rest). */
+  healDrone(): void;
   /** An act boss fell (curses lift; the flow advances the act). */
   actCleared(act: number): void;
 }
@@ -396,7 +400,7 @@ export class RunNode {
           label: SERVICES[id].name,
           text: SERVICES[id].text,
           price: sp[id],
-          disabled: id === 'purge' && !this.carry.curses.length ? 'No curse to purge' : id === 'repair' && this.h.reactorHp >= this.h.reactorMax ? 'Reactor intact' : afford(sp[id]),
+          disabled: id === 'purge' && !this.carry.curses.length ? 'No curse to purge' : id === 'repair' && this.h.survival ? 'No reactor in survival' : id === 'repair' && this.h.reactorHp >= this.h.reactorMax ? 'Reactor intact' : afford(sp[id]),
         }));
         return { ...base, station: st, title: 'RIFT MERCHANT', lore: 'Cores spend here; items land in your cargo and bank when you leave the node.', options: [...items, ...services], used: false };
       }
@@ -409,7 +413,7 @@ export class RunNode {
           options: FORGE_IDS.map((id) => {
             const n = this.carry.forge[id] ?? 0;
             const p = forgePrice(id, this.from, n);
-            return { id, label: `${FORGE[id].name} ${n ? `(${n}/${FORGE[id].max})` : ''}`.trim(), text: FORGE[id].text, price: p, disabled: n >= FORGE[id].max ? 'Maxed' : afford(p) };
+            return { id, label: `${FORGE[id].name} ${n ? `(${n}/${FORGE[id].max})` : ''}`.trim(), text: FORGE[id].text, price: p, disabled: id === 'calibrate' && this.h.survival ? 'No towers in survival' : n >= FORGE[id].max ? 'Maxed' : afford(p) };
           }),
           used: false,
         };
@@ -419,7 +423,7 @@ export class RunNode {
           station: st,
           title: 'SAFE HARBOUR',
           lore: 'Choose one. The harbour seals once you have rested.',
-          options: REST_IDS.map((id) => ({ id, label: REST[id].name, text: REST[id].text, price: null, disabled: this.restUsed ? 'Already rested' : id === 'purge' && !this.carry.curses.length ? 'No curse to purge' : null })),
+          options: REST_IDS.map((id) => ({ id, label: REST[id].name, text: id === 'repair' && this.h.survival ? 'Drone hull and shield to full, a fresh tactical charge.' : REST[id].text, price: null, disabled: this.restUsed ? 'Already rested' : id === 'purge' && !this.carry.curses.length ? 'No curse to purge' : null })),
           used: this.restUsed,
         };
       case 'event': {
@@ -471,6 +475,7 @@ export class RunNode {
         if (!svc || !SERVICES[svc]) return 'Unknown offer';
         const p = this.servicePrices()[svc];
         if (svc === 'purge' && !this.carry.curses.length) return 'No curse to purge';
+        if (svc === 'repair' && h.survival) return 'No reactor in survival';
         if (svc === 'repair' && h.reactorHp >= h.reactorMax) return 'Reactor intact';
         if (!pay(p)) return 'Not enough cores';
         if (svc === 'repair') h.reactorHp = h.reactorMax;
@@ -484,6 +489,7 @@ export class RunNode {
         if (!FORGE[f]) return 'Unknown option';
         const n = this.carry.forge[f] ?? 0;
         if (n >= FORGE[f].max) return 'Maxed';
+        if (f === 'calibrate' && h.survival) return 'No towers in survival';
         if (!pay(forgePrice(f, this.from, n))) return 'Not enough cores';
         this.carry.forge[f] = n + 1;
         h.rebuildStats();
@@ -497,7 +503,8 @@ export class RunNode {
         if (r === 'purge' && !this.carry.curses.length) return 'No curse to purge';
         this.restUsed = true;
         if (r === 'repair') {
-          h.reactorHp = h.reactorMax;
+          if (h.survival) h.healDrone();
+          else h.reactorHp = h.reactorMax;
           h.tacticalRefill();
         }
         if (r === 'reflect') this.carry.picks++;

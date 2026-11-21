@@ -41,6 +41,7 @@ export class Room {
   readonly members = new Map<string, Member>();
   hostId: string;
   tier = 1;
+  mode: 'defense' | 'survival' = 'defense';
   state: LobbyState['state'] = 'lobby';
   sim: CoopSim | null = null;
   readonly serial = ++roomCounter;
@@ -168,6 +169,15 @@ export class Room {
     return null;
   }
 
+  setMode(id: string, mode: 'defense' | 'survival'): string | null {
+    if (id !== this.hostId) return 'Only the host selects the game mode';
+    if (this.state !== 'lobby') return 'Operation already started';
+    this.mode = mode;
+    for (const m of this.members.values()) m.ready = m.id === this.hostId ? m.ready : false;
+    this.broadcastLobby();
+    return null;
+  }
+
   /** Host starts the operation once everyone connected is ready and can deploy. */
   async start(id: string): Promise<string | null> {
     if (id !== this.hostId) return 'Only the host can deploy the team';
@@ -213,6 +223,7 @@ export class Room {
       code: this.code,
       hostId: this.hostId,
       tier: this.tier,
+      mode: this.mode,
       maxTier: this.maxTier,
       capacity: MAX_PLAYERS,
       state: this.state,

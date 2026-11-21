@@ -9,6 +9,7 @@ import type { RunMapState } from '../runmap/state';
 import type { RunMapView } from '../runmap/view';
 import type { NodeSetup } from '../arena/RunNode';
 import type { SlotId } from '../progression/items';
+import { MODE_EFFECT, type RunMode } from '../runmap/defs';
 
 /** What the map session reads from the live arena (narrow: no Game import). */
 export interface MapArena {
@@ -16,7 +17,10 @@ export interface MapArena {
   readonly wallet: { cores: number };
   readonly loot: { count: number };
   readonly turrets: { turrets: readonly { paid: number; wrecked: boolean; temporary?: boolean }[] };
+  readonly planner: { readonly seed: number };
   syncStats(): void;
+  /** Sustained weapon DPS of the current loadout (node intel). */
+  firepower(): number;
 }
 
 /**
@@ -34,6 +38,8 @@ export class MapSession {
     /** Deploy-time loadout (profile-owned items; carried by every node). */
     readonly carried: Partial<Record<SlotId, ItemInstance | null>>,
     step = 0,
+    /** Defense or survival (every node of the run plays it). */
+    readonly mode: RunMode = 'defense',
   ) {
     this.step = step;
     this.sync();
@@ -55,8 +61,8 @@ export class MapSession {
   }
 
   /** Arena configuration for a node: the segment's effective tier, its setup and the run's tower tech. */
-  configFor(node: MapNode, carry: RunCarry | null, baseTier: ThreatTier): { tier: ThreatTier; setup: NodeSetup } {
-    const effect = nodeEffect(node, actEffects(carry ?? { curses: [], blessings: [] }));
+  configFor(node: MapNode, carry: RunCarry | null, baseTier: ThreatTier, mode: RunMode = this.mode): { tier: ThreatTier; setup: NodeSetup } {
+    const effect = nodeEffect(node, [...actEffects(carry ?? { curses: [], blessings: [] }), MODE_EFFECT[mode]]);
     return { tier: segmentTier(baseTier, effect), setup: { node, mapSeed: this.state.seed, carry, effect } };
   }
 
@@ -135,6 +141,10 @@ export class MapSession {
       curses: [...(carry?.curses ?? [])],
       blessings: [...(carry?.blessings ?? [])],
       lastWave: this.run.wavesCleared,
+      plannerSeed: arena?.planner.seed ?? 0,
+      tier: this.run.tier,
+      mode: this.mode,
+      dps: arena?.firepower() ?? 0,
     };
   }
 

@@ -46,6 +46,8 @@ export function TopCenter() {
   const left = useHud((s) => s.enemiesLeft);
   const reactor = useHud((s) => s.reactorHp / s.reactorMax);
   const hit = useHud((s) => s.reactorUnderAttack);
+  const survival = useHud((s) => s.mode === 'survival');
+  const hull = useHud((s) => s.playerHp / Math.max(1, s.playerMax));
   const phaseText = phase === 'prep' ? 'PREPARATION' : phase === 'combat' ? 'ENGAGED' : 'SECURED';
   const tone = reactor < 0.3 ? 'red' : reactor < 0.6 ? 'amber' : 'cyan';
   return (
@@ -61,6 +63,15 @@ export function TopCenter() {
           <em>{phase === 'prep' ? fmtClock(timer) : phase === 'combat' ? `${left} HOSTILE${left === 1 ? '' : 'S'}` : '—'}</em>
         </div>
       </div>
+      {survival ? (
+        <div className="reactor survival-mode" data-testid="survival-banner">
+          <div className="reactor-label">
+            <span>SURVIVAL · HUNTED · ONE LIFE</span>
+            <b>{Math.ceil(hull * 100)}%</b>
+          </div>
+          <SegBar value={hull} tone={hull < 0.3 ? 'red' : hull < 0.6 ? 'amber' : 'white'} segments={30} className="big" />
+        </div>
+      ) : (
       <div className="reactor">
         <div className="reactor-label">
           <span>REACTOR INTEGRITY</span>
@@ -69,6 +80,7 @@ export function TopCenter() {
         </div>
         <SegBar value={reactor} tone={tone} segments={30} className="big" />
       </div>
+      )}
     </div>
   );
 }
@@ -358,6 +370,7 @@ export function WeaponPanel() {
   const heat = useHud((s) => s.heat);
   const hot = useHud((s) => s.overheated);
   const build = useHud((s) => s.buildMode);
+  const survival = useHud((s) => s.mode === 'survival');
   return (
     <div className={`bottom-right ${build ? 'stowed' : ''}`}>
       <AbilityBar />
@@ -384,9 +397,11 @@ export function WeaponPanel() {
         <span className={!build ? 'on' : ''}>
           <Key k="1" /> WEAPON
         </span>
-        <span className={build ? 'on' : ''}>
-          <Key k="2" /> BUILD
-        </span>
+        {!survival && (
+          <span className={build ? 'on' : ''}>
+            <Key k="2" /> BUILD
+          </span>
+        )}
       </div>
     </div>
   );
@@ -432,7 +447,18 @@ export function Hint() {
 
 export function Respawn() {
   const t = useHud((s) => s.respawnIn);
+  const survival = useHud((s) => s.mode === 'survival');
+  const team = useHud((s) => !!s.coop);
   if (t <= 0) return null;
+  if (survival)
+    return (
+      <div className="respawn">
+        <div className="glitch" data-text="DRONE LOST">
+          DRONE LOST
+        </div>
+        <small>{team ? 'Survival: one life. Your team fights on; you rejoin when the node is secured.' : 'Survival: one life.'}</small>
+      </div>
+    );
   return (
     <div className="respawn">
       <div className="glitch" data-text="DRONE DISABLED">

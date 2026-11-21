@@ -187,6 +187,7 @@ export class ClientGame extends Game {
     // Replicas never path or breach: the server owns navigation and tower damage. Hazards only render here
     // and slow the local drone; their trails arrive as 'hz' events.
     this.enemies.nav = null;
+    this.enemies.huntRange = null;
     if (this.hazards) this.hazards.affectEnemies = false;
     // Local drone starts at its team slot.
     const sp = spawnFor(cfg.slot, this.layout);
@@ -403,6 +404,10 @@ export class ClientGame extends Game {
       curses: [...n.carry.curses],
       blessings: [...n.carry.blessings],
       lastWave: n.combat ? n.to : n.from - 1,
+      plannerSeed: this.planner.seed,
+      tier: this.cfg.run.tier,
+      mode: this.hunt ? 'survival' : 'defense',
+      dps: this.firepower(),
       coop: true,
       votes: this.mapVotes.map(([id, v]) => ({ name: names.get(id) ?? id.slice(0, 6), vote: v || null, you: id === this.you, host: false })),
       voteLeft: Math.max(0, this.mapVoteLeft),
@@ -732,7 +737,7 @@ export class ClientGame extends Game {
           this.player.reset();
           this.player.setVitals(hp, maxHp, shield, maxShield, !!alive, respawnT);
         }
-        if (was && !alive) uiEvents.emit('banner', { title: 'DRONE DESTROYED', sub: `Respawning in ${Math.ceil(respawnT)} s · the reactor is still under attack`, tone: 'red' });
+        if (was && !alive) uiEvents.emit('banner', this.hunt ? { title: 'DRONE LOST', sub: 'Survival: you are out until the team secures this node', tone: 'red' } : { title: 'DRONE DESTROYED', sub: `Respawning in ${Math.ceil(respawnT)} s · the reactor is still under attack`, tone: 'red' });
         continue;
       }
       let r = this.remotes.get(id);

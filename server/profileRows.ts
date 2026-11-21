@@ -205,8 +205,8 @@ export function readProfile(headerColumns: Row, rows: Relations): { data: SaveDa
       totals: columns<SaveData['totals']>(rows.profile_totals[0]),
       milestones: h.milestones,
       history: positioned(rows.profile_run_history.map((raw) => columns<SaveData['history'][number] & { position: number }>(raw)))
-        .map(({ position: _position, ...entry }) => dropNulls(entry, ['act', 'nodes', 'path'])),
-      activeRun: rows.profile_active_runs[0] ? dropNulls(columns<NonNullable<SaveData['activeRun']>>(rows.profile_active_runs[0]), ['map', 'nodeBank']) : null,
+        .map(({ position: _position, ...entry }) => dropNulls(entry, ['act', 'nodes', 'path', 'mode'])),
+      activeRun: rows.profile_active_runs[0] ? dropNulls(columns<NonNullable<SaveData['activeRun']>>(rows.profile_active_runs[0]), ['map', 'nodeBank', 'mode']) : null,
       base: {
         layoutVersion: h.layoutVersion, structure, facilities: h.facilities, blueprints: h.blueprints,
         placeables: positioned(rows.profile_hq_placeables.map((raw) => columns<Omit<Placeable, 'position' | 'props'> & { position: number; x: number; y: number; z: number }>(raw)))

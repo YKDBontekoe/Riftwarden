@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Flow } from '../core/Flow';
 import type { Game } from '../core/Game';
-import { BLESSINGS, CURSES, NODE_KINDS, type NodeKind } from '../runmap/defs';
-import { actOf, findNode, generateAct, type MapNode, ROWS } from '../runmap/map';
+import { BLESSINGS, CURSES, isCombatKind, NODE_KINDS, type NodeKind } from '../runmap/defs';
+import { actOf, findNode, generateAct, type MapNode, ROWS, type SegmentEffect } from '../runmap/map';
+import { type Lookahead, lookahead, type NodeIntel, nodeIntel } from '../runmap/intel';
+import { getTier } from '../progression/tiers';
 import { type NodeBrief, nodeBrief } from '../runmap/brief';
 import type { RunMapView, StationPanel } from '../runmap/view';
 import { AffinityRow } from './LoadingScreen';
@@ -32,7 +34,8 @@ const py = (n: MapNode) => H - 50 - n.row * ROW_H;
  * The act as a star chart (SVG): rows bottom to top, links, the path taken, the current node and the nodes
  * the run can travel to. Shared by the in-run map screen and the HQ deploy preview.
  */
-export function MapChart(p: { seed: number; act: number; path: readonly string[]; current: string | null; reachable: readonly string[]; selected: string | null; onSelect?: (id: string) => void; votes?: Record<string, string[]> }) {
+export function MapChart(p: { seed: number; act: number; path: readonly string[]; current: string | null; reachable: readonly string[]; selected: string | null; onSelect?: (id: string) => void; votes?: Record<string, string[]>; ahead?: readonly string[]; onHover?: (id: string | null) => void }) {
+  const ahead = new Set(p.ahead ?? []);
   const map = useMemo(() => generateAct(p.seed, p.act), [p.seed, p.act]);
   const nodes = map.rows.flat();
   const byId = new Map(nodes.map((n) => [n.id, n]));
@@ -41,7 +44,7 @@ export function MapChart(p: { seed: number; act: number; path: readonly string[]
   for (let i = 1; i < p.path.length; i++) pathEdges.add(`${p.path[i - 1]}>${p.path[i]}`);
   const reach = new Set(p.reachable);
   return (
-    <svg className="rm-chart" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`Act ${p.act} map`} data-testid="rm-chart">
+    <svg className={`rm-chart${ahead.size ? ' has-ahead' : ''}`} viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`Act ${p.act} map`} data-testid="rm-chart">
       <defs>
         <radialGradient id="rmGlow">
           <stop offset="0" stopColor="#ffffff" stopOpacity="0.5" />
@@ -59,7 +62,7 @@ export function MapChart(p: { seed: number; act: number; path: readonly string[]
           const m = byId.get(l)!;
           const walked = pathEdges.has(`${n.id}>${l}`);
           const open = n.id === p.current && reach.has(l);
-          return <line key={`${n.id}-${l}`} className={`rm-link${walked ? ' walked' : ''}${open ? ' open' : ''}`} x1={px(n)} y1={py(n)} x2={px(m)} y2={py(m)} />;
+          return <line key={`${n.id}-${l}`} className={`rm-link${walked ? ' walked' : ''}${open ? ' open' : ''}${ahead.has(n.id) && ahead.has(l) ? ' ahead' : ''}`} x1={px(n)} y1={py(n)} x2={px(m)} y2={py(m)} />;
         }),
       )}
       {nodes.map((n) => {
@@ -72,9 +75,11 @@ export function MapChart(p: { seed: number; act: number; path: readonly string[]
         return (
           <g
             key={n.id}
-            className={`rm-node${can ? ' can' : ''}${visited.has(n.id) ? ' seen' : ''}${isCur ? ' cur' : ''}${sel ? ' sel' : ''}`}
+            className={`rm-node${can ? ' can' : ''}${visited.has(n.id) ? ' seen' : ''}${isCur ? ' cur' : ''}${sel ? ' sel' : ''}${ahead.has(n.id) ? ' ahead' : ''}`}
             transform={`translate(${px(n)} ${py(n)})`}
             onClick={() => can && p.onSelect?.(n.id)}
+            onMouseEnter={() => p.onHover?.(n.id)}
+            onMouseLeave={() => p.onHover?.(null)}
             data-testid={`rm-node-${n.id}`}
             data-kind={n.kind}
             style={{ ['--kc' as string]: c }}
@@ -140,11 +145,15 @@ export function RunMapScreen({ flow, game }: { flow: Flow; game: Game }) {
   const view = useHud((s) => s.runMap) as RunMapView | null | undefined;
   const coop = view?.coop;
   const [sel, setSel] = useState<string | null>(null);
+  const [hover, setHover] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const reach = view?.reachable ?? [];
   const selected = sel && reach.includes(sel) ? sel : reach[0] ?? null;
   const showAct = reach.length ? actOf(reach[0]) : view?.act ?? 1;
-  const node = selected && view ? findNode(view.seed, selected) : null;
+  // Hovering any node of the act inspects it; travel always uses the selected reachable node.
+  const inspect = hover && view && actOf(hover) === showAct ? hover : selected;
+  const node = inspect && view ? findNode(view.seed, inspect) : null;
+  const look = useMemo(() => (node && view ? lookahead(view.seed, node) : null), [node, view]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const k = Number(e.key);
@@ -170,11 +179,12 @@ export function RunMapScreen({ flow, game }: { flow: Flow; game: Game }) {
     void flow.returnHome().finally(() => setBusy(false));
   };
   const actChange = showAct !== view.act;
+  const survival = view.mode === 'survival';
   return (
     <div className="screen dim runmap" data-testid="runmap">
       <div className="rm-wrap panel-frame">
         <div className="rm-side">
-          <div className="cp-kicker">Run map · Act {showAct}{actChange ? ' (new act)' : ''}</div>
+          <div className="cp-kicker">Run map · Act {showAct}{actChange ? ' (new act)' : ''}{survival ? ' · Survival' : ''}</div>
           <h2 className="cp-title">{actChange ? `Act ${view.act} cleared` : 'Node secured'}</h2>
           <div className="rm-stats">
             <div><b>{view.cleared}</b><span>NODES</span></div>
@@ -182,7 +192,9 @@ export function RunMapScreen({ flow, game }: { flow: Flow; game: Game }) {
             <div><b>{view.actsCleared}</b><span>ACTS</span></div>
             <div><b>{view.cores}</b><span>CORES</span></div>
           </div>
-          {view.refund > 0 && <div className="rm-note">Towers stay behind: <b>+{view.refund} cores</b> refunded on travel.</div>}
+          {view.dps > 0 && <div className="rm-note">Your firepower: <b className="plain">{Math.round(view.dps)} DPS</b> (gear, before run upgrades)</div>}
+          {survival && <div className="rm-note warn">Survival: no towers, every machine hunts you, one life.</div>}
+          {!survival && view.refund > 0 && <div className="rm-note">Towers stay behind: <b>+{view.refund} cores</b> refunded on travel.</div>}
           {view.leftBehind > 0 && <div className="rm-note warn" data-testid="rm-left">{view.leftBehind} uncollected drop{view.leftBehind === 1 ? '' : 's'} will be left behind. Go back to collect them first.</div>}
           <div className="cp-label">ACT EFFECTS</div>
           <ActEffects curses={view.curses} blessings={view.blessings} />
@@ -196,12 +208,13 @@ export function RunMapScreen({ flow, game }: { flow: Flow; game: Game }) {
           )}
         </div>
         <div className="rm-main">
-          <MapChart seed={view.seed} act={showAct} path={view.path} current={actChange ? null : view.current} reachable={reach} selected={selected} onSelect={setSel} votes={votes} />
-          <div className="rm-hint">Click a lit node or press <kbd>1</kbd>–<kbd>{Math.max(1, reach.length)}</kbd> · <kbd>ENTER</kbd> travels</div>
+          <MapChart seed={view.seed} act={showAct} path={view.path} current={actChange ? null : view.current} reachable={reach} selected={selected} onSelect={setSel} votes={votes} ahead={look?.reach} onHover={setHover} />
+          <div className="rm-hint">Hover any node for intel · click a lit node or press <kbd>1</kbd>–<kbd>{Math.max(1, reach.length)}</kbd> · <kbd>ENTER</kbd> travels</div>
         </div>
         <div className="rm-detail">
-          {node && <NodeCard b={nodeBrief(node, view.lastWave)} />}
-          {node && <AffinityRow faction={BIOMES[node.biome].faction.id} />}
+          {node && <NodeCard b={nodeBrief(node, view.lastWave, view.mode)} />}
+          {node && <NodeTabs node={node} view={view} look={look} />}
+          {node && inspect !== selected && <div className="rm-note">Inspecting · travel goes to the selected lit node</div>}
           <button className="primary" data-testid="rm-travel" disabled={!selected || busy} onClick={() => selected && go(selected)}>
             {coop ? 'VOTE: TRAVEL HERE' : 'TRAVEL'}
           </button>
@@ -211,6 +224,89 @@ export function RunMapScreen({ flow, game }: { flow: Flow; game: Game }) {
           <button className="mini" data-testid="rm-stay" onClick={() => void game.continueRun()}>BACK TO THE ARENA (MAP: H)</button>
         </div>
       </div>
+    </div>
+  );
+}
+
+type Tab = 'intel' | 'rewards' | 'route';
+
+/** Intel / rewards / route tabs of the inspected node. */
+function NodeTabs({ node, view, look }: { node: MapNode; view: RunMapView; look: Lookahead | null }) {
+  const [tab, setTab] = useState<Tab>('intel');
+  const intel = useMemo(
+    () => nodeIntel(node, { plannerSeed: view.plannerSeed, tier: getTier(view.tier), mode: view.mode, lastWave: view.lastWave, act: { curses: view.curses, blessings: view.blessings }, dps: view.dps }),
+    [node, view.plannerSeed, view.tier, view.mode, view.lastWave, view.curses, view.blessings, view.dps],
+  );
+  return (
+    <div className="rm-tabs" data-testid="rm-tabs">
+      <div className="rm-tabbar" role="tablist">
+        {(['intel', 'rewards', 'route'] as Tab[]).map((t) => (
+          <button key={t} role="tab" aria-selected={tab === t} className={tab === t ? 'on' : ''} data-testid={`rm-tab-${t}`} onClick={() => setTab(t)}>{t.toUpperCase()}</button>
+        ))}
+      </div>
+      {tab === 'intel' && <IntelPanel node={node} intel={intel} />}
+      {tab === 'rewards' && <div className="rm-lines" data-testid="rm-rewards">{intel.rewards.map((r) => <div key={r.label} className={r.bonus ? 'bonus' : ''}><span>{r.label}</span><b>{r.value}</b></div>)}</div>}
+      {tab === 'route' && look && <RoutePanel look={look} />}
+    </div>
+  );
+}
+
+const THREAT = ['', 'LIGHT', 'MODERATE', 'HEAVY', 'SEVERE', 'BRUTAL'];
+const fmtK = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}k` : String(Math.round(n)));
+const EFFECT_LABELS: [keyof SegmentEffect, string][] = [['hp', 'Hostile HP'], ['damage', 'Hostile damage'], ['speed', 'Hostile speed'], ['elite', 'Elite chance'], ['budget', 'Encounter size']];
+
+function IntelPanel({ node, intel }: { node: MapNode; intel: NodeIntel }) {
+  const changed = EFFECT_LABELS.filter(([k]) => Math.abs((intel.effect[k] as number) - 1) > 0.005);
+  if (!isCombatKind(node.kind))
+    return (
+      <div className="rm-intel" data-testid="rm-intel">
+        <div className="rm-none">{node.kind === 'vault' ? 'Hub visit. Cracking the vault wakes a guardian wave that hunts the reactor (or you, in survival).' : node.kind === 'event' ? 'Hub visit. Some anomaly choices summon guardians.' : 'Hub visit: no hostiles.'}</div>
+        <AffinityRow faction={BIOMES[node.biome].faction.id} />
+      </div>
+    );
+  return (
+    <div className="rm-intel" data-testid="rm-intel">
+      <div className="rm-threat">
+        <span>THREAT</span>
+        <span className="rm-risk">{[1, 2, 3, 4, 5].map((i) => <i key={i} className={i <= intel.threat ? 'on' : ''} />)}</span>
+        <b>{THREAT[intel.threat]}</b>
+      </div>
+      <div className="rm-lines">
+        <div><span>Hostiles</span><b>≈ {intel.hostiles}{intel.elites ? ` · ${intel.elites} elite` : ''}</b></div>
+        {intel.boss && <div className="bonus"><span>Boss</span><b>{intel.boss}</b></div>}
+        {intel.events.length > 0 && <div><span>Event</span><b>{intel.events.join(' · ')}</b></div>}
+        <div><span>Total hit points</span><b>≈ {fmtK(intel.totalHp)}</b></div>
+        {intel.fireSeconds !== null && <div><span>Sustained fire to clear</span><b>≈ {Math.round(intel.fireSeconds)} s</b></div>}
+        <div><span>Faction</span><b>{intel.faction}</b></div>
+      </div>
+      <div className="rm-roster">
+        {intel.roster.slice(0, 7).map((r) => (
+          <div key={r.kind} className={r.signature ? 'sig' : ''} title={r.signature ? 'Faction signature archetype' : ''}>
+            <span>{r.name}{r.signature ? ' ◆' : ''}</span>
+            <b>×{r.count}{r.elites ? <em> · {r.elites}★</em> : null}</b>
+          </div>
+        ))}
+      </div>
+      {changed.length > 0 && <div className="rm-effchips">{changed.map(([k, l]) => <span key={k} className={(intel.effect[k] as number) > 1 ? 'up' : 'down'}>{l} {(intel.effect[k] as number) > 1 ? '+' : ''}{Math.round(((intel.effect[k] as number) - 1) * 100)}%</span>)}</div>}
+      <AffinityRow faction={BIOMES[node.biome].faction.id} />
+    </div>
+  );
+}
+
+function RoutePanel({ look }: { look: Lookahead }) {
+  const kinds = (Object.keys(look.kinds) as NodeKind[]).sort((a, b) => (look.kinds[b] ?? 0) - (look.kinds[a] ?? 0));
+  return (
+    <div className="rm-route" data-testid="rm-route">
+      <div className="rm-lines">
+        <div><span>Rows to the act boss</span><b>{look.rowsToBoss}</b></div>
+        <div><span>Fights on the way (boss incl.)</span><b>{look.minFights === look.maxFights ? look.minFights : `${look.minFights}–${look.maxFights}`} · {look.minFights * 5}–{look.maxFights * 5} waves</b></div>
+        <div className={look.canShop ? 'bonus' : ''}><span>Merchant / forge ahead</span><b>{look.canShop ? 'Yes' : 'No'}</b></div>
+        <div className={look.canRest ? 'bonus' : ''}><span>Safe harbour ahead</span><b>{look.canRest ? 'Yes' : 'No'}</b></div>
+      </div>
+      <div className="rm-kinds">
+        {kinds.map((k) => <span key={k} style={{ color: KIND_COLOR[k] }} title={NODE_KINDS[k].name}>{NODE_KINDS[k].glyph} {look.kinds[k]}</span>)}
+      </div>
+      <div className="rm-none">Highlighted on the chart: every node this one can lead to.</div>
     </div>
   );
 }

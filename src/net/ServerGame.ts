@@ -363,6 +363,8 @@ export class ServerGame extends Game {
     const body = tgt?.player ?? this.player;
     this.enemyCtx.player = this.deployables.decoyFor(e.pos) ?? body;
     (this as { player: Player }).player = body;
+    // Survival: this machine's "reactor" is the warden it hunts.
+    this.hunt?.aim(this.enemyCtx.player.position);
   }
 
   override hurtPlayer(amount: number, from: Vector3, target: Player = this.player): void {
@@ -614,6 +616,7 @@ export class ServerGame extends Game {
         } else if (m.op === 'jump') this.dev.jump(m.n ?? 5);
         else if (m.op === 'boss') this.dev.force({ boss: 'colossus' });
         else if (m.op === 'reactor') this.debugDamageReactor(m.n ?? 100);
+        else if (m.op === 'down') this.hurtPlayer(1e7, a.player.position.add(new Vector3(2, 0, 0)), a.player);
         return null;
       }
       case 'place': {
@@ -624,6 +627,7 @@ export class ServerGame extends Game {
           if (d.tech && !this.towerTech.has(`${slot}:${cfg[slot]}`)) return 'Blueprint not researched';
           if (slot !== 'base' && canInstall(cfg, slot, cfg[slot])) return canInstall(cfg, slot, cfg[slot]);
         }
+        if (this.hunt) return 'Survival: no towers';
         if (!a.player.alive) return 'Destroyed drones cannot build';
         const v = this.construction.validateAt(m.p[0], m.p[2], cfg, a.player.position, this.wallet.cores, this.turrets.turrets, this.stats);
         if (v.reason !== 'ok') return placementText(v.reason);
@@ -790,7 +794,7 @@ export class ServerGame extends Game {
   /** Map vote opens once the node is secured (no guardians, offer or banking pending). Hubs: from the start. */
   private openMapVote(): void {
     const n = this.node;
-    if (!n || this.voteOpen || this.banking || this.offer || this.upgradeDue || !n.complete || n.guardiansActive || !this.team.atCheckpoint) return;
+    if (!n || this.voteOpen || this.banking || this.offer || this.upgradeDue || !n.complete || n.guardiansActive || (n.combat && !this.team.atCheckpoint)) return;
     this.voteOpen = true;
     // Combat nodes give the team a minute; hubs wait for the first vote (players are shopping).
     this.voteDeadline = n.combat ? this.clock + 60 : Infinity;
@@ -915,25 +919,31 @@ export class ServerGame extends Game {
     for (const a of this.avatars) {
       const pl = a.player;
       if (!a.active) continue;
-      const was = pl.alive;
+      // Deaths happen anywhere (enemy updates, acts): compare with the state seen on the previous tick.
+      const was = a.wasAlive;
       pl.tickVitals(dt);
       if (was && !pl.alive) {
         a.deaths++;
         this.team.survival.deaths++;
         a.run.survival.deaths++;
-        this.rec.push(['u', 'alert', { text: `${a.name.toUpperCase()} DOWN · RESPAWNING`, tone: 'red' }]);
+        // Survival: one life. A downed warden stays out until the team secures the node (revived on travel).
+        if (this.hunt) pl.respawnT = Infinity;
+        this.rec.push(['u', 'alert', { text: this.hunt ? `${a.name.toUpperCase()} IS DOWN · OUT FOR THIS NODE` : `${a.name.toUpperCase()} DOWN · RESPAWNING`, tone: 'red' }]);
+        if (this.hunt && !this.avatars.some((x) => x.active && x.player.alive)) this.serverDefeat();
       }
       this.as(a, () => a.abilities.update(dt));
       if (!was && pl.alive) {
         a.lastPos.copyFrom(pl.position);
         this.rec.push(['mv', arr(pl.position)], a.id);
       }
+      a.wasAlive = pl.alive;
       const wd = a.weaponDef;
       // Swarm: every drone is a claim (a full salvo releases up to 3x the launch count at once).
       const swarmK = wd.family === 'swarm' ? Math.max(1, wd.drones) * (wd.mechanism === 'salvo' ? 3 : 1) : 1;
       const rate = wd.mechanism === 'beam' ? 16 : wd.fireRate * a.stats.fireRateMult * Math.max(1, Math.floor(a.stats.projectiles)) * swarmK * (wd.mechanism === 'scatter' ? SCATTER_PELLETS + 2 : 1) * (wd.mechanism === 'burst' ? 1.6 : 1.25) + 0.5;
       a.budget = Math.min(rate * 0.6 + 3 + (wd.mechanism === 'scatter' ? SCATTER_PELLETS * 2 : 0) + (wd.family === 'swarm' ? swarmK * Math.max(1, Math.floor(a.stats.projectiles)) * 2 : 0), a.budget + rate * dt);
     }
+    if (this.hunt) this.hunt.update(dt, this.enemies.nav, this.avatars.filter((a) => a.active && a.player.alive).map((a) => a.player.position));
     // Offers / votes hold the preparation countdown (never the combat).
     if (this.offer && this.clock > this.offerDeadline) this.applyTeamUpgrade(this.offer[0].id, 'Auto-select');
     if (this.voteOpen && this.clock > this.voteDeadline) {
@@ -1080,7 +1090,8 @@ export class ServerGame extends Game {
         Math.round(a.player.shield),
         Math.round(a.player.maxShield),
         a.player.alive ? 1 : 0,
-        Math.round(a.player.respawnT * 10) / 10,
+        // JSON has no Infinity: a survival warden who is out sends a long countdown.
+        Number.isFinite(a.player.respawnT) ? Math.round(a.player.respawnT * 10) / 10 : 9999,
         a.player.respawns,
         a.flags,
         Math.round(a.heat * 100) / 100,

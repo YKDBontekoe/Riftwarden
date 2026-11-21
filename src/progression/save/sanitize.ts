@@ -50,6 +50,9 @@ function sanitizeRecord(v: unknown): TierRecord {
     deepestAct: int(r.deepestAct, 0),
     bestNodes: int(r.bestNodes, 0),
     actsCleared: int(r.actsCleared, 0),
+    survivalRuns: int(r.survivalRuns, 0),
+    survivalBestWave: int(r.survivalBestWave, 0),
+    survivalBestNodes: int(r.survivalBestNodes, 0),
   };
 }
 
@@ -270,6 +273,7 @@ function sanitizeHistory(v: unknown): RunHistoryEntry | null {
     milestones: arr(r.milestones).filter((x): x is string => typeof x === 'string').slice(0, 32),
     records: arr(r.records).filter((x): x is string => typeof x === 'string').slice(0, 16),
     dev: r.dev === true,
+    ...(r.mode === 'survival' ? { mode: 'survival' as const } : {}),
     // Run map fields only on map-mode runs (older entries serialize unchanged).
     ...(typeof r.act === 'number' && r.act > 0 ? { act: int(r.act, 1, 1), nodes: int(r.nodes, 0), path: arr(r.path).filter((x): x is string => typeof x === 'string').slice(0, 120).map((x) => x.slice(0, 8)) } : {}),
   };
@@ -492,6 +496,7 @@ export function sanitizeSave(raw: unknown, now = Date.now()): { data: SaveData; 
       data.activeRun.map = map;
       data.activeRun.nodeBank = int(ar.nodeBank, 0);
     }
+    if (ar.mode === 'survival') data.activeRun.mode = 'survival';
   }
 
   const base = obj(r.base);

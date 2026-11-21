@@ -19,7 +19,14 @@ export interface NodeBrief {
   sector: string;
 }
 
-export function nodeBrief(n: MapNode, lastWave: number): NodeBrief {
+/** Combat node blurbs in survival (no reactor: the machines hunt the drone). */
+const SURVIVAL_BLURB: Partial<Record<MapNode['kind'], string>> = {
+  combat: 'Survive five waves. Every machine hunts you.',
+  elite: 'Elite packs hunt you for five waves.',
+  boss: 'Survive five waves; a boss hunts you on the last.',
+};
+
+export function nodeBrief(n: MapNode, lastWave: number, mode: 'defense' | 'survival' = 'defense'): NodeBrief {
   const k = NODE_KINDS[n.kind];
   const info = nodeInfo(n);
   return {
@@ -30,7 +37,7 @@ export function nodeBrief(n: MapNode, lastWave: number): NodeBrief {
     act: n.act,
     row: n.row,
     actBoss: n.actBoss,
-    blurb: n.actBoss ? 'The act commander holds the final wave. Clearing it lifts every curse.' : k.blurb,
+    blurb: n.actBoss ? 'The act commander holds the final wave. Clearing it lifts every curse.' : (mode === 'survival' && SURVIVAL_BLURB[n.kind]) || k.blurb,
     reward: n.actBoss ? 'Act chest · 3 rift shards · boss loot' : k.reward,
     risk: n.actBoss ? 3 : k.risk + Math.min(1, n.mods.length),
     waves: isCombatKind(n.kind) ? segmentWaves(lastWave) : null,

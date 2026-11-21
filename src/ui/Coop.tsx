@@ -170,6 +170,15 @@ export function CoopPanel({ flow, compact }: { flow: Flow; compact?: boolean }) 
         ))}
         <em>{tier.name}</em>
       </div>
+      <div className="lobby-tier lobby-mode">
+        <span>GAME MODE</span>
+        {(['defense', 'survival'] as const).map((m) => (
+          <button key={m} data-testid={`lobby-mode-${m}`} className={`mini ${lobby.mode === m ? 'on' : ''}`} disabled={!host || lobby.state !== 'lobby'} onClick={() => flow.net?.send({ t: 'mode', mode: m })}>
+            {m.toUpperCase()}
+          </button>
+        ))}
+        <em>{lobby.mode === 'survival' ? 'No towers · hunted · one life per node' : 'Hold the reactor · build towers'}</em>
+      </div>
       <div className="lobby-actions">
         {!host && (
           <button className={mine?.ready ? '' : 'primary'} data-testid="lobby-ready" disabled={lobby.state !== 'lobby'} onClick={() => flow.net?.send({ t: 'ready', ready: !mine?.ready })}>

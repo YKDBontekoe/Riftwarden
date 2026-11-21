@@ -147,6 +147,40 @@ async function clearWave(bots, actor) {
     // Headless servers cannot fetch the scanned skyline props (a warning on every arena build, also before the map).
     const errLines = server.log.split('\n').filter((l) => /rror/.test(l) && !/rejected|Scenery asset unavailable/.test(l));
     check('M16 no server errors across the node swap', errLines.length === 0, errLines.slice(0, 3).join(' | '));
+
+    // ---------------------------------------------------------- survival operation (same two wardens)
+    stop();
+    await sleep(500);
+    await B.waitNew((m) => m.t === 'lobby' && m.lobby, 5000).catch(() => null);
+    A.send({ t: 'create', tier: 1 });
+    await A.waitNew((m) => m.t === 'lobby' && m.lobby && m.lobby.hostId === A.welcome.playerId);
+    B.send({ t: 'join', code: A.lobby.code });
+    await B.waitNew((m) => m.t === 'lobby' && m.lobby);
+    B.send({ t: 'mode', mode: 'survival' });
+    const refusedMode = await B.waitNew((m) => m.t === 'error', 3000).catch(() => null);
+    A.send({ t: 'mode', mode: 'survival' });
+    await A.waitNew((m) => m.t === 'lobby' && m.lobby?.mode === 'survival');
+    B.send({ t: 'ready', ready: true });
+    await A.wait((m) => m.t === 'lobby' && m.lobby && m.lobby.players.length === 2 && m.lobby.players.every((p) => p.host || p.ready));
+    check('V1 only the host picks the mode; the lobby shows survival', !!refusedMode && A.lobby.mode === 'survival', JSON.stringify(refusedMode));
+    A.send({ t: 'start' });
+    for (const b of [A, B]) await b.waitNew((m) => m.t === 'runStart', 40000);
+    for (const b of [A, B]) await b.waitNew((m) => m.t === 'snap');
+    stop = heartbeat([A, B]);
+    check('V2 runStart carries the survival mode', A.run.mode === 'survival' && B.run.mode === 'survival');
+    const me = A.me();
+    const place = await A.act({ a: 'place', cfg: { base: 'standard', weapon: 'autocannon', core: 'standard_core', modifier: 'none' }, p: [me[1] + 6, 0, me[3]], yaw: 0 });
+    check('V3 towers are refused', !place.ok && /Survival/.test(place.reason ?? ''), place.reason);
+    const endsBefore = A.msgs.filter((m) => m.t === 'runEnd').length;
+    await B.act({ a: 'test', op: 'down' });
+    await sleep(600);
+    const rowB = A.snap.a.find((x) => x[0] === B.welcome.playerId);
+    check('V4 a downed warden is out (no respawn) while the team plays on', !!rowB && rowB[10] === 0 && rowB[11] >= 999 && A.msgs.filter((m) => m.t === 'runEnd').length === endsBefore, JSON.stringify(rowB?.slice(10, 12)));
+    await A.act({ a: 'test', op: 'down' });
+    const endA2 = await A.waitNew((m) => m.t === 'runEnd', 20000).catch(() => null);
+    check('V5 the last warden down = team defeat, recorded as a survival run', endA2?.result?.outcome === 'defeat' && endA2.result.mode === 'survival', JSON.stringify(endA2?.result && { o: endA2.result.outcome, m: endA2.result.mode }));
+    const { rows: [hs] } = await db.query('SELECT mode FROM profile_run_history WHERE player_id = $1 ORDER BY position LIMIT 1', [A.welcome.playerId]);
+    check('V6 PostgreSQL history keeps the mode', hs?.mode === 'survival', JSON.stringify(hs));
   } catch (e) {
     console.log('FAIL  exception', e.stack || e, server?.log?.slice(-2000));
     failures++;

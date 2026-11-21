@@ -39,6 +39,11 @@ export interface RunMapView {
   blessings: BlessingId[];
   /** Waves completed so far (the next combat node starts at lastWave + 1). */
   lastWave: number;
+  /** Node intel inputs: the arena planner's seed, the base threat tier, the game mode, current weapon DPS. */
+  plannerSeed: number;
+  tier: number;
+  mode: 'defense' | 'survival';
+  dps: number;
   /** Co-op: votes per player (node id or 'home'), seconds left. */
   votes?: { name: string; vote: string | null; you: boolean; host: boolean }[];
   voteLeft?: number;

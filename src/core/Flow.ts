@@ -16,8 +16,8 @@ import { equipFromStorage, uninstallModule } from '../progression/save';
 import { applyLoadout, bankRewards, beginRun, deployBlocker, equippedItem, itemByUid, recordRun, resolveInterruptedRun, selectTier } from '../progression/save';
 import { fitsSlot } from '../progression/items';
 import { MapSession } from './mapSession';
-import { findNode, type MapNode, mapSeedFor } from '../runmap/map';
-import { NODE_KINDS } from '../runmap/defs';
+import { combineEffects, findNode, type MapNode, mapSeedFor, segmentTier } from '../runmap/map';
+import { MODE_EFFECT, NODE_KINDS, type RunMode } from '../runmap/defs';
 import { newMapState, resumable } from '../runmap/state';
 import { type RunCarry, sanitizeCarry } from '../runmap/carry';
 import { nodeBrief } from '../runmap/brief';
@@ -244,7 +244,7 @@ export class Flow {
   // ------------------------------------------------------------------ runs
 
   /** Start a fresh run on the selected tier. Callable from HQ or after a defeat. Map runs may name an entry node. */
-  async deploy(tierId = this.profile.save.threat.selected, entryNode?: string): Promise<boolean> {
+  async deploy(tierId = this.profile.save.threat.selected, entryNode?: string, mode: RunMode = this.runMode): Promise<boolean> {
     if (this.busy || (this.run && !this.run.ended)) return false;
     // Online profiles deploy through the co-op lobby only (the server owns their progression).
     if (this.profile.online) return false;
@@ -263,19 +263,21 @@ export class Flow {
     const mapSeed = this.mapMode ? Flow.mapSeedOf(runId) : 0;
     this.profile.mutate((d) => {
       if (!this.devNext) selectTier(d, tierId);
-      beginRun(d, runId, tierId, Date.now(), { mapSeed });
+      beginRun(d, runId, tierId, Date.now(), { mapSeed, mode });
     });
     const run = new RunLedger(runId, tierId, Date.now());
+    run.survivalMode = mode === 'survival';
     this.run = run;
     if (this.devNext) run.survival.dev = true;
     if (mapSeed) {
-      this.map = new MapSession(this.profile, run, structuredClone(this.profile.save.activeRun!.map!), loadout);
+      this.map = new MapSession(this.profile, run, structuredClone(this.profile.save.activeRun!.map!), loadout, 0, mode);
       await this.playNode(this.map.entry(entryNode), null);
       return true;
     }
     this.map = null;
     const layout = Flow.layoutFor(this.arenaSeedFor(runId));
-    await this.launchArena(`DEPLOYING · THREAT TIER ${tier.roman}`, `${layout.name ?? 'Sector 07 reactor'} · ${tier.name}`, layout, tier, { loadout });
+    const sTier = mode === 'survival' ? segmentTier(tier, combineEffects(MODE_EFFECT.survival)) : tier;
+    await this.launchArena(`DEPLOYING · ${mode === 'survival' ? 'SURVIVAL' : 'THREAT'} TIER ${tier.roman}`, `${layout.name ?? 'Sector 07 reactor'} · ${tier.name}`, layout, sTier, { loadout, mode });
     return true;
   }
 
@@ -303,6 +305,8 @@ export class Flow {
   coopMap: { seed: number; path: string[]; cleared: number; acts: number } | null = null;
   /** Run map session of the current solo run (null = classic endless run). */
   map: MapSession | null = null;
+  /** Game mode the next solo deployment uses (deploy terminal switch). */
+  runMode: RunMode = 'defense';
   /** Solo runs use the branching run map (?test defaults to the classic endless flow; ?map opts in). */
   mapMode = true;
 
@@ -337,7 +341,7 @@ export class Flow {
       this.arena.skipUpgrades = this.skipUpgrades || !!(globalThis as { __skipUpgrades?: boolean }).__skipUpgrades;
       this.location = 'arena';
       return this.arena.scene;
-    }, { kind: 'arena', sector: { name: layout.name ?? 'Sector 07 Reactor', code: layout.code ?? 'CLASSIC', layout, tier: tier.roman, tierName: tier.name, players, node: extra.node ? nodeBrief(extra.node.node, run.wavesCleared) : undefined } });
+    }, { kind: 'arena', sector: { name: layout.name ?? 'Sector 07 Reactor', code: layout.code ?? 'CLASSIC', layout, tier: tier.roman, tierName: tier.name, players, node: extra.node ? nodeBrief(extra.node.node, run.wavesCleared, extra.mode) : undefined } });
     this.arena!.start();
   }
 
@@ -353,7 +357,7 @@ export class Flow {
     const save = this.profile.save;
     const tech = [...new Set([...save.towers.unlocked, ...(carry?.runTech ?? [])])];
     const title = `ACT ${node.act} · ${node.actBoss ? 'ACT BOSS' : kind.name.toUpperCase()} · TIER ${base.roman}`;
-    await this.launchArena(title, `${layout.name ?? 'Sector 07 reactor'} · ${kind.blurb}`, layout, tier, { loadout: map.carried, node: setup, towerTech: tech });
+    await this.launchArena(map.mode === 'survival' ? title.replace('· TIER', '· SURVIVAL · TIER') : title, `${layout.name ?? 'Sector 07 reactor'} · ${kind.blurb}`, layout, tier, { loadout: map.carried, node: setup, towerTech: tech, mode: map.mode });
   }
 
   /** Map screen: travel to a reachable node (banks what the current node still holds, then swaps arenas). */
@@ -383,6 +387,7 @@ export class Flow {
     void this.input.requestLock();
     const run = new RunLedger(a.id, a.tier, a.startedAt);
     if (m.ledger) run.restore(m.ledger);
+    run.survivalMode = a.mode === 'survival';
     this.run = run;
     const save = this.profile.save;
     // Run gear banked into the save is now profile-owned: it deploys as carried gear.
@@ -391,7 +396,7 @@ export class Flow {
       const it = (uid && itemByUid(save, uid)) || equippedItem(save, slot);
       return [slot, it && fitsSlot(it, slot) ? structuredClone(it) : null];
     }));
-    this.map = new MapSession(this.profile, run, structuredClone(m), loadout, a.nodeBank ?? 0);
+    this.map = new MapSession(this.profile, run, structuredClone(m), loadout, a.nodeBank ?? 0, a.mode ?? 'defense');
     await this.playNode(next, m.carry);
     return true;
   }
@@ -615,7 +620,7 @@ export class Flow {
     // Run map: the node this arena plays (the server sends the carry it was entered with).
     const mapNode = run.node ? findNode(run.node.map, run.node.id) : null;
     const carry = run.node?.carry ? sanitizeCarry(run.node.carry) : null;
-    const nodeCfg = mapNode && run.node ? new MapSession(this.profile, new RunLedger(run.runId, run.tier, 0), { ...newMapState(run.node.map), current: run.node.id }, {}).configFor(mapNode, carry, tier) : null;
+    const nodeCfg = mapNode && run.node ? new MapSession(this.profile, new RunLedger(run.runId, run.tier, 0), { ...newMapState(run.node.map), current: run.node.id }, {}).configFor(mapNode, carry, tier, run.mode ?? 'defense') : null;
     if (nodeCfg) this.coopMap = { seed: run.node!.map, path: [...run.node!.path], cleared: run.node!.cleared, acts: run.node!.acts };
     await this.transition(`CO-OP DEPLOYMENT · THREAT TIER ${tier.roman}`, `${run.players.length} wardens · ${layout.name ?? 'Sector 07 reactor'}`, () => {
       const ledger = new RunLedger(run.runId, run.tier, Date.now());
@@ -631,6 +636,7 @@ export class Flow {
         {
           tier,
           loadout: run.loadout as never,
+          mode: run.mode ?? 'defense',
           ...(nodeCfg ? { tier: nodeCfg.tier, node: nodeCfg.setup } : {}),
           run: ledger,
           seed: run.seed,

@@ -38,6 +38,7 @@ import { planBlast } from '../combat/blast';
 import { hintFor, lootTargetInfo, runHud } from '../ui/hudModel';
 import { rollLoot } from '../loot/roll';
 import { gearUniques } from '../loot/uniques';
+import { loadoutScore } from '../loot/loadoutScore';
 import { createSunShadows } from '../arena/shadows';
 import { CORE_BEHAVIORS } from '../enemies/coreBehaviors';
 import { DROP_SOURCES, type DropSourceId } from '../loot/drops';
@@ -76,6 +77,8 @@ import { biomeOf } from '../world/biomes';
 import { tintPalette } from '../visuals/biomeLook';
 import { ENV_QUERY } from '../world/physicsGroups';
 import { type NodeHost, type NodeSetup, RunNode } from '../arena/RunNode';
+import { HUNT, Hunt } from '../arena/Hunt';
+import type { RunMode } from '../runmap/defs';
 import { type Impact, Ordnance, Telegraphs } from '../fx/Hostile';
 import { M6_BEHAVIORS } from '../enemies/behaviors';
 import { JAMMER_CRAWLER_BEHAVIORS } from '../enemies/jammerCrawlerBehaviors';
@@ -132,7 +135,11 @@ export interface ArenaConfig {
   layout?: ArenaLayout;
   /** Run map node this arena plays (absent = classic endless run with checkpoint choices). */
   node?: NodeSetup;
+  /** Game mode: defense (hold the reactor, build towers) or survival (no towers, every machine hunts the drone, one life). */
+  mode?: RunMode;
 }
+
+export type { RunMode };
 
 /**
  * One survival run in the arena. Built fresh for every deployment and disposed when
@@ -255,6 +262,8 @@ export class Game {
   checkpointOpen = false;
   /** Run map node (segment, hub stations, carry); null on classic endless runs. */
   node: RunNode | null = null;
+  /** Survival mode: the machines hunt the drone (null in defense). */
+  hunt: Hunt | null = null;
 
   // ---- M6 survival
   /** Resolves once every M6 shader (enemy/boss/telegraph/ordnance/arena-machinery) is compiled. */
@@ -358,6 +367,7 @@ export class Game {
     const sg = createSunShadows(moon, settings.shadows ?? (high ? 'high' : 'low'), high, [...arena.shadowCasters, ...reactorCasters]);
     if (sg) this.kit.shadowSink = (m) => sg.addShadowCaster(m);
     this.enemies = new EnemyManager(scene, this.kit, this.pal);
+    if (cfg.mode === 'survival') this.hunt = new Hunt(this.layout);
     this.wear = this.setupMazing();
     for (const [kind, b] of Object.entries({ ...CORE_BEHAVIORS, ...M6_BEHAVIORS, ...JAMMER_CRAWLER_BEHAVIORS, ...FACTION_BEHAVIORS, ...BOSS_BEHAVIORS })) if (b) this.enemies.register(kind as EnemyKind, b as Behavior);
     this.tele = new Telegraphs(scene);
@@ -410,7 +420,7 @@ export class Game {
     this.enemyCtx = {
       player: this.player,
       effects: this.fx,
-      layout: this.layout,
+      layout: this.hunt?.layout ?? this.layout,
       damageReactor: (a, at) => this.damageReactor(a, at),
       los: (a, b) => this.los(a, b),
       panFor: (p) => this.panFor(p),
@@ -420,6 +430,7 @@ export class Game {
       hurtPlayer: (a, from) => this.hurtPlayer(a, from, this.enemyCtx.player),
       focus: (e) => {
         this.enemyCtx.player = this.deployables.decoyFor(e.pos) ?? this.player;
+        this.hunt?.aim(this.enemyCtx.player.position);
       },
       hostileBlast: (c, r, o) => this.hostileBlast(c, r, o),
       summon: (kind, at, o) => this.summon(kind, at, o),
@@ -509,6 +520,16 @@ export class Game {
     this.arenaVisuals.gateSpawned(s.gate, this.enemies.spawn(s.kind, s.gate, this.layout, hp, dmg, w.speedMult, { mods: s.mods, tag: s.tag, encounter: s.encounter, ctx: this.enemyCtx }).path[0]);
   }
 
+  /** Sustained weapon DPS of the current run loadout (gear only; node intel on the run map). */
+  firepower(): number {
+    return loadoutScore(this.inventory.equippedItems()).dps;
+  }
+
+  /** Survival rest: every drone back to full hull and shield (co-op: the whole team). */
+  protected healDrones(): void {
+    for (const p of this.targets()) if (p.alive) p.setVitals(p.maxHp, p.maxHp, p.maxShield, p.maxShield, true, 0);
+  }
+
   /** Co-op replicas show the node; the server plays it. */
   protected get nodeReplica(): boolean {
     return false;
@@ -582,6 +603,8 @@ export class Game {
       openPanel: () => g.nodeOpenPanel(),
       screenPlaying: () => g.screen === 'playing',
       tacticalRefill: () => (g.tactical.energy = TacticalEnergy.MAX),
+      get survival() { return !!g.hunt; }, // prettier-ignore
+      healDrone: () => g.healDrones(),
       actCleared: (act) => g.cfg.hooks.actCleared?.(act),
     };
   }
@@ -989,7 +1012,7 @@ export class Game {
   }
 
   get towerPanelAllowed(): boolean {
-    return this.screen === 'playing' && this.waves.phase !== 'combat';
+    return this.screen === 'playing' && this.waves.phase !== 'combat' && !this.hunt;
   }
 
   /** Tower configuration panel (T): preparation / between waves; combat edits use the tactical hotkeys. */
@@ -1297,6 +1320,7 @@ export class Game {
       this.cfg.run.tick(dt);
     }
     this.player.update(dt, input, this.stats.moveSpeedMult * (this.hazards?.playerSpeed ?? 1), controls);
+    this.hunt?.update(dt, this.enemies.nav, this.player.alive ? [this.player.position] : []);
     if (this.player.dashedThisFrame) {
       this.player.dashedThisFrame = false;
       this.director.bus.emit({ type: 'dash', chain: this.director.bus.newChain(), source: { kind: 'weapon', id: 'dash' }, value: 1 });
@@ -1336,7 +1360,11 @@ export class Game {
     this.dynamics.update(dt, hdt);
     this.survival.update(dt, hdt);
     this.watchBoss();
-    if (this.playerWasAlive && !this.player.alive) this.cfg.run.survival.deaths++;
+    if (this.playerWasAlive && !this.player.alive) {
+      this.cfg.run.survival.deaths++;
+      // Survival: one life.
+      if (this.hunt) this.onDefeat();
+    }
     this.playerWasAlive = this.player.alive;
     this.turretCtx.stats = this.stats;
     this.turrets.update(dt, this.turretCtx);
@@ -1433,6 +1461,11 @@ export class Game {
 
   protected setBuildMode(on: boolean): void {
     if (on === this.construction.active) return;
+    if (on && this.hunt) {
+      uiEvents.emit('alert', { text: 'SURVIVAL · NO TOWERS', tone: 'orange' });
+      sfx.play('buildDeny');
+      return;
+    }
     if (on && this.node?.noTowers) {
       uiEvents.emit('alert', { text: 'NULL FIELD · NO TOWER CONSTRUCTION ON THIS NODE', tone: 'orange' });
       sfx.play('buildDeny');
@@ -1694,7 +1727,7 @@ export class Game {
     const drones = this.targets();
     const lift = TMP.copyFrom(center);
     lift.y += 0.6;
-    const plan = planBlast(center, radius, o, {
+    const plan = planBlast(center, radius, this.hunt ? { ...o, reactor: 0 } : o, {
       drones: drones.map((d) => ({ alive: d.alive, pos: d.position })),
       clearShot: (i) => this.los(lift, drones[i].eye),
       towers: this.turrets.turrets,
@@ -1861,8 +1894,10 @@ export class Game {
       },
       this.layout.hazards ?? [],
     );
-    if (this.layout.mazing) {
-      this.enemies.nav = new EnemyNavigator(this.layout, {
+    // Survival hunts on a navigation field on every arena (the classic one too); defense only on mazing arenas.
+    if (this.layout.mazing || this.hunt) {
+      if (this.hunt) this.enemies.huntRange = HUNT.chaseRange;
+      this.enemies.nav = new EnemyNavigator(this.hunt?.layout ?? this.layout, {
         // Towers on decks, bridges and container tops stand above the ground lanes: they never block them.
         towers: () => this.turrets.turrets.map((t) => ({ id: t.id, x: t.pos.x, z: t.pos.z, radius: t.radius, blocking: t.blocking && t.pos.y < 1 })),
         breach: (id, dmg, by) => this.wear.breach(id, dmg, by),
@@ -1948,6 +1983,12 @@ export class Game {
   }
 
   protected damageReactor(amount: number, at: Vector3): void {
+    // Survival: attacks on the "reactor" were aimed at the hunted drone.
+    if (this.hunt) {
+      const t = this.enemyCtx.player;
+      if (amount > 0) this.hurtPlayer(Hunt.hitFor(amount, t.maxHp), at, t);
+      return;
+    }
     if (this.reactorHp <= 0 || !(amount > 0)) return;
     this.cfg.run.survival.reactorDamage += Math.min(this.reactorHp, amount);
     this.reactorHp = Math.max(0, this.reactorHp - amount);
@@ -1966,7 +2007,7 @@ export class Game {
     this.defeatT = 0;
     this.tactical.deactivate();
     this.setBuildMode(false);
-    const c = new Vector3(0, 4, 0);
+    const c = this.hunt ? this.player.position.clone() : new Vector3(0, 4, 0);
     this.fx.explode(c, { scale: 4, color: new Color3(0.6, 1.6, 2.2), debris: 30 });
     this.fx.burst('explosion', c, 160, undefined, 3);
     this.fx.flashLight(c, 14, 1.8, new Color3(0.4, 0.9, 1));
@@ -2118,6 +2159,7 @@ export class Game {
       canReturnHome: this.canReturnHome,
       playerAlive: this.player.alive,
       suppress: c.active || !!this.tut?.showing,
+      survival: !!this.hunt,
     }, this.settings.keys);
     const run = this.cfg.run;
     const lt = this.lootTarget;
@@ -2181,6 +2223,7 @@ export class Game {
         : null,
       m6: this.survival.hud(),
       node: this.node?.hud() ?? null,
+      mode: this.hunt ? 'survival' : 'defense',
     });
     void force;
   }

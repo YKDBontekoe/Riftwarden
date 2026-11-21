@@ -250,6 +250,18 @@ export const SERVICES: Record<ServiceId, { id: ServiceId; name: string; text: st
 };
 export const SERVICE_IDS = Object.keys(SERVICES) as ServiceId[];
 
+/** Game mode of a run: defense (hold the reactor, build towers) or survival (no towers, hunted, one life). */
+export type RunMode = 'defense' | 'survival';
+
+/**
+ * Mode effect on every combat segment. Survival has no towers and one life: smaller encounters, better income and
+ * luck to pay for the risk.
+ */
+export const MODE_EFFECT: Record<RunMode, NodeEffect> = {
+  defense: {},
+  survival: { budget: 0.8, income: 1.25, luck: 1.2 },
+};
+
 /** Act boss rotation (an act boss always commands the final wave of its node). */
 export const ACT_BOSSES: readonly BossId[] = ['colossus', 'overseer'];
 

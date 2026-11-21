@@ -230,6 +230,11 @@ wss.on('connection', (ws: WebSocket) => {
         if (why) fail('tier', why);
         return;
       }
+      case 'mode': {
+        const why = me.room?.setMode(me.id, msg.mode);
+        if (why) fail('mode', why);
+        return;
+      }
       case 'start': {
         if (!me.room) return fail('start', 'Not in a session');
         const why = await me.room.start(me.id);

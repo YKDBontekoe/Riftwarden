@@ -91,6 +91,20 @@ async function forceNext(p, kind, anomaly) {
       check('B1 node completes after wave 5 and banks', r.complete && st.banked === 5, JSON.stringify({ r, st }));
       check('B2 map screen opens with reachable nodes', st.screen === 'runmap' && st.view && st.reach >= 1, JSON.stringify(st));
       check('B3 waves held, extraction available', st.hold && st.canHome);
+      // Node intel: tabs, roster, rewards, route lookahead.
+      await p.waitForSelector('[data-testid=rm-intel]', { timeout: 20000 }).catch(() => {});
+      const intel = await ev(p, () => ({ intel: document.querySelector('[data-testid=rm-intel]')?.textContent ?? '', ahead: document.querySelectorAll('.rm-node.ahead').length }));
+      // Combat nodes list the expected roster; hubs say so (the first reachable node is random).
+      check('B5 node intel lists the threat, hostiles and total HP (or the hub)', (/THREAT/.test(intel.intel) && /Hostiles/.test(intel.intel) && /hit points/.test(intel.intel)) || /^Hub visit/.test(intel.intel), intel.intel.slice(0, 160));
+      check('B6 route lookahead highlights the downstream nodes', intel.ahead >= 2, String(intel.ahead));
+      await p.click('[data-testid=rm-tab-rewards]');
+      const rw = await ev(p, () => document.querySelector('[data-testid=rm-rewards]')?.textContent ?? '');
+      check('B7 rewards tab breaks down credits / cache', /Checkpoint cache|Stock|Vault cache|Choose one|Temper|Gambler|Rift|Echo|Derelict|Void|Abandoned/.test(rw), rw.slice(0, 120));
+      await p.click('[data-testid=rm-tab-route]');
+      const rt = await ev(p, () => document.querySelector('[data-testid=rm-route]')?.textContent ?? '');
+      check('B8 route tab: rows to boss + fights', /Rows to the act boss/.test(rt) && /Fights on the way/.test(rt), rt.slice(0, 120));
+      await p.click('[data-testid=rm-tab-intel]');
+      if (want('V')) await shot(p, 'runmap-intel', { frames: 2 });
       if (want('V')) await shot(p, 'runmap-screen', { frames: 2 });
       // Back to the arena and back to the map with H.
       await p.click('[data-testid=rm-stay]');
@@ -294,6 +308,74 @@ async function forceNext(p, kind, anomaly) {
     }
 
     // SwiftShader: the known hit-flash PBR variant can exceed the uniform buffer limit (see CLAUDE.md, m1 Z).
+    if (want('S')) {
+      // Survival: a fresh deployment in survival mode (classic arena in ?test: the hunt builds its own nav field).
+      await ev(p, async () => {
+        const r = window.__rift;
+        if (r.flow.run && !r.flow.run.ended) { r.game.checkpointOpen = true; await r.flow.abandonRun(); }
+      });
+      await waitFor(p, () => !window.__rift.flow.busy);
+      await ev(p, () => window.__rift.flow.enterHq());
+      await ev(p, () => window.__rift.flow.deploy(1, undefined, 'survival'));
+      await waitFor(p, () => window.__rift.state().location === 'arena' && !window.__rift.flow.busy);
+      await ev(p, () => window.__rift.advance(0.2));
+      const s1 = await ev(p, () => {
+        const g = window.__rift.game;
+        return { hunt: !!g.hunt, nav: !!g.enemies.nav, mode: window.__rift.profile.save.activeRun.mode, banner: !!document.querySelector('[data-testid=survival-banner]') };
+      });
+      check('S1 survival deploy: hunt + nav field, mode saved, survival HUD', s1.hunt && s1.nav && s1.mode === 'survival' && s1.banner, JSON.stringify(s1));
+      const s2 = await ev(p, () => {
+        const r = window.__rift;
+        const g = r.game;
+        g.setScreen('playing');
+        g.input.simulateKey('KeyB', true);
+        r.advance(1 / 60);
+        g.input.simulateKey('KeyB', false);
+        r.advance(1 / 60);
+        return g.construction.active;
+      });
+      check('S2 no tower construction', s2 === false);
+      // Move the drone far from the reactor, start the wave: the machines path to the drone.
+      const s3 = await ev(p, () => {
+        const r = window.__rift;
+        const g = r.game;
+        const L = g.layout;
+        const corner = { x: L.reactor.x + 26, z: L.reactor.z - 26 };
+        r.teleport(corner.x, corner.z, 1.2);
+        r.advance(1);
+        g.startWave();
+        r.advance(4);
+        const es = g.enemies.active.filter((e) => e.path.length);
+        const ends = es.map((e) => e.path[e.path.length - 1]);
+        const nearDrone = ends.filter((pt) => Math.hypot(pt.x - g.player.position.x, pt.z - g.player.position.z) < 9).length;
+        const nearReactor = ends.filter((pt) => Math.hypot(pt.x - L.reactor.x, pt.z - L.reactor.z) < 9).length;
+        return { n: es.length, nearDrone, nearReactor };
+      });
+      check('S3 enemies path to the drone, not the reactor', s3.n > 0 && s3.nearDrone > s3.nearReactor, JSON.stringify(s3));
+      const s4 = await ev(p, () => {
+        const r = window.__rift;
+        const g = r.game;
+        const hp0 = g.player.hp + g.player.shield;
+        for (let i = 0; i < 40 && g.player.alive && g.screen !== 'defeat'; i++) { g.setScreen('playing'); r.advance(0.5); }
+        return { reactor: g.reactorHp, max: 1000, hp0, hp: g.player.hp + g.player.shield, alive: g.player.alive, screen: g.screen };
+      });
+      check('S4 the reactor is never damaged; the drone takes the hits', s4.reactor === s4.max && (s4.hp < s4.hp0 || !s4.alive), JSON.stringify(s4));
+      const s5 = await ev(p, () => {
+        const r = window.__rift;
+        const g = r.game;
+        if (g.screen !== 'defeat') {
+          g.setScreen('playing');
+          g.player.hp = 1;
+          g.player.shield = 0;
+          g.hurtPlayer(500, g.player.position.add(new r.V3(3, 0, 0)));
+          r.advance(0.2);
+        }
+        return { screen: g.screen, ended: r.flow.run.ended, outcome: r.profile.save.history[0]?.outcome, mode: r.profile.save.history[0]?.mode };
+      });
+      check('S5 one life: losing the drone ends the run (defeat, survival history)', s5.screen === 'defeat' && s5.ended && s5.outcome === 'defeat' && s5.mode === 'survival', JSON.stringify(s5));
+      if (want('V')) await shot(p, 'survival-defeat', { frames: 1 });
+    }
+
     const bad = errs.filter((e) => !/compil(e|ing) effect|Trying next fallback|BJS - \[[\d:]+\]: (Uniforms|Attributes|Defines|Error: (VERTEX|FRAGMENT))|GPU stall|favicon/.test(e));
     check('Z no runtime errors', bad.length === 0, bad.slice(0, 5).join(' | '));
   } catch (e) {

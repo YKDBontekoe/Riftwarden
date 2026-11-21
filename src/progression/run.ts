@@ -86,6 +86,8 @@ export interface RunResult {
   records?: string[];
   /** Run map: act reached, nodes completed, act bosses defeated, compact path. */
   map?: MapSummary;
+  /** Survival mode run (absent = defense). */
+  mode?: 'survival';
 }
 
 export interface MapSummary {
@@ -127,6 +129,8 @@ export class RunLedger {
   private xpAccounted = 0;
   /** Run map summary (map-mode runs; kept current by the session flow). */
   map: MapSummary | null = null;
+  /** Survival mode run (finalize copies it into the result). */
+  survivalMode = false;
   /** Items secured before a resume (the items themselves are in the save). */
   private securedBefore = 0;
 
@@ -335,6 +339,7 @@ export class RunLedger {
       itemsCollected: this.itemsCollected,
       survival: { ...this.survival, bosses: [...this.survival.bosses], events: [...this.survival.events], milestones: [...this.survival.milestones] },
       ...(this.map ? { map: { ...this.map, path: [...this.map.path] } } : {}),
+      ...(this.survivalMode ? { mode: 'survival' as const } : {}),
     };
     // Unsecured rewards are gone for good.
     this.unsecured = emptyRewards();
