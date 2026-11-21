@@ -67,7 +67,9 @@ export interface StatMod {
   value: number;
 }
 
-export type NodeModId = 'elite_surge' | 'fortified' | 'blitz' | 'no_towers' | 'bounty' | 'swarm' | 'scarcity' | 'hunt';
+export type NodeModId = 'elite_surge' | 'fortified' | 'blitz' | 'no_towers' | 'bounty' | 'swarm' | 'scarcity' | 'hunt' | WarModId;
+/** Live war modifiers (never rolled by a layout; the war state puts them on a node). */
+export type WarModId = 'corrupted' | 'stronghold' | 'distress' | 'defense' | 'convoy';
 
 export interface NodeModDef {
   id: NodeModId;
@@ -78,6 +80,8 @@ export interface NodeModDef {
   effect: NodeEffect;
   /** Only combat kinds roll modifiers; some are restricted further. */
   kinds?: NodeKind[];
+  /** Live war modifier (set by the war state, never rolled). */
+  dynamic?: boolean;
 }
 
 export const NODE_MODS: Record<NodeModId, NodeModDef> = {
@@ -89,8 +93,16 @@ export const NODE_MODS: Record<NodeModId, NodeModDef> = {
   swarm: { id: 'swarm', name: 'Swarm Front', text: 'A swarm event is guaranteed · drop chance +25%', tone: 'mixed', effect: { event: 'swarm', drops: 1.25 } },
   scarcity: { id: 'scarcity', name: 'Scarcity', text: 'Cores -40% · loot luck +50%', tone: 'risk', effect: { cores: 0.6, luck: 1.5 } },
   hunt: { id: 'hunt', name: 'High-Value Target', text: 'A vault courier is guaranteed · +1 rift shard', tone: 'reward', effect: { event: 'hvt', shards: 1 }, kinds: ['combat', 'elite'] },
+  // ---- live war modifiers
+  corrupted: { id: 'corrupted', name: 'Rift Corrupted', text: 'Hostiles +30% HP, +15% damage · loot luck +50% · +1 shard · securing it purges the corruption', tone: 'mixed', effect: { hp: 1.3, damage: 1.15, luck: 1.5, shards: 1 }, dynamic: true },
+  stronghold: { id: 'stronghold', name: 'Stronghold', text: 'Region capital before 60% liberation: hostiles +30% HP, elites x1.5', tone: 'risk', effect: { hp: 1.3, elite: 1.5 }, dynamic: true },
+  distress: { id: 'distress', name: 'Distress Call', text: 'Double liberation · income +30% · loot luck +20% (timed)', tone: 'reward', effect: { income: 1.3, luck: 1.2 }, dynamic: true },
+  defense: { id: 'defense', name: 'Under Threat', text: 'Corruption is closing in: secure it before the timer runs out · income +20%', tone: 'mixed', effect: { income: 1.2 }, dynamic: true },
+  convoy: { id: 'convoy', name: 'Rift Convoy', text: 'A vault courier convoy passes through · +2 rift shards (timed)', tone: 'reward', effect: { event: 'hvt', shards: 2 }, dynamic: true },
 };
 export const NODE_MOD_IDS = Object.keys(NODE_MODS) as NodeModId[];
+/** Modifiers a layout may roll (live war modifiers excluded). */
+export const ROLLED_MOD_IDS = NODE_MOD_IDS.filter((m) => !NODE_MODS[m].dynamic);
 
 /** Per-kind segment effect (on top of the modifiers). */
 export const KIND_EFFECT: Partial<Record<NodeKind, NodeEffect>> = {

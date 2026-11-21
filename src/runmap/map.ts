@@ -9,7 +9,7 @@ import {
   type AnomalyId,
   isCombatKind,
   KIND_EFFECT,
-  NODE_MOD_IDS,
+  ROLLED_MOD_IDS,
   NODE_MODS,
   type NodeEffect,
   type NodeKind,
@@ -47,6 +47,14 @@ export interface MapNode {
   boss: BossId | null;
   /** Ids of the nodes in the next row this node leads to (none on the last row). */
   links: string[];
+  // ---- war regions (free networks on the globe)
+  /** Vertical position 0..1 on the region map. */
+  y?: number;
+  /** Region name. */
+  region?: string;
+  /** Globe position (degrees). */
+  lat?: number;
+  lon?: number;
 }
 
 export interface ActMap {
@@ -123,14 +131,14 @@ export function staircase(a: number, b: number, r: () => number): [number, numbe
 }
 
 /** Node modifiers: combat kinds only, more and nastier with depth. */
-function rollMods(kind: NodeKind, act: number, row: number, r: () => number): NodeModId[] {
+export function rollMods(kind: NodeKind, act: number, row: number, r: () => number): NodeModId[] {
   if (!isCombatKind(kind) || row === 0 && act === 1) return [];
   const chance = Math.min(0.85, 0.22 + 0.06 * row + 0.12 * (act - 1));
   const out: NodeModId[] = [];
   const max = act >= 3 ? 2 : 1;
   for (let k = 0; k < max; k++) {
     if (r() >= chance * (k ? 0.5 : 1)) break;
-    const pool = NODE_MOD_IDS.filter((m) => !out.includes(m) && (!NODE_MODS[m].kinds || NODE_MODS[m].kinds!.includes(kind)));
+    const pool = ROLLED_MOD_IDS.filter((m) => !out.includes(m) && (!NODE_MODS[m].kinds || NODE_MODS[m].kinds!.includes(kind)));
     // Two forced events never stack.
     const filtered = out.some((m) => NODE_MODS[m].effect.event) ? pool.filter((m) => !NODE_MODS[m].effect.event) : pool;
     if (!filtered.length) break;
