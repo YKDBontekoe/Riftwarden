@@ -1,7 +1,7 @@
 import type { ItemInstance } from '@riftwarden/rules/loot/types';
 import type { Profile } from '../progression/Profile';
 import type { RunLedger } from '@riftwarden/rules/progression/run';
-import { bankNodeRewards, saveMapProgress } from '@riftwarden/rules/progression/save';
+import { emptyRewards } from '@riftwarden/rules/progression/run';
 import { getTier, type ThreatTier } from '@riftwarden/rules/progression/tiers';
 import { actEffects, type RunCarry, towerRefund } from '@riftwarden/rules/runmap/carry';
 import { type MapNode, nodeEffect, segmentTier } from '@riftwarden/rules/runmap/map';
@@ -117,7 +117,7 @@ export class MapSession {
     if (!moved.items.length && !moved.salvage && !moved.credits && !moved.components && !moved.shards && !moved.xp) return true;
     this.step++;
     const step = this.step;
-    return this.profile.mutate((d) => bankNodeRewards(d, this.run.id, step, moved)) && this.profile.lastWriteOk;
+    return this.profile.runEntry({ kind: 'nodeBank', runId: this.run.id, step, rewards: { ...emptyRewards(), ...moved }, loot: [...this.run.lootJournal] }) && this.profile.lastWriteOk;
   }
 
   /** Keep the ledger's map summary current (finalize copies it into the run result). */
@@ -128,7 +128,7 @@ export class MapSession {
 
   persist(): void {
     if (this.run.survival.dev) return;
-    this.profile.mutate((d) => saveMapProgress(d, this.run.id, this.state));
+    this.profile.runEntry({ kind: 'map', runId: this.run.id, state: this.state });
   }
 
   /** The map screen's data for the current arena. */

@@ -1,4 +1,5 @@
 import { Store } from '../ui/store';
+import { apiBase } from '../net/api';
 import { newWar, sanitizeWar, secureNode, type SecureResult, tickWar, type WarState } from '@riftwarden/rules/war/state';
 
 const LOCAL_KEY = 'riftwarden.war.local';
@@ -14,11 +15,11 @@ export interface WarView {
   seenAt: number;
 }
 
-/** HTTP base of the war server: `?server=host:port` or the page's own origin (Vite proxies /war in dev). */
+/** HTTP base of the war: the gateway (`apiBase`), or `?server=host:port` for a legacy co-op test server. */
 export function defaultWarBase(): string {
   const q = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('server') : null;
   if (q) return q.startsWith('ws') ? q.replace(/^ws/, 'http').replace(/\/ws$/, '') : `http://${q}`;
-  return '';
+  return apiBase();
 }
 
 /**
@@ -93,7 +94,9 @@ export class WarClient {
   async report(node: string, mode: 'defense' | 'survival'): Promise<SecureResult> {
     if (this.source === 'server' && this.base !== null) {
       try {
-        const res = await fetch(`${this.base}/war/report`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ node, mode, id: this.reporter }) });
+        // Signed-in wardens count toward the shared war (session cookie); guests do not.
+        const res = await fetch(`${this.base}/war/report`, { method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ node, mode, id: this.reporter }) });
+        if (res.status === 401) return { ok: false, reason: 'Sign in (main menu, ACCOUNT) to count toward the shared war', gain: 0, lib: 0, messages: [] };
         const r = (await res.json()) as SecureResult;
         void this.refresh();
         return r;

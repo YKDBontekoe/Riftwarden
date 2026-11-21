@@ -1,6 +1,7 @@
 // Account session state for the UI: unknown (checking) -> offline | signedOut | signedIn.
 import { useSyncExternalStore } from 'react';
 import { Store } from '@riftwarden/game/ui/store';
+import type { SyncStatus } from '@riftwarden/game/net/SessionClient';
 import { type Account, accountApi, ApiError, type PasskeyInfo } from './api';
 
 export interface AccountState {
@@ -11,9 +12,11 @@ export interface AccountState {
   recoveryCode: string | null;
   busy: boolean;
   error: string;
+  /** Profile sync with the server while signed in. */
+  sync: SyncStatus | null;
 }
 
-export const accountStore = new Store<AccountState>({ status: 'unknown', account: null, passkeys: [], recoveryCode: null, busy: false, error: '' });
+export const accountStore = new Store<AccountState>({ status: 'unknown', account: null, passkeys: [], recoveryCode: null, busy: false, error: '', sync: null });
 
 export function useAccount(): AccountState {
   return useSyncExternalStore(accountStore.subscribe, () => accountStore.get());

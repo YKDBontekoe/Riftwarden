@@ -13,7 +13,8 @@ import { RunLedger, type RunOutcome } from '@riftwarden/rules/progression/run';
 import * as TX from '@riftwarden/rules/economy/transactions';
 import type { SaveData } from '@riftwarden/rules/progression/save';
 import { equipFromStorage, uninstallModule } from '@riftwarden/rules/progression/save';
-import { applyLoadout, bankRewards, beginRun, deployBlocker, equippedItem, itemByUid, recordRun, resolveInterruptedRun, selectTier } from '@riftwarden/rules/progression/save';
+import { deployBlocker, equippedItem, itemByUid } from '@riftwarden/rules/progression/save';
+import { emptyRewards } from '@riftwarden/rules/progression/run';
 import { fitsSlot } from '@riftwarden/rules/progression/items';
 import { MapSession } from '@riftwarden/game/core/mapSession';
 import { combineEffects, type MapNode, segmentTier } from '@riftwarden/rules/runmap/map';
@@ -268,10 +269,7 @@ export class Flow {
     const war = this.mapMode ? await this.warNow() : null;
     if (this.busy || (this.run && !this.run.ended)) return false;
     const mapSeed = war ? war.seed : 0;
-    this.profile.mutate((d) => {
-      if (!this.devNext) selectTier(d, tierId);
-      beginRun(d, runId, tierId, Date.now(), { mapSeed, mode });
-    });
+    this.profile.runEntry({ kind: 'start', runId, tier: tierId, at: Date.now(), mapSeed, mode, select: !this.devNext });
     const run = new RunLedger(runId, tierId, Date.now());
     run.survivalMode = mode === 'survival';
     this.run = run;
@@ -340,7 +338,10 @@ export class Flow {
         hooks: {
           // Reported as secured only once the write succeeded.
           // Development sessions (M6 dev tools used) never commit permanent rewards.
-          bank: (wave, rewards) => !run.survival.dev && this.profile.mutate((d) => bankRewards(d, run.id, wave, rewards, { bosses: run.survival.bossesKilled })) && this.profile.lastWriteOk,
+          bank: (wave, rewards) =>
+            !run.survival.dev &&
+            this.profile.runEntry({ kind: 'bank', runId: run.id, wave, rewards: { ...emptyRewards(), ...rewards }, bosses: run.survival.bossesKilled, loot: [...run.lootJournal] }) &&
+            this.profile.lastWriteOk,
           checkpoint: () => {},
           defeat: () => this.endRun('defeat'),
           mapOpened: () => this.publishMap(),
@@ -417,7 +418,7 @@ export class Flow {
   /** End a suspended (resumable) run from the HQ: recorded as interrupted, banked rewards stay. */
   endSuspendedRun(): boolean {
     if (this.run && !this.run.ended) return false;
-    return !!this.profile.mutate((d) => resolveInterruptedRun(d) !== null);
+    return this.profile.runEntry({ kind: 'interrupt', at: Date.now() });
   }
 
   /** A sector was secured: count it in the Rift War (dev sessions never do). */
@@ -444,12 +445,7 @@ export class Flow {
     // Record the run, then let the profile adopt the run loadout for items it owns
     // (unsecured items were just lost, so their slots keep the previous secured gear).
     const owned = this.arena?.inventory.ownedLoadout() ?? {};
-    if (first)
-      this.profile.mutate((d) => {
-        const recorded = recordRun(d, result);
-        applyLoadout(d, owned, { ignoreActiveRun: true });
-        return recorded;
-      });
+    if (first) this.profile.runEntry({ kind: 'end', result, loadout: owned });
     hudStore.set({ lastRun: { ...result } });
     return result;
   }
@@ -611,6 +607,11 @@ export class Flow {
       this.profile.detachRemote();
       if (this.home && !this.busy) this.rebuildHomeKeepScreen();
     }
+  }
+
+  /** The profile switched to another copy (account / guest): rebuild the HQ behind the current screen. */
+  profileSwitched(): void {
+    if (this.home && !this.busy && this.location === 'home') this.rebuildHomeKeepScreen();
   }
 
   private rebuildHomeKeepScreen(): void {

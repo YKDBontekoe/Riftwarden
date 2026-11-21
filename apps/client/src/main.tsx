@@ -1,4 +1,6 @@
 import HavokPhysics from '@babylonjs/havok';
+import { startAccountSync } from './account/sync';
+import { refreshAccount } from './account/store';
 import havokWasmUrl from '@babylonjs/havok/lib/esm/HavokPhysics.wasm?url';
 import { Engine } from '@babylonjs/core';
 import { createRoot } from 'react-dom/client';
@@ -21,6 +23,9 @@ async function boot(): Promise<void> {
 
   const params = new URLSearchParams(location.search);
   flow.devTools = params.has('dev') || params.has('test');
+  // Accounts: sync the profile while signed in; restore the session at boot (automation opts in with &account).
+  startAccountSync(flow);
+  if (!params.has('test') || params.has('account')) void refreshAccount();
   if (params.has('classic')) flow.arenaMode = 'classic';
   if (params.has('endless')) flow.mapMode = false;
   if (params.has('test')) {

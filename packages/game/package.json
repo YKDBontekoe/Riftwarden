@@ -12,6 +12,7 @@
   "dependencies": {
     "@babylonjs/core": "catalog:",
     "@babylonjs/loaders": "catalog:",
+    "@bufbuild/protobuf": "catalog:",
     "@riftwarden/protocol": "workspace:*",
     "@riftwarden/rules": "workspace:*"
   }

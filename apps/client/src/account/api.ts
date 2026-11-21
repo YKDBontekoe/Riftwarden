@@ -23,12 +23,9 @@ export class ApiError extends Error {
   }
 }
 
-export function apiBase(): string {
-  const param = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('api') : null;
-  if (param) return param.replace(/\/$/, '');
-  const env = (import.meta.env as Record<string, string | undefined>).VITE_API_URL;
-  return env ? env.replace(/\/$/, '') : '';
-}
+import { apiBase } from '@riftwarden/game/net/api';
+
+export { apiBase };
 
 async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
   let res: Response;

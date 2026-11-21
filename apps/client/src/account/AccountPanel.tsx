@@ -80,6 +80,20 @@ function SignedOut() {
   );
 }
 
+function SyncLine() {
+  const s = useAccount().sync;
+  if (!s) return null;
+  const text =
+    s.state === 'syncing' ? 'Syncing…' : s.state === 'offline' || s.state === 'connecting' ? `Offline · ${s.pending} change${s.pending === 1 ? '' : 's'} waiting` : s.state === 'error' ? `Sync error: ${s.error}` : `Synced · revision ${s.rev}`;
+  return (
+    <div className="acct-sync" data-testid="acct-sync" data-state={s.state} data-rev={s.rev} data-pending={s.pending}>
+      <span>{text}</span>
+      {s.claimed && <small>Your progress on this device moved into the account.</small>}
+      {s.rejected.length > 0 && <small className="acct-error" data-testid="acct-rejected">{s.rejected.length} change(s) refused by the server: {s.rejected[0].reason}</small>}
+    </div>
+  );
+}
+
 function SignedIn() {
   const s = useAccount();
   const a = s.account!;
@@ -92,6 +106,7 @@ function SignedIn() {
         <strong data-testid="acct-signed-in">{a.name}</strong>
         <button className="mini" data-testid="acct-logout" disabled={s.busy} onClick={() => void accountAction(() => accountApi.logout())}>SIGN OUT</button>
       </div>
+      <SyncLine />
       <h3>Passkeys</h3>
       <ul className="acct-keys" data-testid="acct-passkeys">
         {s.passkeys.map((k) => (

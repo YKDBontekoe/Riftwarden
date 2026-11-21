@@ -6,7 +6,11 @@ pub mod config;
 pub mod error;
 mod health;
 pub mod limits;
+pub mod session;
+pub mod sync;
 pub mod telemetry;
+pub mod war;
+pub mod workers;
 
 use std::sync::Arc;
 
@@ -21,6 +25,9 @@ pub struct AppState {
     pub db: riftwarden_db::PgPool,
     pub redis: redis::aio::ConnectionManager,
     pub webauthn: webauthn_rs::Webauthn,
+    pub workers: workers::Workers,
+    pub hub: sync::Hub,
+    pub war: war::War,
 }
 
 pub type State = Arc<AppState>;
@@ -35,7 +42,7 @@ pub fn router(state: State) -> Router {
         .allow_credentials(true)
         .allow_methods([Method::GET, Method::POST, Method::DELETE])
         .allow_headers([header::CONTENT_TYPE]);
-    let traced = Router::new().merge(auth::routes()).layer(cors).layer(
+    let traced = Router::new().merge(auth::routes()).merge(session::routes()).merge(war::routes()).layer(cors).layer(
         TraceLayer::new_for_http()
             .make_span_with(DefaultMakeSpan::new().level(tracing::Level::INFO))
             .on_response(DefaultOnResponse::new().level(tracing::Level::INFO)),
@@ -49,11 +56,13 @@ pub async fn connect(config: Config) -> Result<State> {
     let db = riftwarden_db::connect(&config.database_url, config.database_max_connections).await.context("PostgreSQL")?;
     let redis = redis::Client::open(config.redis_url.as_str()).context("REDIS_URL")?.get_connection_manager().await.context("Redis")?;
     let webauthn = auth::webauthn(&config)?;
-    Ok(Arc::new(AppState { config, db, redis, webauthn }))
+    let workers = workers::Workers::new(&config.rules_workers, 2);
+    Ok(Arc::new(AppState { config, db, redis, webauthn, workers, hub: sync::Hub::default(), war: war::War::default() }))
 }
 
-/// Background housekeeping: purge expired sessions every hour.
+/// Background housekeeping: purge expired sessions every hour, advance the war every 30 s.
 pub fn spawn_maintenance(state: State) {
+    war::spawn_ticker(state.clone());
     tokio::spawn(async move {
         let mut tick = tokio::time::interval(std::time::Duration::from_secs(3600));
         loop {

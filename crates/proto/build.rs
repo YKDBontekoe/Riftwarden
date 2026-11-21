@@ -6,6 +6,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .filter_map(|e| e.ok().map(|e| e.path()))
         .filter(|p| p.extension().is_some_and(|x| x == "proto"))
         .collect();
+    println!("cargo:rerun-if-changed={}", root.join("riftwarden/v1").display());
     for f in &files {
         println!("cargo:rerun-if-changed={}", f.display());
     }

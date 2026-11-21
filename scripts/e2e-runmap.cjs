@@ -135,11 +135,15 @@ async function forceNext(p, kind, anomaly) {
       const kind = await ev(p, () => window.__rift.flow.map.reachable().find((n) => n.kind === 'combat' || n.kind === 'elite') ? 'combat' : null);
       if (!kind) await forceNext(p, 'combat');
       // Corrupt the next combat sector in the (local) war: the arena must play the corrupted variant.
+      // The node travelTo(p, 'combat') will pick (same rule), tracked by the war (the local war's seed is random per profile).
       await ev(p, () => {
         const r = window.__rift;
-        const n = r.flow.map.reachable().find((x) => x.kind === 'combat' || x.kind === 'elite');
+        const v = r.flow.map.view(r.game);
+        const nodes = v.reachable.map((id) => r.flow.map.node(id));
+        const n = nodes.find((x) => x.kind === 'combat' && !x.actBoss) || nodes.find((x) => x.kind === 'combat') || nodes[0];
         const k = Number(n.id.match(/^r(\d+)/)[1]);
-        r.flow.war.state.regions.find((x) => x.k === k).nodes[n.id].corrupt = true;
+        const region = r.flow.war.state.regions.find((x) => x.k === k);
+        region.nodes[n.id] = { ...(region.nodes[n.id] ?? { lib: 0 }), corrupt: true };
       });
       const prevRun = await ev(p, () => window.__rift.flow.run.id);
       await travelTo(p, 'combat');

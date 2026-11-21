@@ -1,0 +1,13 @@
+{
+  "name": "@riftwarden/worker",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Internal TypeScript workers behind the gateway: rules (profile replay, war ticks) and, from step 7, co-op simulations.",
+  "dependencies": {
+    "@bufbuild/protobuf": "catalog:",
+    "@riftwarden/protocol": "workspace:*",
+    "@riftwarden/rules": "workspace:*",
+    "tsx": "catalog:"
+  }
+}

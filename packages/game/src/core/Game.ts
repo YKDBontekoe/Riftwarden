@@ -209,6 +209,8 @@ export class Game {
   /** Rift shard rolls: their own stream, so loot rolls of a run seed never shift. */
   protected shardRand: () => number;
   protected lootCounter = 0;
+  /** Values drawn from the loot stream (recorded with each roll for the server's re-roll). */
+  protected lootDraws = 0;
   lootTarget: Pickup | null = null;
   /** Loot placement, landing/pickup presentation and targeting. */
   protected readonly pickups = new LootPickups(this.lootHost());
@@ -409,7 +411,8 @@ export class Game {
     if (cfg.node?.carry) this.inventory.adoptLoadout(cfg.node.carry.loadout);
     // Every map node rolls its own loot stream (a new arena must not replay the previous node's drops).
     const nodeSalt = cfg.node?.node.seed ?? 0;
-    this.lootRand = mulberry32((hashSeed(cfg.run.id) ^ nodeSalt) >>> 0);
+    const lootStream = mulberry32((hashSeed(cfg.run.id) ^ nodeSalt) >>> 0);
+    this.lootRand = () => (this.lootDraws++, lootStream());
     this.shardRand = mulberry32((hashSeed(cfg.run.id) ^ 0x51ed27a3 ^ nodeSalt) >>> 0);
     this.towerTech = new Set([...STARTER_TECH, ...(cfg.towerTech ?? [])]);
     this.applyTree(cfg.tree);
@@ -861,6 +864,8 @@ export class Game {
   /** The run's own loot stream (single player): one place that knows the uid scheme and the debug chance multiplier. */
   private rollFrom(src: DropSource, wave: number): ItemInstance[] {
     const run = this.cfg.run;
+    const t = this.cfg.tier;
+    if (this.dropChanceMult === 1) run.lootJournal.push({ node: this.cfg.node?.node.id ?? null, draw: this.lootDraws, counter: this.lootCounter, source: src, wave, tier: { lootLevelBonus: t.lootLevelBonus, lootLuck: t.lootLuck, id: t.id }, faction: this.director.faction });
     return rollLoot({ source: src, wave, tier: this.cfg.tier, rand: this.lootRand, nextUid: () => `${run.id}.${++this.lootCounter}`, originId: run.id, chanceMult: this.dropChanceMult, faction: this.director.faction });
   }
 

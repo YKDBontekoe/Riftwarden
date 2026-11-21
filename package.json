@@ -16,7 +16,8 @@
     "lint": "eslint .",
     "server": "tsx apps/server/main.ts",
     "serve": "pnpm build && pnpm server",
-    "proto": "buf lint proto && buf generate proto --template proto/buf.gen.yaml && cargo fmt -p riftwarden-proto"
+    "proto": "buf lint proto && buf generate proto --template proto/buf.gen.yaml && cargo fmt -p riftwarden-proto",
+    "worker": "tsx apps/worker/src/main.ts"
   },
   "devDependencies": {
     "@babylonjs/core": "catalog:",
@@ -27,6 +28,7 @@
     "@riftwarden/protocol": "workspace:*",
     "@riftwarden/rules": "workspace:*",
     "@riftwarden/server": "workspace:*",
+    "@riftwarden/worker": "workspace:*",
     "@types/node": "catalog:",
     "@types/pg": "catalog:",
     "@types/react": "catalog:",

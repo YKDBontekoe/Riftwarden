@@ -16,11 +16,12 @@ const emptyTotals = (): SaveData['totals'] => ({ runs: 0, returned: 0, defeated:
 
 export const defaultPresets = (): LoadoutPreset[] => Array.from({ length: PRESET_COUNT }, (_, i) => ({ name: `CONFIG ${String.fromCharCode(65 + i)}`, slots: emptyLoadout() }));
 
-export function createDefaultSave(now = Date.now()): SaveData {
-  const starter = starterWeapon(newUid('it'), now);
+/** A fresh profile. `ids` pins the random ids so a server can rebuild a device's genesis document exactly. */
+export function createDefaultSave(now = Date.now(), ids: { profileId?: string; starterUid?: string } = {}): SaveData {
+  const starter = starterWeapon(ids.starterUid ?? newUid('it'), now);
   const loadout = emptyLoadout();
   loadout.weapon = starter.uid;
-  const profileId = newUid('pf');
+  const profileId = ids.profileId ?? newUid('pf');
   return {
     version: SAVE_VERSION,
     profile: { id: profileId, callsign: 'WARDEN', createdAt: now, lastSavedAt: now },

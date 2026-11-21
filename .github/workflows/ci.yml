@@ -96,6 +96,12 @@ jobs:
           persist-credentials: false
       # rust-toolchain.toml pins the version; rustup on the runner installs it.
       - run: rustup show active-toolchain || rustup toolchain install
+      # The sync tests start the TypeScript rules worker (apps/worker).
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - run: corepack enable && pnpm install --frozen-lockfile
       - run: cargo fmt --check
       - run: cargo clippy --all-targets --locked -- -D warnings
       - run: cargo test --locked

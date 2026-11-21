@@ -131,6 +131,8 @@ export class RunLedger {
   map: MapSummary | null = null;
   /** Survival mode run (finalize copies it into the result). */
   survivalMode = false;
+  /** Every roll on this run's loot streams, sent with banked rewards so the server can re-roll them (runCheck). */
+  lootJournal: import('./runRules').LootRecord[] = [];
   /** Items secured before a resume (the items themselves are in the save). */
   private securedBefore = 0;
 
