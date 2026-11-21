@@ -6,7 +6,7 @@
  * rewards, online profiles); clients send intents (movement state, shot claims, actions) which
  * the server validates. Messages are validated structurally here before any game code sees them.
  */
-export const PROTOCOL_VERSION = 10;
+export const PROTOCOL_VERSION = 11;
 export const MAX_PLAYERS = 4;
 export const MAX_MESSAGE_BYTES = 64 * 1024;
 /** Authoritative simulation and snapshot rates (Hz). */
@@ -31,6 +31,8 @@ export type ActMsg =
   | { a: 'collect'; pickup: number }
   | { a: 'upgrade'; pick: string }
   | { a: 'vote'; home: boolean }
+  | { a: 'mapVote'; choice: string }
+  | { a: 'station'; station: string; opt: string }
   | { a: 'equip'; uid: string; slot?: string }
   | { a: 'unequip'; slot: string }
   | { a: 'discard'; uid: string }
@@ -41,7 +43,7 @@ export type ActMsg =
   /** A ground pound landed at `p` after a fall of `f` metres (the server checks position + cooldown, applies the blast). */
   | { a: 'pound'; p: V3; f: number }
   /** Test servers only (RIFT_TEST=1): drive the run quickly through the real pipelines. */
-  | { a: 'test'; op: 'killAll' | 'jump' | 'boss' | 'clear' | 'reactor'; n?: number };
+  | { a: 'test'; op: 'killAll' | 'jump' | 'boss' | 'clear' | 'reactor' | 'down'; n?: number };
 
 /** Act messages are sent as `{ t: 'act', id: <request id>, ...act }`: no variant may use `id` or `t` (compile-time check). */
 type ClashingAct = Extract<ActMsg, { id: unknown } | { t: unknown }>;
@@ -81,6 +83,8 @@ export type ClientMsg =
   | { t: 'leave' }
   | { t: 'ready'; ready: boolean }
   | { t: 'tier'; tier: number }
+  | { t: 'mode'; mode: 'defense' | 'survival' }
+  | { t: 'node'; node: string | null }
   | { t: 'start' }
   | { t: 'profileInit' }
   | { t: 'op'; name: string; args: unknown[]; tx: string }
@@ -108,6 +112,10 @@ export interface LobbyState {
   code: string;
   hostId: string;
   tier: number;
+  /** Game mode the host picked (defense / survival). */
+  mode: 'defense' | 'survival';
+  /** Rift War sector the host picked for the deployment (null = the front's landing). */
+  node: string | null;
   maxTier: number;
   capacity: number;
   state: 'lobby' | 'deploying' | 'running';
@@ -144,6 +152,10 @@ export interface RunStart {
   milestones: string[];
   /** Present when rejoining an operation in progress. */
   rejoin: boolean;
+  /** Game mode of the operation (absent = defense). */
+  mode?: 'defense' | 'survival';
+  /** Run map: the node this arena plays (map seed, path so far, the carry it was entered with). */
+  node?: { id: string; map: number; path: string[]; cleared: number; acts: number; carry: unknown } | null;
 }
 
 // ------------------------------------------------------------------ validation
@@ -183,6 +195,10 @@ function validAct(o: Record<string, unknown>): boolean {
       return isStr(o.pick, 48);
     case 'vote':
       return isBool(o.home);
+    case 'mapVote':
+      return isStr(o.choice, 24);
+    case 'station':
+      return isStr(o.station, 16) && isStr(o.opt, 32);
     case 'equip':
       return isStr(o.uid, 120) && (o.slot === undefined || isStr(o.slot, 24));
     case 'unequip':
@@ -196,7 +212,7 @@ function validAct(o: Record<string, unknown>): boolean {
     case 'ability':
       return (o.slot === 'ability' || o.slot === 'ability2' || o.slot === 'ultimate') && isV3(o.o) && isV3(o.d);
     case 'test':
-      return (o.op === 'killAll' || o.op === 'jump' || o.op === 'boss' || o.op === 'clear' || o.op === 'reactor') && (o.n === undefined || isNum(o.n, 1e6));
+      return (o.op === 'killAll' || o.op === 'jump' || o.op === 'boss' || o.op === 'clear' || o.op === 'reactor' || o.op === 'down') && (o.n === undefined || isNum(o.n, 1e6));
     default:
       return false;
   }
@@ -220,6 +236,10 @@ export function parseClientMsg(raw: unknown): ClientMsg | null {
       return isBool(o.ready) ? (o as ClientMsg) : null;
     case 'tier':
       return isInt(o.tier, 10) ? (o as ClientMsg) : null;
+    case 'mode':
+      return o.mode === 'defense' || o.mode === 'survival' ? (o as ClientMsg) : null;
+    case 'node':
+      return o.node === null || isStr(o.node, 16) ? (o as ClientMsg) : null;
     case 'profileInit':
       return Object.keys(o).length === 1 ? { t: 'profileInit' } : null;
     case 'op':

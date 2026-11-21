@@ -10,7 +10,7 @@ import type { RunResult } from '../progression/run';
  * report after returning). Arena: playing, checkpoint (bank/continue/return choice),
  * defeat. Shared: loading, transit (scene swap), paused.
  */
-export type Screen = 'loading' | 'menu' | 'home' | 'terminal' | 'summary' | 'transit' | 'playing' | 'paused' | 'checkpoint' | 'defeat' | 'inventory' | 'upgrade' | 'build' | 'towers' | 'dev' | 'construct';
+export type Screen = 'loading' | 'menu' | 'home' | 'terminal' | 'summary' | 'transit' | 'playing' | 'paused' | 'checkpoint' | 'defeat' | 'inventory' | 'upgrade' | 'build' | 'towers' | 'dev' | 'construct' | 'runmap' | 'station';
 export type Location = 'home' | 'arena';
 export type TerminalId = 'deploy' | 'loadout' | 'storage' | 'workshop' | 'command' | 'merchant' | 'modules' | 'salvage' | 'fabricate' | 'architect' | 'lattice';
 
@@ -65,7 +65,7 @@ export interface TransitInfo {
   /** Current loading stage (0 = charting, 1 = building, 2 = compiling, 3 = ready). */
   stage?: number;
   /** Procedural sector being deployed to (map preview + stats). */
-  sector?: { name: string; code: string; layout: ArenaLayout; tier: string; tierName: string; players?: number } | null;
+  sector?: { name: string; code: string; layout: ArenaLayout; tier: string; tierName: string; players?: number; node?: import('../runmap/brief').NodeBrief } | null;
 }
 
 export interface InspectInfo {
@@ -215,6 +215,11 @@ export interface HudState {
   perf: { fps: number; enemies: number; draws: number; particles: number; towers?: number; projectiles?: number; pending?: number; statuses?: number; triggers?: number; dpsPlayer?: number; dpsTower?: number; effects?: number; dropped?: number; frameMs?: number; aiMs?: number; telegraphs?: number; ordnance?: number; wave?: number; tier?: number; event?: string; boss?: string; budget?: number; hpMult?: number; dmgMult?: number; spawnQueue?: number; elites?: number; dev?: boolean } | null;
   m5: M5Hud | null;
   m6: SurvivalHud | null;
+  /** Run map: current node chip (arena) and the map screen view. */
+  node?: import('../runmap/view').NodeHud | null;
+  runMap?: import('../runmap/view').RunMapView | null;
+  /** Game mode of the current run (survival hides the reactor and shows the one-life state). */
+  mode?: 'defense' | 'survival';
 }
 
 export const initialHud: HudState = {

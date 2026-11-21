@@ -39,7 +39,7 @@ export type ReplicatedEvent =
   // run flow
   | readonly ['up', string, string]
   | readonly ['offer', string[], string | null, string, number]
-  | readonly ['vote', Flag, Flag?]
+  | readonly ['vote', 0 | 1 | 2, Flag?] // 1 checkpoint vote opened, 2 run-map vote opened, 0 closed (+ extract flag)
   | readonly ['bank', number, Flag, number, number, number, number]
   | readonly ['def']
   // personal / teammates
@@ -83,7 +83,7 @@ const SHAPES: { [K in EventTag]: { fields: Check[]; optional?: number } } = {
   'L-': { fields: [num, flag] },
   up: { fields: [str, str] },
   offer: { fields: [arrOf(str), opt(str), str, num], optional: 1 },
-  vote: { fields: [flag, flag], optional: 1 },
+  vote: { fields: [(v: unknown) => v === 0 || v === 1 || v === 2, flag], optional: 1 },
   bank: { fields: [num, flag, num, num, num, num] },
   def: { fields: [] },
   h: { fields: [num, flag, opt(v3)] },

@@ -3,6 +3,7 @@ import { type Placeable } from '../../home/placeables';
 import { type ItemInstance, type SlotId } from '../items';
 import type { RunOutcome } from '../run';
 import { type MarketState } from '../../economy/market';
+import type { RunMapState } from '../../runmap/state';
 
 export const SAVE_VERSION = 10;
 export const SAVE_KEY = 'riftwarden.save';
@@ -38,6 +39,19 @@ export interface TierRecord {
   bestTowerDamage: number;
   deaths: number;
   itemsBanked: number;
+  // ---- run map (absent in older saves = 0; sanitize fills it)
+  /** Deepest act reached. */
+  deepestAct: number;
+  /** Most map nodes completed in a single run. */
+  bestNodes: number;
+  /** Act bosses defeated (all runs). */
+  actsCleared: number;
+  // ---- survival mode (no towers, hunted, one life)
+  survivalRuns: number;
+  /** Most waves cleared in one survival run. */
+  survivalBestWave: number;
+  /** Most map nodes completed in one survival run. */
+  survivalBestNodes: number;
 }
 
 export type HistoryOutcome = RunOutcome | 'interrupted';
@@ -73,6 +87,12 @@ export interface RunHistoryEntry {
   records: string[];
   /** Development session (not record eligible). */
   dev: boolean;
+  /** Survival mode run (absent = defense). */
+  mode?: 'survival';
+  /** Run map: act reached, nodes completed and the compact path (e.g. "1C", "1E", "1B*"). */
+  act?: number;
+  nodes?: number;
+  path?: string[];
 }
 
 export interface ActiveRun {
@@ -85,6 +105,12 @@ export interface ActiveRun {
   itemsSecured: number;
   creditsSecured: number;
   componentsSecured: number;
+  /** Run map progress (map-mode runs only). */
+  map?: RunMapState | null;
+  /** Hub-node banking guard: nodes whose extra rewards were committed. */
+  nodeBank?: number;
+  /** Survival mode run (absent = defense). */
+  mode?: 'survival';
 }
 
 export interface LoadoutPreset {
@@ -128,6 +154,9 @@ export interface SaveData {
     towerDamage: number;
     reactorDamage: number;
     devRuns: number;
+    /** Run map nodes completed / act bosses defeated (all runs). */
+    nodesCleared: number;
+    actsCleared: number;
   };
   /** M6: survival milestones reached (ids, see survival/records.ts). Development sessions never add to it. */
   milestones: string[];

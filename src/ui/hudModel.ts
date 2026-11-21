@@ -18,12 +18,16 @@ export interface HintState {
   playerAlive: boolean;
   /** Build mode or the tutorial card already explains things: show no hint. */
   suppress: boolean;
+  /** Survival mode: no towers, the machines hunt the drone. */
+  survival?: boolean;
 }
 
 /** The one-line contextual hint under the HUD ('' = none). */
 export function hintFor(s: HintState, keys: Settings['keys'] = DEFAULT_SETTINGS.keys): string {
   if (!s.playing || !s.playerAlive || s.suppress) return '';
   if (s.canReturnHome) return `Checkpoint secured. Press ${keyLabel(keys.checkpoint)} to return to HQ, or start the next wave with ${keyLabel(keys.wave)}.`;
+  if (s.survival && s.phase === 'prep') return `Survival: no towers, every machine hunts you, one life. Press ${keyLabel(keys.wave)} when ready.`;
+  if (s.survival && s.phase === 'combat' && s.kills < 3) return 'Keep moving: walls break their line of fire, and dashes break their chase.';
   if (s.phase === 'prep' && s.wave === 1) return `Build Sentinel turrets beside the orange enemy lanes (2 / ${keyLabel(keys.build)}). Press ${keyLabel(keys.wave)} to start the wave.`;
   if (s.phase === 'prep') return `Preparation: build and reposition. Press ${keyLabel(keys.wave)} to start early.`;
   if (s.wave === 1 && s.phase === 'combat' && s.kills < 3) return 'Aim for the glowing visors: weakpoints always crit.';

@@ -42,7 +42,7 @@ export class Profile {
     this.loadStatus = r.status;
     this.loadNotes = r.notes;
     // A run still marked active means the page closed mid-run: record it once.
-    const dirty = resolveInterruptedRun(this.data) !== null || r.status !== 'loaded' || r.notes.length > 0;
+    const dirty = resolveInterruptedRun(this.data, Date.now(), { keepResumable: true }) !== null || r.status !== 'loaded' || r.notes.length > 0;
     this.store = new Store({ save: snapshot(this.data), savedAt: 0, lastWriteOk: true });
     if (dirty) this.persist();
   }

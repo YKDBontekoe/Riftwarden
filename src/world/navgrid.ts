@@ -51,6 +51,19 @@ export class NavGrid {
   dist: Float32Array;
   /** Bumped whenever the field changes (enemies compare it to re-plan). */
   version = 0;
+  /**
+   * Survival (hunt): the field flows to these points (the living drones) instead of the reactor ring; set them with
+   * `retarget`. Null = the reactor (defense).
+   */
+  goals: Vec2[] | null = null;
+  /** Goal radius while hunting (m): enemies close in this far before their last step. */
+  static readonly HUNT_RADIUS = 3.5;
+
+  /** Hunt mode: flow to the given points (re-computes the field, bumps the version). */
+  retarget(goals: readonly Vec2[]): void {
+    this.goals = goals.map((g) => ({ x: g.x, z: g.z }));
+    this.compute();
+  }
   private obstacleKey = '';
 
   constructor(readonly layout: ArenaLayout, private withTowers = true) {
@@ -145,11 +158,32 @@ export class NavGrid {
     const dist = new Float32Array(n).fill(Infinity);
     const heap = new MinHeap(n);
     const L = this.layout;
-    for (let k = 0; k < n; k++) {
-      if (this.blocked[k]) continue;
-      if (Math.hypot(this.cx(k) - L.reactor.x, this.cz(k) - L.reactor.z) <= NAV.goalRadius) {
-        dist[k] = 0;
-        heap.push(k, 0);
+    const goals = this.goals;
+    if (goals?.length) {
+      // Seed only the cells around each goal (cheap), then let Dijkstra flood the arena.
+      const r = Math.ceil(NavGrid.HUNT_RADIUS / this.cell);
+      for (const g0 of goals) {
+        // A drone on a platform or a block top stands over solid cells: hunt the nearest walkable ground below it.
+        const g = this.walkableNear(g0.x, g0.z, 14) ?? g0;
+        const i0 = Math.floor((g.x - this.ox) / this.cell);
+        const j0 = Math.floor((g.z - this.oz) / this.cell);
+        for (let j = j0 - r; j <= j0 + r; j++) {
+          for (let i = i0 - r; i <= i0 + r; i++) {
+            if (i < 0 || j < 0 || i >= this.w || j >= this.h) continue;
+            const k = j * this.w + i;
+            if (this.blocked[k] || Math.hypot(this.cx(k) - g.x, this.cz(k) - g.z) > NavGrid.HUNT_RADIUS) continue;
+            dist[k] = 0;
+            heap.push(k, 0);
+          }
+        }
+      }
+    } else {
+      for (let k = 0; k < n; k++) {
+        if (this.blocked[k]) continue;
+        if (Math.hypot(this.cx(k) - L.reactor.x, this.cz(k) - L.reactor.z) <= NAV.goalRadius) {
+          dist[k] = 0;
+          heap.push(k, 0);
+        }
       }
     }
     const w = this.w;
@@ -175,6 +209,32 @@ export class NavGrid {
     }
     this.dist = dist;
     this.version++;
+  }
+
+  /** Nearest walkable cell centre to a point (spiral search up to `max` m), ignoring the field. */
+  walkableNear(x: number, z: number, max: number): Vec2 | null {
+    const k0 = this.idx(x, z);
+    if (k0 >= 0 && !this.blocked[k0]) return { x, z };
+    const i0 = Math.floor((x - this.ox) / this.cell);
+    const j0 = Math.floor((z - this.oz) / this.cell);
+    for (let r = 1; r <= max / this.cell; r++) {
+      let best: Vec2 | null = null;
+      let bestD = Infinity;
+      for (let j = j0 - r; j <= j0 + r; j++) {
+        for (let i = i0 - r; i <= i0 + r; i++) {
+          if (Math.max(Math.abs(i - i0), Math.abs(j - j0)) !== r || i < 0 || j < 0 || i >= this.w || j >= this.h) continue;
+          const k = j * this.w + i;
+          if (this.blocked[k]) continue;
+          const d = Math.hypot(this.cx(k) - x, this.cz(k) - z);
+          if (d < bestD) {
+            bestD = d;
+            best = { x: this.cx(k), z: this.cz(k) };
+          }
+        }
+      }
+      if (best) return best;
+    }
+    return null;
   }
 
   /** Cost to goal at a world point (nearest walkable cell). */
@@ -257,8 +317,9 @@ export class NavGrid {
       cells.push(k);
     }
     const pts: Vec2[] = [{ x, z }, ...cells.slice(1).map((c) => ({ x: this.cx(c), z: this.cz(c) }))];
-    // End on the ring, on the line from the reactor to the last cell (walkers ring the reactor).
     const last = pts[pts.length - 1];
+    if (this.goals?.length) return this.pull(pts);
+    // End on the ring, on the line from the reactor to the last cell (walkers ring the reactor).
     const R = this.layout.reactor;
     const ang = Math.atan2(last.x - R.x, last.z - R.z);
     const ring = R.radius + 3.2;

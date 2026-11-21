@@ -27,6 +27,8 @@ export class WaveManager {
   private elapsed = 0;
   private cursor = 0;
   spawnedTotal = 0;
+  /** Run map: hold the preparation clock (hub visits, a completed node). Combat in progress is unaffected. */
+  hold = false;
 
   /** M6: the survival director composes waves when provided (legacy generator otherwise). */
   compose: ((n: number) => WaveDef) | null = null;
@@ -70,7 +72,7 @@ export class WaveManager {
 
   /** Skip the rest of preparation. */
   startNow(): void {
-    if (this.phase === 'prep') this.timer = 0;
+    if (this.phase === 'prep' && !this.hold) this.timer = 0;
   }
 
   get remainingToSpawn(): number {
@@ -85,6 +87,7 @@ export class WaveManager {
   update(realDt: number, hostileDt: number): void {
     switch (this.phase) {
       case 'prep':
+        if (this.hold) break;
         this.timer -= realDt;
         if (this.timer <= 0) {
           this.phase = 'combat';

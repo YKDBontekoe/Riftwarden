@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [react()],
   optimizeDeps: { exclude: ['@babylonjs/havok'] },
   // Co-op: the dev server proxies /ws to the co-op server (npm run server) so the client always uses same-origin /ws.
-  server: { proxy: { '/ws': { target: `ws://localhost:${process.env.RIFT_PORT ?? 8787}`, ws: true } } },
+  server: { proxy: { '/ws': { target: `ws://localhost:${process.env.RIFT_PORT ?? 8787}`, ws: true }, '/war': { target: `http://localhost:${process.env.RIFT_PORT ?? 8787}` } } },
   build: {
     target: 'es2022',
     chunkSizeWarningLimit: 7000,

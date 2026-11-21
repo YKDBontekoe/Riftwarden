@@ -757,6 +757,33 @@ export class EnemyManager {
   }
 
   /** Move along the path at `speed` m/s. Returns true when the end was reached this step. */
+  /**
+   * Survival: the hunted drone moves, so a machine that reached its goal (attacking) and is now out of range goes
+   * back to the chase. The behaviour's "reactor" is the hunted drone (the context layout follows it).
+   */
+  huntRange: number | null = null;
+
+  private pursue(e: Enemy, ctx: EnemyContext): void {
+    if (e.state !== 'attack' || e.def.role === 'boss' || e.hidden) return;
+    const R = ctx.layout.reactor;
+    const d = Math.hypot(e.pos.x - R.x, e.pos.z - R.z);
+    if (d <= this.huntRange!) return;
+    e.state = 'move';
+    const here = { x: e.pos.x, z: e.pos.z };
+    if (this.nav) {
+      // A one-point path: the navigator re-plans from here on this frame (navV differs).
+      e.path = [here, { ...here }];
+      e.seg = 1;
+      e.navV = -1;
+    } else {
+      const k = Math.max(0, d - 4) / d;
+      e.path = [here, { x: e.pos.x + (R.x - e.pos.x) * k, z: e.pos.z + (R.z - e.pos.z) * k }];
+      e.seg = 1;
+    }
+    e.bestDist = Infinity;
+    e.remaining = pathLength(e.path, e.seg, e.pos);
+  }
+
   follow(e: Enemy, speed: number, hdt: number, turnRate = 5): boolean {
     const target = e.path[e.seg];
     if (!target) return true;
@@ -902,6 +929,7 @@ export class EnemyManager {
       const sev = e.hidden ? 0 : woundSeverity(e.hp, e.maxHp);
       if (sev > 0) ctx.effects.wound(e.center(TMP), e.def.radius * e.def.scale, sev);
       if (!e.alive) continue;
+      if (this.huntRange !== null) this.pursue(e, ctx);
       if (this.nav && this.nav.refresh(e)) e.remaining = pathLength(e.path, e.seg, e.pos);
 
       e.behavior.update(e, hdt, ctx, this);

@@ -8,6 +8,8 @@ import { HISTORY_LIMIT, MAX_XP, RunHistoryEntry, STORAGE_CAPACITY, SaveData, Tie
 import { emptyRecord, rotateMarket } from './defaults';
 import { sanitizeItem } from './sanitize';
 import { allOwnedUids, equippedItem, itemByUid, slotOf } from './ownership';
+import { newMapState, resumable, type RunMapState } from '../../runmap/state';
+import { pathCode } from '../../war/world';
 
 // ------------------------------------------------------------------ mutations (game rules)
 
@@ -23,9 +25,11 @@ export function record(data: SaveData, tier: number): TierRecord {
 }
 
 /** Turn a dangling active run (tab closed mid-run) into an 'interrupted' history entry. */
-export function resolveInterruptedRun(data: SaveData, now = Date.now()): RunHistoryEntry | null {
+export function resolveInterruptedRun(data: SaveData, now = Date.now(), opts: { keepResumable?: boolean } = {}): RunHistoryEntry | null {
   const a = data.activeRun;
   if (!a) return null;
+  // A map run closed after a completed node waits at the HQ for RESUME (single player only).
+  if (opts.keepResumable && resumable(a.map)) return null;
   const entry: RunHistoryEntry = {
     id: a.id,
     tier: a.tier,
@@ -53,8 +57,11 @@ export function resolveInterruptedRun(data: SaveData, now = Date.now()): RunHist
     milestones: [],
     records: [],
     dev: false,
+    ...(a.mode === 'survival' ? { mode: 'survival' as const } : {}),
+    ...(a.map ? { act: a.map.act, nodes: a.map.cleared, path: pathCode(a.map.path, a.map.seed) } : {}),
   };
   const rec = record(data, a.tier);
+  if (a.map) noteMap(data, a.tier, { act: a.map.act, nodes: a.map.cleared, actsCleared: a.map.actsCleared });
   rec.runs++;
   rec.lastPlayedAt = now;
   data.totals.runs++;
@@ -66,9 +73,44 @@ export function resolveInterruptedRun(data: SaveData, now = Date.now()): RunHist
   return entry;
 }
 
-export function beginRun(data: SaveData, runId: string, tier: number, now = Date.now()): void {
+export function beginRun(data: SaveData, runId: string, tier: number, now = Date.now(), opts: { mapSeed?: number; mode?: 'defense' | 'survival' } = {}): void {
   resolveInterruptedRun(data, now);
   data.activeRun = { id: runId, tier, startedAt: now, bankedThroughWave: 0, salvageSecured: 0, itemsSecured: 0, creditsSecured: 0, componentsSecured: 0 };
+  if (opts.mapSeed) {
+    data.activeRun.map = newMapState(opts.mapSeed);
+    data.activeRun.nodeBank = 0;
+  }
+  if (opts.mode === 'survival') data.activeRun.mode = 'survival';
+}
+
+/** Store the run map progress (node entered / completed, resume point). Only for the live run. */
+export function saveMapProgress(data: SaveData, runId: string, map: RunMapState): boolean {
+  const a = data.activeRun;
+  if (!a || a.id !== runId || !a.map) return false;
+  a.map = JSON.parse(JSON.stringify(map)) as RunMapState;
+  return true;
+}
+
+/** Map records: deepest act, most nodes in a run, act bosses (all-time). */
+function noteMap(data: SaveData, tier: number, m: { act: number; nodes: number; actsCleared: number }): void {
+  const rec = record(data, tier);
+  rec.deepestAct = Math.max(rec.deepestAct, m.act);
+  rec.bestNodes = Math.max(rec.bestNodes, m.nodes);
+  rec.actsCleared += m.actsCleared;
+  data.totals.nodesCleared += m.nodes;
+  data.totals.actsCleared += m.actsCleared;
+}
+
+/**
+ * Commit rewards found at a map node after its checkpoint (hub visits, loot picked up after the last wave).
+ * Guarded by the node step, so the same node can never be banked twice.
+ */
+export function bankNodeRewards(data: SaveData, runId: string, step: number, rewards: Pick<Rewards, 'salvage' | 'items'> & Partial<Rewards>): boolean {
+  const a = data.activeRun;
+  if (!a || a.id !== runId || !a.map || step <= (a.nodeBank ?? 0)) return false;
+  a.nodeBank = step;
+  applyBanked(data, a, rewards);
+  return true;
 }
 
 /**
@@ -79,7 +121,17 @@ export function beginRun(data: SaveData, runId: string, tier: number, now = Date
 export function bankRewards(data: SaveData, runId: string, wave: number, rewards: Pick<Rewards, 'salvage' | 'items'> & Partial<Rewards>, opts: { bosses?: number } = {}): boolean {
   const a = data.activeRun;
   if (!a || a.id !== runId || wave <= a.bankedThroughWave || wave % CHECKPOINT_INTERVAL !== 0) return false;
-  // Validate everything first, then apply in one step (application-level atomicity).
+  a.bankedThroughWave = wave;
+  // Validated in one step (application-level atomicity): applyBanked sanitizes every item first.
+  applyBanked(data, a, rewards);
+  const rec = record(data, a.tier);
+  rec.checkpoints++;
+  if (unlocksNextTier(a.tier, wave, opts.bosses ?? 0) && data.threat.unlocked < a.tier + 1) data.threat.unlocked = a.tier + 1;
+  return true;
+}
+
+/** Apply validated banked rewards to the save (resources, XP, items into storage, records). */
+function applyBanked(data: SaveData, a: NonNullable<SaveData['activeRun']>, rewards: Pick<Rewards, 'salvage' | 'items'> & Partial<Rewards>): void {
   const known = new Set(allOwnedUids(data));
   const incoming: ItemInstance[] = [];
   for (const raw of rewards.items) {
@@ -88,7 +140,6 @@ export function bankRewards(data: SaveData, runId: string, wave: number, rewards
     known.add(it.uid);
     incoming.push(it);
   }
-  a.bankedThroughWave = wave;
   const s = Math.max(0, Math.floor(rewards.salvage));
   const cr = Math.max(0, Math.floor(rewards.credits ?? 0));
   const co = Math.max(0, Math.floor(rewards.components ?? 0));
@@ -111,11 +162,8 @@ export function bankRewards(data: SaveData, runId: string, wave: number, rewards
   data.storage.uids.push(...incoming.map((i) => i.uid));
   for (const it of incoming) data.totals.bestRarity = Math.max(data.totals.bestRarity, rarity(it.rarity).index);
   const rec = record(data, a.tier);
-  rec.checkpoints++;
   rec.salvageSecured += s;
   rec.itemsBanked += incoming.length;
-  if (unlocksNextTier(a.tier, wave, opts.bosses ?? 0) && data.threat.unlocked < a.tier + 1) data.threat.unlocked = a.tier + 1;
-  return true;
 }
 
 /**
@@ -159,6 +207,18 @@ export function recordRun(data: SaveData, result: RunResult): boolean {
       t.reactorDamage = Math.min(1e300, t.reactorDamage + sv.reactorDamage);
       for (const m of sv.milestones) if (!data.milestones.includes(m)) data.milestones.push(m);
     }
+    if (result.mode === 'survival') {
+      const r1 = record(data, result.tier);
+      r1.survivalRuns++;
+      r1.survivalBestWave = beat('Survival waves', r1.survivalBestWave, result.wavesCleared);
+      r1.survivalBestNodes = Math.max(r1.survivalBestNodes, result.map?.nodes ?? 0);
+    }
+    if (result.map) {
+      const r0 = record(data, result.tier);
+      if (result.map.act > r0.deepestAct && r0.deepestAct > 0) broken.push('Deepest act');
+      if (result.map.nodes > r0.bestNodes && r0.bestNodes > 0) broken.push('Nodes in one run');
+      noteMap(data, result.tier, result.map);
+    }
     // XP banked at checkpoints is already applied; the end of the run adds what was kept.
     data.progress.xp = Math.min(MAX_XP, data.progress.xp + Math.max(0, Math.floor(result.xpKept ?? 0)));
     data.totals.runs++;
@@ -197,6 +257,8 @@ export function recordRun(data: SaveData, result: RunResult): boolean {
     milestones: [...(sv?.milestones ?? [])],
     records: broken,
     dev,
+    ...(result.mode === 'survival' ? { mode: 'survival' as const } : {}),
+    ...(result.map ? { act: result.map.act, nodes: result.map.nodes, path: [...result.map.path] } : {}),
   });
   data.history = data.history.slice(0, HISTORY_LIMIT);
   data.activeRun = null;

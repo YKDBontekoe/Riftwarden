@@ -9,6 +9,7 @@ import { DEFAULT_PORT, MAX_MESSAGE_BYTES, normalizeCode, parseClientMsg, PROTOCO
 import { playerIdFor, ProfileStore } from './profiles';
 import { type Peer, Room } from './room';
 import { CoopSim, loadHavok } from './sim';
+import { WarService } from './war';
 
 /**
  * Riftwarden co-op server.
@@ -28,6 +29,8 @@ await store.migrate();
 const havok = await loadHavok();
 const rooms = new Map<string, Room>();
 const online = new Map<string, Peer>();
+// The shared Rift War: every connected warden counts toward the population; solo clients report over HTTP.
+const war = await WarService.create(store, () => online.size, log);
 const messages = new Set<Promise<void>>();
 let shuttingDown = false;
 
@@ -36,6 +39,13 @@ const MIME: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js
 async function serveHttp(req: IncomingMessage, res: ServerResponse): Promise<void> {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Cache-Control', 'no-store');
+  const path0 = (req.url ?? '/').split('?')[0];
+  if (path0 === '/war' && req.method === 'GET') {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(war.snapshot());
+    return;
+  }
+  if (path0 === '/war/report' && req.method === 'POST') return warReport(req, res);
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     res.writeHead(405, { Allow: 'GET, HEAD' }).end();
     return;
@@ -78,6 +88,29 @@ async function serveHttp(req: IncomingMessage, res: ServerResponse): Promise<voi
   else await pipeline(createReadStream(file), res);
 }
 
+/** Solo clients report a secured sector: {node, mode, id}. Small JSON body, rate limited per address + identity. */
+async function warReport(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  let body = '';
+  for await (const chunk of req) {
+    body += chunk;
+    if (body.length > 2048) {
+      res.writeHead(413).end();
+      return;
+    }
+  }
+  let msg: { node?: unknown; mode?: unknown; id?: unknown };
+  try {
+    msg = JSON.parse(body) as typeof msg;
+  } catch {
+    res.writeHead(400).end();
+    return;
+  }
+  const who = `${req.socket.remoteAddress ?? '?'}|${typeof msg.id === 'string' ? msg.id.slice(0, 64) : ''}`;
+  const r = war.report({ node: String(msg.node ?? ''), mode: msg.mode === 'survival' ? 'survival' : 'defense', players: 1 }, who);
+  res.writeHead(r.ok ? 200 : 429, { 'content-type': 'application/json' });
+  res.end(JSON.stringify(r));
+}
+
 const http = createServer((req, res) => {
   void serveHttp(req, res).catch((error: NodeJS.ErrnoException) => {
     if (error.code !== 'ERR_STREAM_PREMATURE_CLOSE') log(`HTTP error: ${error.message}`);
@@ -101,7 +134,7 @@ function deps() {
   return {
     store,
     log,
-    createSim: (room: Room) => CoopSim.create(room, store, havok, log),
+    createSim: (room: Room) => CoopSim.create(room, store, havok, log, war),
   };
 }
 
@@ -230,6 +263,16 @@ wss.on('connection', (ws: WebSocket) => {
         if (why) fail('tier', why);
         return;
       }
+      case 'mode': {
+        const why = me.room?.setMode(me.id, msg.mode);
+        if (why) fail('mode', why);
+        return;
+      }
+      case 'node': {
+        const why = me.room?.setNode(me.id, msg.node);
+        if (why) fail('node', why);
+        return;
+      }
       case 'start': {
         if (!me.room) return fail('start', 'Not in a session');
         const why = await me.room.start(me.id);
@@ -262,6 +305,7 @@ wss.on('connection', (ws: WebSocket) => {
 });
 
 // Housekeeping: reconnect windows, empty rooms, lobby presence (10 Hz).
+const warTimer = setInterval(() => war.tick(), 30_000);
 const housekeeping = setInterval(() => {
   for (const [code, r] of rooms) {
     r.tick();
@@ -285,6 +329,8 @@ async function shutdown(sig: string): Promise<void> {
   log(`${sig}: closing ${rooms.size} sessions`);
   clearInterval(heartbeat);
   clearInterval(housekeeping);
+  clearInterval(warTimer);
+  await war.flush();
   clearInterval(presence);
   http.close();
   await Promise.allSettled(messages);

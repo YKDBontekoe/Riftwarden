@@ -103,6 +103,12 @@ export class EnemyNavigator {
     return pts.length >= 2 ? pts : this.layout.routes[gate].points;
   }
 
+  /** Survival: both fields flow to the living drones (re-plans every agent through the version bump). */
+  hunt(goals: readonly Vec2[]): void {
+    this.ground.retarget(goals);
+    this.air.retarget(goals);
+  }
+
   /** Per-frame bookkeeping (hostile time). */
   tick(hdt: number): void {
     this.syncT -= hdt;

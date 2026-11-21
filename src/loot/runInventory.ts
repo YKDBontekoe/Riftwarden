@@ -45,6 +45,20 @@ export class RunInventory {
     }
   }
 
+  /** Run map: take over the previous node's run loadout (uids that this run still holds; others stay as they are). */
+  adoptLoadout(loadout: Partial<Record<string, string | null>>): void {
+    for (const s of SLOT_IDS) {
+      if (!(s in loadout)) continue;
+      const uid = loadout[s];
+      if (uid === null) {
+        if (!getSlot(s).required) this.loadout[s] = null;
+        continue;
+      }
+      const it = uid ? this.find(uid) : null;
+      if (it && fitsSlot(it, s)) this.loadout[s] = uid!;
+    }
+  }
+
   get cargoUsed(): number {
     return this.ledger.unsecured.items.length;
   }

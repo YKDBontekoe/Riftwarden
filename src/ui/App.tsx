@@ -20,6 +20,7 @@ import { XpGain } from './Directory';
 import { XP } from '../progression/level';
 import { BuildOverview, TowerPanel, UpgradePanel } from './Roguelite';
 import { DevPanel } from './DevPanel';
+import { RunMapScreen, StationScreen } from './RunMap';
 import { milestoneLabel } from '../survival/records';
 import { EVENTS, type EventId } from '../survival/events';
 
@@ -54,6 +55,8 @@ export function App({ getFlow }: Props) {
       {screen === 'terminal' && flow && home && <TerminalHost key={`term${flow.transitions}`} flow={flow} home={home} />}
       {screen === 'paused' && flow && <PauseMenu flow={flow} />}
       {screen === 'checkpoint' && flow && arena && <CheckpointPanel flow={flow} game={arena} />}
+      {screen === 'runmap' && flow && arena && <RunMapScreen key={`map${flow.transitions}`} flow={flow} game={arena} />}
+      {screen === 'station' && arena && <StationScreen key={`st${flow?.transitions}`} game={arena} />}
       {screen === 'upgrade' && arena && <UpgradePanel key={`up${arena.director.build.offers}`} game={arena} />}
       {screen === 'build' && arena && <BuildOverview game={arena} />}
       {screen === 'dev' && arena && flow && <DevPanel game={arena} flow={flow} />}
@@ -114,7 +117,7 @@ const CONTROLS = [
   [<BoundKey action="tactical" />, 'Tactical slow-time'],
   [<BoundKey action="recycle" />, 'Hold to recycle a turret'],
   [<BoundKey action="wave" />, 'Start wave early'],
-  [<BoundKey action="checkpoint" />, 'Return to HQ at a checkpoint'],
+  [<BoundKey action="checkpoint" />, 'Run map once a node is secured: travel to the next node or extract to HQ'],
   [<kbd>ESC</kbd>, 'Pause or close terminal'],
   [<kbd>F3</kbd>, 'Performance stats'],
 ] as const;
