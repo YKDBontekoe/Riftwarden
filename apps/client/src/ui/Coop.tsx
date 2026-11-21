@@ -2,7 +2,7 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 import { defaultEntry, findNode, nodePlayable } from '@riftwarden/rules/war/world';
 import { RegionMap, RegionTabs, regionOfNode } from './WarMap';
 import type { Flow } from '../core/Flow';
-import { MAX_PLAYERS, normalizeCode } from '@riftwarden/game/net/protocol';
+import { MAX_PLAYERS, normalizeCode } from '@riftwarden/protocol/protocol';
 import type { NetState } from '@riftwarden/game/net/NetClient';
 import { rarity } from '@riftwarden/rules/loot/rarity';
 import { THREAT_TIERS } from '@riftwarden/rules/progression/tiers';

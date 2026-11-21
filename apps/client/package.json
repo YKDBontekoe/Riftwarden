@@ -16,6 +16,7 @@
     "@babylonjs/core": "catalog:",
     "@babylonjs/havok": "catalog:",
     "@riftwarden/game": "workspace:*",
+    "@riftwarden/protocol": "workspace:*",
     "@riftwarden/rules": "workspace:*",
     "react": "catalog:",
     "react-dom": "catalog:"

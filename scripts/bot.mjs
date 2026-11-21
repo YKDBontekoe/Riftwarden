@@ -1,6 +1,9 @@
-// Protocol bot for co-op tests (no rendering). Usage: import { Bot } from './bot.mjs'
+// Protocol bot for co-op tests (no rendering). Usage: import { Bot } from './bot.mjs' (run the suite with `node --import tsx`).
+// Speaks the binary protobuf frames through the real codec (packages/protocol/src/codec.ts).
 import WebSocket from 'ws';
 import { randomBytes } from 'node:crypto';
+import { decodeServer, encodeClient } from '../packages/protocol/src/codec.ts';
+import { PROTOCOL_VERSION } from '../packages/protocol/src/protocol.ts';
 
 export class Bot {
   constructor(name, url = process.env.RIFT_WS ?? 'ws://localhost:8787/ws', secret = randomBytes(16).toString('hex')) {
@@ -8,12 +11,13 @@ export class Bot {
     this.msgs = []; this.events = []; this.snap = null; this.lobby = null; this.seq = 0; this.actId = 1; this.acts = new Map();
     this.waiters = [];
   }
-  connect(v = 11) {
+  connect(v = PROTOCOL_VERSION) {
     return new Promise((res, rej) => {
       this.ws = new WebSocket(this.url);
       this.ws.on('open', () => { this.send({ t: 'hello', v, secret: this.secret, name: this.name }); });
-      this.ws.on('message', (b) => {
-        const m = JSON.parse(b.toString());
+      this.ws.on('message', (b, binary) => {
+        const m = binary ? decodeServer(new Uint8Array(b.buffer, b.byteOffset, b.byteLength)) : JSON.parse(String(b));
+        if (!m) return;
         this.msgs.push(m);
         if (m.t === 'welcome') { this.welcome = m; res(m); }
         if (m.t === 'error' && !this.welcome) res(m);
@@ -30,7 +34,7 @@ export class Bot {
       this.ws.on('close', () => { this.closed = true; });
     });
   }
-  send(m) { this.ws.send(JSON.stringify(m)); }
+  send(m) { this.ws.send(encodeClient(m)); }
   wait(fn, ms = 20000) {
     for (const m of this.msgs) if (fn(m)) return Promise.resolve(m);
     return new Promise((res, rej) => { const w = { fn, res }; this.waiters.push(w); setTimeout(() => rej(new Error(`${this.name}: timeout`)), ms); });

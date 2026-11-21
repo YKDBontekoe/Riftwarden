@@ -1,10 +1,11 @@
 // M7 co-op acceptance (protocol level, no rendering): lobby, 2-4 player runs, authoritative combat,
 // towers, tactical, individual loot + banking, votes, disconnect/reconnect, persistence across a
 // server restart, and the failure cases of the M7 spec (section 35).
-// Usage: node scripts/e2e-coop-protocol.mjs [filter]   (starts its own test server on :8799)
+// Usage: node --import tsx scripts/e2e-coop-protocol.mjs [filter]   (starts its own test server on :8799)
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import pg from 'pg';
+import WebSocket from 'ws';
 import { Bot, sleep } from './bot.mjs';
 
 const PORT = 8799;
@@ -371,10 +372,20 @@ async function profileRows(id) {
       check('S3 incompatible protocol version is refused with a message', r.t === 'error' && r.code === 'version', r.msg);
       // Malformed + rate limit
       const bad = await bot('Mal');
-      bad.ws.send('{not json');
-      bad.ws.send(JSON.stringify({ t: 'act', id: 1, a: 'place', cfg: 5 }));
+      // Binary garbage, then a decodable frame whose act carries no variant.
+      bad.ws.send(Buffer.from([0xff, 0xff, 0xff, 0xff]));
+      bad.ws.send(Buffer.from([0x7a, 0x02, 0x08, 0x01]));
       const err = await bad.waitNew((m) => m.t === 'error');
       check('S4 malformed messages are rejected safely', err.code === 'malformed');
+      // A tab still running a pre-protobuf client sends JSON text: it gets a readable version notice in JSON.
+      const legacy = new WebSocket(WS_URL);
+      const notice = await new Promise((res) => {
+        legacy.on('open', () => legacy.send(JSON.stringify({ t: 'hello', v: 11, secret: 'x'.repeat(32), name: 'Legacy' })));
+        legacy.on('message', (b, binary) => res(binary ? null : JSON.parse(String(b))));
+        setTimeout(() => res(null), 5000);
+      });
+      legacy.close();
+      check('S4b a legacy JSON client is told to reload', notice?.t === 'error' && notice.code === 'version', notice?.msg);
       // Repeat purchase / craft request (same tx id)
       bad.send({ t: 'op', name: 'refreshMarket', args: [], tx: 'tx_repeat_1' });
       const o1 = await bad.waitNew((m) => m.t === 'opResult');

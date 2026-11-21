@@ -29,11 +29,11 @@ import { configCost, type TowerSlot } from '@riftwarden/rules/towers/components'
 import { hudStore, uiEvents } from '../ui/store';
 import { buildWardenDrone, type DroneRig, SLOT_CSS } from '../visuals/droneModel';
 import type { GateId } from '@riftwarden/rules/world/layout';
-import type { ActMsg, ShotClaim } from './protocol';
-import { INPUT_HZ } from './protocol';
+import type { ActMsg, ClientMsg, ShotClaim } from '@riftwarden/protocol/protocol';
+import { INPUT_HZ } from '@riftwarden/protocol/protocol';
 import { spawnFor } from './ServerGame';
 import { dec, vec } from './wire';
-import { parseEvent, type ReplicatedEvent } from './events';
+import { parseEvent, type ReplicatedEvent } from '@riftwarden/protocol/events';
 import { isFxCall, isOrdnanceCall, isWfxCall, replay } from './replicated';
 import type { ShotOutcome, ShotRequest } from '../combat/Weapon';
 import { MOVE, type Player } from '../player/Player';
@@ -43,7 +43,7 @@ import type { Palette } from '../visuals/materials';
 
 /** Connection used by the replica (implemented by NetClient). */
 export interface NetLink {
-  send(msg: Record<string, unknown>): void;
+  send(msg: ClientMsg): void;
   act(a: ActMsg): Promise<{ ok: boolean; reason?: string }>;
   readonly rtt: number;
 }

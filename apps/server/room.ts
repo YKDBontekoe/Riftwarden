@@ -1,4 +1,4 @@
-import { CODE_ALPHABET, type LobbyState, MAX_PLAYERS, RECONNECT_WINDOW, type ServerMsg } from '@riftwarden/game/net/protocol';
+import { CODE_ALPHABET, type LobbyState, MAX_PLAYERS, RECONNECT_WINDOW, type ServerMsg } from '@riftwarden/protocol/protocol';
 import { equippedItem, deployBlocker } from '@riftwarden/rules/progression/save';
 import { THREAT_TIERS } from '@riftwarden/rules/progression/tiers';
 import type { OnlineProfile, ProfileStore } from './profiles';
@@ -7,7 +7,8 @@ import type { CoopSim } from './sim';
 export interface Peer {
   id: string;
   name: string;
-  send(msg: ServerMsg): void;
+  /** Encodes and sends one frame; returns its size in bytes (0 when the socket is closed). */
+  send(msg: ServerMsg): number;
   profile: OnlineProfile | null;
   room: Room | null;
   /** Lobby HQ presence (for host-HQ visits). */

@@ -19,9 +19,9 @@ message ShotClaim {
   Vec3 origin = 2;
   Vec3 dir = 3;
   // Charge power (rail) 0..1, beam tick = 1.
-  float power = 4;
+  double power = 4;
   // Weapon heat 0..1 when fired.
-  float heat = 5;
+  double heat = 5;
   // Claimed enemy hits in order (max 12).
   repeated ShotHit hits = 6;
 }
@@ -29,13 +29,13 @@ message ShotClaim {
 message Input {
   uint32 seq = 1;
   Vec3 p = 2;
-  float yaw = 3;
-  float pitch = 4;
+  double yaw = 3;
+  double pitch = 4;
   // Horizontal speed (m/s).
-  float speed = 5;
+  double speed = 5;
   // 1 dashing, 2 sprinting, 4 firing, 8 build mode.
   uint32 flags = 6;
-  float heat = 7;
+  double heat = 7;
   repeated ShotClaim shots = 8;
 }
 
@@ -106,7 +106,7 @@ message Act {
   message Place {
     TowerConfig cfg = 1;
     Vec3 p = 2;
-    float yaw = 3;
+    double yaw = 3;
   }
   message TowerRef {
     uint32 tower = 1;
@@ -153,7 +153,7 @@ message Act {
   }
   message Pound {
     Vec3 p = 1;
-    float fall = 2;
+    double fall = 2;
   }
   message Test {
     TestOp op = 1;
@@ -177,7 +177,8 @@ message RunPlayer {
 
 message RunNodeStart {
   string id = 1;
-  uint32 map = 2;
+  // Seeds are signed 32-bit hashes in JS: doubles keep them exact.
+  double map = 2;
   repeated string path = 3;
   uint32 cleared = 4;
   uint32 acts = 5;
@@ -187,9 +188,9 @@ message RunNodeStart {
 message RunStart {
   string run_id = 1;
   uint32 tier = 2;
-  uint32 seed = 3;
+  double seed = 3;
   // Procedural arena seed (0 = the classic arena).
-  uint32 arena = 4;
+  double arena = 4;
   string you = 5;
   repeated RunPlayer players = 6;
   Doc loadout = 7;

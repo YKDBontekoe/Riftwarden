@@ -33,7 +33,7 @@ import { tutorialActive } from '@riftwarden/rules/progression/tutorial';
 import { Input } from '@riftwarden/game/core/Input';
 import { ClientGame } from '@riftwarden/game/net/ClientGame';
 import { NetClient } from '@riftwarden/game/net/NetClient';
-import type { RunStart } from '@riftwarden/game/net/protocol';
+import type { RunStart } from '@riftwarden/protocol/protocol';
 import type { RunResult } from '@riftwarden/rules/progression/run';
 import { keyRemap, type Settings, saveSettings } from '@riftwarden/game/core/settings';
 import { FrameClock } from '@riftwarden/game/core/frameClock';

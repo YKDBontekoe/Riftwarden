@@ -43,6 +43,11 @@ jobs:
           package-manager-cache: false
       - run: corepack enable
       - run: pnpm install --frozen-lockfile
+      - name: Protocol schema is linted and the generated TypeScript is current
+        run: |
+          pnpm exec buf lint proto
+          pnpm exec buf generate proto --template proto/buf.gen.yaml
+          git diff --exit-code packages/protocol/src/gen
       - run: pnpm lint
       - run: pnpm test
         env:

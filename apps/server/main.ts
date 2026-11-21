@@ -5,7 +5,8 @@ import { stat } from 'node:fs/promises';
 import { extname, join, resolve, sep } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { WebSocketServer, type WebSocket } from 'ws';
-import { DEFAULT_PORT, MAX_MESSAGE_BYTES, normalizeCode, parseClientMsg, PROTOCOL_VERSION, RateLimiter, type ClientMsg, type ServerMsg } from '@riftwarden/game/net/protocol';
+import { decodeClient, encodeServer } from '@riftwarden/protocol/codec';
+import { DEFAULT_PORT, MAX_MESSAGE_BYTES, normalizeCode, parseClientMsg, PROTOCOL_VERSION, RateLimiter, type ClientMsg, type ServerMsg } from '@riftwarden/protocol/protocol';
 import { playerIdFor, ProfileStore } from './profiles';
 import { type Peer, Room } from './room';
 import { CoopSim, loadHavok } from './sim';
@@ -143,24 +144,33 @@ wss.on('connection', (ws: WebSocket) => {
   let processing = Promise.resolve();
   const limiter = new RateLimiter(90, 180);
   let strikes = 0;
-  const send = (msg: ServerMsg) => {
-    if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
+  // Binary protobuf frames (proto/riftwarden/v1/envelope.proto).
+  const sendFrame = (msg: ServerMsg): number => {
+    if (ws.readyState !== ws.OPEN) return 0;
+    const frame = encodeServer(msg);
+    ws.send(frame);
+    return frame.length;
   };
+  const send = (msg: ServerMsg): void => void sendFrame(msg);
   const fail = (code: string, msg: string) => send({ t: 'error', code, msg });
 
   ws.on('pong', () => awaitingPong.delete(ws));
   ws.on('error', (error) => log(`WebSocket error: ${error.message}`));
   ws.on('message', (buf, isBinary) => {
     if (shuttingDown) return;
-    if (isBinary) return ws.close(1003, 'binary not supported');
+    if (!isBinary) {
+      // A tab still running a pre-v12 client speaks JSON: tell it in its own format, then close.
+      if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ t: 'error', code: 'version', msg: `Protocol mismatch: server v${PROTOCOL_VERSION}. Reload the page.` }));
+      return ws.close(1003, 'binary frames only');
+    }
     if (!limiter.take()) {
       if (++strikes > 50) ws.close(1008, 'rate limit');
       return;
     }
-    let raw: unknown;
-    try {
-      raw = JSON.parse(buf.toString());
-    } catch {
+    const bytes = Array.isArray(buf) ? Buffer.concat(buf) : buf instanceof ArrayBuffer ? new Uint8Array(buf) : buf;
+    const raw = decodeClient(bytes);
+    if (raw === null) {
+      if (++strikes > 50) ws.close(1008, 'malformed traffic');
       return fail('malformed', 'Unreadable message');
     }
     const msg = parseClientMsg(raw);
@@ -193,7 +203,7 @@ wss.on('connection', (ws: WebSocket) => {
       const prev = online.get(id);
       if (prev) prev.send({ t: 'error', code: 'replaced', msg: 'Signed in from another window' });
       const name = msg.name.replace(/[^\p{L}\p{N} _.-]/gu, '').trim().slice(0, 18) || 'Warden';
-      peer = { id, name, send, profile: prof, room: prev?.room ?? null, presence: null, visiting: false };
+      peer = { id, name, send: sendFrame, profile: prof, room: prev?.room ?? null, presence: null, visiting: false };
       online.set(id, peer);
       send({ t: 'welcome', v: PROTOCOL_VERSION, playerId: id, name, hasProfile: !!prof, profile: prof?.data ?? null });
       // Reconnect into a session (and a running operation) this identity still belongs to.

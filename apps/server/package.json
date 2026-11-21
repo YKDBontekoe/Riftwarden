@@ -8,6 +8,7 @@
     "@babylonjs/core": "catalog:",
     "@babylonjs/havok": "catalog:",
     "@riftwarden/game": "workspace:*",
+    "@riftwarden/protocol": "workspace:*",
     "@riftwarden/rules": "workspace:*",
     "pg": "catalog:",
     "tsx": "catalog:",

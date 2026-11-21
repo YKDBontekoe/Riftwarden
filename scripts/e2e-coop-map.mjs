@@ -1,7 +1,7 @@
 // Co-op run map (protocol level, no rendering): a map operation starts on a node, the node completes after
 // five waves, the team votes on the run map, a "home" voter extracts alone, the rest travel to the next node
 // (a fresh authoritative arena with the carried state), and the run records its path in PostgreSQL.
-// Usage: RIFT_TEST_DATABASE_URL=... node scripts/e2e-coop-map.mjs   (starts its own test server on :8798, RIFT_MAP=1)
+// Usage: RIFT_TEST_DATABASE_URL=... node --import tsx scripts/e2e-coop-map.mjs   (starts its own test server on :8798, RIFT_MAP=1)
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import pg from 'pg';

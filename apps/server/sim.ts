@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path';
 import { NullEngine } from '@babylonjs/core';
 import HavokPhysics from '@babylonjs/havok';
 import { hashRunSeed } from '@riftwarden/rules/roguelite/upgrades';
-import { type ClientMsg, type RunStart, SIM_HZ, SNAP_HZ } from '@riftwarden/game/net/protocol';
+import { type ClientMsg, type RunStart, SIM_HZ, SNAP_HZ } from '@riftwarden/protocol/protocol';
 import { type Avatar, ServerGame, type ServerPlayerInit } from '@riftwarden/game/net/ServerGame';
 import { newUid, SLOT_IDS } from '@riftwarden/rules/progression/items';
 import { RunLedger, type RunOutcome } from '@riftwarden/rules/progression/run';
@@ -405,8 +405,7 @@ export class CoopSim {
   }
 
   private send(peer: Peer, msg: Parameters<Peer['send']>[0]): void {
-    this.stats.bytes += JSON.stringify(msg).length;
-    peer.send(msg);
+    this.stats.bytes += peer.send(msg);
   }
 
   // ------------------------------------------------------------------ membership

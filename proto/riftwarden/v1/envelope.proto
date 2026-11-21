@@ -84,14 +84,14 @@ message ProfileState {
 
 message Presence {
   Vec3 p = 1;
-  float yaw = 2;
+  double yaw = 2;
 }
 
 message PresencePlayer {
   string id = 1;
   string name = 2;
   Vec3 p = 3;
-  float yaw = 4;
+  double yaw = 4;
 }
 
 message PresenceState {

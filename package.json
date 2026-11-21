@@ -15,12 +15,16 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "server": "tsx apps/server/main.ts",
-    "serve": "pnpm build && pnpm server"
+    "serve": "pnpm build && pnpm server",
+    "proto": "buf lint proto && buf generate proto --template proto/buf.gen.yaml && cargo fmt -p riftwarden-proto"
   },
   "devDependencies": {
     "@babylonjs/core": "catalog:",
+    "@bufbuild/buf": "catalog:",
+    "@bufbuild/protoc-gen-es": "catalog:",
     "@riftwarden/client": "workspace:*",
     "@riftwarden/game": "workspace:*",
+    "@riftwarden/protocol": "workspace:*",
     "@riftwarden/rules": "workspace:*",
     "@riftwarden/server": "workspace:*",
     "@types/node": "catalog:",

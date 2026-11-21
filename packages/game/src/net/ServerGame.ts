@@ -31,7 +31,7 @@ import { canInstall, configCost, partDef, type TowerConfig } from '@riftwarden/r
 import type { Turret } from '../defense/Turrets';
 import { uiEvents } from '../ui/store';
 import { ARENA, type ArenaLayout } from '@riftwarden/rules/world/layout';
-import type { ActMsg, InputMsg, ShotClaim } from './protocol';
+import type { ActMsg, InputMsg, ShotClaim } from '@riftwarden/protocol/protocol';
 import { capturePresentation, enterRecorder, patchGlobals, Recorder, withRecorder } from './recorder';
 export { Recorder, type NetEvent } from './recorder';
 import { arr, enc } from './wire';

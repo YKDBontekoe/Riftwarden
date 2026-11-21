@@ -4,16 +4,17 @@ package riftwarden.v1;
 
 // Shared value types. Hot paths (enemy / avatar rows) use quantised integers instead (see snapshot.proto).
 
+// Doubles: the values are already rounded by the simulation (cm), and exact round-trips keep replay deterministic.
 message Vec3 {
-  float x = 1;
-  float y = 2;
-  float z = 3;
+  double x = 1;
+  double y = 2;
+  double z = 3;
 }
 
 message Color {
-  float r = 1;
-  float g = 2;
-  float b = 3;
+  double r = 1;
+  double g = 2;
+  double b = 3;
 }
 
 // A dynamically shaped value: effect-call arguments, behaviour AI fields, HUD blobs.
@@ -28,6 +29,8 @@ message Value {
     Color color = 6;
     ValueList list = 7;
     ValueMap map = 8;
+    // Integers in int32 range travel as zigzag varints (1-5 bytes instead of 9).
+    sint32 int = 9;
   }
 }
 

@@ -1,5 +1,6 @@
 import { Store } from '../ui/store';
-import { type ActMsg, type LobbyState, PROTOCOL_VERSION, type RunStart, type ServerMsg } from './protocol';
+import { decodeServer, encodeClient } from '@riftwarden/protocol/codec';
+import { type ActMsg, type ClientMsg, type LobbyState, PROTOCOL_VERSION, type RunStart, type ServerMsg } from '@riftwarden/protocol/protocol';
 
 export type NetStatus = 'offline' | 'connecting' | 'online' | 'reconnecting' | 'error';
 
@@ -115,16 +116,15 @@ export class NetClient {
         return resolve(false);
       }
       this.ws = ws;
+      // Binary protobuf frames (proto/riftwarden/v1/envelope.proto).
+      ws.binaryType = 'arraybuffer';
       let welcomed = false;
-      ws.onopen = () => ws.send(JSON.stringify({ t: 'hello', v: PROTOCOL_VERSION, secret: this.identity.secret, name: this.identity.name }));
+      ws.onopen = () => ws.send(encodeClient({ t: 'hello', v: PROTOCOL_VERSION, secret: this.identity.secret, name: this.identity.name }));
       ws.onmessage = (ev) => {
-        this.bytesIn += (ev.data as string).length;
-        let m: ServerMsg;
-        try {
-          m = JSON.parse(ev.data as string) as ServerMsg;
-        } catch {
-          return;
-        }
+        if (!(ev.data instanceof ArrayBuffer)) return;
+        this.bytesIn += ev.data.byteLength;
+        const m = decodeServer(new Uint8Array(ev.data));
+        if (!m) return;
         if (m.t === 'welcome') {
           welcomed = true;
           this.retry = 0;
@@ -215,8 +215,8 @@ export class NetClient {
     }
   }
 
-  send(msg: Record<string, unknown>): void {
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(msg));
+  send(msg: ClientMsg): void {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.send(encodeClient(msg));
   }
 
   act(a: ActMsg): Promise<{ ok: boolean; reason?: string }> {

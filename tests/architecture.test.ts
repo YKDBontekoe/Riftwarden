@@ -4,7 +4,7 @@ import { dirname, join, relative, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 // Every package keeps the old src/ sub-paths, so module keys below ('core/Game.ts', ...) are package-relative.
-const ROOTS = { rules: resolve(__dirname, '../packages/rules/src'), game: resolve(__dirname, '../packages/game/src'), client: resolve(__dirname, '../apps/client/src') } as const;
+const ROOTS = { rules: resolve(__dirname, '../packages/rules/src'), protocol: resolve(__dirname, '../packages/protocol/src'), game: resolve(__dirname, '../packages/game/src'), client: resolve(__dirname, '../apps/client/src') } as const;
 type Pkg = keyof typeof ROOTS;
 
 function walk(dir: string, out: string[] = []): string[] {
@@ -36,7 +36,7 @@ function imports(file: string): Imp[] {
 }
 
 function resolveLocal(from: string, spec: string): string | null {
-  const pkg = /^@riftwarden\/(rules|game|client)\/(.+)$/.exec(spec);
+  const pkg = /^@riftwarden\/(rules|protocol|game|client)\/(.+)$/.exec(spec);
   if (!spec.startsWith('.') && !pkg) return null;
   const base = pkg ? join(ROOTS[pkg[1] as Pkg], pkg[2]) : resolve(dirname(from), spec);
   for (const c of [base + '.ts', base + '.tsx', join(base, 'index.ts'), join(base, 'index.tsx')]) {
@@ -85,8 +85,8 @@ function findCycle(group: string[]): string[] | null {
 const inDir = (d: string) => files.filter((f) => rel(f).startsWith(d));
 
 describe('architecture boundaries', () => {
-  it('packages depend downward only: client -> game -> rules', () => {
-    const allowed: Record<Pkg, Pkg[]> = { rules: ['rules'], game: ['rules', 'game'], client: ['rules', 'game', 'client'] };
+  it('packages depend downward only: client -> game -> protocol -> rules', () => {
+    const allowed: Record<Pkg, Pkg[]> = { rules: ['rules'], protocol: ['rules', 'protocol'], game: ['rules', 'protocol', 'game'], client: ['rules', 'protocol', 'game', 'client'] };
     const bad: string[] = [];
     for (const f of files) {
       for (const i of imports(f)) {
@@ -102,6 +102,14 @@ describe('architecture boundaries', () => {
     for (const f of files.filter((x) => pkgOf(x) === 'rules')) {
       if (f.endsWith('.tsx')) bad.push(rel(f));
       for (const i of imports(f)) if (!i.spec.startsWith('.') && !i.spec.startsWith('@riftwarden/rules/')) bad.push(`${rel(f)} -> ${i.spec}`);
+    }
+    expect(bad).toEqual([]);
+  });
+
+  it('the protocol package uses only protobuf-es besides the rules (no engine, no DOM libraries)', () => {
+    const bad: string[] = [];
+    for (const f of files.filter((x) => pkgOf(x) === 'protocol')) {
+      for (const i of imports(f)) if (!i.spec.startsWith('.') && !/^@riftwarden\/(rules|protocol)\//.test(i.spec) && !i.spec.startsWith('@bufbuild/protobuf')) bad.push(`${rel(f)} -> ${i.spec}`);
     }
     expect(bad).toEqual([]);
   });

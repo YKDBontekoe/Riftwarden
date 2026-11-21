@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeCode, parseClientMsg, PROTOCOL_VERSION, RateLimiter } from '@riftwarden/game/net/protocol';
+import { normalizeCode, parseClientMsg, PROTOCOL_VERSION, RateLimiter } from '@riftwarden/protocol/protocol';
 import { opError, runOp } from '@riftwarden/rules/progression/ops';
 import { createDefaultSave } from '@riftwarden/rules/progression/save';
 

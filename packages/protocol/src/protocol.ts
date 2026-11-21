@@ -1,12 +1,13 @@
 /**
  * Riftwarden co-op protocol (M7). Shared by the browser client and the Node server.
  *
- * Transport: one WebSocket per player, JSON text frames. Every message is `{ t: <type>, ... }`.
+ * Transport: one WebSocket per player, binary protobuf frames (proto/riftwarden/v1, codec.ts since v12).
+ * In game code every message is still `{ t: <type>, ... }`; codec.ts converts at the socket.
  * The server is authoritative for everything shared (enemies, waves, reactor, towers, loot,
  * rewards, online profiles); clients send intents (movement state, shot claims, actions) which
  * the server validates. Messages are validated structurally here before any game code sees them.
  */
-export const PROTOCOL_VERSION = 11;
+export const PROTOCOL_VERSION = 12;
 export const MAX_PLAYERS = 4;
 export const MAX_MESSAGE_BYTES = 64 * 1024;
 /** Authoritative simulation and snapshot rates (Hz). */
