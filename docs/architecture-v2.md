@@ -177,7 +177,7 @@ Secured sectors ride in the run journal. A report counts toward liberation only 
 
 | # | Step | Done when |
 | --- | --- | --- |
-| 1 | **Monorepo** restructure (pnpm workspaces, `packages/rules` / `packages/game` / `apps/client` / `apps/server`; the Cargo workspace and `apps/worker` arrive with steps 3 and 5), no behaviour change | **done**: unit 492/492 (with DB), co-op protocol 51/51, co-op map 28/28, image smoke test, browser suites (see commit) |
+| 1 | **Monorepo** restructure (pnpm workspaces, `packages/rules` / `packages/game` / `apps/client` / `apps/server`; the Cargo workspace and `apps/worker` arrive with steps 3 and 5), no behaviour change | **done**: unit 492/492 (with DB), co-op protocol 51/51, co-op map 28/28, image smoke test, e2e arenas 16/16, combat 37/37, runmap 54/54, m10 21/24 and m1 69/70 (the known C1-C3 / Z failures) |
 | 2 | **Protocol schema** in `proto/`, TS codegen; the existing Node server + client switch from JSON to protobuf frames | co-op protocol suites pass over protobuf |
 | 3 | **Gateway skeleton**: config, OTel tracing/logs/metrics, health, sqlx migrations (new schema), Redis, CI Rust jobs | gateway serves `/health`, migrations run in CI, spans reach the collector |
 | 4 | **Passkeys + sessions** + client sign-in/sign-up screens | Playwright virtual-authenticator suite passes |
