@@ -1,4 +1,13 @@
-import { ArcRotateCamera, Color3, Color4, Engine, type LinesMesh, type Mesh, MeshBuilder, PointerEventTypes, Scene, StandardMaterial, Vector3 } from '@babylonjs/core';
+import { ArcRotateCamera } from '@babylonjs/core/Cameras/arcRotateCamera';
+import { Engine } from '@babylonjs/core/Engines/engine';
+import { PointerEventTypes } from '@babylonjs/core/Events/pointerEvents';
+import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
+import { Color3, Color4 } from '@babylonjs/core/Maths/math.color';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { type LinesMesh } from '@babylonjs/core/Meshes/linesMesh';
+import { type Mesh } from '@babylonjs/core/Meshes/mesh';
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
+import { Scene } from '@babylonjs/core/scene';
 import { regionLayout } from '@riftwarden/rules/war/regions';
 import { regionLiberation, type WarState } from '@riftwarden/rules/war/state';
 

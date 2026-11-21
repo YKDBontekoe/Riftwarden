@@ -1,4 +1,7 @@
-import { type Mesh, MeshBuilder, type Scene, type TargetCamera } from '@babylonjs/core';
+import { type TargetCamera } from '@babylonjs/core/Cameras/targetCamera';
+import { type Mesh } from '@babylonjs/core/Meshes/mesh';
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
+import { type Scene } from '@babylonjs/core/scene';
 import { damp } from '../visuals/anim';
 import { unlit } from '../visuals/materials';
 

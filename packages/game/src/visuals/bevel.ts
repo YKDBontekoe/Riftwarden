@@ -1,4 +1,6 @@
-import { Mesh, type Scene, VertexData } from '@babylonjs/core';
+import { Mesh } from '@babylonjs/core/Meshes/mesh';
+import { VertexData } from '@babylonjs/core/Meshes/mesh.vertexData';
+import { type Scene } from '@babylonjs/core/scene';
 
 /**
  * Chamfered box: 6 inset faces, 12 bevel strips and 8 corner triangles, flat shaded.

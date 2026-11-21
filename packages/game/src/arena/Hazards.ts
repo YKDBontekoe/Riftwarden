@@ -6,7 +6,11 @@
  *   frost: the drone moves 35% slower while low over it; ground enemies on it build chill (towers combo with it).
  *   slag:  scorches the drone while it skims low over it (12 / s); ground enemies on it burn (Molten ones do not).
  */
-import { Color3, type Mesh, MeshBuilder, type PBRMaterial, type Scene } from '@babylonjs/core';
+import { type PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
+import { type Mesh } from '@babylonjs/core/Meshes/mesh';
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
+import { type Scene } from '@babylonjs/core/scene';
 import type { Enemy } from '../enemies/EnemyManager';
 import type { Player } from '../player/Player';
 import { unlit } from '../visuals/materials';

@@ -1,4 +1,8 @@
-import { Color3, Constants, PBRMaterial, type Scene, Texture } from '@babylonjs/core';
+import { Constants } from '@babylonjs/core/Engines/constants';
+import { PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial';
+import { Texture } from '@babylonjs/core/Materials/Textures/texture';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
+import { type Scene } from '@babylonjs/core/scene';
 import { canvas, fbm, heightToNormal, rng, toTexture, vnoise } from '../visuals/textures';
 import type { Finish } from '@riftwarden/rules/weapons/build';
 

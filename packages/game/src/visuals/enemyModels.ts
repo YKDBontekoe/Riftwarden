@@ -1,4 +1,8 @@
-import { type AbstractMesh, Color3, PBRMaterial, type Scene, type TransformNode } from '@babylonjs/core';
+import { PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
+import { type AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh';
+import { type TransformNode } from '@babylonjs/core/Meshes/transformNode';
+import { type Scene } from '@babylonjs/core/scene';
 import { latheData } from '../weapons/geometry';
 import type { Kit } from './kit';
 import { type Palette, unlit } from './materials';

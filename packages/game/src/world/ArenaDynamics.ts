@@ -1,17 +1,14 @@
-import {
-  type AbstractMesh,
-  Color3,
-  type Material,
-  type Mesh,
-  MeshBuilder,
-  PhysicsBody,
-  PhysicsMotionType,
-  PhysicsShapeBox,
-  Quaternion,
-  type Scene,
-  TransformNode,
-  Vector3,
-} from '@babylonjs/core';
+import { type Material } from '@babylonjs/core/Materials/material';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
+import { Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { type AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh';
+import { type Mesh } from '@babylonjs/core/Meshes/mesh';
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
+import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
+import { PhysicsMotionType } from '@babylonjs/core/Physics/v2/IPhysicsEnginePlugin';
+import { PhysicsBody } from '@babylonjs/core/Physics/v2/physicsBody';
+import { PhysicsShapeBox } from '@babylonjs/core/Physics/v2/physicsShape';
+import { type Scene } from '@babylonjs/core/scene';
 import { createBeveledBox } from '../visuals/bevel';
 import { type Palette, unlit } from '../visuals/materials';
 import type { ArenaLayout, Box } from '@riftwarden/rules/world/layout';

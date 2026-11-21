@@ -1,4 +1,10 @@
-import { type AbstractMesh, Color3, DynamicTexture, type PBRMaterial, type Scene, TransformNode, Vector3 } from '@babylonjs/core';
+import { type PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial';
+import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { type AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh';
+import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
+import { type Scene } from '@babylonjs/core/scene';
 import type { Kit } from '../visuals/kit';
 import { type Palette, unlit } from '../visuals/materials';
 import { baseDef, type IconKind } from '@riftwarden/rules/loot/bases';

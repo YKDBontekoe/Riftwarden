@@ -1,21 +1,18 @@
-import {
-  type AbstractMesh,
-  Color3,
-  Color4,
-  Constants,
-  Effect,
-  HemisphericLight,
-  Mesh,
-  MeshBuilder,
-  ParticleSystem,
-  TransformNode,
-  PointLight,
-  type Scene,
-  ShaderMaterial,
-  SpotLight,
-  Texture,
-  Vector3,
-} from '@babylonjs/core';
+import { Constants } from '@babylonjs/core/Engines/constants';
+import { HemisphericLight } from '@babylonjs/core/Lights/hemisphericLight';
+import { PointLight } from '@babylonjs/core/Lights/pointLight';
+import { SpotLight } from '@babylonjs/core/Lights/spotLight';
+import { Effect } from '@babylonjs/core/Materials/effect';
+import { ShaderMaterial } from '@babylonjs/core/Materials/shaderMaterial';
+import { Texture } from '@babylonjs/core/Materials/Textures/texture';
+import { Color3, Color4 } from '@babylonjs/core/Maths/math.color';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { type AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh';
+import { Mesh } from '@babylonjs/core/Meshes/mesh';
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
+import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
+import { ParticleSystem } from '@babylonjs/core/Particles/particleSystem';
+import { type Scene } from '@babylonjs/core/scene';
 import type { ArenaLayout } from '@riftwarden/rules/world/layout';
 import { biomeOf } from '@riftwarden/rules/world/biomes';
 import { type Palette, unlit } from './materials';

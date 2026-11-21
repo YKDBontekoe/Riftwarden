@@ -1,4 +1,8 @@
-import { Color3, type Mesh, MeshBuilder, type Scene, Vector3 } from '@babylonjs/core';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { type Mesh } from '@babylonjs/core/Meshes/mesh';
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
+import { type Scene } from '@babylonjs/core/scene';
 import type { Director } from '../combat/Director';
 import type { CombatStats } from '@riftwarden/rules/combat/stats';
 import type { Input } from '../core/Input';

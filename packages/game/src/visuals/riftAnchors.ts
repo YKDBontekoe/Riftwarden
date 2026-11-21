@@ -2,7 +2,12 @@
  * Forward rift anchors (procedural arenas): a scorched ground ring with hazard ticks and a vertical tear of
  * additive light that idles faintly and flares when enemies come through. Visual only (not pickable).
  */
-import { Color3, Mesh, MeshBuilder, type PBRMaterial, type Scene, TransformNode } from '@babylonjs/core';
+import { type PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
+import { Mesh } from '@babylonjs/core/Meshes/mesh';
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
+import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
+import { type Scene } from '@babylonjs/core/scene';
 import type { Rift } from '@riftwarden/rules/world/layout';
 import { unlit } from './materials';
 import { flareSprite, ringSprite } from './textures';

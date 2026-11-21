@@ -1,4 +1,7 @@
-import { Effect, GeometryBufferRenderer, type ParticleSystem, type Scene } from '@babylonjs/core';
+import { Effect } from '@babylonjs/core/Materials/effect';
+import { type ParticleSystem } from '@babylonjs/core/Particles/particleSystem';
+import { GeometryBufferRenderer } from '@babylonjs/core/Rendering/geometryBufferRenderer';
+import { type Scene } from '@babylonjs/core/scene';
 
 Effect.ShadersStore.rwSoftParticlePixelShader = /* glsl */ `
 precision highp float;

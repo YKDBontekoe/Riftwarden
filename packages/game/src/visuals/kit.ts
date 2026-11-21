@@ -1,7 +1,15 @@
 import { beveledBoxData } from './bevel';
 import { enableHitFlash, initFlash, registerFlashBuffer } from './hitFlashPlugin';
 import { loftData, smoothLatheData } from './sculpt';
-import { type AbstractMesh, type Material, Matrix, Mesh, MeshBuilder, PBRMaterial, type Scene, TransformNode, Vector3, type VertexData } from '@babylonjs/core';
+import { type Material } from '@babylonjs/core/Materials/material';
+import { PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial';
+import { Matrix, Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { type AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh';
+import { Mesh } from '@babylonjs/core/Meshes/mesh';
+import { type VertexData } from '@babylonjs/core/Meshes/mesh.vertexData';
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
+import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
+import { type Scene } from '@babylonjs/core/scene';
 
 export type Shape = 'box' | 'cyl' | 'cyl6' | 'cyl8' | 'sphere' | 'ico' | 'cone' | 'torus' | 'torusThin' | 'arc' | 'cone4' | `s:${string}`;
 

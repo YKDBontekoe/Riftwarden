@@ -1,4 +1,10 @@
-import { Mesh, MeshBuilder, PBRMaterial, type Scene, Texture, Vector3, VertexBuffer } from '@babylonjs/core';
+import { VertexBuffer } from '@babylonjs/core/Buffers/buffer';
+import { PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial';
+import { Texture } from '@babylonjs/core/Materials/Textures/texture';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { Mesh } from '@babylonjs/core/Meshes/mesh';
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
+import { type Scene } from '@babylonjs/core/scene';
 import { canvas, rng, toTexture } from './textures';
 import type { Box, GateId } from '@riftwarden/rules/world/layout';
 

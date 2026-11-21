@@ -1,4 +1,13 @@
-import { Color3, type Material, MeshBuilder, PhysicsBody, PhysicsMotionType, PhysicsShapeBox, PhysicsShapeContainer, PointLight, Quaternion, type Scene, type TransformNode, Vector3 } from '@babylonjs/core';
+import { PointLight } from '@babylonjs/core/Lights/pointLight';
+import { type Material } from '@babylonjs/core/Materials/material';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
+import { Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
+import { type TransformNode } from '@babylonjs/core/Meshes/transformNode';
+import { PhysicsMotionType } from '@babylonjs/core/Physics/v2/IPhysicsEnginePlugin';
+import { PhysicsBody } from '@babylonjs/core/Physics/v2/physicsBody';
+import { PhysicsShapeBox, PhysicsShapeContainer } from '@babylonjs/core/Physics/v2/physicsShape';
+import { type Scene } from '@babylonjs/core/scene';
 import { type Emitter, sfx } from '../../audio/Sfx';
 import type { Kit } from '../../visuals/kit';
 import { unlit } from '../../visuals/materials';

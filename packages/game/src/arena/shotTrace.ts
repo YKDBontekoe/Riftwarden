@@ -1,4 +1,9 @@
-import { type AbstractMesh, type PickingInfo, Ray, type Scene, Vector3 } from '@babylonjs/core';
+import '../babylonSideEffects';
+import { type PickingInfo } from '@babylonjs/core/Collisions/pickingInfo';
+import { Ray } from '@babylonjs/core/Culling/ray.core';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { type AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh';
+import { type Scene } from '@babylonjs/core/scene';
 import type { Enemy, EnemyHitboxMeta } from '../enemies/EnemyManager';
 import type { ShotRequest } from '../combat/Weapon';
 

@@ -1,18 +1,15 @@
-import {
-  type AbstractMesh,
-  Color3,
-  Color4,
-  type DynamicTexture,
-  Mesh,
-  MeshBuilder,
-  ParticleSystem,
-  PBRMaterial,
-  PointLight,
-  type Scene,
-  StandardMaterial,
-  type TransformNode,
-  Vector3,
-} from '@babylonjs/core';
+import { PointLight } from '@babylonjs/core/Lights/pointLight';
+import { PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial';
+import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
+import { type DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture';
+import { Color3, Color4 } from '@babylonjs/core/Maths/math.color';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { type AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh';
+import { Mesh } from '@babylonjs/core/Meshes/mesh';
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
+import { type TransformNode } from '@babylonjs/core/Meshes/transformNode';
+import { ParticleSystem } from '@babylonjs/core/Particles/particleSystem';
+import { type Scene } from '@babylonjs/core/scene';
 import type { SurfaceImpact } from '../combat/Weapon';
 import { softenParticles } from './softParticles';
 import type { Kit } from '../visuals/kit';

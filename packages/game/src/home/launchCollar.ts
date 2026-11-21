@@ -1,4 +1,8 @@
-import { Color3, PBRMaterial, type Scene, type TransformNode, VertexBuffer } from '@babylonjs/core';
+import { VertexBuffer } from '@babylonjs/core/Buffers/buffer';
+import { PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
+import { type TransformNode } from '@babylonjs/core/Meshes/transformNode';
+import { type Scene } from '@babylonjs/core/scene';
 import { segmentedRing } from '../visuals/rings';
 import { canvas, toTexture } from '../visuals/textures';
 

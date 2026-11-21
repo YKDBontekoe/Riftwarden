@@ -1,4 +1,7 @@
-import type { AbstractMesh, Material, Scene, TransformNode } from '@babylonjs/core';
+import type { Material } from '@babylonjs/core/Materials/material';
+import type { AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh';
+import type { TransformNode } from '@babylonjs/core/Meshes/transformNode';
+import type { Scene } from '@babylonjs/core/scene';
 import type { EnemyDef } from '@riftwarden/rules/data/defs';
 import type { EliteModId } from '@riftwarden/rules/survival/elites';
 import { enemyMats } from './enemyModels';

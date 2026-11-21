@@ -1,4 +1,10 @@
-import { Color3, type PhysicsEngineV2, PhysicsRaycastResult, Ray, type Scene, Vector3 } from '@babylonjs/core';
+import '../babylonSideEffects';
+import { Ray } from '@babylonjs/core/Culling/ray.core';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { PhysicsRaycastResult } from '@babylonjs/core/Physics/physicsRaycastResult';
+import { type PhysicsEngine as PhysicsEngineV2 } from '@babylonjs/core/Physics/v2/physicsEngine';
+import { type Scene } from '@babylonjs/core/scene';
 import {
   ABILITIES,
   type AbilityDef,

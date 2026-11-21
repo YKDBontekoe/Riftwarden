@@ -1,4 +1,6 @@
-import { Color3, type Scene, Vector3 } from '@babylonjs/core';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { type Scene } from '@babylonjs/core/scene';
 import { sfx } from '../audio/Sfx';
 import { rollDamage } from '@riftwarden/rules/combat/damage';
 import { elementPayload, procWeight } from '@riftwarden/rules/combat/elements';

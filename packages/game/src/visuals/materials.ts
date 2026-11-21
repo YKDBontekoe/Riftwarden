@@ -1,4 +1,13 @@
-import { type BaseTexture, Color3, Constants, FresnelParameters, type Material, NullEngine, PBRMaterial, type Scene, StandardMaterial, Texture } from '@babylonjs/core';
+import { Constants } from '@babylonjs/core/Engines/constants';
+import { NullEngine } from '@babylonjs/core/Engines/nullEngine';
+import { FresnelParameters } from '@babylonjs/core/Materials/fresnelParameters';
+import { type Material } from '@babylonjs/core/Materials/material';
+import { PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial';
+import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
+import { type BaseTexture } from '@babylonjs/core/Materials/Textures/baseTexture';
+import { Texture } from '@babylonjs/core/Materials/Textures/texture';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
+import { type Scene } from '@babylonjs/core/scene';
 import type { ArenaLayout } from '@riftwarden/rules/world/layout';
 import { floorSet, type PbrSet, rustSet, wallSet, wearSet, yardDeckSet } from './textures';
 

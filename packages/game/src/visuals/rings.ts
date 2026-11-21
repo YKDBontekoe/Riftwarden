@@ -1,4 +1,6 @@
-import { Mesh, type Scene, VertexData } from '@babylonjs/core';
+import { Mesh } from '@babylonjs/core/Meshes/mesh';
+import { VertexData } from '@babylonjs/core/Meshes/mesh.vertexData';
+import { type Scene } from '@babylonjs/core/scene';
 
 /** Flat machined arcs around +Y, batched into a single mesh. */
 export function segmentedRing(scene: Scene, name: string, radius: number, width: number, count: number, coverage: number): Mesh {

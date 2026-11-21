@@ -1,18 +1,16 @@
-import {
-  ArcRotateCamera,
-  Color3,
-  Color4,
-  DefaultRenderingPipeline,
-  DirectionalLight,
-  Engine,
-  HemisphericLight,
-  ImageProcessingConfiguration,
-  Mesh,
-  MeshBuilder,
-  PBRMaterial,
-  Scene,
-  Vector3,
-} from '@babylonjs/core';
+import '@riftwarden/game/babylonSideEffects';
+import { ArcRotateCamera } from '@babylonjs/core/Cameras/arcRotateCamera';
+import { Engine } from '@babylonjs/core/Engines/engine';
+import { DirectionalLight } from '@babylonjs/core/Lights/directionalLight';
+import { HemisphericLight } from '@babylonjs/core/Lights/hemisphericLight';
+import { ImageProcessingConfiguration } from '@babylonjs/core/Materials/imageProcessingConfiguration';
+import { PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial';
+import { Color3, Color4 } from '@babylonjs/core/Maths/math.color';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { Mesh } from '@babylonjs/core/Meshes/mesh';
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
+import { DefaultRenderingPipeline } from '@babylonjs/core/PostProcesses/RenderPipeline/Pipelines/defaultRenderingPipeline';
+import { Scene } from '@babylonjs/core/scene';
 import { rarity } from '@riftwarden/rules/loot/rarity';
 import type { ItemInstance } from '@riftwarden/rules/loot/types';
 import { WeaponAnimator } from '@riftwarden/game/weapons/animator';

@@ -1,4 +1,11 @@
-import { Color3, Constants, Effect, type Mesh, MeshBuilder, type Scene, ShaderMaterial, Vector3 } from '@babylonjs/core';
+import { Constants } from '@babylonjs/core/Engines/constants';
+import { Effect } from '@babylonjs/core/Materials/effect';
+import { ShaderMaterial } from '@babylonjs/core/Materials/shaderMaterial';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { type Mesh } from '@babylonjs/core/Meshes/mesh';
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
+import { type Scene } from '@babylonjs/core/scene';
 import type { ArenaLayout, GateId } from '@riftwarden/rules/world/layout';
 
 /**

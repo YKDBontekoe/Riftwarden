@@ -1,4 +1,9 @@
-import { type AbstractMesh, type Material, MaterialPluginBase, type Mesh, type Scene, Vector4 } from '@babylonjs/core';
+import { type Material } from '@babylonjs/core/Materials/material';
+import { MaterialPluginBase } from '@babylonjs/core/Materials/materialPluginBase';
+import { Vector4 } from '@babylonjs/core/Maths/math.vector';
+import { type AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh';
+import { type Mesh } from '@babylonjs/core/Meshes/mesh';
+import { type Scene } from '@babylonjs/core/scene';
 
 /** Name of the per-instance vec4 buffer: rgb = additive tint (HDR), a = strength. */
 export const FLASH_BUFFER = 'instanceFlash';

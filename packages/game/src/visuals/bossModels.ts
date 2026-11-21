@@ -1,4 +1,5 @@
-import type { AbstractMesh, TransformNode } from '@babylonjs/core';
+import type { AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh';
+import type { TransformNode } from '@babylonjs/core/Meshes/transformNode';
 import { enemyMats } from './enemyModels';
 import type { Kit } from './kit';
 import type { Palette } from './materials';

@@ -1,6 +1,8 @@
 // Abilities: definitions, scaling rules, loot integration, save v10 and the arena runtime (with fakes, no scene).
 import '../apps/worker/src/sim/headless';
-import { NullEngine, Scene, Vector3 } from '@babylonjs/core';
+import { NullEngine } from '@babylonjs/core/Engines/nullEngine';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { Scene } from '@babylonjs/core/scene';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { ABILITIES, ABILITY_KINDS, abilityCooldown, abilityPower, abilityRadius, blinkDistance, BLINK_MARGIN, THROW, ultChargeNeeded, ultGain } from '@riftwarden/rules/abilities/defs';
 import { Abilities, type AbilityHost } from '@riftwarden/game/arena/Abilities';

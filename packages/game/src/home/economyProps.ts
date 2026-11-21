@@ -1,4 +1,8 @@
-import { type AbstractMesh, MeshBuilder, type PBRMaterial, type Scene, type TransformNode } from '@babylonjs/core';
+import { type PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial';
+import { type AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh';
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
+import { type TransformNode } from '@babylonjs/core/Meshes/transformNode';
+import { type Scene } from '@babylonjs/core/scene';
 import type { MarketEntry } from '@riftwarden/rules/economy/market';
 import { RARITIES, rarity } from '@riftwarden/rules/loot/rarity';
 import type { Category } from '@riftwarden/rules/loot/types';

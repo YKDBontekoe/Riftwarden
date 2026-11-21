@@ -1,4 +1,12 @@
-import { Color3, DirectionalLight, type Material, type Mesh, MeshBuilder, PointLight, type Scene, TransformNode, Vector3 } from '@babylonjs/core';
+import { DirectionalLight } from '@babylonjs/core/Lights/directionalLight';
+import { PointLight } from '@babylonjs/core/Lights/pointLight';
+import { type Material } from '@babylonjs/core/Materials/material';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { type Mesh } from '@babylonjs/core/Meshes/mesh';
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
+import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
+import { type Scene } from '@babylonjs/core/scene';
 import { sfx } from '../audio/Sfx';
 import type { WeaponDef, WeaponFamily } from '@riftwarden/rules/data/defs';
 import { chargeFactor } from '@riftwarden/rules/loot/equipment';

@@ -1,16 +1,14 @@
-import {
-  type Camera,
-  Color4,
-  ColorCurves,
-  Constants,
-  CubeTexture,
-  DefaultRenderingPipeline,
-  type Engine,
-  ImageProcessingConfiguration,
-  type Scene,
-  SSAO2RenderingPipeline,
-  SSRRenderingPipeline,
-} from '@babylonjs/core';
+import { type Camera } from '@babylonjs/core/Cameras/camera';
+import { Constants } from '@babylonjs/core/Engines/constants';
+import { type Engine } from '@babylonjs/core/Engines/engine';
+import { ColorCurves } from '@babylonjs/core/Materials/colorCurves';
+import { ImageProcessingConfiguration } from '@babylonjs/core/Materials/imageProcessingConfiguration';
+import { CubeTexture } from '@babylonjs/core/Materials/Textures/cubeTexture';
+import { Color4 } from '@babylonjs/core/Maths/math.color';
+import { DefaultRenderingPipeline } from '@babylonjs/core/PostProcesses/RenderPipeline/Pipelines/defaultRenderingPipeline';
+import { SSAO2RenderingPipeline } from '@babylonjs/core/PostProcesses/RenderPipeline/Pipelines/ssao2RenderingPipeline';
+import { SSRRenderingPipeline } from '@babylonjs/core/PostProcesses/RenderPipeline/Pipelines/ssrRenderingPipeline';
+import { type Scene } from '@babylonjs/core/scene';
 
 /** Exposure and contrast are uniforms. Their shader variants only change at unity. */
 class CameraGrade extends ImageProcessingConfiguration {

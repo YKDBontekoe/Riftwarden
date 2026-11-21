@@ -1,4 +1,11 @@
-import { type AbstractMesh, Constants, CubeTexture, HDRFiltering, ReflectionProbe, RenderTargetTexture, type Scene, type Vector3 } from '@babylonjs/core';
+import { Constants } from '@babylonjs/core/Engines/constants';
+import { CubeTexture } from '@babylonjs/core/Materials/Textures/cubeTexture';
+import { HDRFiltering } from '@babylonjs/core/Materials/Textures/Filtering/hdrFiltering';
+import { RenderTargetTexture } from '@babylonjs/core/Materials/Textures/renderTargetTexture';
+import { type Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { type AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh';
+import { ReflectionProbe } from '@babylonjs/core/Probes/reflectionProbe';
+import { type Scene } from '@babylonjs/core/scene';
 
 /**
  * Render the finished static scene once into a reflection probe, wrap the cube in a

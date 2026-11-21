@@ -1,18 +1,15 @@
-import {
-  Color3,
-  Constants,
-  DynamicTexture,
-  type InstancedMesh,
-  Mesh,
-  MeshBuilder,
-  PBRMaterial,
-  PointLight,
-  Quaternion,
-  type Scene,
-  Texture,
-  Vector3,
-  VertexData,
-} from '@babylonjs/core';
+import { Constants } from '@babylonjs/core/Engines/constants';
+import { PointLight } from '@babylonjs/core/Lights/pointLight';
+import { PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial';
+import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture';
+import { Texture } from '@babylonjs/core/Materials/Textures/texture';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
+import { Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { type InstancedMesh } from '@babylonjs/core/Meshes/instancedMesh';
+import { Mesh } from '@babylonjs/core/Meshes/mesh';
+import { VertexData } from '@babylonjs/core/Meshes/mesh.vertexData';
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
+import { type Scene } from '@babylonjs/core/scene';
 import type { WeaponFamily } from '@riftwarden/rules/data/defs';
 import { starSprite } from '../visuals/textures';
 

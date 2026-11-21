@@ -1,4 +1,5 @@
-import { Color3, Vector3 } from '@babylonjs/core';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { sfx } from '../../audio/Sfx';
 import { speedFactor } from '@riftwarden/rules/combat/status';
 import { BOSSES, bossPhase, bossScaling } from '@riftwarden/rules/survival/bosses';

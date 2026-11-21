@@ -1,4 +1,7 @@
-import { type AbstractMesh, Color3, type Scene, type TransformNode } from '@babylonjs/core';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
+import { type AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh';
+import { type TransformNode } from '@babylonjs/core/Meshes/transformNode';
+import { type Scene } from '@babylonjs/core/scene';
 import type { Kit } from './kit';
 import { type Palette, unlit } from './materials';
 

@@ -1,4 +1,6 @@
-import { Vector3, type Scene } from '@babylonjs/core';
+import '../babylonSideEffects';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { type Scene } from '@babylonjs/core/scene';
 import { sfx } from '../audio/Sfx';
 import { mulberry32 } from '@riftwarden/rules/combat/damage';
 import type { StatModifier } from '@riftwarden/rules/combat/stats';

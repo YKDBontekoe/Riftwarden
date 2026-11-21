@@ -2,7 +2,8 @@
  * Tower durability on mazing arenas (arena side): breach hits, wrecks, repairs and wave-clear mending.
  * Narrow host interface (no Game import): the arena hands in its towers, effects, wallet and alert sink.
  */
-import { Color3, Vector3 } from '@babylonjs/core';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { sfx } from '../audio/Sfx';
 import type { Turret } from '../defense/Turrets';
 import type { NavAgent } from '@riftwarden/rules/enemies/navigation';

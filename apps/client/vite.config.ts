@@ -18,10 +18,6 @@ export default defineConfig({
     emptyOutDir: true,
     target: 'es2022',
     chunkSizeWarningLimit: 7000,
-    rollupOptions: {
-      output: {
-        manualChunks: (id) => (id.includes('@babylonjs') ? 'babylon' : id.includes('node_modules') ? 'vendor' : undefined),
-      },
-    },
+    // No manual chunks: Babylon loads each shader with a dynamic import, which must stay its own chunk.
   },
 });

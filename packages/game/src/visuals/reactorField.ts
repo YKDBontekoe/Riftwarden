@@ -1,4 +1,8 @@
-import { Color3, Effect, type Scene, ShaderMaterial, Vector2 } from '@babylonjs/core';
+import { Effect } from '@babylonjs/core/Materials/effect';
+import { ShaderMaterial } from '@babylonjs/core/Materials/shaderMaterial';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
+import { Vector2 } from '@babylonjs/core/Maths/math.vector';
+import { type Scene } from '@babylonjs/core/scene';
 
 Effect.ShadersStore.rwReactorFieldVertexShader = /* glsl */ `
 precision highp float;

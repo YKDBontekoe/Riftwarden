@@ -1,4 +1,9 @@
-import { Color4, Mesh, ParticleSystem, type Scene, Vector3, VertexData } from '@babylonjs/core';
+import { Color4 } from '@babylonjs/core/Maths/math.color';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { Mesh } from '@babylonjs/core/Meshes/mesh';
+import { VertexData } from '@babylonjs/core/Meshes/mesh.vertexData';
+import { ParticleSystem } from '@babylonjs/core/Particles/particleSystem';
+import { type Scene } from '@babylonjs/core/scene';
 import { unlit } from '../visuals/materials';
 import { canvas, flareSprite, rng, toTexture } from '../visuals/textures';
 import { HQ_WINDOW } from '@riftwarden/rules/home/layout';

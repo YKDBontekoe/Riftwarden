@@ -1,19 +1,15 @@
-import {
-  Color3,
-  Mesh,
-  type PBRMaterial,
-  MeshBuilder,
-  NullEngine,
-  PhysicsBody,
-  PhysicsMotionType,
-  PhysicsShapeBox,
-  PhysicsShapeContainer,
-  Quaternion,
-  type Scene,
-  type Material,
-  TransformNode,
-  Vector3,
-} from '@babylonjs/core';
+import { NullEngine } from '@babylonjs/core/Engines/nullEngine';
+import { type Material } from '@babylonjs/core/Materials/material';
+import { type PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
+import { Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { Mesh } from '@babylonjs/core/Meshes/mesh';
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
+import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
+import { PhysicsMotionType } from '@babylonjs/core/Physics/v2/IPhysicsEnginePlugin';
+import { PhysicsBody } from '@babylonjs/core/Physics/v2/physicsBody';
+import { PhysicsShapeBox, PhysicsShapeContainer } from '@babylonjs/core/Physics/v2/physicsShape';
+import { type Scene } from '@babylonjs/core/scene';
 import type { ArenaLayout, Box, GateId, Ramp } from '@riftwarden/rules/world/layout';
 import { RiftAnchors } from './riftAnchors';
 import { biomeOf } from '@riftwarden/rules/world/biomes';

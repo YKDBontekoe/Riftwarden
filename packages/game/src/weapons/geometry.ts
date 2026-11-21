@@ -1,4 +1,4 @@
-import { VertexData } from '@babylonjs/core';
+import { VertexData } from '@babylonjs/core/Meshes/mesh.vertexData';
 
 /**
  * Hard-surface primitives for procedural weapons (pure vertex generation).

@@ -1,4 +1,4 @@
-import { VertexData } from '@babylonjs/core';
+import { VertexData } from '@babylonjs/core/Meshes/mesh.vertexData';
 import { cylProfile, latheData, type P2, tubeProfile } from './geometry';
 
 /** Vertex-data helpers shared by the weapon model builders (pure geometry, no scene). */

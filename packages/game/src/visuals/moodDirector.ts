@@ -1,4 +1,6 @@
-import { Color3, type DirectionalLight, type Scene } from '@babylonjs/core';
+import { type DirectionalLight } from '@babylonjs/core/Lights/directionalLight';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
+import { type Scene } from '@babylonjs/core/scene';
 import { BASE_FOG, blendMood, calmMood, moodFor, type MoodInput } from './mood';
 import type { PostFx } from './postfx';
 

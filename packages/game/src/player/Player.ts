@@ -1,13 +1,9 @@
-import {
-  CharacterSupportedState,
-  type CharacterSurfaceInfo,
-  FreeCamera,
-  PhysicsCharacterController,
-  type PhysicsEngineV2,
-  PhysicsRaycastResult,
-  type Scene,
-  Vector3,
-} from '@babylonjs/core';
+import { FreeCamera } from '@babylonjs/core/Cameras/freeCamera';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { PhysicsRaycastResult } from '@babylonjs/core/Physics/physicsRaycastResult';
+import { CharacterSupportedState, type CharacterSurfaceInfo, PhysicsCharacterController } from '@babylonjs/core/Physics/v2/characterController';
+import { type PhysicsEngine as PhysicsEngineV2 } from '@babylonjs/core/Physics/v2/physicsEngine';
+import { type Scene } from '@babylonjs/core/scene';
 import { sfx } from '../audio/Sfx';
 import { ECONOMY } from '@riftwarden/rules/data/defs';
 import { BASE_STATS, type CombatStats, maxHull, mitigation } from '@riftwarden/rules/combat/stats';

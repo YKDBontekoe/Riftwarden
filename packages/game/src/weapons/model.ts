@@ -1,5 +1,12 @@
 import { elementEnergy } from '@riftwarden/rules/combat/elements';
-import { Color3, type Material, Matrix, Mesh, type PBRMaterial, Quaternion, type Scene, TransformNode, Vector3, VertexData } from '@babylonjs/core';
+import { type Material } from '@babylonjs/core/Materials/material';
+import { type PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
+import { Matrix, Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { Mesh } from '@babylonjs/core/Meshes/mesh';
+import { VertexData } from '@babylonjs/core/Meshes/mesh.vertexData';
+import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
+import { type Scene } from '@babylonjs/core/scene';
 import type { WeaponFamily } from '@riftwarden/rules/data/defs';
 import type { ItemInstance } from '@riftwarden/rules/loot/types';
 import { loftData } from '../visuals/sculpt';

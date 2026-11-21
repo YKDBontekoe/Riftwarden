@@ -1,4 +1,6 @@
-import { type Engine, type Scene, Vector3 } from '@babylonjs/core';
+import { type Engine } from '@babylonjs/core/Engines/engine';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { type Scene } from '@babylonjs/core/scene';
 import { buildWeaponModel } from '@riftwarden/game/weapons/model';
 import { rarity } from '@riftwarden/rules/loot/rarity';
 import { generateUnique, uniqueDef } from '@riftwarden/rules/loot/uniques';

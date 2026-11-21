@@ -1,4 +1,8 @@
-import { type DynamicTexture, type Particle, ParticleSystem, type Scene, Vector3 } from '@babylonjs/core';
+import { type DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { type Particle } from '@babylonjs/core/Particles/particle';
+import { ParticleSystem } from '@babylonjs/core/Particles/particleSystem';
+import { type Scene } from '@babylonjs/core/scene';
 import type { ArenaLayout } from '@riftwarden/rules/world/layout';
 
 /** Static collision volumes (AABBs) for cheap visual-only physics. */

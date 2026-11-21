@@ -1,4 +1,14 @@
-import { ArcRotateCamera, type Camera, Color3, type LinesMesh, type Mesh, MeshBuilder, Plane, type Scene, StandardMaterial, Vector3 } from '@babylonjs/core';
+import '../../babylonSideEffects';
+import { ArcRotateCamera } from '@babylonjs/core/Cameras/arcRotateCamera';
+import { type Camera } from '@babylonjs/core/Cameras/camera';
+import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
+import { Plane } from '@babylonjs/core/Maths/math.plane';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { type LinesMesh } from '@babylonjs/core/Meshes/linesMesh';
+import { type Mesh } from '@babylonjs/core/Meshes/mesh';
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
+import { type Scene } from '@babylonjs/core/scene';
 import { sfx } from '../../audio/Sfx';
 import type { Input } from '../../core/Input';
 import type { OpResult } from '@riftwarden/rules/progression/ops';

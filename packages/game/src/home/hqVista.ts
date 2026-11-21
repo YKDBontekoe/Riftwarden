@@ -1,4 +1,8 @@
-import { type Material, Mesh, MeshBuilder, type PBRMaterial, type Scene } from '@babylonjs/core';
+import { type Material } from '@babylonjs/core/Materials/material';
+import { type PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial';
+import { Mesh } from '@babylonjs/core/Meshes/mesh';
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
+import { type Scene } from '@babylonjs/core/scene';
 import { type Palette, unlit } from '../visuals/materials';
 import { loftData, type LoftAxis, type Section, smoothLatheData } from '../visuals/sculpt';
 import { boxProjectUVs } from '../visuals/uv';

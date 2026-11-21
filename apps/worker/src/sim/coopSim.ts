@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { NullEngine } from '@babylonjs/core';
+import { NullEngine } from '@babylonjs/core/Engines/nullEngine';
 import HavokPhysics from '@babylonjs/havok';
 import { hashRunSeed } from '@riftwarden/rules/roguelite/upgrades';
 import { type ClientMsg, type RunStart, SIM_HZ, SNAP_HZ } from '@riftwarden/protocol/protocol';

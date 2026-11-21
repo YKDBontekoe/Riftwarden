@@ -1,4 +1,5 @@
-import { Color3, Vector3 } from '@babylonjs/core';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 
 /**
  * Argument encoding for replicated presentation calls (effects, telegraphs, ordnance, sounds).

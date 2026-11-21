@@ -1,4 +1,7 @@
-import { Color4, ParticleSystem, type Scene, Vector3 } from '@babylonjs/core';
+import { Color4 } from '@babylonjs/core/Maths/math.color';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { ParticleSystem } from '@babylonjs/core/Particles/particleSystem';
+import { type Scene } from '@babylonjs/core/scene';
 import { plumeSprite, SMOKE_CELL, SMOKE_FRAMES } from '../visuals/textures';
 
 /**

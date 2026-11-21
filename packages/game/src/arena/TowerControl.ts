@@ -1,4 +1,8 @@
-import { Color3, Ray, type Scene, Vector3 } from '@babylonjs/core';
+import '../babylonSideEffects';
+import { Ray } from '@babylonjs/core/Culling/ray.core';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { type Scene } from '@babylonjs/core/scene';
 import { sfx } from '../audio/Sfx';
 import type { CombatStats } from '@riftwarden/rules/combat/stats';
 import type { Input } from '../core/Input';

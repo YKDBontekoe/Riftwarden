@@ -1,4 +1,7 @@
-import { type PhysicsEngineV2, PhysicsRaycastResult, type Scene, Vector3 } from '@babylonjs/core';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { PhysicsRaycastResult } from '@babylonjs/core/Physics/physicsRaycastResult';
+import { type PhysicsEngine as PhysicsEngineV2 } from '@babylonjs/core/Physics/v2/physicsEngine';
+import { type Scene } from '@babylonjs/core/scene';
 import { sfx } from '../audio/Sfx';
 import type { Effects } from '../fx/Effects';
 import { pickInteractable } from '../home/interaction';

@@ -1,6 +1,6 @@
 // Core ground archetypes: Walker / Bulwark (bipedal rig, shoots the player, fires at the reactor) and Rush Drone
 // (flies the lane and detonates on the player or the reactor). Same Behavior interface as every other enemy.
-import { Vector3 } from '@babylonjs/core';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { sfx } from '../audio/Sfx';
 import { speedFactor } from '@riftwarden/rules/combat/status';
 import type { Effects } from '../fx/Effects';

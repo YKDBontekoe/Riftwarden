@@ -1,5 +1,8 @@
-import { type AssetContainer, LoadAssetContainerAsync, PBRMaterial, TransformNode, Vector3 } from '@babylonjs/core';
-import '@babylonjs/loaders/glTF/2.0/glTFLoader';
+import { type AssetContainer } from '@babylonjs/core/assetContainer';
+import { LoadAssetContainerAsync } from '@babylonjs/core/Loading/sceneLoader';
+import { PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
 
 const sources = {
   fern: new URL('../assets/nest-fern.glb', import.meta.url).href,
@@ -14,7 +17,10 @@ export function placeScan(parent: TransformNode, species: keyof typeof sources, 
   if (!library) libraries.set(scene, library = new Map());
   let source = library.get(species);
   if (!source) {
-    source = LoadAssetContainerAsync(sources[species], scene, { pluginExtension: '.glb' }).then(container => {
+    // The glTF loader (~200 KB) is only needed here: loaded on first use, not with the app.
+    source = import('@babylonjs/loaders/glTF/2.0/glTFLoader')
+      .then(() => LoadAssetContainerAsync(sources[species], scene, { pluginExtension: '.glb' }))
+      .then(container => {
       for (const m of container.materials) if (m instanceof PBRMaterial) {
         m.usePhysicalLightFalloff = false;
         m.maxSimultaneousLights = 8;

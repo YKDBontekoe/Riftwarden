@@ -1,4 +1,5 @@
-import { type Mesh, VertexBuffer } from '@babylonjs/core';
+import { VertexBuffer } from '@babylonjs/core/Buffers/buffer';
+import { type Mesh } from '@babylonjs/core/Meshes/mesh';
 
 /**
  * Replace a (world-space, frozen) mesh's UVs with box projection: each vertex takes the

@@ -1,4 +1,5 @@
-import type { DynamicTexture, Scene } from '@babylonjs/core';
+import type { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture';
+import type { Scene } from '@babylonjs/core/scene';
 import { canvas, fbm, heightToNormal, rng, toTexture, vnoise } from './textures';
 
 /**

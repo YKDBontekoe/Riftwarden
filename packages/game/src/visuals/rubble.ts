@@ -1,4 +1,9 @@
-import { type Material, type Mesh, MeshBuilder, Quaternion, type Scene, Vector3, VertexBuffer } from '@babylonjs/core';
+import { VertexBuffer } from '@babylonjs/core/Buffers/buffer';
+import { type Material } from '@babylonjs/core/Materials/material';
+import { Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { type Mesh } from '@babylonjs/core/Meshes/mesh';
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
+import { type Scene } from '@babylonjs/core/scene';
 
 /** Per-chunk shade: most pieces dusty grey, some darker, a few scorched black. */
 function chunkShade(rand: () => number): [number, number, number] {

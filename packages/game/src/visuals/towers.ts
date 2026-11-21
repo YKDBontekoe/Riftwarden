@@ -1,4 +1,6 @@
-import type { AbstractMesh, Material, TransformNode } from '@babylonjs/core';
+import type { Material } from '@babylonjs/core/Materials/material';
+import type { AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh';
+import type { TransformNode } from '@babylonjs/core/Meshes/transformNode';
 import { BASES, CORES, MODIFIERS, type TowerConfig, WEAPONS } from '@riftwarden/rules/towers/components';
 import type { Kit } from './kit';
 import type { Palette } from './materials';

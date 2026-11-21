@@ -9,7 +9,8 @@
  *   frostbound    chill/freeze immune (Director); telegraphed frost nova: drone damage, towers shorted
  *   molten        burn immune (Director); drops slag pools behind it (arena hazard, scorches the drone)
  */
-import { Color3, Vector3 } from '@babylonjs/core';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { sfx } from '../audio/Sfx';
 import { isBurning, isFrozen, isShocked } from '@riftwarden/rules/combat/status';
 import { ELITE } from '@riftwarden/rules/survival/elites';

@@ -1,4 +1,4 @@
-import { VertexData } from '@babylonjs/core';
+import { VertexData } from '@babylonjs/core/Meshes/mesh.vertexData';
 
 /**
  * Procedural sculpting for hard-surface models: smooth lofted shells and lathed parts.

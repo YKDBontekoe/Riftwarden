@@ -1,4 +1,6 @@
-import { Color3, type TransformNode, Vector3 } from '@babylonjs/core';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { type TransformNode } from '@babylonjs/core/Meshes/transformNode';
 import { sfx } from '../audio/Sfx';
 import type { Effects } from '../fx/Effects';
 import type { WalkerRig } from '../visuals/models';

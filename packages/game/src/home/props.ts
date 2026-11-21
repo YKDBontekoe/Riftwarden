@@ -1,4 +1,12 @@
-import { Color3, type DynamicTexture, type Material, Matrix, MeshBuilder, type PBRMaterial, type Scene, type TransformNode, VertexBuffer } from '@babylonjs/core';
+import { VertexBuffer } from '@babylonjs/core/Buffers/buffer';
+import { type Material } from '@babylonjs/core/Materials/material';
+import { type PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial';
+import { type DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
+import { Matrix } from '@babylonjs/core/Maths/math.vector';
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
+import { type TransformNode } from '@babylonjs/core/Meshes/transformNode';
+import { type Scene } from '@babylonjs/core/scene';
 import { createRiftMaterial } from '../visuals/atmosphere';
 import { buildWardenDrone } from '../visuals/droneModel';
 import { type Kit } from '../visuals/kit';

@@ -1,16 +1,12 @@
-import {
-  type Material,
-  Mesh,
-  MeshBuilder,
-  PhysicsBody,
-  PhysicsMotionType,
-  PhysicsShapeBox,
-  PhysicsShapeContainer,
-  Quaternion,
-  type Scene,
-  TransformNode,
-  Vector3,
-} from '@babylonjs/core';
+import { type Material } from '@babylonjs/core/Materials/material';
+import { Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { Mesh } from '@babylonjs/core/Meshes/mesh';
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
+import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
+import { PhysicsMotionType } from '@babylonjs/core/Physics/v2/IPhysicsEnginePlugin';
+import { PhysicsBody } from '@babylonjs/core/Physics/v2/physicsBody';
+import { PhysicsShapeBox, PhysicsShapeContainer } from '@babylonjs/core/Physics/v2/physicsShape';
+import { type Scene } from '@babylonjs/core/scene';
 import { createBeveledBox } from '../visuals/bevel';
 import { boxProjectUVs } from '../visuals/uv';
 import { loftData } from '../visuals/sculpt';

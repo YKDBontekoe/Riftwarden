@@ -1,4 +1,7 @@
-import { type Material, type Mesh, MeshBuilder, type Scene } from '@babylonjs/core';
+import { type Material } from '@babylonjs/core/Materials/material';
+import { type Mesh } from '@babylonjs/core/Meshes/mesh';
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
+import { type Scene } from '@babylonjs/core/scene';
 import type { ArenaLayout } from '@riftwarden/rules/world/layout';
 import { planPads } from '@riftwarden/rules/world/rubblePlan';
 import type { Palette } from './materials';

@@ -1,4 +1,9 @@
-import { Color3, type Mesh, MeshBuilder, type PBRMaterial, type Scene, Vector3 } from '@babylonjs/core';
+import { type PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { type Mesh } from '@babylonjs/core/Meshes/mesh';
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
+import { type Scene } from '@babylonjs/core/scene';
 import { unlit } from '../visuals/materials';
 
 export type TeleColor = 'red' | 'orange' | 'blue' | 'violet' | 'green' | 'white';

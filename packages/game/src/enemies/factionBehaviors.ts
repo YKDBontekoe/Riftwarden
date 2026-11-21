@@ -1,6 +1,7 @@
 // M10 faction archetypes: Sapper (tower hunter), Skimmer (swarm flyer), Marksman (sniper), Burrower (tunneler).
 // Same Behavior interface as every other enemy; state in `e.ai` (primitive fields replicate to co-op replicas).
-import { Color3, Vector3 } from '@babylonjs/core';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { sfx } from '../audio/Sfx';
 import { isFrozen, isShocked, speedFactor } from '@riftwarden/rules/combat/status';
 import type { Turret } from '../defense/Turrets';

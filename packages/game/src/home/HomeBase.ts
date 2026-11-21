@@ -1,27 +1,25 @@
+import '../babylonSideEffects';
 import { stationInfo } from '@riftwarden/rules/home/stationInfo';
 import { drawStationScreen } from './stationScreens';
 import { levelForXp } from '@riftwarden/rules/progression/level';
 import { freePoints } from '@riftwarden/rules/progression/skilltree';
 import { placeScan } from '../visuals/scannedProps';
 import { loftData } from '../visuals/sculpt';
-import {
-  Color3,
-  Color4,
-  DirectionalLight,
-  type Engine,
-  HavokPlugin,
-  HemisphericLight,
-  PBRMaterial,
-  type PhysicsEngineV2,
-  PhysicsRaycastResult,
-  PointLight,
-  Scene,
-  SceneInstrumentation,
-  ShadowGenerator,
-  SpotLight,
-  Texture,
-  Vector3,
-} from '@babylonjs/core';
+import { type Engine } from '@babylonjs/core/Engines/engine';
+import { SceneInstrumentation } from '@babylonjs/core/Instrumentation/sceneInstrumentation';
+import { DirectionalLight } from '@babylonjs/core/Lights/directionalLight';
+import { HemisphericLight } from '@babylonjs/core/Lights/hemisphericLight';
+import { PointLight } from '@babylonjs/core/Lights/pointLight';
+import { ShadowGenerator } from '@babylonjs/core/Lights/Shadows/shadowGenerator';
+import { SpotLight } from '@babylonjs/core/Lights/spotLight';
+import { PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial';
+import { Texture } from '@babylonjs/core/Materials/Textures/texture';
+import { Color3, Color4 } from '@babylonjs/core/Maths/math.color';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { PhysicsRaycastResult } from '@babylonjs/core/Physics/physicsRaycastResult';
+import { type PhysicsEngine as PhysicsEngineV2 } from '@babylonjs/core/Physics/v2/physicsEngine';
+import { HavokPlugin } from '@babylonjs/core/Physics/v2/Plugins/havokPlugin';
+import { Scene } from '@babylonjs/core/scene';
 import { type Emitter, sfx } from '../audio/Sfx';
 import type { Input } from '../core/Input';
 import { keyLabel, type Settings } from '../core/settings';

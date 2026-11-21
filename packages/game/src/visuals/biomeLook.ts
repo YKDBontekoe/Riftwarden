@@ -2,7 +2,7 @@
  * M10: apply a biome's material tints to a freshly created outdoor palette (albedo multipliers on the big
  * surfaces). The palette is per scene, so nothing leaks into other worlds.
  */
-import type { PBRMaterial } from '@babylonjs/core';
+import type { PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial';
 import type { BiomeDef } from '@riftwarden/rules/world/biomes';
 import type { Palette } from './materials';
 

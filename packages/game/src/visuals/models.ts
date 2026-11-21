@@ -1,14 +1,12 @@
-import {
-  type AbstractMesh,
-  type Material,
-  Color3,
-  Mesh,
-  MeshBuilder,
-  PBRMaterial,
-  Quaternion,
-  type Scene,
-  TransformNode,
-} from '@babylonjs/core';
+import { type Material } from '@babylonjs/core/Materials/material';
+import { PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
+import { Quaternion } from '@babylonjs/core/Maths/math.vector';
+import { type AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh';
+import { Mesh } from '@babylonjs/core/Meshes/mesh';
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
+import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
+import { type Scene } from '@babylonjs/core/scene';
 import type { Kit } from './kit';
 import { type Palette, unlit } from './materials';
 import { canvas, fbm, flareSprite, toTexture, vnoise } from './textures';

@@ -1,4 +1,9 @@
-import { type AbstractMesh, InstancedMesh, type Mesh, PBRMaterial, Quaternion, type TransformNode, Vector3, type Vector4 } from '@babylonjs/core';
+import { PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial';
+import { Quaternion, Vector3, type Vector4 } from '@babylonjs/core/Maths/math.vector';
+import { type AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh';
+import { InstancedMesh } from '@babylonjs/core/Meshes/instancedMesh';
+import { type Mesh } from '@babylonjs/core/Meshes/mesh';
+import { type TransformNode } from '@babylonjs/core/Meshes/transformNode';
 import { FLASH_BUFFER, initFlash } from '../visuals/hitFlashPlugin';
 import type { CollisionBoxes } from './sparks';
 import { pickFragments, type FragmentCandidate } from './fragmentPlan';

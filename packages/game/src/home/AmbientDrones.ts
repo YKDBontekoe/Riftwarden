@@ -1,4 +1,5 @@
-import { type Scene, Vector3 } from '@babylonjs/core';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { type Scene } from '@babylonjs/core/scene';
 import { type Emitter, sfx } from '../audio/Sfx';
 import { damp } from '../visuals/anim';
 import { buildWardenDrone, type DroneRig } from '../visuals/droneModel';

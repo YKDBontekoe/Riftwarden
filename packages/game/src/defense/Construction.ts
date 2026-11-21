@@ -1,4 +1,11 @@
-import { type AbstractMesh, type Material, type Mesh, MeshBuilder, Ray, type Scene, Vector3 } from '@babylonjs/core';
+import '../babylonSideEffects';
+import { Ray } from '@babylonjs/core/Culling/ray.core';
+import { type Material } from '@babylonjs/core/Materials/material';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { type AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh';
+import { type Mesh } from '@babylonjs/core/Meshes/mesh';
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
+import { type Scene } from '@babylonjs/core/scene';
 import type { CombatStats } from '@riftwarden/rules/combat/stats';
 import type { Player } from '../player/Player';
 import type { Palette } from '../visuals/materials';

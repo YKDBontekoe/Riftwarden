@@ -1,4 +1,9 @@
-import { Color3, type Mesh, MeshBuilder, type Scene, type TransformNode, Vector3 } from '@babylonjs/core';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { type Mesh } from '@babylonjs/core/Meshes/mesh';
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
+import { type TransformNode } from '@babylonjs/core/Meshes/transformNode';
+import { type Scene } from '@babylonjs/core/scene';
 import { sfx } from '../audio/Sfx';
 import { applyDamage, type DamageResult, type DamageType, type Health } from '@riftwarden/rules/combat/damage';
 import { ENEMIES, type EnemyDef, type EnemyKind } from '@riftwarden/rules/data/defs';

@@ -1,6 +1,14 @@
-import {
-  Color3, Constants, Effect, type Material, Mesh, MeshBuilder, PBRMaterial, Quaternion, ShaderMaterial, TransformNode, Vector3, type VertexData,
-} from '@babylonjs/core';
+import { Constants } from '@babylonjs/core/Engines/constants';
+import { Effect } from '@babylonjs/core/Materials/effect';
+import { type Material } from '@babylonjs/core/Materials/material';
+import { PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial';
+import { ShaderMaterial } from '@babylonjs/core/Materials/shaderMaterial';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
+import { Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { Mesh } from '@babylonjs/core/Meshes/mesh';
+import { type VertexData } from '@babylonjs/core/Meshes/mesh.vertexData';
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
+import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
 import { biomeOf, type BiomeId } from '@riftwarden/rules/world/biomes';
 import type { ArenaLayout } from '@riftwarden/rules/world/layout';
 import type { DressingHost } from './arenaDressing';

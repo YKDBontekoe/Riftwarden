@@ -1,5 +1,7 @@
 import type { BiomeId } from '@riftwarden/rules/world/biomes';
-import { DynamicTexture, type Scene, Texture } from '@babylonjs/core';
+import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture';
+import { Texture } from '@babylonjs/core/Materials/Textures/texture';
+import { type Scene } from '@babylonjs/core/scene';
 
 /**
  * Canvas-generated tileable noise, height-to-normal conversion, PBR texture sets

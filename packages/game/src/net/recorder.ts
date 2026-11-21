@@ -1,6 +1,6 @@
 // Presentation capture for the headless server: effects, sounds and HUD events produced by the
 // authoritative simulation are recorded and streamed to the replicas (see ClientGame.applyEvent).
-import type { Vector3 } from '@babylonjs/core';
+import type { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { sfx } from '../audio/Sfx';
 import type { Effects } from '../fx/Effects';
 import type { Ordnance, Telegraphs } from '../fx/Hostile';

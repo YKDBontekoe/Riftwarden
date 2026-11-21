@@ -1,4 +1,7 @@
-import { CascadedShadowGenerator, type AbstractMesh, type DirectionalLight, ShadowGenerator } from '@babylonjs/core';
+import { type DirectionalLight } from '@babylonjs/core/Lights/directionalLight';
+import { CascadedShadowGenerator } from '@babylonjs/core/Lights/Shadows/cascadedShadowGenerator';
+import { ShadowGenerator } from '@babylonjs/core/Lights/Shadows/shadowGenerator';
+import { type AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh';
 
 export type ShadowQuality = 'off' | 'low' | 'high';
 

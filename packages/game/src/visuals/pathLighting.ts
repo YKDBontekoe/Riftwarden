@@ -1,12 +1,10 @@
-import {
-  type Color3,
-  Constants,
-  Effect,
-  Mesh,
-  type Scene,
-  ShaderMaterial,
-  VertexData,
-} from '@babylonjs/core';
+import { Constants } from '@babylonjs/core/Engines/constants';
+import { Effect } from '@babylonjs/core/Materials/effect';
+import { ShaderMaterial } from '@babylonjs/core/Materials/shaderMaterial';
+import { type Color3 } from '@babylonjs/core/Maths/math.color';
+import { Mesh } from '@babylonjs/core/Meshes/mesh';
+import { VertexData } from '@babylonjs/core/Meshes/mesh.vertexData';
+import { type Scene } from '@babylonjs/core/scene';
 import type { Vec2 } from '@riftwarden/rules/world/layout';
 
 Effect.ShadersStore.rwPathVertexShader = /* glsl */ `

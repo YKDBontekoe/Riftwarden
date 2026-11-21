@@ -1,4 +1,8 @@
-import { type Mesh, MeshBuilder, type PBRMaterial, type Scene, Vector3 } from '@babylonjs/core';
+import { type PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { type Mesh } from '@babylonjs/core/Meshes/mesh';
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
+import { type Scene } from '@babylonjs/core/scene';
 import { throwStep } from '@riftwarden/rules/abilities/defs';
 import { unlit } from '../visuals/materials';
 
