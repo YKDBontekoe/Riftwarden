@@ -1,55 +1,21 @@
-//! Riftwarden gateway: the only public backend service (see docs/architecture-v2.md).
-
-mod config;
-mod health;
-
-use std::sync::Arc;
+//! Gateway binary: configuration, telemetry, serve, graceful shutdown.
 
 use anyhow::{Context, Result};
-use axum::Router;
+use riftwarden_gateway::{Config, connect, router, telemetry::Telemetry};
 use tokio::net::TcpListener;
-use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
-
-pub use config::Config;
-
-/// Shared state for every handler.
-pub struct AppState {
-    pub config: Config,
-    pub db: riftwarden_db::PgPool,
-    pub redis: redis::aio::ConnectionManager,
-}
-
-pub type State = Arc<AppState>;
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let config = Config::from_env()?;
-    init_tracing(config.json_logs);
+    let telemetry = Telemetry::init(config.json_logs, &config.build)?;
     tracing::info!(build = %config.build, listen = %config.listen, "gateway starting");
 
-    let db = riftwarden_db::connect(&config.database_url, config.database_max_connections).await.context("PostgreSQL")?;
-    let redis = redis::Client::open(config.redis_url.as_str()).context("REDIS_URL")?.get_connection_manager().await.context("Redis")?;
-    let state = Arc::new(AppState { config, db, redis });
-
-    let app = router(state.clone());
+    let state = connect(config).await?;
     let listener = TcpListener::bind(state.config.listen).await.context("bind")?;
-    axum::serve(listener, app).with_graceful_shutdown(shutdown_signal()).await?;
+    axum::serve(listener, router(state)).with_graceful_shutdown(shutdown_signal()).await?;
     tracing::info!("gateway stopped");
+    telemetry.shutdown();
     Ok(())
-}
-
-pub fn router(state: State) -> Router {
-    Router::new().merge(health::routes()).layer(tower_http::trace::TraceLayer::new_for_http()).with_state(state)
-}
-
-fn init_tracing(json: bool) {
-    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info,tower_http=info,sqlx=warn"));
-    let registry = tracing_subscriber::registry().with(filter);
-    if json {
-        registry.with(tracing_subscriber::fmt::layer().json().flatten_event(true)).init();
-    } else {
-        registry.with(tracing_subscriber::fmt::layer()).init();
-    }
 }
 
 async fn shutdown_signal() {

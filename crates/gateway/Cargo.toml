@@ -12,6 +12,10 @@ workspace = true
 [dependencies]
 anyhow = "1.0.104"
 axum = { version = "0.8.9", features = ["ws", "macros"] }
+opentelemetry = "0.33.1"
+opentelemetry-appender-tracing = "0.33.1"
+opentelemetry-otlp = { version = "0.33.1", features = ["grpc-tonic", "trace", "logs", "metrics"] }
+opentelemetry_sdk = { version = "0.33.1", features = ["rt-tokio"] }
 redis = { version = "1.8.2", features = ["tokio-comp", "connection-manager"] }
 riftwarden-db = { path = "../db" }
 serde = { version = "1.0.229", features = ["derive"] }
@@ -20,4 +24,8 @@ sqlx = { version = "0.9.1", default-features = false, features = ["postgres"] }
 tokio = { version = "1.54.1", features = ["full"] }
 tower-http = { version = "0.7.1", features = ["trace", "timeout", "limit", "cors"] }
 tracing = "0.1.44"
+tracing-opentelemetry = "0.34.0"
 tracing-subscriber = { version = "0.3.23", features = ["json", "env-filter"] }
+
+[dev-dependencies]
+tower = { version = "0.5.3", features = ["util"] }
