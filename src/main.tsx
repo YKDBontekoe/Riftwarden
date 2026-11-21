@@ -30,6 +30,8 @@ async function boot(): Promise<void> {
     flow.arenaMode = params.has('procedural') ? 'procedural' : 'classic';
     // ...and the classic endless checkpoint flow; ?map opts into the branching run map.
     flow.mapMode = params.has('map');
+    // ...and a local Rift War (no network) unless ?war asks for the shared one.
+    if (!params.has('war')) flow.war.base = null;
     (window as unknown as { __rift: unknown }).__rift = flow.debugApi();
   }
 

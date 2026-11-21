@@ -39,7 +39,7 @@ async function travelTo(p, pick) {
   const id = await ev(p, (pick) => {
     const v = window.__rift.flow.map.view(window.__rift.game);
     const nodes = v.reachable.map((id) => window.__rift.flow.map.node(id));
-    const n = (pick && nodes.find((x) => x.kind === pick)) || nodes[0];
+    const n = (pick && nodes.find((x) => x.kind === pick && !x.actBoss)) || (pick && nodes.find((x) => x.kind === pick)) || nodes[0];
     window.__rift.flow.travel(n.id);
     return n.id;
   }, pick);
@@ -52,7 +52,8 @@ async function travelTo(p, pick) {
 async function forceNext(p, kind, anomaly) {
   return ev(p, ([kind, anomaly]) => {
     const m = window.__rift.flow.map;
-    const n = m.reachable()[0];
+    // Prefer a sector that is not a capital (forcing the capital would change the region boss).
+    const n = m.reachable().find((x) => !x.actBoss) ?? m.reachable()[0];
     n.kind = kind;
     n.mods = [];
     n.boss = null;
@@ -93,16 +94,16 @@ async function forceNext(p, kind, anomaly) {
       check('B3 waves held, extraction available', st.hold && st.canHome);
       // Node intel: tabs, roster, rewards, route lookahead.
       await p.waitForSelector('[data-testid=rm-intel]', { timeout: 20000 }).catch(() => {});
-      const intel = await ev(p, () => ({ intel: document.querySelector('[data-testid=rm-intel]')?.textContent ?? '', ahead: document.querySelectorAll('.rm-node.ahead').length }));
+      const intel = await ev(p, () => ({ intel: document.querySelector('[data-testid=rm-intel]')?.textContent ?? '', ahead: document.querySelectorAll('.wm-node.ahead').length }));
       // Combat nodes list the expected roster; hubs say so (the first reachable node is random).
       check('B5 node intel lists the threat, hostiles and total HP (or the hub)', (/THREAT/.test(intel.intel) && /Hostiles/.test(intel.intel) && /hit points/.test(intel.intel)) || /^Hub visit/.test(intel.intel), intel.intel.slice(0, 160));
-      check('B6 route lookahead highlights the downstream nodes', intel.ahead >= 2, String(intel.ahead));
+      check('B6 route lookahead highlights the sectors within two links', intel.ahead >= 2, String(intel.ahead));
       await p.click('[data-testid=rm-tab-rewards]');
       const rw = await ev(p, () => document.querySelector('[data-testid=rm-rewards]')?.textContent ?? '');
       check('B7 rewards tab breaks down credits / cache', /Checkpoint cache|Stock|Vault cache|Choose one|Temper|Gambler|Rift|Echo|Derelict|Void|Abandoned/.test(rw), rw.slice(0, 120));
       await p.click('[data-testid=rm-tab-route]');
       const rt = await ev(p, () => document.querySelector('[data-testid=rm-route]')?.textContent ?? '');
-      check('B8 route tab: rows to boss + fights', /Rows to the act boss/.test(rt) && /Fights on the way/.test(rt), rt.slice(0, 120));
+      check('B8 route tab: links to the capital + stops nearby', /Links to the region capital/.test(rt) && /within 2 links/.test(rt), rt.slice(0, 120));
       await p.click('[data-testid=rm-tab-intel]');
       if (want('V')) await shot(p, 'runmap-intel', { frames: 2 });
       if (want('V')) await shot(p, 'runmap-screen', { frames: 2 });
@@ -111,6 +112,18 @@ async function forceNext(p, kind, anomaly) {
       await ev(p, () => { window.__rift.game.setScreen('playing'); window.__rift.advance(0.1); });
       await ev(p, () => { window.__rift.game.input.simulateKey('KeyH', true); window.__rift.advance(1 / 60); window.__rift.game.input.simulateKey('KeyH', false); window.__rift.advance(1 / 60); });
       check('B4 H reopens the map', (await S(p)).screen === 'runmap');
+      const w = await ev(p, () => {
+        const r = window.__rift;
+        const war = r.flow.war.state;
+        const cur = r.game.node.node.id;
+        const k = Number(cur.match(/^r(\d+)/)[1]);
+        const reg = war.regions.find((x) => x.k === k);
+        const links = r.flow.map.reachable().map((n) => n.id).sort();
+        return { seed: war.seed, mapSeed: r.profile.save.activeRun.map.seed, cur, lib: reg.nodes[cur]?.lib ?? 0, secured: war.secured, links, staticLinks: r.game.node.node.links.slice().sort(), globe: !!document.querySelector('[data-testid=war-globe]'), report: document.querySelector('[data-testid=war-report]')?.textContent ?? '' };
+      });
+      check('W1 the run plays on the Rift War (map seed = war seed, war globe on the map)', w.seed === w.mapSeed && /^r\d+n\d+$/.test(w.cur) && w.globe, JSON.stringify({ seed: w.seed, mapSeed: w.mapSeed, cur: w.cur }));
+      check('W2 the secured sector raised its liberation in the war', w.lib > 0 && w.secured >= 1 && /liberat|Wardens|sector/i.test(w.report) !== undefined, JSON.stringify({ lib: w.lib, secured: w.secured }));
+      check('W3 travel options are the sector links in unlocked regions', w.links.length > 0 && w.links.every((id) => w.staticLinks.includes(id)), JSON.stringify(w.links));
       firstCarry = await ev(p, () => {
         const g = window.__rift.game;
         g.wallet.cores = 777;
@@ -121,6 +134,13 @@ async function forceNext(p, kind, anomaly) {
     if (want('C') || want('D') || want('E') || want('F') || want('G')) {
       const kind = await ev(p, () => window.__rift.flow.map.reachable().find((n) => n.kind === 'combat' || n.kind === 'elite') ? 'combat' : null);
       if (!kind) await forceNext(p, 'combat');
+      // Corrupt the next combat sector in the (local) war: the arena must play the corrupted variant.
+      await ev(p, () => {
+        const r = window.__rift;
+        const n = r.flow.map.reachable().find((x) => x.kind === 'combat' || x.kind === 'elite');
+        const k = Number(n.id.match(/^r(\d+)/)[1]);
+        r.flow.war.state.regions.find((x) => x.k === k).nodes[n.id].corrupt = true;
+      });
       const prevRun = await ev(p, () => window.__rift.flow.run.id);
       await travelTo(p, 'combat');
       const c = await ev(p, () => {
@@ -130,6 +150,8 @@ async function forceNext(p, kind, anomaly) {
       check('C1 travel builds a new arena on row 1, waves continue at 6', c.row === 1 && c.from === 6 && c.wave === 6, JSON.stringify(c));
       check('C2 cores and upgrades carry, same run ledger', c.cores >= firstCarry.cores && c.ups === firstCarry.ups && c.run === prevRun && c.kills === firstCarry.kills, JSON.stringify({ c, firstCarry }));
       check('C3 resume point stored', c.resum && c.path === 2);
+      const wm = await ev(p, () => ({ mods: window.__rift.game.node.node.mods, hp: window.__rift.game.cfg.tier.hpMult }));
+      check('W4 live war corruption reaches the arena (corrupted modifier, tougher tier)', wm.mods.includes('corrupted') && wm.hp > 1, JSON.stringify(wm));
     }
 
     if (want('D')) {
@@ -279,8 +301,9 @@ async function forceNext(p, kind, anomaly) {
       await ev(p, () => window.__rift.flow.enterHq());
       await ev(p, () => window.__rift.home.openTerminal('deploy'));
       await p.waitForSelector('[data-testid=rm-preview]', { timeout: 20000 }).catch(() => {});
-      const d = await ev(p, () => ({ preview: !!document.querySelector('[data-testid=rm-preview]'), codex: !!document.querySelector('[data-testid=dm-codex]'), entries: document.querySelectorAll('[data-testid^=rm-node-a1r0]').length }));
-      check('E3 HQ deploy terminal previews act 1 with entry choices + codex', d.preview && d.codex && d.entries >= 2, JSON.stringify(d));
+      await p.waitForSelector('[data-testid=war-map]', { timeout: 20000 }).catch(() => {});
+      const d = await ev(p, () => ({ map: !!document.querySelector('[data-testid=war-map]'), globe: !!document.querySelector('[data-testid=war-globe]'), codex: !!document.querySelector('[data-testid=dm-codex]'), sectors: document.querySelectorAll('[data-testid^=wm-node-]').length, report: !!document.querySelector('[data-testid=war-report]') }));
+      check('E3 HQ deploy terminal shows the Rift War (globe, region map, report) + codex', d.map && d.globe && d.codex && d.report && d.sectors >= 10, JSON.stringify(d));
       if (want('V')) await shot(p, 'deploy-map-preview', { frames: 2 });
       await ev(p, () => window.__rift.home.setScreen('home'));
     }

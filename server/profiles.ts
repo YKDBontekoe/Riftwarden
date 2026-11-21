@@ -23,6 +23,15 @@ export class ProfileStore {
     this.db = new ProfileDatabase((error) => log(`PostgreSQL connection error: ${error.message}`));
   }
 
+  /** Shared Rift War persistence (see server/war.ts). */
+  loadWar(): Promise<unknown | null> {
+    return this.db.loadWar();
+  }
+
+  saveWar(data: unknown): Promise<void> {
+    return this.db.saveWar(data);
+  }
+
   migrate(): Promise<void> {
     return this.db.migrate();
   }

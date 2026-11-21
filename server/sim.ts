@@ -12,7 +12,10 @@ import { RunLedger, type RunOutcome } from '../src/progression/run';
 import { applyLoadout, bankNodeRewards, bankRewards, equippedItem, recordRun } from '../src/progression/save';
 import { getTier, type ThreatTier } from '../src/progression/tiers';
 import { actEffects, type RunCarry } from '../src/runmap/carry';
-import { combineEffects, findNode, type MapNode, mapSeedFor, nodeEffect, pathCode, reachable, segmentTier } from '../src/runmap/map';
+import { combineEffects, type MapNode, nodeEffect, segmentTier } from '../src/runmap/map';
+import { defaultEntry, findNode, liveNode, nodePlayable, pathCode, reachable } from '../src/war/world';
+import { buffEffect } from '../src/war/state';
+import type { WarService } from './war';
 import { MODE_EFFECT } from '../src/runmap/defs';
 import { newMapState, type RunMapState } from '../src/runmap/state';
 import type { SlotId } from '../src/progression/items';
@@ -72,13 +75,13 @@ export class CoopSim {
   private whyLast = '{}';
   stats = { ticks: 0, simMs: 0, maxMs: 0, bytes: 0, snaps: 0, events: 0 };
 
-  static async create(room: Room, store: ProfileStore, havok: unknown, log: (m: string) => void): Promise<CoopSim> {
+  static async create(room: Room, store: ProfileStore, havok: unknown, log: (m: string) => void, war: WarService): Promise<CoopSim> {
     const players = room.connected.map((m) => ({ id: m.id, name: m.name, profile: store.get(m.id)! }));
     const runId = newUid('run');
-    const mapSeed = coopMapMode() ? mapSeedFor(hashRunSeed(runId)) : 0;
+    const mapSeed = coopMapMode() ? war.state.seed : 0;
     if (!await store.startRun(players.map((p) => p.profile), runId, room.tier, mapSeed, room.mode)) throw new Error('Could not save operation start');
     try {
-      return new CoopSim(room, store, havok, log, runId, players);
+      return new CoopSim(room, store, havok, log, runId, players, war);
     } catch (error) {
       await Promise.all(players.map(async ({ profile }) => {
         await store.mutate(profile, (data) => { data.activeRun = null; });
@@ -95,6 +98,8 @@ export class CoopSim {
     private log: (m: string) => void,
     readonly runId: string,
     members: { id: string; name: string; profile: OnlineProfile }[],
+    /** The shared Rift War (map operations play on it and report secured sectors). */
+    private war: WarService,
   ) {
     this.engine = new NullEngine();
     this.tier = getTier(room.tier);
@@ -104,7 +109,7 @@ export class CoopSim {
     const mode = process.env.RIFT_ARENA ?? (process.env.RIFT_TEST === '1' ? 'classic' : 'procedural');
     this.classicArena = mode === 'classic';
     this.arenaSeed = this.classicArena ? 0 : ((this.seed ^ 0x2545f491) >>> 0) || 1;
-    this.mapState = coopMapMode() ? newMapState(mapSeedFor(this.seed)) : null;
+    this.mapState = coopMapMode() ? newMapState(war.state.seed) : null;
     const players: ServerPlayerInit[] = [];
     const tech = new Set<string>();
     let milestones = null as Set<string> | null;
@@ -122,7 +127,8 @@ export class CoopSim {
     }
     this.tech = [...tech];
     this.milestones = [...(milestones ?? [])];
-    const first = this.mapState ? reachable(this.mapState.seed, null)[0] : null;
+    // The host picks the deployment node on the war map (any unlocked sector); default: the front's landing.
+    const first = this.mapState ? findNode(this.mapState.seed, room.node && nodePlayable(war.state, room.node) ? room.node : defaultEntry(war.state)) : null;
     this.game = this.createGame(first, null, players);
     for (const a of this.game.avatars) {
       if (this.peer(a.id)) this.sendStart(a, false);
@@ -138,7 +144,9 @@ export class CoopSim {
     let setup = undefined;
     const ms = this.mapState;
     if (node && ms) {
-      const effect = nodeEffect(node, [...actEffects(carry ?? { curses: [], blessings: [] }), MODE_EFFECT[this.mode]]);
+      // Live war modifiers and order buffs at the moment the team enters.
+      node = liveNode(ms.seed, this.war.state, node.id) ?? node;
+      const effect = nodeEffect(node, [...actEffects(carry ?? { curses: [], blessings: [] }), MODE_EFFECT[this.mode], buffEffect(this.war.state, Date.now())]);
       tier = segmentTier(this.tier, effect);
       setup = { node, mapSeed: ms.seed, carry, effect };
       this.arenaSeed = this.classicArena ? 0 : node.seed;
@@ -170,7 +178,13 @@ export class CoopSim {
         actCleared: () => {
           if (this.mapState) this.mapState.actsCleared++;
         },
-        reachable: () => (this.mapState ? reachable(this.mapState.seed, this.mapState.current).map((n) => n.id) : []),
+        reachable: () => (this.mapState ? reachable(this.mapState.seed, this.war.state, this.mapState.current).map((n) => n.id) : []),
+        secured: (id) => {
+          // The server played the sector itself: a trusted report, one share per warden still in.
+          const players = this.game.avatars.filter((a) => !a.left).length;
+          const r = this.war.report({ node: id, mode: this.mode, players }, `coop:${this.runId}`, true);
+          if (r.ok) this.game.within(() => this.game.rec.push(['u', 'alert', { text: `RIFT WAR · +${r.gain.toFixed(1)}% LIBERATION${r.messages.length ? ` · ${r.messages.join(' · ').toUpperCase()}` : ''}`, tone: 'blue' }]));
+        },
         hostId: () => this.room.hostId,
       },
     );

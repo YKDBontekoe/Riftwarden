@@ -4,7 +4,9 @@ import type { RunLedger } from '../progression/run';
 import { bankNodeRewards, saveMapProgress } from '../progression/save';
 import { getTier, type ThreatTier } from '../progression/tiers';
 import { actEffects, type RunCarry, towerRefund } from '../runmap/carry';
-import { findNode, type MapNode, nodeEffect, pathCode, reachable, segmentTier } from '../runmap/map';
+import { type MapNode, nodeEffect, segmentTier } from '../runmap/map';
+import { defaultEntry, findNode, liveNode, nodePlayable, pathCode, reachable } from '../war/world';
+import { buffEffect, type WarState } from '../war/state';
 import type { RunMapState } from '../runmap/state';
 import type { RunMapView } from '../runmap/view';
 import type { NodeSetup } from '../arena/RunNode';
@@ -51,18 +53,25 @@ export class MapSession {
 
   /** Nodes the run can travel to now. */
   reachable(): MapNode[] {
-    return reachable(this.state.seed, this.state.current);
+    return reachable(this.state.seed, this.war(), this.state.current);
   }
 
-  /** The node to enter first (a chosen entry sector or the first of the row). */
+  /** The shared war (live modifiers, unlocked regions); set by the flow. */
+  war: () => WarState | null = () => null;
+
+  /** The node to enter first: the chosen node when its region is unlocked, else the front's landing. */
   entry(id?: string | null): MapNode {
-    const opts = this.reachable();
-    return opts.find((n) => n.id === id) ?? opts[0];
+    const war = this.war();
+    if (id && nodePlayable(war, id) && findNode(this.state.seed, id)) return findNode(this.state.seed, id)!;
+    return findNode(this.state.seed, war ? defaultEntry(war) : 'r0n0')!;
   }
 
   /** Arena configuration for a node: the segment's effective tier, its setup and the run's tower tech. */
-  configFor(node: MapNode, carry: RunCarry | null, baseTier: ThreatTier, mode: RunMode = this.mode): { tier: ThreatTier; setup: NodeSetup } {
-    const effect = nodeEffect(node, [...actEffects(carry ?? { curses: [], blessings: [] }), MODE_EFFECT[mode]]);
+  configFor(node0: MapNode, carry: RunCarry | null, baseTier: ThreatTier, mode: RunMode = this.mode): { tier: ThreatTier; setup: NodeSetup } {
+    // Live war state at the moment of entry: corruption, stronghold, events, order buffs.
+    const war = this.war();
+    const node = liveNode(this.state.seed, war, node0.id) ?? node0;
+    const effect = nodeEffect(node, [...actEffects(carry ?? { curses: [], blessings: [] }), MODE_EFFECT[mode], buffEffect(war, Date.now())]);
     return { tier: segmentTier(baseTier, effect), setup: { node, mapSeed: this.state.seed, carry, effect } };
   }
 

@@ -1,90 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { mulberry32 } from '../src/combat/damage';
-import { actOf, findNode, generateAct, mapSeedFor, nodeEffect, pathCode, reachable, ROWS, staircase } from '../src/runmap/map';
+import { nodeEffect } from '../src/runmap/map';
+import { regionLayout } from '../src/war/regions';
 import { actEffects, addCurse, carryStats, emptyCarry, endAct, purgeCurse, sanitizeCarry, towerRefund } from '../src/runmap/carry';
-import { ANOMALIES, ANOMALY_IDS, CURSES, isCombatKind, MAX_CURSES, NODE_MODS } from '../src/runmap/defs';
+import { ANOMALIES, ANOMALY_IDS, CURSES, MAX_CURSES } from '../src/runmap/defs';
 import { forgePrice, merchantStock, resolveAnomaly } from '../src/runmap/hub';
 import { newMapState, resumable, sanitizeMapState } from '../src/runmap/state';
 
-const crosses = (edges: [number, number][]) => edges.some(([a, b]) => edges.some(([c, d]) => a < c && b > d));
 
-describe('run map generation', () => {
-  it('is deterministic per (seed, act) and differs between seeds', () => {
-    const a = JSON.stringify(generateAct(1234, 1));
-    expect(JSON.stringify(generateAct(1234, 1))).toBe(a);
-    expect(JSON.stringify(generateAct(1235, 1))).not.toBe(a);
-    expect(JSON.stringify(generateAct(1234, 2))).not.toBe(a);
-  });
-
-  it('staircase links cover both rows without crossings', () => {
-    const r = mulberry32(9);
-    for (let k = 0; k < 400; k++) {
-      const a = 1 + Math.floor(r() * 4);
-      const b = 1 + Math.floor(r() * 4);
-      const e = staircase(a, b, r);
-      expect(crosses(e)).toBe(false);
-      for (let i = 0; i < a; i++) expect(e.some(([x]) => x === i)).toBe(true);
-      for (let j = 0; j < b; j++) expect(e.some(([, y]) => y === j)).toBe(true);
-    }
-  });
-
-  it('every act has the expected shape over many seeds', () => {
-    let kinds = new Set<string>();
-    let mods = 0;
-    for (let s = 1; s <= 300; s++) {
-      const seed = mapSeedFor(s);
-      for (const act of [1, 2, 4]) {
-        const m = generateAct(seed, act);
-        expect(m.rows).toHaveLength(ROWS);
-        expect(m.rows[0].every((n) => n.kind === 'combat')).toBe(true);
-        const last = m.rows[ROWS - 1];
-        expect(last).toHaveLength(1);
-        expect(last[0].actBoss && last[0].kind === 'boss' && !!last[0].boss).toBe(true);
-        expect(m.rows[ROWS - 2].some((n) => n.kind === 'rest')).toBe(true);
-        expect(m.rows.flat().filter((n) => n.kind === 'boss' && !n.actBoss).length).toBeLessThanOrEqual(1);
-        for (let row = 1; row < ROWS - 2; row++) expect(m.rows[row].some((n) => isCombatKind(n.kind))).toBe(true);
-        for (const n of m.rows.flat()) {
-          kinds.add(n.kind);
-          mods += n.mods.length;
-          expect(n.seed).toBeGreaterThan(0);
-          if (!isCombatKind(n.kind)) expect(n.mods).toEqual([]);
-          expect(n.kind === 'event').toBe(!!n.anomaly);
-          if (act === 1 && n.row === 0) expect(n.mods).toEqual([]);
-          for (const m2 of n.mods) if (NODE_MODS[m2].kinds) expect(NODE_MODS[m2].kinds).toContain(n.kind);
-          expect(n.mods.filter((x) => NODE_MODS[x].effect.event).length).toBeLessThanOrEqual(1);
-        }
-        // Every node is reachable from the entry row and leads to the boss.
-        const seen = new Set(m.rows[0].map((n) => n.id));
-        for (let row = 0; row < ROWS - 1; row++) for (const n of m.rows[row]) if (seen.has(n.id)) n.links.forEach((l) => seen.add(l));
-        expect(seen.size).toBe(m.rows.flat().length);
-        for (let row = 0; row < ROWS - 1; row++) for (const n of m.rows[row]) expect(n.links.length).toBeGreaterThan(0);
-      }
-    }
-    expect([...kinds].sort()).toEqual(['boss', 'combat', 'elite', 'event', 'forge', 'merchant', 'rest', 'vault']);
-    expect(mods).toBeGreaterThan(100);
-    kinds = new Set();
-  });
-
-  it('reachable: entry row before the first node, links mid-act, next act after the boss', () => {
-    const seed = mapSeedFor(77);
-    const a1 = generateAct(seed, 1);
-    expect(reachable(seed, null).map((n) => n.id)).toEqual(a1.rows[0].map((n) => n.id));
-    const n = a1.rows[2][0];
-    expect(reachable(seed, n.id).map((q) => q.id)).toEqual(n.links);
-    const boss = a1.rows[ROWS - 1][0];
-    expect(reachable(seed, boss.id).map((q) => q.id)).toEqual(generateAct(seed, 2).rows[0].map((q) => q.id));
-    expect(actOf('a12r3c1')).toBe(12);
-    expect(findNode(seed, boss.id)?.actBoss).toBe(true);
-    expect(pathCode([a1.rows[0][0].id, boss.id], seed)).toEqual(['1C', '1B*']);
-  });
-
-  it('acts stay finite and valid deep into an endless run', () => {
-    const m = generateAct(mapSeedFor(5), 500);
-    expect(m.rows.flat().every((n) => Number.isFinite(n.x) && n.seed > 0)).toBe(true);
-  });
-
+describe('node effects', () => {
   it('node effects combine kind, modifiers and act effects', () => {
-    const node = { ...generateAct(1, 2).rows[1][0], kind: 'elite' as const, mods: ['fortified' as const, 'scarcity' as const] };
+    const node = { ...regionLayout(1, 1).nodes[2], kind: 'elite' as const, mods: ['fortified' as const, 'scarcity' as const] };
     const e = nodeEffect(node, actEffects({ curses: ['famine'], blessings: ['fortune'] }));
     expect(e.elite).toBeCloseTo(2.4);
     // Act 2: +8% HP, +10% luck on top of the node.
@@ -137,8 +63,8 @@ describe('carry', () => {
     expect(sanitizeMapState({ seed: 0 })).toBe(null);
     const m = newMapState(42);
     expect(resumable(m)).toBe(false);
-    const s = sanitizeMapState({ ...m, path: ['a1r0c0', 'evil', 'a1r1c2'], current: 'a1r1c2', next: 'a1r2c0', carry: emptyCarry() })!;
-    expect(s.path).toEqual(['a1r0c0', 'a1r1c2']);
+    const s = sanitizeMapState({ ...m, path: ['r0n0', 'evil', 'r0n2'], current: 'r0n2', next: 'r0n3', carry: emptyCarry() })!;
+    expect(s.path).toEqual(['r0n0', 'r0n2']);
     expect(s.act).toBe(1);
     expect(resumable(s)).toBe(true);
   });
@@ -205,7 +131,7 @@ describe('run map persistence', () => {
   it('a resumable run survives load (sanitize + keepResumable) and is recorded as interrupted otherwise', () => {
     const d = createDefaultSave(1);
     beginRun(d, 'run_b', 1, 2, { mapSeed: 9 });
-    const m = { ...d.activeRun!.map!, current: 'a1r0c0', path: ['a1r0c0'], cleared: 1, carry: emptyCarry(), next: 'a1r1c0' };
+    const m = { ...d.activeRun!.map!, current: 'r0n0', path: ['r0n0'], cleared: 1, carry: emptyCarry(), next: 'r0n4' };
     expect(saveMapProgress(d, 'run_b', m)).toBe(true);
     const back = sanitizeSave(JSON.parse(JSON.stringify(d))).data;
     expect(resumable(back.activeRun?.map)).toBe(true);
@@ -255,18 +181,18 @@ describe('run map persistence', () => {
 import { resolveMapVote, voteComplete } from '../src/net/mapVote';
 
 describe('co-op map vote', () => {
-  const reach = ['a1r1c0', 'a1r1c1', 'a1r1c2'];
+  const reach = ['r0n4', 'r0n5', 'r0n2'];
   it('majority wins, host breaks ties, home voters extract alone', () => {
-    expect(resolveMapVote(new Map([['a', 'a1r1c1'], ['b', 'a1r1c1'], ['c', 'a1r1c0']]), reach, 'c')).toEqual({ travel: 'a1r1c1', home: [] });
-    expect(resolveMapVote(new Map([['a', 'a1r1c2'], ['b', 'a1r1c0']]), reach, 'a')).toEqual({ travel: 'a1r1c2', home: [] });
-    expect(resolveMapVote(new Map([['a', 'a1r1c2'], ['b', 'a1r1c0']]), reach, 'z').travel).toBe('a1r1c0');
-    expect(resolveMapVote(new Map([['a', 'home'], ['b', 'a1r1c0']]), reach, 'a')).toEqual({ travel: 'a1r1c0', home: ['a'] });
+    expect(resolveMapVote(new Map([['a', 'r0n5'], ['b', 'r0n5'], ['c', 'r0n4']]), reach, 'c')).toEqual({ travel: 'r0n5', home: [] });
+    expect(resolveMapVote(new Map([['a', 'r0n2'], ['b', 'r0n4']]), reach, 'a')).toEqual({ travel: 'r0n2', home: [] });
+    expect(resolveMapVote(new Map([['a', 'r0n2'], ['b', 'r0n4']]), reach, 'z').travel).toBe('r0n4');
+    expect(resolveMapVote(new Map([['a', 'home'], ['b', 'r0n4']]), reach, 'a')).toEqual({ travel: 'r0n4', home: ['a'] });
   });
   it('everyone home extracts; a silent timeout continues; unreachable votes are ignored', () => {
     expect(resolveMapVote(new Map([['a', 'home'], ['b', 'home']]), reach, 'a')).toEqual({ travel: null, home: [] });
-    expect(resolveMapVote(new Map([['a', null]]), reach, 'a')).toEqual({ travel: 'a1r1c0', home: [] });
-    expect(resolveMapVote(new Map([['a', 'a9r9c9']]), reach, 'a').travel).toBe('a1r1c0');
+    expect(resolveMapVote(new Map([['a', null]]), reach, 'a')).toEqual({ travel: 'r0n4', home: [] });
+    expect(resolveMapVote(new Map([['a', 'r9n9']]), reach, 'a').travel).toBe('r0n4');
     expect(voteComplete(new Map([['a', 'home'], ['b', null]]), ['a', 'b'])).toBe(false);
-    expect(voteComplete(new Map([['a', 'home'], ['b', 'a1r1c0']]), ['a', 'b'])).toBe(true);
+    expect(voteComplete(new Map([['a', 'home'], ['b', 'r0n4']]), ['a', 'b'])).toBe(true);
   });
 });

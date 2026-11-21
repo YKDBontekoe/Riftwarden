@@ -113,6 +113,8 @@ export interface ArenaHooks {
   mapOpened?(): void;
   /** Run map: an act boss fell. */
   actCleared?(act: number): void;
+  /** Run map: a combat sector was secured (counts in the Rift War). */
+  nodeSecured?(nodeId: string): void;
 }
 
 export interface ArenaConfig {
@@ -606,6 +608,7 @@ export class Game {
       get survival() { return !!g.hunt; }, // prettier-ignore
       healDrone: () => g.healDrones(),
       actCleared: (act) => g.cfg.hooks.actCleared?.(act),
+      secured: (id) => g.cfg.hooks.nodeSecured?.(id),
     };
   }
 

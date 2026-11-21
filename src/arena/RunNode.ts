@@ -90,6 +90,8 @@ export interface NodeHost {
   healDrone(): void;
   /** An act boss fell (curses lift; the flow advances the act). */
   actCleared(act: number): void;
+  /** A combat sector was secured (the Rift War counts it). */
+  secured(nodeId: string): void;
 }
 
 /**
@@ -196,6 +198,7 @@ export class RunNode {
     this.complete = true;
     this.mapDue = true;
     this.h.waves.hold = true;
+    this.h.secured(this.node.id);
     const at = new Vector3(this.h.layout.reactor.x, 3, this.h.layout.reactor.z + 5);
     if (this.node.kind === 'elite') this.h.dropFrom(DROP_SOURCES.eliteCache, at);
     const shards = this.setup.effect.shards + (this.node.actBoss ? 3 : 0);

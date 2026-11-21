@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { generateAct, mapSeedFor, nodeEffect, segmentTier, SEGMENT } from '../src/runmap/map';
+import { nodeEffect, segmentTier, SEGMENT } from '../src/runmap/map';
+import { regionLayout } from '../src/war/regions';
 import { lookahead, nodeIntel } from '../src/runmap/intel';
 import { MODE_EFFECT } from '../src/runmap/defs';
 import { getTier } from '../src/progression/tiers';
@@ -12,9 +13,9 @@ import { Hunt, HUNT } from '../src/arena/Hunt';
 import { beginRun, createDefaultSave, recordRun, sanitizeSave } from '../src/progression/save';
 import { RunLedger } from '../src/progression/run';
 
-const seed = mapSeedFor(4242);
-const act1 = generateAct(seed, 1);
-const entry = act1.rows[0][0];
+const seed = 4242;
+const region0 = regionLayout(seed, 0);
+const entry = region0.nodes[0];
 const ctx = (o: Partial<Parameters<typeof nodeIntel>[1]> = {}) => ({ plannerSeed: 777, tier: getTier(1), mode: 'defense' as const, lastWave: 10, act: { curses: [], blessings: [] }, dps: 150, ...o });
 
 describe('node intel', () => {
@@ -32,7 +33,7 @@ describe('node intel', () => {
     expect(intel.threat).toBeGreaterThanOrEqual(1);
     expect(intel.threat).toBeLessThanOrEqual(5);
     // Faction of the node's sector = the faction the generated arena carries.
-    expect(BIOMES[generateArena(entry.seed).biome as keyof typeof BIOMES].faction.name).toBe(intel.faction);
+    expect(BIOMES[(generateArena(entry.seed).biome ?? 'outpost') as keyof typeof BIOMES].faction.name).toBe(intel.faction);
   });
 
   it('elite and boss nodes read harder; survival is smaller; hubs list rewards without hostiles', () => {
@@ -51,15 +52,13 @@ describe('node intel', () => {
     }
   });
 
-  it('route lookahead: downstream nodes, rows to the boss, fight range', () => {
+  it('route lookahead: sectors within two links and the way to the capital', () => {
     const l = lookahead(seed, entry);
-    const boss = act1.rows[act1.rows.length - 1][0];
-    expect(l.reach).toContain(boss.id);
-    expect(l.rowsToBoss).toBe(act1.rows.length - 1);
-    expect(l.minFights).toBeGreaterThanOrEqual(2); // the entry fight and the boss
-    expect(l.maxFights).toBeGreaterThanOrEqual(l.minFights);
-    expect(l.canRest).toBe(true); // the camp row always has a safe harbour
-    expect(lookahead(seed, boss)).toMatchObject({ rowsToBoss: 0, minFights: 1, maxFights: 1 });
+    expect(l.reach).toContain(entry.id);
+    for (const id of entry.links) expect(l.reach).toContain(id);
+    expect(l.hopsToCapital).toBeGreaterThan(0);
+    const cap = region0.nodes.find((n) => n.id === region0.capital)!;
+    expect(lookahead(seed, cap).hopsToCapital).toBe(0);
     expect(SEGMENT).toBe(5);
   });
 });

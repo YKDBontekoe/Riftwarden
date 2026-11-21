@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
+import { defaultEntry, findNode, nodePlayable } from '../war/world';
+import { RegionMap, RegionTabs, regionOfNode } from './WarMap';
 import type { Flow } from '../core/Flow';
 import { MAX_PLAYERS, normalizeCode } from '../net/protocol';
 import type { NetState } from '../net/NetClient';
@@ -170,6 +172,7 @@ export function CoopPanel({ flow, compact }: { flow: Flow; compact?: boolean }) 
         ))}
         <em>{tier.name}</em>
       </div>
+      <LobbyWar flow={flow} host={host} node={lobby.node} disabled={lobby.state !== 'lobby'} />
       <div className="lobby-tier lobby-mode">
         <span>GAME MODE</span>
         {(['defense', 'survival'] as const).map((m) => (
@@ -219,4 +222,28 @@ function localName(): string {
     /* ignore */
   }
   return 'Warden';
+}
+
+/** Lobby: the Rift War sector the team deploys to (the host picks on the map; default: the front's landing). */
+function LobbyWar({ flow, host, node, disabled }: { flow: Flow; host: boolean; node: string | null; disabled: boolean }) {
+  const wv = useSyncExternalStore(flow.war.store.subscribe, flow.war.store.get);
+  const [k, setK] = useState<number | null>(null);
+  useEffect(() => {
+    void flow.war.refresh();
+  }, [flow]);
+  const war = wv.war;
+  if (!war) return null;
+  const chosen = node && nodePlayable(war, node) ? node : defaultEntry(war);
+  const region = k ?? regionOfNode(war.seed, chosen, 0);
+  const n = findNode(war.seed, chosen);
+  return (
+    <div className="lobby-war" data-testid="lobby-war">
+      <div className="lobby-tier">
+        <span>DEPLOYMENT SECTOR</span>
+        <em>{n ? `${n.region} · ${n.actBoss ? 'capital' : `sector ${n.col + 1}`}` : '—'}{host ? ' · click a sector to choose' : ' · the host chooses'}</em>
+      </div>
+      <RegionTabs war={war} k={region} onPick={setK} />
+      <RegionMap war={war} k={region} pickAll={host && !disabled} selected={chosen} onSelect={(id) => flow.net?.send({ t: 'node', node: id })} seenAt={wv.seenAt} />
+    </div>
+  );
 }

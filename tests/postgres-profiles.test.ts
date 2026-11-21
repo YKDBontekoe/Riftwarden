@@ -69,7 +69,7 @@ describe.skipIf(!testUrl)('PostgreSQL profiles', () => {
     // A map run: its interrupted history entry carries the path, the records the map fields.
     beginRun(data, 'previous-run', 1, Date.now(), { mapSeed: 99 });
     bankRewards(data, 'previous-run', 5, { salvage: 5, items: [] });
-    data.activeRun!.map!.path = ['a1r0c0'];
+    data.activeRun!.map!.path = ['r0n0'];
     data.activeRun!.map!.cleared = 1;
     resolveInterruptedRun(data);
     data.market.equipment[0].sold = true;
@@ -77,7 +77,7 @@ describe.skipIf(!testUrl)('PostgreSQL profiles', () => {
     beginRun(data, 'active-run', 1, Date.now(), { mapSeed: 7 });
     bankRewards(data, 'active-run', 5, { salvage: 3, items: [] });
     data.activeRun!.map!.carry = { ...emptyCarry(), wave: 5, cores: 420, curses: ['famine'] };
-    data.activeRun!.map!.next = 'a1r1c0';
+    data.activeRun!.map!.next = 'r0n4';
 
     await db.save([{ id: 'rich-profile', revision: null, data }]);
     const loaded = await db.load('rich-profile');

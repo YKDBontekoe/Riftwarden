@@ -1,6 +1,7 @@
 import type { NodeNet } from '../arena/RunNode';
 import type { RunMapView } from '../runmap/view';
-import { reachable } from '../runmap/map';
+import { reachable } from '../war/world';
+import type { WarState } from '../war/state';
 import { towerRefund } from '../runmap/carry';
 import { traceShot } from '../arena/shotTrace';
 import { hasLost, LIMB_IDS } from '../enemies/limbs';
@@ -358,6 +359,9 @@ export class ClientGame extends Game {
     void this.request({ a: 'mapVote', choice }).then(() => this.publishMapView());
   }
 
+  /** The shared war (set by the flow): unlocked regions for the vote. */
+  war: () => WarState | null = () => null;
+
   /** Run map path/progress as the server reported it at the start of this node. */
   mapInfo: { path: string[]; cleared: number; acts: number } = { path: [], cleared: 0, acts: 0 };
   private mapVotes: [string, string][] = [];
@@ -395,7 +399,7 @@ export class ClientGame extends Game {
       act: n.node.act,
       current: n.node.id,
       path: this.mapInfo.path,
-      reachable: reachable(seed, n.node.id).map((x) => x.id),
+      reachable: reachable(seed, this.war(), n.node.id).map((x) => x.id),
       cleared: this.mapInfo.cleared + (n.complete ? 1 : 0),
       actsCleared: this.mapInfo.acts,
       cores: this.wallet.cores,

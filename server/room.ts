@@ -42,6 +42,8 @@ export class Room {
   hostId: string;
   tier = 1;
   mode: 'defense' | 'survival' = 'defense';
+  /** Rift War node the host picked for the deployment (null = the front's landing). */
+  node: string | null = null;
   state: LobbyState['state'] = 'lobby';
   sim: CoopSim | null = null;
   readonly serial = ++roomCounter;
@@ -178,6 +180,14 @@ export class Room {
     return null;
   }
 
+  setNode(id: string, node: string | null): string | null {
+    if (id !== this.hostId) return 'Only the host picks the deployment sector';
+    if (this.state !== 'lobby') return 'Operation already started';
+    this.node = node && /^r\d{1,5}n\d{1,2}$/.test(node) ? node : null;
+    this.broadcastLobby();
+    return null;
+  }
+
   /** Host starts the operation once everyone connected is ready and can deploy. */
   async start(id: string): Promise<string | null> {
     if (id !== this.hostId) return 'Only the host can deploy the team';
@@ -224,6 +234,7 @@ export class Room {
       hostId: this.hostId,
       tier: this.tier,
       mode: this.mode,
+      node: this.node,
       maxTier: this.maxTier,
       capacity: MAX_PLAYERS,
       state: this.state,

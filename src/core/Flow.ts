@@ -16,7 +16,10 @@ import { equipFromStorage, uninstallModule } from '../progression/save';
 import { applyLoadout, bankRewards, beginRun, deployBlocker, equippedItem, itemByUid, recordRun, resolveInterruptedRun, selectTier } from '../progression/save';
 import { fitsSlot } from '../progression/items';
 import { MapSession } from './mapSession';
-import { combineEffects, findNode, type MapNode, mapSeedFor, segmentTier } from '../runmap/map';
+import { combineEffects, type MapNode, segmentTier } from '../runmap/map';
+import { findNode } from '../war/world';
+import { WarClient } from '../war/client';
+import { hashSeed } from '../loot/generate';
 import { MODE_EFFECT, NODE_KINDS, type RunMode } from '../runmap/defs';
 import { newMapState, resumable } from '../runmap/state';
 import { type RunCarry, sanitizeCarry } from '../runmap/carry';
@@ -155,6 +158,8 @@ export class Flow {
     this.input = new Input(canvas);
     applyGlobalSettings(settings, this.input);
     this.profile = new Profile();
+    this.war.reporter = this.profile.save.profile.id;
+    this.war.localSeed = hashSeed(`war:${this.profile.save.profile.id}`) || 1;
     // Ctrl slides: Ctrl+W (close tab) cannot be intercepted outside fullscreen keyboard lock, so a run asks first.
     window.addEventListener('beforeunload', (e) => {
       if (!this.arena || this.input.forceCapture) return;
@@ -258,9 +263,11 @@ export class Flow {
     // Request pointer lock inside the click gesture; the canvas keeps it across scenes.
     void this.input.requestLock();
     const tier = getTier(tierId);
-    const runId = this.pendingRunId ?? newUid('run');
-    this.pendingRunId = null;
-    const mapSeed = this.mapMode ? Flow.mapSeedOf(runId) : 0;
+    const runId = newUid('run');
+    // Map runs play on the Rift War (the shared war, or the local copy when the server is unreachable).
+    const war = this.mapMode ? await this.warNow() : null;
+    if (this.busy || (this.run && !this.run.ended)) return false;
+    const mapSeed = war ? war.seed : 0;
     this.profile.mutate((d) => {
       if (!this.devNext) selectTier(d, tierId);
       beginRun(d, runId, tierId, Date.now(), { mapSeed, mode });
@@ -271,6 +278,7 @@ export class Flow {
     if (this.devNext) run.survival.dev = true;
     if (mapSeed) {
       this.map = new MapSession(this.profile, run, structuredClone(this.profile.save.activeRun!.map!), loadout, 0, mode);
+      this.map.war = () => this.war.state;
       await this.playNode(this.map.entry(entryNode), null);
       return true;
     }
@@ -282,13 +290,19 @@ export class Flow {
   }
 
   /** Map seed of a run id (the HQ previews it before deploying). */
-  static mapSeedOf(runId: string): number {
-    return mapSeedFor(hashRunSeed(runId));
+  /** The Rift War client (shared war on the server, local copy offline). */
+  readonly war = new WarClient();
+
+  /** A war state fresh enough to deploy on (refetched after a minute). */
+  async warNow(): Promise<NonNullable<WarClient['state']>> {
+    const v = this.war.store.get();
+    if (v.war && Date.now() - v.fetchedAt < 60_000) return v.war;
+    return this.war.refresh();
   }
 
   /** Map seed the next deployment will use (HQ preview). */
   mapSeedPreview(): number {
-    return Flow.mapSeedOf(this.previewRunId());
+    return this.war.state?.seed ?? 1;
   }
 
   /** Co-op map screen: vote for a node (or 'home' to extract). */
@@ -297,10 +311,7 @@ export class Flow {
   }
 
   /** Run id the next deployment will use (so the HQ can preview its map). Map runs only. */
-  previewRunId(): string {
-    return (this.pendingRunId ??= newUid('run'));
-  }
-  private pendingRunId: string | null = null;
+
   /** Co-op run map (what the replica knows about the team's path). */
   coopMap: { seed: number; path: string[]; cleared: number; acts: number } | null = null;
   /** Run map session of the current solo run (null = classic endless run). */
@@ -333,6 +344,7 @@ export class Flow {
           checkpoint: () => {},
           defeat: () => this.endRun('defeat'),
           mapOpened: () => this.publishMap(),
+          nodeSecured: (id) => void this.reportSecured(id, extra.mode ?? 'defense'),
           actCleared: () => this.map?.actCleared(),
         },
         ...extra,
@@ -397,6 +409,7 @@ export class Flow {
       return [slot, it && fitsSlot(it, slot) ? structuredClone(it) : null];
     }));
     this.map = new MapSession(this.profile, run, structuredClone(m), loadout, a.nodeBank ?? 0, a.mode ?? 'defense');
+    this.map.war = () => this.war.state;
     await this.playNode(next, m.carry);
     return true;
   }
@@ -405,6 +418,15 @@ export class Flow {
   endSuspendedRun(): boolean {
     if (this.run && !this.run.ended) return false;
     return !!this.profile.mutate((d) => resolveInterruptedRun(d) !== null);
+  }
+
+  /** A sector was secured: count it in the Rift War (dev sessions never do). */
+  private async reportSecured(id: string, mode: 'defense' | 'survival'): Promise<void> {
+    if (this.run?.survival.dev) return;
+    const r = await this.war.report(id, mode);
+    if (!r.ok) return;
+    const local = this.war.source === 'local';
+    uiEvents.emit('alert', { text: `RIFT WAR · +${r.gain.toFixed(1)}% LIBERATION${local ? ' (OFFLINE COPY)' : ''}${r.messages.length ? ` · ${r.messages.join(' · ').toUpperCase()}` : ''}`, tone: 'blue' });
   }
 
   /** Publish the map screen's view of the current run. */
@@ -620,7 +642,9 @@ export class Flow {
     // Run map: the node this arena plays (the server sends the carry it was entered with).
     const mapNode = run.node ? findNode(run.node.map, run.node.id) : null;
     const carry = run.node?.carry ? sanitizeCarry(run.node.carry) : null;
-    const nodeCfg = mapNode && run.node ? new MapSession(this.profile, new RunLedger(run.runId, run.tier, 0), { ...newMapState(run.node.map), current: run.node.id }, {}).configFor(mapNode, carry, tier, run.mode ?? 'defense') : null;
+    const session = mapNode && run.node ? new MapSession(this.profile, new RunLedger(run.runId, run.tier, 0), { ...newMapState(run.node.map), current: run.node.id }, {}) : null;
+    if (session) session.war = () => this.war.state;
+    const nodeCfg = session && mapNode ? session.configFor(mapNode, carry, tier, run.mode ?? 'defense') : null;
     if (nodeCfg) this.coopMap = { seed: run.node!.map, path: [...run.node!.path], cleared: run.node!.cleared, acts: run.node!.acts };
     await this.transition(`CO-OP DEPLOYMENT · THREAT TIER ${tier.roman}`, `${run.players.length} wardens · ${layout.name ?? 'Sector 07 reactor'}`, () => {
       const ledger = new RunLedger(run.runId, run.tier, Date.now());
@@ -653,6 +677,7 @@ export class Flow {
       );
       g.myName = me?.name ?? 'You';
       if (run.node) g.mapInfo = { path: [...run.node.path], cleared: run.node.cleared, acts: run.node.acts };
+      g.war = () => this.war.state;
       Object.defineProperty(g, 'devTools', { value: false });
       this.arena = g;
       this.location = 'arena';

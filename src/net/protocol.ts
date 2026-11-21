@@ -84,6 +84,7 @@ export type ClientMsg =
   | { t: 'ready'; ready: boolean }
   | { t: 'tier'; tier: number }
   | { t: 'mode'; mode: 'defense' | 'survival' }
+  | { t: 'node'; node: string | null }
   | { t: 'start' }
   | { t: 'profileInit' }
   | { t: 'op'; name: string; args: unknown[]; tx: string }
@@ -113,6 +114,8 @@ export interface LobbyState {
   tier: number;
   /** Game mode the host picked (defense / survival). */
   mode: 'defense' | 'survival';
+  /** Rift War sector the host picked for the deployment (null = the front's landing). */
+  node: string | null;
   maxTier: number;
   capacity: number;
   state: 'lobby' | 'deploying' | 'running';
@@ -235,6 +238,8 @@ export function parseClientMsg(raw: unknown): ClientMsg | null {
       return isInt(o.tier, 10) ? (o as ClientMsg) : null;
     case 'mode':
       return o.mode === 'defense' || o.mode === 'survival' ? (o as ClientMsg) : null;
+    case 'node':
+      return o.node === null || isStr(o.node, 16) ? (o as ClientMsg) : null;
     case 'profileInit':
       return Object.keys(o).length === 1 ? { t: 'profileInit' } : null;
     case 'op':

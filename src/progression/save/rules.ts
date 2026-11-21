@@ -9,7 +9,7 @@ import { emptyRecord, rotateMarket } from './defaults';
 import { sanitizeItem } from './sanitize';
 import { allOwnedUids, equippedItem, itemByUid, slotOf } from './ownership';
 import { newMapState, resumable, type RunMapState } from '../../runmap/state';
-import { pathCode } from '../../runmap/map';
+import { pathCode } from '../../war/world';
 
 // ------------------------------------------------------------------ mutations (game rules)
 

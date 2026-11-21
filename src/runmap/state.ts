@@ -1,8 +1,8 @@
 import { type RunCarry, sanitizeCarry } from './carry';
-import { actOf } from './map';
+import { regionOf } from '../war/world';
 
 /**
- * Persisted run-map progress (on `save.activeRun.map`). The map itself is regenerated from `seed`;
+ * Persisted run-map progress (on `save.activeRun.map`). `seed` is the Rift War's seed (regions regenerate from it);
  * the save keeps the path, the carry at the last completed node and the node chosen next, so a run
  * closed mid-node resumes at the start of that node.
  */
@@ -31,7 +31,7 @@ export const newMapState = (seed: number): RunMapState => ({ seed: seed >>> 0 ||
 /** A run that can be resumed from its last completed node. */
 export const resumable = (m: RunMapState | null | undefined): boolean => !!m && !!m.carry && !!m.next;
 
-const ID = /^a\d{1,6}r\d{1,2}c\d{1,2}$/;
+const ID = /^r\d{1,5}n\d{1,2}$/;
 
 export function sanitizeMapState(raw: unknown): RunMapState | null {
   if (!raw || typeof raw !== 'object') return null;
@@ -46,7 +46,7 @@ export function sanitizeMapState(raw: unknown): RunMapState | null {
   const ledger = r.ledger && typeof r.ledger === 'object' && !Array.isArray(r.ledger) ? (JSON.parse(JSON.stringify(r.ledger)) as Record<string, unknown>) : null;
   return {
     seed,
-    act: Math.max(1, current ? actOf(current) : n(r.act, 1e6) || 1),
+    act: Math.max(1, current ? regionOf(current) : n(r.act, 1e6) || 1),
     current,
     path,
     cleared: n(r.cleared, 1e6),

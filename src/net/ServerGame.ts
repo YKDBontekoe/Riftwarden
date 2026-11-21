@@ -149,6 +149,8 @@ export interface ServerHooks {
   reachable?(): string[];
   /** Run map: the lobby host (breaks vote ties). */
   hostId?(): string | null;
+  /** Run map: a combat sector was secured (the shared war counts it). */
+  secured?(nodeId: string): void;
 }
 
 /** Fastest legitimate drone speed (a dash) plus slack for jitter; the 2.5 m per-packet allowance covers the rest. */
@@ -198,7 +200,7 @@ export class ServerGame extends Game {
         ...cfg,
         loadout: players[0].loadout,
         run: team,
-        hooks: { bank: () => true, checkpoint: () => {}, defeat: () => box.g?.serverDefeat(), actCleared: (n) => box.g?.sh.actCleared?.(n) },
+        hooks: { bank: () => true, checkpoint: () => {}, defeat: () => box.g?.serverDefeat(), actCleared: (n) => box.g?.sh.actCleared?.(n), nodeSecured: (id) => box.g?.sh.secured?.(id) },
       });
     } finally {
       enterRecorder(prev);

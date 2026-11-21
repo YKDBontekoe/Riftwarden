@@ -10,7 +10,9 @@ import { BIOMES } from '../world/biomes';
 import { actEffects, type RunCarry } from './carry';
 import { ANOMALIES, FORGE, FORGE_IDS, isCombatKind, MODE_EFFECT, type NodeKind, type RunMode, SERVICES, SERVICE_IDS } from './defs';
 import { forgePrice, GUARDIAN, merchantStock } from './hub';
-import { generateAct, type MapNode, nodeById, nodeEffect, ROWS, type SegmentEffect, segmentTier, SEGMENT } from './map';
+import { type MapNode, nodeEffect, type SegmentEffect, segmentTier, SEGMENT } from './map';
+import { findNode } from '../war/world';
+import { regionLayout } from '../war/regions';
 
 /**
  * Node intel for the run map (pure): the real expected roster of a combat node (the same planner the arena runs,
@@ -175,57 +177,41 @@ function hubRewards(node: MapNode, from: number): RewardLine[] {
   return [];
 }
 
-/** What a node leads to before the act boss: every node downstream, hub stops and fight counts along the paths. */
+/** Route lookahead on the war map: what lies within two links, and how far the region capital is. */
 export interface Lookahead {
-  /** Every node reachable from this one in its act (this one included). */
+  /** The node and every node within two links (any unlocked region). */
   reach: string[];
-  /** Rows left until the act boss. */
-  rowsToBoss: number;
-  /** Nodes of each kind reachable downstream (excluding this one). */
+  /** Links to the region capital (0 = this is the capital). */
+  hopsToCapital: number;
+  /** Nodes of each kind within two links (excluding this one). */
   kinds: Partial<Record<NodeKind, number>>;
-  /** Fewest / most combat nodes (5 waves each) on a path from here to the boss (both included). */
-  minFights: number;
-  maxFights: number;
-  /** Some path from here reaches a merchant / forge / rest before the boss. */
+  /** A merchant / forge / safe harbour within two links. */
   canShop: boolean;
   canRest: boolean;
 }
 
-export function lookahead(mapSeed: number, node: MapNode): Lookahead {
-  const act = generateAct(mapSeed, node.act);
-  const reach = new Set<string>([node.id]);
-  for (let row = node.row; row < ROWS - 1; row++) for (const n of act.rows[row]) if (reach.has(n.id)) n.links.forEach((l) => reach.add(l));
-  const kinds: Partial<Record<NodeKind, number>> = {};
-  for (const id of reach) {
-    if (id === node.id) continue;
-    const n = nodeById(act, id)!;
-    kinds[n.kind] = (kinds[n.kind] ?? 0) + 1;
+export function lookahead(seed: number, node: MapNode, open: (id: string) => boolean = () => true): Lookahead {
+  const dist = new Map<string, number>([[node.id, 0]]);
+  const q = [node.id];
+  while (q.length) {
+    const id = q.shift()!;
+    const d = dist.get(id)!;
+    if (d >= 2) continue;
+    for (const l of findNode(seed, id)?.links ?? []) if (!dist.has(l) && open(l)) (dist.set(l, d + 1), q.push(l));
   }
-  // Fights on the paths to the boss: dynamic programming over the rows (min/max of combat nodes).
-  const memo = new Map<string, [number, number]>();
-  const walk = (n: MapNode): [number, number] => {
-    const m = memo.get(n.id);
-    if (m) return m;
-    const self = isCombatKind(n.kind) ? 1 : 0;
-    let lo = Infinity;
-    let hi = -Infinity;
-    for (const l of n.links) {
-      const [a, b] = walk(nodeById(act, l)!);
-      lo = Math.min(lo, a);
-      hi = Math.max(hi, b);
-    }
-    const r: [number, number] = n.links.length ? [self + lo, self + hi] : [self, self];
-    memo.set(n.id, r);
-    return r;
-  };
-  const [minFights, maxFights] = walk(node);
-  return {
-    reach: [...reach],
-    rowsToBoss: ROWS - 1 - node.row,
-    kinds,
-    minFights,
-    maxFights,
-    canShop: !!(kinds.merchant || kinds.forge),
-    canRest: !!kinds.rest,
-  };
+  const kinds: Partial<Record<NodeKind, number>> = {};
+  for (const id of dist.keys()) {
+    if (id === node.id) continue;
+    const k = findNode(seed, id)?.kind;
+    if (k) kinds[k] = (kinds[k] ?? 0) + 1;
+  }
+  // Hops to the region capital (inside the region).
+  const capital = regionLayout(seed, node.act - 1).capital;
+  const seen = new Map<string, number>([[node.id, 0]]);
+  const q2 = [node.id];
+  while (q2.length && !seen.has(capital)) {
+    const id = q2.shift()!;
+    for (const l of findNode(seed, id)?.links ?? []) if (!seen.has(l) && findNode(seed, l)?.act === node.act) (seen.set(l, seen.get(id)! + 1), q2.push(l));
+  }
+  return { reach: [...dist.keys()], hopsToCapital: seen.get(capital) ?? 0, kinds, canShop: !!(kinds.merchant || kinds.forge), canRest: !!kinds.rest };
 }

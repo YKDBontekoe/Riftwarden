@@ -92,7 +92,8 @@ async function clearWave(bots, actor) {
     for (const b of [A, B]) await b.waitNew((m) => m.t === 'snap');
     stop = heartbeat([A, B]);
     const run0 = A.run;
-    check('M1 runStart carries the entry node (act 1 row 0) and the map seed', !!run0.node && /^a1r0c\d$/.test(run0.node.id) && run0.node.map > 0 && run0.node.carry === null, JSON.stringify(run0.node));
+    const war0 = await (await fetch(`http://localhost:${PORT}/war`)).json();
+    check('M1 runStart carries the war entry sector (the front landing) and the war seed', !!run0.node && run0.node.id === 'r0n0' && run0.node.map === war0.war.seed && run0.node.carry === null, JSON.stringify(run0.node));
     check('M2 snapshots carry node state and the map vote field', !!A.snap.nd && Array.isArray(A.snap.mv), JSON.stringify({ nd: A.snap.nd, mv: A.snap.mv }));
     const { rows: [ar] } = await db.query('SELECT map FROM profile_active_runs WHERE player_id = $1', [A.welcome.playerId]);
     check('M3 PostgreSQL active run holds the map state', !!ar?.map && ar.map.seed === run0.node.map, JSON.stringify(ar));
@@ -113,8 +114,10 @@ async function clearWave(bots, actor) {
     const badVote = await A.act({ a: 'mapVote', choice: 'a9r9c9' });
     check('M6 unreachable nodes are refused', !badVote.ok, badVote.reason);
     // Reachable nodes: from the map seed (same pure generator as the server).
-    const { reachable } = await import('../src/runmap/map.ts');
-    const next = reachable(run0.node.map, run0.node.id)[0];
+    const { reachable } = await import('../src/war/world.ts');
+    const warNow = (await (await fetch(`http://localhost:${PORT}/war`)).json()).war;
+    check('W1 the co-op team secured r0n0: the shared war counted it (trusted, per warden)', warNow.secured >= 1 && warNow.regions[0].nodes.r0n0.lib > war0.war.regions[0].nodes.r0n0.lib, JSON.stringify({ before: war0.war.regions[0].nodes.r0n0, after: warNow.regions[0].nodes.r0n0 }));
+    const next = reachable(run0.node.map, warNow, run0.node.id)[0];
     const cores = A.snap.c;
     const vA = await A.act({ a: 'mapVote', choice: next.id });
     const vB = await B.act({ a: 'mapVote', choice: 'home' });
@@ -147,6 +150,21 @@ async function clearWave(bots, actor) {
     // Headless servers cannot fetch the scanned skyline props (a warning on every arena build, also before the map).
     const errLines = server.log.split('\n').filter((l) => /rror/.test(l) && !/rejected|Scenery asset unavailable/.test(l));
     check('M16 no server errors across the node swap', errLines.length === 0, errLines.slice(0, 3).join(' | '));
+
+    // ---------------------------------------------------------- solo reports over HTTP
+    const post = (body) => fetch(`http://localhost:${PORT}/war/report`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).then(async (r) => ({ status: r.status, body: await r.json() }));
+    const target = Object.keys(warNow.regions[0].nodes).find((id) => id !== 'r0n0');
+    const r1 = await post({ node: target, mode: 'defense', id: 'solo-test' });
+    const r2 = await post({ node: target, mode: 'defense', id: 'solo-test' });
+    const r3 = await post({ node: 'r9n9', mode: 'defense', id: 'solo-other' });
+    check('W2 a solo report adds liberation (one warden share)', r1.status === 200 && r1.body.ok && r1.body.gain > 0, JSON.stringify(r1));
+    check('W3 reports are rate limited per reporter', r2.status === 429 && /Too soon/.test(r2.body.reason ?? ''), JSON.stringify(r2));
+    check('W4 locked or unknown sectors are refused', r3.status === 429 && !r3.body.ok, JSON.stringify(r3.body));
+    const bad = await fetch(`http://localhost:${PORT}/war/report`, { method: 'POST', body: 'x'.repeat(5000) });
+    check('W5 oversized report bodies are refused', bad.status === 413);
+    await sleep(400);
+    const { rows: [ws] } = await db.query('SELECT data FROM war_state WHERE id = 1');
+    check('W6 the war is persisted in PostgreSQL', ws?.data?.war?.secured >= 2, JSON.stringify(ws?.data?.war?.secured));
 
     // ---------------------------------------------------------- survival operation (same two wardens)
     stop();

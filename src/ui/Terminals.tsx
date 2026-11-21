@@ -65,7 +65,7 @@ export function DeployTerminal({ flow, close }: { flow: Flow; close: () => void 
       ) : flow.profile.online ? (
         <div className="deploy-block">Your online profile is active. Online operations are deployed through the co-op lobby; disconnect from the co-op server to play solo with your local profile.</div>
       ) : (
-      <div className="deploy-grid">
+      <div className={`deploy-grid${flow.mapMode ? ' war' : ''}`}>
         <div className="arena-card">
           <ResumeCard flow={flow} save={save} />
           {flow.mapMode ? <DeployMapPanel flow={flow} save={save} entry={entry} onEntry={setEntry} /> : <><div className="operation-heading"><h2>Reactor yard</h2><span>Sector 07</span></div>

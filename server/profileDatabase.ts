@@ -3,7 +3,7 @@ import pg, { type PoolClient } from 'pg';
 import type { SaveData } from '../src/progression/save';
 import { encodeRows, profileHeader, profileRelations, profileTables, readProfile, snakeCase, type Relations, type Row } from './profileRows';
 
-const migrations = ['001_profiles.sql', '002_progress.sql', '003_secondary_weapon.sql', '004_abilities.sql', '005_elements.sql', '006_loot_depth.sql', '007_run_map.sql', '008_survival_mode.sql'].map((file) => new URL(`./migrations/${file}`, import.meta.url));
+const migrations = ['001_profiles.sql', '002_progress.sql', '003_secondary_weapon.sql', '004_abilities.sql', '005_elements.sql', '006_loot_depth.sql', '007_run_map.sql', '008_survival_mode.sql', '009_war.sql'].map((file) => new URL(`./migrations/${file}`, import.meta.url));
 const loadQuery = `
   SELECT to_jsonb(p) AS header, json_build_object(
     ${profileTables.map((table) => `'${table}', COALESCE((SELECT json_agg(t) FROM ${table} t WHERE t.player_id = p.player_id), '[]'::json)`).join(',\n')}
@@ -79,6 +79,16 @@ export class ProfileDatabase {
         }
       }
     });
+  }
+
+  /** The shared Rift War (one row). */
+  async loadWar(): Promise<unknown | null> {
+    const { rows: [row] } = await this.pool.query<{ data: unknown }>('SELECT data FROM war_state WHERE id = 1');
+    return row?.data ?? null;
+  }
+
+  async saveWar(data: unknown): Promise<void> {
+    await this.pool.query('INSERT INTO war_state (id, data, updated_at) VALUES (1, $1, now()) ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = now()', [JSON.stringify(data)]);
   }
 
   async close(): Promise<void> {
