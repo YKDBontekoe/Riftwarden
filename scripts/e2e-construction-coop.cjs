@@ -1,5 +1,7 @@
 // Browser acceptance (construction, persistence, co-op clients, tutorial, settings).
-// Usage: pnpm dev (5173) [+ pnpm server for co-op sections], then node scripts/e2e-construction-coop.cjs [G,H,I,J,K,L,M,O,P,X]
+// Usage: pnpm dev (5173), then node scripts/e2e-construction-coop.cjs [G,H,I,J,K,L,M,O,P,X]
+// X (co-op with real clients) starts its own gateway stack on :8090 (where Vite proxies /auth and /session):
+// needs RIFT_TEST_DATABASE_URL and RIFT_TEST_REDIS_URL; run it with `node --import tsx`.
 const H = require('./lib/harness.cjs');
 const { chromium, OUT, check } = H;
 const FILTER = process.argv[2] || '';
@@ -234,20 +236,28 @@ const cell = (i, j) => [2 + 5 * i + 2.5, -2.5 + 5 * j + 2.5];
     check('J5 unlock, built module and placed machinery persist after reload', persisted[0] === 'floor_lab' && persisted[1] && persisted[2], JSON.stringify(persisted));
   }
 
-  // ------------------------------------------------------------------ X: co-op with real clients (needs RIFT_TEST=1 server)
+  // ------------------------------------------------------------------ X: co-op with real clients (own gateway stack)
   if (want('X')) {
     const { Bot, sleep } = await import('./bot.mjs');
-    const wsUrl = process.env.RIFT_WS || 'ws://localhost:8787/ws';
-    const A = (await open(b)).p;
-    const B = (await open(b)).p;
+    const { startStack } = await import('./lib/stack.mjs');
+    const stack = await startStack({ port: 8090 });
+    // Each page signs in with the test login (through the Vite proxy) and boots again with the account.
+    const signedIn = async (name) => {
+      const { p: pg } = await open(b);
+      const r = await ev(pg, (n) => fetch('/auth/test-login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: n }) }).then((x) => x.status), name);
+      if (r !== 200) throw new Error(`test login ${r}`);
+      await pg.goto((process.env.RIFT_URL || 'http://localhost:5173/') + '?test&account');
+      await waitFor(pg, () => window.__rift && window.__rift.state().screen === 'menu' && window.__session?.()?.status.get().state === 'idle' && window.__session().status.get().rev > 0);
+      return pg;
+    };
+    const A = await signedIn('Alpha');
+    const B = await signedIn('Bravo');
     // Two live software-GL render loops starve Playwright's actionability checks (clicks time out): the lobby UI is
     // React-driven and the arena transition renders by itself, so the clients run with the loop stopped.
     for (const pg of [A, B]) await ev(pg, () => window.__rift.stopLoop());
-    for (const [pg, name] of [[A, 'Alpha'], [B, 'Bravo']]) {
-      await ev(pg, (n) => window.__rift.flow.coopConnect(n), name);
+    for (const pg of [A, B]) {
+      await ev(pg, () => window.__rift.flow.coopConnect());
       await waitFor(pg, () => window.__rift.flow.net.state.status === 'online');
-      await ev(pg, () => window.__rift.flow.coopProfileInit());
-      await waitFor(pg, () => window.__rift.flow.profile.online);
     }
     // Lobby through the real UI: A creates from the menu's co-op tab, B types the code.
     await ev(A, () => window.__rift.flow.net.send({ t: 'create', tier: 1 }));
@@ -260,10 +270,8 @@ const cell = (i, j) => [2 + 5 * i + 2.5, -2.5 + 5 * j + 2.5];
     check('X1 a second client joins through the lobby UI with the code', true, code);
     const bots = [];
     for (const n of ['Charlie', 'Delta']) {
-      const bt = new Bot(n, wsUrl);
+      const bt = new Bot(n, stack);
       await bt.connect();
-      bt.send({ t: 'profileInit' });
-      await bt.wait((m) => m.t === 'profile');
       bt.send({ t: 'join', code });
       await bt.waitNew((m) => m.t === 'lobby' && m.lobby);
       bt.send({ t: 'ready', ready: true });
@@ -343,8 +351,10 @@ const cell = (i, j) => [2 + 5 * i + 2.5, -2.5 + 5 * j + 2.5];
     await B.click('[data-testid="cp-home"]');
     for (const bt of bots) await bt.act({ a: 'vote', home: true });
     for (const pg of [A, B]) await waitFor(pg, () => window.__rift.state().location === 'home' && !window.__rift.state().busy, null, 60000);
+    // The run's results reach the account on the server; the client pulls the new copy.
+    for (const pg of [A, B]) await waitFor(pg, () => window.__rift.profile.save.resources.salvage > 0 && !window.__rift.profile.save.activeRun, null, 20000).catch(() => null);
     const after = await Promise.all([A, B].map((pg) => ev(pg, () => ({ items: window.__rift.profile.save.items.length, salvage: window.__rift.profile.save.resources.salvage, run: window.__rift.profile.save.activeRun, screen: window.__rift.state().screen }))));
-    check('X6 unanimous UI vote returns both clients home with banked rewards in their online profiles', after.every((x) => x.salvage > 0 && !x.run && x.screen === 'summary'), JSON.stringify(after));
+    check('X6 unanimous UI vote returns both clients home with banked rewards synced into their accounts', after.every((x) => x.salvage > 0 && !x.run && x.screen === 'summary'), JSON.stringify(after));
     botsAlive = false;
     for (const bt of bots) bt.close();
     // Visit the host's HQ: B sees A's layout read-only, A's construction appears live, both see each other.
@@ -370,6 +380,7 @@ const cell = (i, j) => [2 + 5 * i + 2.5, -2.5 + 5 * j + 2.5];
     check('X10 the guest returns to their own HQ (own layout, writable)', !own.ro, JSON.stringify(own));
     console.log([...A.errs, ...B.errs].filter((e) => e.startsWith('PAGEERR')).slice(0, 5).join('\n'));
     check('X7 no page errors on co-op clients', ![...A.errs, ...B.errs].some((e) => e.startsWith('PAGEERR')));
+    await stack.stop();
   }
 
   console.log(p.errs.slice(0, 6).join('\n'));

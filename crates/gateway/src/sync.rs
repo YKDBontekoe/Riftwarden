@@ -132,6 +132,10 @@ async fn apply(state: &State, account: Uuid, conn: u64, req: SyncRequest, truste
     tx.commit().await.map_err(ApiError::internal)?;
     if changed {
         state.hub.notify(account, conn, rev);
+        // Sim workers holding this player get the new copy (their own trusted entries are already in theirs).
+        if !trusted {
+            state.coop.profile_changed(account, &new_doc);
+        }
     }
 
     // Results for every sent entry: replayed ones from the worker, earlier ones were already applied.

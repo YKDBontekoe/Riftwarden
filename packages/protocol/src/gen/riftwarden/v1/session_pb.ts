@@ -12,7 +12,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file riftwarden/v1/session.proto.
  */
 export const file_riftwarden_v1_session: GenFile = /*@__PURE__*/
-  fileDesc("ChtyaWZ0d2FyZGVuL3YxL3Nlc3Npb24ucHJvdG8SDXJpZnR3YXJkZW4udjEiVAoSU2Vzc2lvbkNsaWVudEZyYW1lEgoKAmlkGAEgASgNEioKBHN5bmMYAiABKAsyGi5yaWZ0d2FyZGVuLnYxLlN5bmNSZXF1ZXN0SABCBgoEY2FsbCKoAQoSU2Vzc2lvblNlcnZlckZyYW1lEjIKCHJlc3BvbnNlGAEgASgLMh4ucmlmdHdhcmRlbi52MS5TZXNzaW9uUmVzcG9uc2VIABIwCgdjaGFuZ2VkGAIgASgLMh0ucmlmdHdhcmRlbi52MS5Qcm9maWxlQ2hhbmdlZEgAEiUKBWVycm9yGAMgASgLMhQucmlmdHdhcmRlbi52MS5FcnJvckgAQgUKA21zZyJ3Cg9TZXNzaW9uUmVzcG9uc2USCgoCaWQYASABKA0SIwoFZXJyb3IYAiABKAsyFC5yaWZ0d2FyZGVuLnYxLkVycm9yEikKBHN5bmMYAyABKAsyGS5yaWZ0d2FyZGVuLnYxLlN5bmNSZXN1bHRIAEIICgZyZXN1bHQiRgoJU3luY0VudHJ5EgsKA3NlcRgBIAEoBBIKCgJhdBgCIAEoARIgCgRib2R5GAMgASgLMhIucmlmdHdhcmRlbi52MS5Eb2MibQoLU3luY1JlcXVlc3QSDgoGZGV2aWNlGAEgASgJEikKB2VudHJpZXMYAiADKAsyGC5yaWZ0d2FyZGVuLnYxLlN5bmNFbnRyeRIjCgdnZW5lc2lzGAMgASgLMhIucmlmdHdhcmRlbi52MS5Eb2MiNgoLRW50cnlSZXN1bHQSCwoDc2VxGAEgASgEEgoKAm9rGAIgASgIEg4KBnJlYXNvbhgDIAEoCSJ4CgpTeW5jUmVzdWx0EgsKA3JldhgBIAEoAxIfCgNkb2MYAiABKAsyEi5yaWZ0d2FyZGVuLnYxLkRvYxIrCgdyZXN1bHRzGAMgAygLMhoucmlmdHdhcmRlbi52MS5FbnRyeVJlc3VsdBIPCgdjbGFpbWVkGAQgASgIIh0KDlByb2ZpbGVDaGFuZ2VkEgsKA3JldhgBIAEoA2IGcHJvdG8z", [file_riftwarden_v1_common]);
+  fileDesc("ChtyaWZ0d2FyZGVuL3YxL3Nlc3Npb24ucHJvdG8SDXJpZnR3YXJkZW4udjEiZAoSU2Vzc2lvbkNsaWVudEZyYW1lEgoKAmlkGAEgASgNEioKBHN5bmMYAiABKAsyGi5yaWZ0d2FyZGVuLnYxLlN5bmNSZXF1ZXN0SAASDgoEY29vcBgDIAEoDEgAQgYKBGNhbGwiuAEKElNlc3Npb25TZXJ2ZXJGcmFtZRIyCghyZXNwb25zZRgBIAEoCzIeLnJpZnR3YXJkZW4udjEuU2Vzc2lvblJlc3BvbnNlSAASMAoHY2hhbmdlZBgCIAEoCzIdLnJpZnR3YXJkZW4udjEuUHJvZmlsZUNoYW5nZWRIABIlCgVlcnJvchgDIAEoCzIULnJpZnR3YXJkZW4udjEuRXJyb3JIABIOCgRjb29wGAQgASgMSABCBQoDbXNnIncKD1Nlc3Npb25SZXNwb25zZRIKCgJpZBgBIAEoDRIjCgVlcnJvchgCIAEoCzIULnJpZnR3YXJkZW4udjEuRXJyb3ISKQoEc3luYxgDIAEoCzIZLnJpZnR3YXJkZW4udjEuU3luY1Jlc3VsdEgAQggKBnJlc3VsdCJGCglTeW5jRW50cnkSCwoDc2VxGAEgASgEEgoKAmF0GAIgASgBEiAKBGJvZHkYAyABKAsyEi5yaWZ0d2FyZGVuLnYxLkRvYyJtCgtTeW5jUmVxdWVzdBIOCgZkZXZpY2UYASABKAkSKQoHZW50cmllcxgCIAMoCzIYLnJpZnR3YXJkZW4udjEuU3luY0VudHJ5EiMKB2dlbmVzaXMYAyABKAsyEi5yaWZ0d2FyZGVuLnYxLkRvYyI2CgtFbnRyeVJlc3VsdBILCgNzZXEYASABKAQSCgoCb2sYAiABKAgSDgoGcmVhc29uGAMgASgJIngKClN5bmNSZXN1bHQSCwoDcmV2GAEgASgDEh8KA2RvYxgCIAEoCzISLnJpZnR3YXJkZW4udjEuRG9jEisKB3Jlc3VsdHMYAyADKAsyGi5yaWZ0d2FyZGVuLnYxLkVudHJ5UmVzdWx0Eg8KB2NsYWltZWQYBCABKAgiHQoOUHJvZmlsZUNoYW5nZWQSCwoDcmV2GAEgASgDYgZwcm90bzM", [file_riftwarden_v1_common]);
 
 /**
  * @generated from message riftwarden.v1.SessionClientFrame
@@ -32,6 +32,14 @@ export type SessionClientFrame = Message<"riftwarden.v1.SessionClientFrame"> & {
      */
     value: SyncRequest;
     case: "sync";
+  } | {
+    /**
+     * A co-op frame (envelope.proto ClientFrame bytes), routed to the sim worker that holds the player's room.
+     *
+     * @generated from field: bytes coop = 3;
+     */
+    value: Uint8Array;
+    case: "coop";
   } | { case: undefined; value?: undefined };
 };
 
@@ -67,6 +75,14 @@ export type SessionServerFrame = Message<"riftwarden.v1.SessionServerFrame"> & {
      */
     value: Error;
     case: "error";
+  } | {
+    /**
+     * A co-op frame (envelope.proto ServerFrame bytes).
+     *
+     * @generated from field: bytes coop = 4;
+     */
+    value: Uint8Array;
+    case: "coop";
   } | { case: undefined; value?: undefined };
 };
 

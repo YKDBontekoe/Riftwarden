@@ -1,5 +1,5 @@
 // traceShot: the hitscan geometry shared by the authoritative game and the co-op replica (NullEngine scene).
-import '../apps/server/headless';
+import '../apps/worker/src/sim/headless';
 import { MeshBuilder, NullEngine, Scene, Vector3 } from '@babylonjs/core';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { traceShot } from '@riftwarden/game/arena/shotTrace';

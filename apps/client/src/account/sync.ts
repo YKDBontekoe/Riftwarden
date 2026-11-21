@@ -35,7 +35,7 @@ async function adopt(flow: Flow, account: string, c: SessionClient): Promise<voi
 }
 
 function idle(flow: Flow): boolean {
-  return (!flow.run || flow.run.ended) && flow.location !== 'arena' && !flow.profile.online;
+  return (!flow.run || flow.run.ended) && flow.location !== 'arena' && !flow.coopRun;
 }
 
 export function startAccountSync(flow: Flow): void {
@@ -51,6 +51,7 @@ export function startAccountSync(flow: Flow): void {
     if (!idle(flow)) return void setTimeout(() => void apply(), 2000);
     switching = true;
     try {
+      flow.coopDisconnect();
       client?.close();
       client = null;
       flow.profile.onEntry = null;

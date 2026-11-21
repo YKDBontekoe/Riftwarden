@@ -1,8 +1,10 @@
 //! Riftwarden gateway: the only public backend service (see docs/architecture-v2.md).
 //! The binary (`main.rs`) only wires configuration, telemetry and shutdown around [`router`].
 
+pub mod admin;
 pub mod auth;
 pub mod config;
+pub mod coop;
 pub mod error;
 mod health;
 pub mod limits;
@@ -28,6 +30,7 @@ pub struct AppState {
     pub workers: workers::Workers,
     pub hub: sync::Hub,
     pub war: war::War,
+    pub coop: coop::Coop,
 }
 
 pub type State = Arc<AppState>;
@@ -57,12 +60,23 @@ pub async fn connect(config: Config) -> Result<State> {
     let redis = redis::Client::open(config.redis_url.as_str()).context("REDIS_URL")?.get_connection_manager().await.context("Redis")?;
     let webauthn = auth::webauthn(&config)?;
     let workers = workers::Workers::new(&config.rules_workers, 2);
-    Ok(Arc::new(AppState { config, db, redis, webauthn, workers, hub: sync::Hub::default(), war: war::War::default() }))
+    let config_sims = config.sim_workers.clone();
+    Ok(Arc::new(AppState {
+        config,
+        db,
+        redis,
+        webauthn,
+        workers,
+        hub: sync::Hub::default(),
+        war: war::War::default(),
+        coop: coop::Coop::new(&config_sims),
+    }))
 }
 
 /// Background housekeeping: purge expired sessions every hour, advance the war every 30 s.
 pub fn spawn_maintenance(state: State) {
     war::spawn_ticker(state.clone());
+    coop::spawn(state.clone());
     tokio::spawn(async move {
         let mut tick = tokio::time::interval(std::time::Duration::from_secs(3600));
         loop {

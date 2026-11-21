@@ -12,7 +12,7 @@ const viaClient = (m: ClientMsg) => decodeClient(encodeClient(m));
 const r = (v: number, k: number) => Math.round(v * k) / k;
 
 const CLIENT: ClientMsg[] = [
-  { t: 'hello', v: PROTOCOL_VERSION, secret: 's'.repeat(32), name: 'Alpha' },
+  { t: 'hello', v: PROTOCOL_VERSION },
   { t: 'create', tier: 2 },
   { t: 'join', code: 'ABCDE' },
   { t: 'leave' },
@@ -23,8 +23,6 @@ const CLIENT: ClientMsg[] = [
   { t: 'node', node: 'r0n4' },
   { t: 'node', node: null },
   { t: 'start' },
-  { t: 'profileInit' },
-  { t: 'op', name: 'equipFromStorage', args: ['a.1', null], tx: 'tx-1' },
   { t: 'presence', p: [1.5, 2, -3.25], yaw: 0.75 },
   { t: 'visit', on: true },
   { t: 'input', seq: 41, p: [12.345678, 1.6, -40.1], yaw: 1.2345, pitch: -0.1, sp: 16.5, fl: 5, heat: 0.42 },
@@ -164,8 +162,7 @@ describe('frame codec: client messages', () => {
 
 describe('frame codec: server messages', () => {
   const SERVER: ServerMsg[] = [
-    { t: 'welcome', v: PROTOCOL_VERSION, playerId: 'p1', name: 'Alpha', hasProfile: true, profile: { v: 10, data: { a: [1, 2] } } },
-    { t: 'welcome', v: PROTOCOL_VERSION, playerId: 'p1', name: 'Alpha', hasProfile: false, profile: null },
+    { t: 'welcome', v: PROTOCOL_VERSION, playerId: 'p1', name: 'Alpha' },
     { t: 'error', code: 'version', msg: 'Reload the page.' },
     { t: 'lobby', lobby: null },
     {
@@ -173,9 +170,6 @@ describe('frame codec: server messages', () => {
       lobby: { code: 'ABCDE', hostId: 'p1', tier: 2, mode: 'survival', node: 'r0n1', maxTier: 3, capacity: 4, state: 'running', wave: 7, players: [{ id: 'p1', name: 'Alpha', ready: true, connected: true, host: true, weapon: 'Repeater', rarity: 'rare', level: 12 }] },
     },
     { t: 'lobby', lobby: { code: 'ABCDE', hostId: 'p1', tier: 1, mode: 'defense', node: null, maxTier: 1, capacity: 4, state: 'lobby', wave: 0, players: [] } },
-    { t: 'profile', save: { items: [{ uid: 'x' }] } },
-    { t: 'opResult', tx: 'tx-1', ok: true },
-    { t: 'opResult', tx: 'tx-2', ok: false, reason: 'Not enough credits' },
     { t: 'presence', players: [{ id: 'p2', name: 'Beta', p: [1, 2, 3], yaw: 0.5 }] },
     { t: 'hostHq', owner: 'p1', base: { structure: {} } },
     {
@@ -184,7 +178,7 @@ describe('frame codec: server messages', () => {
     },
     { t: 'runStart', run: { runId: 'run-2', tier: 1, seed: 5, arena: 0, you: 'p1', players: [], loadout: {}, towerTech: [], milestones: ['m'], rejoin: true, node: null } },
     { t: 'actResult', id: 9, ok: false, reason: 'Towers are offline in survival' },
-    { t: 'runEnd', result: { outcome: 'returned' }, save: { v: 10 } },
+    { t: 'runEnd', result: { outcome: 'returned' } },
     { t: 'pong', c: 1.5, s: 1700000000000 },
   ];
 

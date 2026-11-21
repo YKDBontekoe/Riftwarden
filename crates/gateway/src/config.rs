@@ -31,6 +31,10 @@ pub struct Config {
     pub rules_workers: Vec<String>,
     /// Minimum seconds between two war reports of one warden (0 = off, for tests).
     pub war_report_gap_s: u64,
+    /// Sim worker addresses (apps/worker, role sim).
+    pub sim_workers: Vec<String>,
+    /// Operator listener (admin.rs); never published outside the container.
+    pub admin_listen: std::net::SocketAddr,
 }
 
 impl Config {
@@ -52,6 +56,13 @@ impl Config {
             cookie_domain: var("RIFT_COOKIE_DOMAIN"),
             trust_cf_ip: var("RIFT_TRUST_CF_IP").is_some_and(|v| v == "1"),
             test_mode: var("RIFT_TEST").is_some_and(|v| v == "1"),
+            sim_workers: var("RIFT_SIM_WORKERS")
+                .unwrap_or_else(|| "127.0.0.1:7201".into())
+                .split(',')
+                .map(|s| s.trim().to_owned())
+                .filter(|s| !s.is_empty())
+                .collect(),
+            admin_listen: var("RIFT_ADMIN_LISTEN").unwrap_or_else(|| "127.0.0.1:9090".into()).parse().context("RIFT_ADMIN_LISTEN")?,
             war_report_gap_s: var("RIFT_WAR_GAP_S").map(|v| v.parse()).transpose().context("RIFT_WAR_GAP_S")?.unwrap_or(45),
             rules_workers: var("RIFT_RULES_WORKERS")
                 .unwrap_or_else(|| "127.0.0.1:7101".into())
@@ -78,6 +89,8 @@ impl Config {
             trust_cf_ip: false,
             test_mode: true,
             war_report_gap_s: 0,
+            sim_workers: Vec::new(),
+            admin_listen: "127.0.0.1:0".parse().expect("addr"),
             rules_workers: std::env::var("RIFT_TEST_WORKER").map(|w| vec![w]).unwrap_or_default(),
         }
     }

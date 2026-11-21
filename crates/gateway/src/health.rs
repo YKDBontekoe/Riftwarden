@@ -11,6 +11,10 @@ struct Health {
     build: String,
     db: bool,
     redis: bool,
+    /// Connected sim workers, open rooms, running operations.
+    sims: usize,
+    rooms: usize,
+    running: u32,
 }
 
 pub fn routes() -> Router<State> {
@@ -23,5 +27,7 @@ async fn health(Extract(state): Extract<State>) -> (StatusCode, Json<Health>) {
     let redis = redis::cmd("PING").query_async::<String>(&mut redis).await.is_ok();
     let ok = db && redis;
     let code = if ok { StatusCode::OK } else { StatusCode::SERVICE_UNAVAILABLE };
-    (code, Json(Health { ok, build: state.config.build.clone(), db, redis }))
+    let sims = state.coop.links.iter().filter(|l| l.up.load(std::sync::atomic::Ordering::Relaxed)).count();
+    let (rooms, running) = state.coop.status();
+    (code, Json(Health { ok, build: state.config.build.clone(), db, redis, sims, rooms, running }))
 }

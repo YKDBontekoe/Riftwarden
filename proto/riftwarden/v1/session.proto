@@ -11,6 +11,8 @@ message SessionClientFrame {
   uint32 id = 1;
   oneof call {
     SyncRequest sync = 2;
+    // A co-op frame (envelope.proto ClientFrame bytes), routed to the sim worker that holds the player's room.
+    bytes coop = 3;
   }
 }
 
@@ -19,6 +21,8 @@ message SessionServerFrame {
     SessionResponse response = 1;
     ProfileChanged changed = 2;
     Error error = 3;
+    // A co-op frame (envelope.proto ServerFrame bytes).
+    bytes coop = 4;
   }
 }
 

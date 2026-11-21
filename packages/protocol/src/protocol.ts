@@ -7,7 +7,7 @@
  * rewards, online profiles); clients send intents (movement state, shot claims, actions) which
  * the server validates. Messages are validated structurally here before any game code sees them.
  */
-export const PROTOCOL_VERSION = 12;
+export const PROTOCOL_VERSION = 13;
 export const MAX_PLAYERS = 4;
 export const MAX_MESSAGE_BYTES = 64 * 1024;
 /** Authoritative simulation and snapshot rates (Hz). */
@@ -78,7 +78,7 @@ export interface InputMsg {
 }
 
 export type ClientMsg =
-  | { t: 'hello'; v: number; secret: string; name: string }
+  | { t: 'hello'; v: number }
   | { t: 'create'; tier: number }
   | { t: 'join'; code: string }
   | { t: 'leave' }
@@ -87,8 +87,6 @@ export type ClientMsg =
   | { t: 'mode'; mode: 'defense' | 'survival' }
   | { t: 'node'; node: string | null }
   | { t: 'start' }
-  | { t: 'profileInit' }
-  | { t: 'op'; name: string; args: unknown[]; tx: string }
   | { t: 'presence'; p: V3; yaw: number }
   | { t: 'visit'; on: boolean }
   | InputMsg
@@ -126,18 +124,16 @@ export interface LobbyState {
 }
 
 export type ServerMsg =
-  | { t: 'welcome'; v: number; playerId: string; name: string; hasProfile: boolean; profile: unknown | null }
+  | { t: 'welcome'; v: number; playerId: string; name: string }
   | { t: 'error'; code: string; msg: string }
   | { t: 'lobby'; lobby: LobbyState | null }
-  | { t: 'profile'; save: unknown }
-  | { t: 'opResult'; tx: string; ok: boolean; reason?: string }
   | { t: 'presence'; players: { id: string; name: string; p: V3; yaw: number }[] }
   | { t: 'hostHq'; owner: string; base: unknown }
   | { t: 'runStart'; run: RunStart }
   | { t: 'snap'; s: unknown }
   | { t: 'ev'; e: unknown[] }
   | { t: 'actResult'; id: number; ok: boolean; reason?: string }
-  | { t: 'runEnd'; result: unknown; save: unknown }
+  | { t: 'runEnd'; result: unknown }
   | { t: 'pong'; c: number; s: number };
 
 export interface RunStart {
@@ -225,7 +221,7 @@ export function parseClientMsg(raw: unknown): ClientMsg | null {
   const o = raw as Record<string, unknown>;
   switch (o.t) {
     case 'hello':
-      return isInt(o.v) && isStr(o.secret, 128) && (o.secret as string).length >= 16 && isStr(o.name, 40) ? (o as ClientMsg) : null;
+      return isInt(o.v) ? { t: 'hello', v: o.v as number } : null;
     case 'create':
       return isInt(o.tier, 10) ? (o as ClientMsg) : null;
     case 'join':
@@ -241,10 +237,6 @@ export function parseClientMsg(raw: unknown): ClientMsg | null {
       return o.mode === 'defense' || o.mode === 'survival' ? (o as ClientMsg) : null;
     case 'node':
       return o.node === null || isStr(o.node, 16) ? (o as ClientMsg) : null;
-    case 'profileInit':
-      return Object.keys(o).length === 1 ? { t: 'profileInit' } : null;
-    case 'op':
-      return isStr(o.name, 40) && Array.isArray(o.args) && isStr(o.tx, 80) ? (o as ClientMsg) : null;
     case 'presence':
       return isV3(o.p) && isNum(o.yaw, 100) ? (o as ClientMsg) : null;
     case 'visit':

@@ -56,6 +56,30 @@ pub fn routes() -> Router<State> {
         .route("/auth/passkeys/{id}", delete(remove_passkey))
         .route("/auth/recovery-code", post(new_recovery_code))
         .route("/auth/rename", post(rename))
+        .route("/auth/test-login", post(test_login))
+}
+
+#[derive(Deserialize)]
+struct TestLogin {
+    name: String,
+}
+
+/// Test servers only (RIFT_TEST=1): sign in as `name`, creating the account with a dummy passkey. Bots and
+/// protocol suites use it; it does not exist on production servers.
+async fn test_login(Extract(state): Extract<State>, headers: HeaderMap, Json(req): Json<TestLogin>) -> ApiResult<Response> {
+    if !state.config.test_mode {
+        return Err(ApiError::new(StatusCode::NOT_FOUND, "not_found", "Not found"));
+    }
+    let name = names::validate(&req.name).map_err(|m| ApiError::bad("bad_name", m))?;
+    let account = match riftwarden_db::accounts::account_by_name(&state.db, &name).await? {
+        Some(a) => a,
+        None => {
+            let id = Uuid::new_v4();
+            riftwarden_db::accounts::create_account(&state.db, id, &name, id.as_bytes(), &serde_json::json!({}), "test").await?
+        }
+    };
+    let cookie = session::start(&state, account.id, &session::user_agent(&headers)).await?;
+    Ok(with_cookie(cookie, SignedIn { account: (&account).into(), recovery_code: None }))
 }
 
 // ------------------------------------------------------------------ ceremony state

@@ -42,6 +42,9 @@ catalogs:
     '@vitejs/plugin-react':
       specifier: ^5.2.0
       version: 5.2.0
+    esbuild:
+      specifier: ^0.28.2
+      version: 0.28.2
     pg:
       specifier: ^8.23.1
       version: 8.23.1
@@ -92,9 +95,6 @@ importers:
       '@riftwarden/rules':
         specifier: workspace:*
         version: link:packages/rules
-      '@riftwarden/server':
-        specifier: workspace:*
-        version: link:apps/server
       '@riftwarden/worker':
         specifier: workspace:*
         version: link:apps/worker
@@ -172,7 +172,7 @@ importers:
         specifier: 'catalog:'
         version: 7.3.8(@types/node@26.6.6)(tsx@4.23.15)
 
-  apps/server:
+  apps/worker:
     dependencies:
       '@babylonjs/core':
         specifier: 'catalog:'
@@ -180,6 +180,9 @@ importers:
       '@babylonjs/havok':
         specifier: 'catalog:'
         version: 1.3.14
+      '@bufbuild/protobuf':
+        specifier: 'catalog:'
+        version: 2.17.0
       '@riftwarden/game':
         specifier: workspace:*
         version: link:../../packages/game
@@ -189,30 +192,13 @@ importers:
       '@riftwarden/rules':
         specifier: workspace:*
         version: link:../../packages/rules
-      pg:
-        specifier: 'catalog:'
-        version: 8.23.1
       tsx:
         specifier: 'catalog:'
         version: 4.23.15
-      ws:
+    devDependencies:
+      esbuild:
         specifier: 'catalog:'
-        version: 8.23.0
-
-  apps/worker:
-    dependencies:
-      '@bufbuild/protobuf':
-        specifier: 'catalog:'
-        version: 2.17.0
-      '@riftwarden/protocol':
-        specifier: workspace:*
-        version: link:../../packages/protocol
-      '@riftwarden/rules':
-        specifier: workspace:*
-        version: link:../../packages/rules
-      tsx:
-        specifier: 'catalog:'
-        version: 4.23.15
+        version: 0.28.2
 
   packages/game:
     dependencies:

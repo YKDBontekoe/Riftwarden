@@ -1,5 +1,5 @@
 // Shoot-off parts: pure rules + a real walker on a NullEngine scene (as the co-op server runs it).
-import '../apps/server/headless';
+import '../apps/worker/src/sim/headless';
 import { NullEngine, Scene, Vector3 } from '@babylonjs/core';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { CORE_BEHAVIORS } from '@riftwarden/game/enemies/coreBehaviors';

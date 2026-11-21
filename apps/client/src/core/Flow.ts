@@ -34,6 +34,7 @@ import { tutorialActive } from '@riftwarden/rules/progression/tutorial';
 import { Input } from '@riftwarden/game/core/Input';
 import { ClientGame } from '@riftwarden/game/net/ClientGame';
 import { NetClient } from '@riftwarden/game/net/NetClient';
+import { sessionClient } from '../account/sync';
 import type { RunStart } from '@riftwarden/protocol/protocol';
 import type { RunResult } from '@riftwarden/rules/progression/run';
 import { keyRemap, type Settings, saveSettings } from '@riftwarden/game/core/settings';
@@ -252,8 +253,7 @@ export class Flow {
   /** Start a fresh run on the selected tier. Callable from HQ or after a defeat. Map runs may name an entry node. */
   async deploy(tierId = this.profile.save.threat.selected, entryNode?: string, mode: RunMode = this.runMode): Promise<boolean> {
     if (this.busy || (this.run && !this.run.ended)) return false;
-    // Online profiles deploy through the co-op lobby only (the server owns their progression).
-    if (this.profile.online) return false;
+    if (this.coopRun) return false;
     const save = this.profile.save;
     if (tierId < 1 || (tierId > save.threat.unlocked && !this.devNext) || tierId > THREAT_TIERS.length) return false;
     if (deployBlocker(save)) return false;
@@ -389,7 +389,7 @@ export class Flow {
 
   /** Resume a run closed after a completed node: the chosen next node starts over with the stored carry. */
   async resumeRun(): Promise<boolean> {
-    if (this.busy || this.profile.online || (this.run && !this.run.ended)) return false;
+    if (this.busy || this.coopRun || (this.run && !this.run.ended)) return false;
     const a = this.profile.save.activeRun;
     const m = a?.map;
     if (!a || !m || !resumable(m) || deployBlocker(this.profile.save)) return false;
@@ -525,13 +525,21 @@ export class Flow {
 
   // ------------------------------------------------------------------ M7 co-op
 
-  /** Connect to the co-op server (identity is a local secret; the server stores only its hash). */
-  async coopConnect(name?: string, url?: string): Promise<boolean> {
+  /** Join co-op through the account's session socket (co-op needs a signed-in account). */
+  async coopConnect(): Promise<boolean> {
+    const session = sessionClient();
+    if (!session) {
+      uiEvents.emit('alert', { text: 'SIGN IN (ACCOUNT IN THE MAIN MENU) TO PLAY CO-OP', tone: 'orange' });
+      return false;
+    }
+    if (this.net && this.net.tunnel !== session) {
+      this.net.close();
+      this.net = null;
+    }
     if (!this.net) {
-      this.net = new NetClient(url);
+      this.net = new NetClient(session);
       this.wireNet(this.net);
-    } else if (url) this.net.url = url;
-    if (name) this.net.setName(name);
+    }
     sfx.init();
     return this.net.connect();
   }
@@ -558,13 +566,6 @@ export class Flow {
 
   private wireNet(net: NetClient): void {
     net.handlers = {
-      welcome: (m) => {
-        if (m.hasProfile && m.profile) this.adoptOnline(m.profile);
-      },
-      profile: (save) => this.adoptOnline(save),
-      opResult: (m) => {
-        if (!m.ok) uiEvents.emit('banner', { title: 'SERVER REFUSED', sub: m.reason ?? 'Operation rejected', tone: 'red' });
-      },
       runStart: (run) => void this.coopRunStart(run),
       hostHq: () => {
         if (this.visiting && this.home && this.location === 'home' && !this.busy) this.home.applyHostBase();
@@ -577,7 +578,7 @@ export class Flow {
         if (this.arena instanceof ClientGame && !this.busy) this.arena.onEvents(e);
         else if (this.coopRun) this.netQueue.events.push(...e);
       },
-      runEnd: (result, save) => void this.coopRunEnd(result as RunResult, save),
+      runEnd: (result) => void this.coopRunEnd(result as RunResult),
       lost: () => {
         if (this.coopRun) uiEvents.emit('banner', { title: 'CONNECTION LOST', sub: 'Reconnecting… your run slot is held for two minutes', tone: 'orange' });
       },
@@ -587,26 +588,10 @@ export class Flow {
     };
   }
 
-  /** Mirror the server-owned profile (the single-player save is kept aside, untouched). */
-  private adoptOnline(save: unknown): void {
-    const first = !this.profile.online;
-    if (first) this.profile.attachRemote({ send: (name, args, tx) => this.net?.send({ t: 'op', name, args, tx }), label: this.net?.url ?? '' }, save);
-    else this.profile.adoptRemote(save);
-    if (first && this.home && !this.busy && this.location === 'home') this.rebuildHomeKeepScreen();
-  }
-
-  coopProfileInit(): void {
-    this.net?.send({ t: 'profileInit' });
-  }
-
-  /** Disconnect and return to the single-player profile. */
+  /** Leave co-op (single player and the account sync carry on). */
   coopDisconnect(): void {
     if (this.coopRun) return;
     this.net?.close();
-    if (this.profile.online) {
-      this.profile.detachRemote();
-      if (this.home && !this.busy) this.rebuildHomeKeepScreen();
-    }
   }
 
   /** The profile switched to another copy (account / guest): rebuild the HQ behind the current screen. */
@@ -691,8 +676,9 @@ export class Flow {
     this.netQueue = { snaps: [], events: [] };
   }
 
-  private async coopRunEnd(result: RunResult, save: unknown): Promise<void> {
-    if (save) this.profile.adoptRemote(save);
+  private async coopRunEnd(result: RunResult): Promise<void> {
+    // The operation's results were applied to the account by the server: pull the new copy.
+    void sessionClient()?.sync();
     hudStore.set({ lastRun: { ...result } });
     this.coopRun = null;
     if (this.run && !this.run.ended) this.run.finalize(result.outcome);

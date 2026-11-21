@@ -37,6 +37,7 @@ export { Recorder, type NetEvent } from './recorder';
 import { arr, enc } from './wire';
 import { resolveMapVote, voteComplete } from '@riftwarden/rules/net/mapVote';
 import { KIT } from '@riftwarden/rules/player/movement';
+import { PositionTrail, SAMPLE_S } from '@riftwarden/rules/net/lagComp';
 
 export interface ServerPlayerInit {
   id: string;
@@ -178,6 +179,9 @@ export class ServerGame extends Game {
   defeated = false;
   /** Statistics: rejected claims (tests / diagnostics). */
   rejected = { shots: 0, hits: 0, moves: 0, acts: 0 };
+  /** Recent positions per hostile (lag compensation of shot claims), keyed by id; `gen` tells pooled reuse apart. */
+  private trails = new Map<number, { gen: number; trail: PositionTrail }>();
+  private trailT = 0;
   /** Rejection reasons (diagnostics). */
   why: Record<string, number> = {};
   private reject(kind: 'shots' | 'hits' | 'moves', why: string): void {
@@ -569,11 +573,31 @@ export class ServerGame extends Game {
     });
   }
 
+  /** Sample every hostile's centre at the snapshot rate (what clients interpolate between). */
+  private recordTrails(dt: number): void {
+    this.trailT += dt;
+    if (this.trailT < SAMPLE_S) return;
+    this.trailT = 0;
+    const live = new Set<number>();
+    const c = new Vector3();
+    for (const e of this.enemies.active) {
+      live.add(e.id);
+      let t = this.trails.get(e.id);
+      if (!t || t.gen !== e.gen) this.trails.set(e.id, (t = { gen: e.gen, trail: new PositionTrail() }));
+      e.center(c);
+      t.trail.push(this.clock, c.x, c.y, c.z);
+    }
+    for (const id of this.trails.keys()) if (!live.has(id)) this.trails.delete(id);
+  }
+
   private invalidHit(e: Enemy, o: Vector3, p: Vector3, range: number): string | null {
     if (Vector3.Distance(o, p) > range + 2) return 'hit-range';
     const c = e.center(new Vector3());
-    const reach = e.def.bodyR * e.def.scale + e.def.radius + 2.2 + e.def.speed * e.moveMult * 0.35;
-    if (Vector3.Distance(c, p) > Math.max(reach, e.def.topY + 1.5)) return 'hit-reach';
+    // Lag compensation: the claimed point must be on the target where it was within the rewind window.
+    const t = this.trails.get(e.id);
+    const off = t && t.gen === e.gen ? t.trail.distance(p.x, p.y, p.z, [c.x, c.y, c.z]) : Vector3.Distance(c, p);
+    const reach = e.def.bodyR * e.def.scale + e.def.radius + 1.4 + e.def.speed * e.moveMult * SAMPLE_S;
+    if (off > Math.max(reach, e.def.topY + 1.5)) return 'hit-reach';
     // Line of sight from the muzzle to just short of the point.
     const dir = p.subtract(o);
     const len = dir.length();
@@ -960,6 +984,7 @@ export class ServerGame extends Game {
     if (!hold) this.waves.update(dt, hdt);
     this.hostileT += hdt;
     this.enemies.update(hdt, this.enemyCtx, dt);
+    this.recordTrails(dt);
     // Hazards: patches and enemies once, the drone effects (slag burns) per avatar.
     if (this.hazards) {
       this.hazards.onAdd ??= (x, z, r, kind, life) => this.rec.push(['hz', Math.round(x * 100) / 100, Math.round(z * 100) / 100, r, kind, life]);

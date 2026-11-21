@@ -1,17 +1,10 @@
 import { Store } from '../ui/store';
-import { type KeyValueStorage, type LoadStatus, loadSave, type SaveData, sanitizeSave, writeSave } from '@riftwarden/rules/progression/save';
+import { type KeyValueStorage, type LoadStatus, loadSave, type SaveData, writeSave } from '@riftwarden/rules/progression/save';
 import { type OpResult, runOp } from '@riftwarden/rules/progression/ops';
 import { applyRunEntry, type RunEntry } from '@riftwarden/rules/progression/runRules';
 import { type LogEntry, openDoc, replay } from '@riftwarden/rules/progression/sync';
 import { namespaced, SyncJournal } from './SyncJournal';
 import { newUid } from '@riftwarden/rules/progression/items';
-
-/** Online (co-op) backend: operations are mirrored locally and executed authoritatively by the server. */
-export interface RemoteProfile {
-  send(name: string, args: unknown[], txId: string): void;
-  /** Server id shown in the UI. */
-  label: string;
-}
 
 function browserStorage(): KeyValueStorage | null {
   try {
@@ -28,11 +21,6 @@ function browserStorage(): KeyValueStorage | null {
  */
 export class Profile {
   private data: SaveData;
-  /** Single-player save kept aside while an online profile is mirrored. */
-  private localData: SaveData | null = null;
-  private localStorageRef: KeyValueStorage | null = null;
-  /** Set while the session mirrors an online (server-owned) profile. */
-  remote: RemoteProfile | null = null;
   readonly loadStatus: LoadStatus;
   readonly loadNotes: string[];
   /** Immutable snapshot for React (replaced on every committed change). */
@@ -76,7 +64,7 @@ export class Profile {
   /** Apply a run lifecycle entry (runRules.ts) and log it. Returns true when the save changed. */
   runEntry(e: RunEntry): boolean {
     const changed = this.mutate((d) => applyRunEntry(d, e));
-    if (changed && !this.remote) this.record({ run: e });
+    if (changed) this.record({ run: e });
     return changed;
   }
 
@@ -85,7 +73,7 @@ export class Profile {
    * own storage namespace; the session client then syncs it with the server.
    */
   useNamespace(ns: string | null): void {
-    if (ns === this.namespace || this.remote) return;
+    if (ns === this.namespace) return;
     this.namespace = ns;
     this.storage = namespaced(this.baseStorage, ns);
     const r = loadSave(this.storage);
@@ -164,62 +152,13 @@ export class Profile {
   }
 
   /**
-   * Run a named operation (progression/ops.ts). Locally: validated, persisted, rolled back on
-   * a failed write. Online: applied to the mirror for instant feedback and sent to the server,
-   * whose authoritative save replaces the mirror when it answers (`adoptRemote`).
+   * Run a named operation (progression/ops.ts): validated, persisted, rolled back on a failed write, and
+   * journaled for the account sync (the server replays the same operation).
    */
   op(name: string, args: unknown[] = [], txId: string = newUid('tx')): OpResult {
-    if (!this.remote) {
-      const r = this.transact((d) => runOp(d, name, args, txId));
-      if (r.ok) this.record({ op: { name, args, tx: txId } });
-      return r;
-    }
-    const before = JSON.stringify(this.data);
-    let res: OpResult;
-    try {
-      res = runOp(this.data, name, args, txId);
-    } catch (e) {
-      res = { ok: false, reason: `Operation error: ${(e as Error).message}` };
-    }
-    if (!res.ok) {
-      this.data = JSON.parse(before) as SaveData;
-      return res;
-    }
-    this.remote.send(name, args, txId);
-    this.store.set({ save: snapshot(this.data), savedAt: Date.now(), lastWriteOk: true });
-    return res;
-  }
-
-  /** Switch to mirroring an online profile (the local save is kept aside, untouched). */
-  attachRemote(remote: RemoteProfile, save: unknown): void {
-    if (!this.remote) {
-      this.localData = this.data;
-      this.localStorageRef = this.storage;
-    }
-    this.remote = remote;
-    this.storage = null;
-    this.adoptRemote(save);
-  }
-
-  /** Replace the mirror with the server's authoritative save. */
-  adoptRemote(save: unknown): void {
-    if (!this.remote) return;
-    this.data = sanitizeSave(save).data;
-    this.store.set({ save: snapshot(this.data), savedAt: Date.now(), lastWriteOk: true });
-  }
-
-  /** Back to the single-player profile. */
-  detachRemote(): void {
-    if (!this.remote) return;
-    this.remote = null;
-    this.storage = this.localStorageRef;
-    if (this.localData) this.data = this.localData;
-    this.localData = null;
-    this.store.set({ save: snapshot(this.data), savedAt: Date.now(), lastWriteOk: true });
-  }
-
-  get online(): boolean {
-    return !!this.remote;
+    const r = this.transact((d) => runOp(d, name, args, txId));
+    if (r.ok) this.record({ op: { name, args, tx: txId } });
+    return r;
   }
 
   rollbacks = 0;

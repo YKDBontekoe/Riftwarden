@@ -123,7 +123,7 @@ function actFromProto(m: Act): Record<string, unknown> | null {
 function clientInit(m: ClientMsg): ClientInit {
   switch (m.t) {
     case 'hello':
-      return { msg: { case: 'hello', value: { protocol: m.v, secret: m.secret, name: m.name } } };
+      return { msg: { case: 'hello', value: { protocol: m.v } } };
     case 'create':
       return { msg: { case: 'create', value: { tier: m.tier } } };
     case 'join':
@@ -140,10 +140,6 @@ function clientInit(m: ClientMsg): ClientInit {
       return { msg: { case: 'node', value: { node: m.node ?? '' } } };
     case 'start':
       return { msg: { case: 'start', value: {} } };
-    case 'profileInit':
-      return { msg: { case: 'profileInit', value: {} } };
-    case 'op':
-      return { msg: { case: 'op', value: { name: m.name, args: toDoc(m.args), tx: m.tx } } };
     case 'presence':
       return { msg: { case: 'presence', value: { p: vec(m.p), yaw: m.yaw } } };
     case 'visit':
@@ -188,7 +184,7 @@ export function decodeClient(bytes: Uint8Array): unknown {
   const m = f.msg;
   switch (m.case) {
     case 'hello':
-      return { t: 'hello', v: m.value.protocol, secret: m.value.secret, name: m.value.name };
+      return { t: 'hello', v: m.value.protocol };
     case 'create':
       return { t: 'create', tier: m.value.tier };
     case 'join':
@@ -205,17 +201,6 @@ export function decodeClient(bytes: Uint8Array): unknown {
       return { t: 'node', node: m.value.node || null };
     case 'start':
       return { t: 'start' };
-    case 'profileInit':
-      return { t: 'profileInit' };
-    case 'op': {
-      let args: unknown;
-      try {
-        args = fromDoc(m.value.args);
-      } catch {
-        return null;
-      }
-      return { t: 'op', name: m.value.name, args, tx: m.value.tx };
-    }
     case 'presence':
       return { t: 'presence', p: unvec(m.value.p), yaw: m.value.yaw };
     case 'visit':
@@ -281,15 +266,11 @@ function runStartToProto(r: RunStart) {
 function serverInit(m: ServerMsg): ServerInit {
   switch (m.t) {
     case 'welcome':
-      return { msg: { case: 'welcome', value: { protocol: m.v, playerId: m.playerId, name: m.name, hasProfile: m.hasProfile, profile: m.profile == null ? undefined : toDoc(m.profile) } } };
+      return { msg: { case: 'welcome', value: { protocol: m.v, playerId: m.playerId, name: m.name } } };
     case 'error':
       return { msg: { case: 'error', value: { code: m.code, msg: m.msg } } };
     case 'lobby':
       return { msg: { case: 'lobby', value: { lobby: m.lobby ? lobbyToProto(m.lobby) : undefined } } };
-    case 'profile':
-      return { msg: { case: 'profile', value: { save: toDoc(m.save) } } };
-    case 'opResult':
-      return { msg: { case: 'opResult', value: { tx: m.tx, ok: m.ok, reason: m.reason ?? '' } } };
     case 'presence':
       return { msg: { case: 'presence', value: { players: m.players.map((p) => ({ id: p.id, name: p.name, p: vec(p.p), yaw: p.yaw })) } } };
     case 'hostHq':
@@ -303,7 +284,7 @@ function serverInit(m: ServerMsg): ServerInit {
     case 'actResult':
       return { msg: { case: 'actResult', value: { id: m.id, ok: m.ok, reason: m.reason ?? '' } } };
     case 'runEnd':
-      return { msg: { case: 'runEnd', value: { result: toDoc(m.result), save: toDoc(m.save) } } };
+      return { msg: { case: 'runEnd', value: { result: toDoc(m.result) } } };
     case 'pong':
       return { msg: { case: 'pong', value: { c: m.c, s: m.s } } };
   }
@@ -325,15 +306,11 @@ export function decodeServer(bytes: Uint8Array): ServerMsg | null {
   const reason = (r: string) => (r ? { reason: r } : {});
   switch (m.case) {
     case 'welcome':
-      return { t: 'welcome', v: m.value.protocol, playerId: m.value.playerId, name: m.value.name, hasProfile: m.value.hasProfile, profile: m.value.profile ? fromDoc(m.value.profile) : null };
+      return { t: 'welcome', v: m.value.protocol, playerId: m.value.playerId, name: m.value.name };
     case 'error':
       return { t: 'error', code: m.value.code, msg: m.value.msg };
     case 'lobby':
       return { t: 'lobby', lobby: m.value.lobby ? lobbyFromProto(m.value.lobby) : null };
-    case 'profile':
-      return { t: 'profile', save: fromDoc(m.value.save) };
-    case 'opResult':
-      return { t: 'opResult', tx: m.value.tx, ok: m.value.ok, ...reason(m.value.reason) };
     case 'presence':
       return { t: 'presence', players: m.value.players.map((p) => ({ id: p.id, name: p.name, p: unvec(p.p), yaw: p.yaw })) };
     case 'hostHq':
@@ -364,7 +341,7 @@ export function decodeServer(bytes: Uint8Array): ServerMsg | null {
     case 'actResult':
       return { t: 'actResult', id: m.value.id, ok: m.value.ok, ...reason(m.value.reason) };
     case 'runEnd':
-      return { t: 'runEnd', result: fromDoc(m.value.result), save: fromDoc(m.value.save) };
+      return { t: 'runEnd', result: fromDoc(m.value.result) };
     case 'pong':
       return { t: 'pong', c: m.value.c, s: m.value.s };
     default:

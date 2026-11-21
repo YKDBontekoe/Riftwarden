@@ -1,44 +1,30 @@
-// Co-op run map (protocol level, no rendering): a map operation starts on a node, the node completes after
-// five waves, the team votes on the run map, a "home" voter extracts alone, the rest travel to the next node
-// (a fresh authoritative arena with the carried state), and the run records its path in PostgreSQL.
-// Usage: RIFT_TEST_DATABASE_URL=... node --import tsx scripts/e2e-coop-map.mjs   (starts its own test server on :8798, RIFT_MAP=1)
-import { spawn } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
-import pg from 'pg';
+// Co-op run map (protocol level, no rendering) through the gateway: a map operation starts on a node, the node
+// completes after five waves, the team votes on the run map, a "home" voter extracts alone, the rest travel to
+// the next node (a fresh authoritative arena with the carried state), and each account records the path.
+// Usage: node --import tsx scripts/e2e-coop-map.mjs   (own stack on :8796 with RIFT_MAP=1; needs RIFT_TEST_DATABASE_URL
+// and RIFT_TEST_REDIS_URL)
 import { Bot, sleep } from './bot.mjs';
+import { profileDoc, startStack } from './lib/stack.mjs';
 
-const PORT = 8798;
-const WS_URL = `ws://localhost:${PORT}/ws`;
-if (!process.env.RIFT_TEST_DATABASE_URL) throw new Error('Set RIFT_TEST_DATABASE_URL to a PostgreSQL test database');
-const schema = `coopmap_${randomBytes(8).toString('hex')}`;
-const databaseUrl = new URL(process.env.RIFT_TEST_DATABASE_URL);
-databaseUrl.searchParams.set('options', `-c search_path=${schema}`);
-const db = new pg.Pool({ connectionString: databaseUrl.href });
 let passes = 0, failures = 0;
 const check = (n, ok, info = '') => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${n}${info ? '  ' + info : ''}`); ok ? passes++ : failures++; };
-
-let server = null;
-function startServer() {
-  const child = spawn(process.execPath, ['--import', 'tsx', 'apps/server/main.ts'], {
-    env: { ...process.env, RIFT_PORT: String(PORT), DATABASE_URL: databaseUrl.href, RIFT_TEST: '1', RIFT_MAP: '1' },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  server = child;
-  child.log = '';
-  return new Promise((res, rej) => {
-    const timeout = setTimeout(() => rej(new Error(`Server startup timed out\n${child.log}`)), 20000);
-    child.once('exit', () => { clearTimeout(timeout); rej(new Error(`Server exited\n${child.log}`)); });
-    child.stdout.on('data', (d) => { child.log += d; if (child.log.includes('Riftwarden co-op server')) { clearTimeout(timeout); res(); } });
-    child.stderr.on('data', (d) => (child.log += d));
-  });
-}
+let stack = null;
 
 async function bot(name) {
-  const b = new Bot(name, WS_URL);
+  const b = new Bot(name, stack);
   const w = await b.connect();
   if (w.t !== 'welcome') throw new Error(`${name}: ${JSON.stringify(w)}`);
-  if (!w.hasProfile) { b.send({ t: 'profileInit' }); await b.wait((m) => m.t === 'profile'); }
   return b;
+}
+
+/** Poll an account's profile until `fn(doc)` holds (run entries are applied through the gateway's queue). */
+async function docWhen(account, fn, ms = 8000) {
+  let doc = null;
+  for (const t0 = Date.now(); Date.now() - t0 < ms; await sleep(120)) {
+    doc = await profileDoc(stack, account);
+    if (doc && fn(doc)) return doc;
+  }
+  return doc;
 }
 
 function heartbeat(bots) {
@@ -77,8 +63,7 @@ async function clearWave(bots, actor) {
 (async () => {
   let stop = () => {};
   try {
-    await db.query(`CREATE SCHEMA ${schema}`);
-    await startServer();
+    stack = await startStack({ port: 8796, simEnv: { RIFT_MAP: '1' } });
     const A = await bot('Alpha');
     const B = await bot('Bravo');
     A.send({ t: 'create', tier: 1 });
@@ -87,16 +72,16 @@ async function clearWave(bots, actor) {
     await B.waitNew((m) => m.t === 'lobby' && m.lobby);
     B.send({ t: 'ready', ready: true });
     await A.wait((m) => m.t === 'lobby' && m.lobby && m.lobby.players.length === 2 && m.lobby.players.every((p) => p.host || p.ready));
+    let started = [A, B].map((b) => b.waitNew((m) => m.t === 'runStart', 40000).then(() => b.waitNew((m) => m.t === 'snap')));
     A.send({ t: 'start' });
-    for (const b of [A, B]) await b.waitNew((m) => m.t === 'runStart', 40000);
-    for (const b of [A, B]) await b.waitNew((m) => m.t === 'snap');
+    await Promise.all(started);
     stop = heartbeat([A, B]);
     const run0 = A.run;
-    const war0 = await (await fetch(`http://localhost:${PORT}/war`)).json();
+    const war0 = await (await fetch(`${stack.url}/war`)).json();
     check('M1 runStart carries the war entry sector (the front landing) and the war seed', !!run0.node && run0.node.id === 'r0n0' && run0.node.map === war0.war.seed && run0.node.carry === null, JSON.stringify(run0.node));
     check('M2 snapshots carry node state and the map vote field', !!A.snap.nd && Array.isArray(A.snap.mv), JSON.stringify({ nd: A.snap.nd, mv: A.snap.mv }));
-    const { rows: [ar] } = await db.query('SELECT map FROM profile_active_runs WHERE player_id = $1', [A.welcome.playerId]);
-    check('M3 PostgreSQL active run holds the map state', !!ar?.map && ar.map.seed === run0.node.map, JSON.stringify(ar));
+    const ar = (await docWhen(A.welcome.playerId, (d) => !!d.activeRun?.map))?.activeRun;
+    check('M3 the account\'s active run holds the map state', !!ar?.map && ar.map.seed === run0.node.map, JSON.stringify(ar?.map && { seed: ar.map.seed }));
 
     for (let w = 0; w < 5; w++) await clearWave([A, B], A);
     // Pick the last upgrade, then the vote opens.
@@ -115,7 +100,7 @@ async function clearWave(bots, actor) {
     check('M6 unreachable nodes are refused', !badVote.ok, badVote.reason);
     // Reachable nodes: from the map seed (same pure generator as the server).
     const { reachable } = await import('../packages/rules/src/war/world.ts');
-    const warNow = (await (await fetch(`http://localhost:${PORT}/war`)).json()).war;
+    const warNow = (await (await fetch(`${stack.url}/war`)).json()).war;
     check('W1 the co-op team secured r0n0: the shared war counted it (trusted, per warden)', warNow.secured >= 1 && warNow.regions[0].nodes.r0n0.lib > war0.war.regions[0].nodes.r0n0.lib, JSON.stringify({ before: war0.war.regions[0].nodes.r0n0, after: warNow.regions[0].nodes.r0n0 }));
     const next = reachable(run0.node.map, warNow, run0.node.id)[0];
     const cores = A.snap.c;
@@ -132,8 +117,8 @@ async function clearWave(bots, actor) {
     await sleep(300);
     check('M11 the new arena starts at wave 6 (combat) or holds (hub)', next.kind === 'combat' || next.kind === 'elite' || next.kind === 'boss' ? A.snap.w[0] === 6 : A.snap.w[0] === 6 && A.snap.mv?.[0] === 1, JSON.stringify({ w: A.snap.w, kind: next.kind, mv: A.snap.mv }));
     check('M12 the extracted warden is gone from the team', !A.snap.a.some((x) => x[0] === B.welcome.playerId));
-    const { rows: [hb] } = await db.query('SELECT path, nodes, outcome FROM profile_run_history WHERE player_id = $1 ORDER BY position LIMIT 1', [B.welcome.playerId]);
-    check('M13 PostgreSQL history keeps the home voter path', hb?.outcome === 'returned' && hb.nodes === 1 && hb.path?.length === 1, JSON.stringify(hb));
+    const hb = (await docWhen(B.welcome.playerId, (d) => d.history.some((h) => h.id === run0.runId)))?.history.find((h) => h.id === run0.runId);
+    check('M13 the home voter\'s history keeps the path', hb?.outcome === 'returned' && hb.nodes === 1 && hb.path?.length === 1, JSON.stringify(hb));
     // Alpha extracts from the new node (hub: immediately; combat: after it is secured).
     if (!A.snap.mv?.[0]) {
       for (let w = 0; w < 5; w++) await clearWave([A], A);
@@ -145,25 +130,25 @@ async function clearWave(bots, actor) {
     const vh = await A.act({ a: 'mapVote', choice: 'home' });
     const endA = await A.waitNew((m) => m.t === 'runEnd', 20000).catch(() => null);
     check('M14 the last warden extracts: run ends with two nodes on the path', vh.ok && endA?.result?.outcome === 'returned' && endA.result.map?.nodes === 2 && endA.result.map.path.length === 2, JSON.stringify(endA?.result?.map));
-    const { rows: [rec] } = await db.query('SELECT best_nodes, deepest_act FROM profile_tier_records WHERE player_id = $1 AND tier = 1', [A.welcome.playerId]);
-    check('M15 map records in PostgreSQL', Number(rec?.best_nodes) === 2 && Number(rec?.deepest_act) === 1, JSON.stringify(rec));
+    const rec = (await docWhen(A.welcome.playerId, (d) => !d.activeRun))?.records?.[1];
+    check('M15 map records on the account', Number(rec?.bestNodes) === 2 && Number(rec?.deepestAct) === 1, JSON.stringify(rec && { bestNodes: rec.bestNodes, deepestAct: rec.deepestAct }));
     // Headless servers cannot fetch the scanned skyline props (a warning on every arena build, also before the map).
-    const errLines = server.log.split('\n').filter((l) => /rror/.test(l) && !/rejected|Scenery asset unavailable/.test(l));
+    const errLines = stack.sim.log.split('\n').filter((l) => /rror/.test(l) && !/rejected|Scenery asset unavailable/.test(l));
     check('M16 no server errors across the node swap', errLines.length === 0, errLines.slice(0, 3).join(' | '));
 
-    // ---------------------------------------------------------- solo reports over HTTP
-    const post = (body) => fetch(`http://localhost:${PORT}/war/report`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).then(async (r) => ({ status: r.status, body: await r.json() }));
+    // ---------------------------------------------------------- solo reports over HTTP (signed-in wardens only)
+    const post = (body, cookie = A.cookie) => fetch(`${stack.url}/war/report`, { method: 'POST', headers: { 'content-type': 'application/json', ...(cookie ? { cookie } : {}) }, body: typeof body === 'string' ? body : JSON.stringify(body) }).then(async (r) => ({ status: r.status, body: await r.json().catch(() => null) }));
     const target = Object.keys(warNow.regions[0].nodes).find((id) => id !== 'r0n0');
-    const r1 = await post({ node: target, mode: 'defense', id: 'solo-test' });
-    const r2 = await post({ node: target, mode: 'defense', id: 'solo-test' });
-    const r3 = await post({ node: 'r9n9', mode: 'defense', id: 'solo-other' });
+    const r1 = await post({ node: target, mode: 'defense' });
+    const r2 = await post({ node: target, mode: 'defense' }, null);
+    const r3 = await post({ node: 'r9n9', mode: 'defense' });
     check('W2 a solo report adds liberation (one warden share)', r1.status === 200 && r1.body.ok && r1.body.gain > 0, JSON.stringify(r1));
-    check('W3 reports are rate limited per reporter', r2.status === 429 && /Too soon/.test(r2.body.reason ?? ''), JSON.stringify(r2));
-    check('W4 locked or unknown sectors are refused', r3.status === 429 && !r3.body.ok, JSON.stringify(r3.body));
-    const bad = await fetch(`http://localhost:${PORT}/war/report`, { method: 'POST', body: 'x'.repeat(5000) });
-    check('W5 oversized report bodies are refused', bad.status === 413);
+    check('W3 reports need a signed-in warden', r2.status === 401, JSON.stringify(r2));
+    check('W4 locked or unknown sectors are refused', !r3.body?.ok, JSON.stringify(r3.body));
+    const bad = await post('x'.repeat(5000));
+    check('W5 oversized report bodies are refused', bad.status === 413, String(bad.status));
     await sleep(400);
-    const { rows: [ws] } = await db.query('SELECT data FROM war_state WHERE id = 1');
+    const { rows: [ws] } = await stack.db.query('SELECT data FROM war_state WHERE id = 1');
     check('W6 the war is persisted in PostgreSQL', ws?.data?.war?.secured >= 2, JSON.stringify(ws?.data?.war?.secured));
 
     // ---------------------------------------------------------- survival operation (same two wardens)
@@ -181,9 +166,9 @@ async function clearWave(bots, actor) {
     B.send({ t: 'ready', ready: true });
     await A.wait((m) => m.t === 'lobby' && m.lobby && m.lobby.players.length === 2 && m.lobby.players.every((p) => p.host || p.ready));
     check('V1 only the host picks the mode; the lobby shows survival', !!refusedMode && A.lobby.mode === 'survival', JSON.stringify(refusedMode));
+    started = [A, B].map((b) => b.waitNew((m) => m.t === 'runStart', 40000).then(() => b.waitNew((m) => m.t === 'snap')));
     A.send({ t: 'start' });
-    for (const b of [A, B]) await b.waitNew((m) => m.t === 'runStart', 40000);
-    for (const b of [A, B]) await b.waitNew((m) => m.t === 'snap');
+    await Promise.all(started);
     stop = heartbeat([A, B]);
     check('V2 runStart carries the survival mode', A.run.mode === 'survival' && B.run.mode === 'survival');
     const me = A.me();
@@ -197,17 +182,15 @@ async function clearWave(bots, actor) {
     await A.act({ a: 'test', op: 'down' });
     const endA2 = await A.waitNew((m) => m.t === 'runEnd', 20000).catch(() => null);
     check('V5 the last warden down = team defeat, recorded as a survival run', endA2?.result?.outcome === 'defeat' && endA2.result.mode === 'survival', JSON.stringify(endA2?.result && { o: endA2.result.outcome, m: endA2.result.mode }));
-    const { rows: [hs] } = await db.query('SELECT mode FROM profile_run_history WHERE player_id = $1 ORDER BY position LIMIT 1', [A.welcome.playerId]);
-    check('V6 PostgreSQL history keeps the mode', hs?.mode === 'survival', JSON.stringify(hs));
+    const hs = (await docWhen(A.welcome.playerId, (d) => !d.activeRun && d.history[0]?.mode === 'survival'))?.history[0];
+    check('V6 the account\'s history keeps the mode', hs?.mode === 'survival', JSON.stringify(hs && { mode: hs.mode }));
   } catch (e) {
-    console.log('FAIL  exception', e.stack || e, server?.log?.slice(-2000));
+    console.log('FAIL  exception', e.stack || e, stack?.log(30));
     failures++;
   } finally {
     stop();
     console.log(`\n${passes} passed, ${failures} failed`);
-    server?.kill();
-    await db.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`).catch(() => {});
-    await db.end();
+    await stack?.stop();
     process.exit(failures ? 1 : 0);
   }
 })();

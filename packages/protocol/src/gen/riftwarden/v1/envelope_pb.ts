@@ -20,7 +20,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file riftwarden/v1/envelope.proto.
  */
 export const file_riftwarden_v1_envelope: GenFile = /*@__PURE__*/
-  fileDesc("ChxyaWZ0d2FyZGVuL3YxL2VudmVsb3BlLnByb3RvEg1yaWZ0d2FyZGVuLnYxIrQFCgtDbGllbnRGcmFtZRIlCgVoZWxsbxgBIAEoCzIULnJpZnR3YXJkZW4udjEuSGVsbG9IABIsCgZjcmVhdGUYAiABKAsyGi5yaWZ0d2FyZGVuLnYxLkxvYmJ5Q3JlYXRlSAASKAoEam9pbhgDIAEoCzIYLnJpZnR3YXJkZW4udjEuTG9iYnlKb2luSAASKgoFbGVhdmUYBCABKAsyGS5yaWZ0d2FyZGVuLnYxLkxvYmJ5TGVhdmVIABIqCgVyZWFkeRgFIAEoCzIZLnJpZnR3YXJkZW4udjEuTG9iYnlSZWFkeUgAEigKBHRpZXIYBiABKAsyGC5yaWZ0d2FyZGVuLnYxLkxvYmJ5VGllckgAEigKBG1vZGUYByABKAsyGC5yaWZ0d2FyZGVuLnYxLkxvYmJ5TW9kZUgAEigKBG5vZGUYCCABKAsyGC5yaWZ0d2FyZGVuLnYxLkxvYmJ5Tm9kZUgAEioKBXN0YXJ0GAkgASgLMhkucmlmdHdhcmRlbi52MS5Mb2JieVN0YXJ0SAASMgoMcHJvZmlsZV9pbml0GAogASgLMhoucmlmdHdhcmRlbi52MS5Qcm9maWxlSW5pdEgAEiYKAm9wGAsgASgLMhgucmlmdHdhcmRlbi52MS5Qcm9maWxlT3BIABIrCghwcmVzZW5jZRgMIAEoCzIXLnJpZnR3YXJkZW4udjEuUHJlc2VuY2VIABIlCgV2aXNpdBgNIAEoCzIULnJpZnR3YXJkZW4udjEuVmlzaXRIABIlCgVpbnB1dBgOIAEoCzIULnJpZnR3YXJkZW4udjEuSW5wdXRIABIhCgNhY3QYDyABKAsyEi5yaWZ0d2FyZGVuLnYxLkFjdEgAEiMKBHBpbmcYECABKAsyEy5yaWZ0d2FyZGVuLnYxLlBpbmdIAEIFCgNtc2ci0AQKC1NlcnZlckZyYW1lEikKB3dlbGNvbWUYASABKAsyFi5yaWZ0d2FyZGVuLnYxLldlbGNvbWVIABIlCgVlcnJvchgCIAEoCzIULnJpZnR3YXJkZW4udjEuRXJyb3JIABIrCgVsb2JieRgDIAEoCzIaLnJpZnR3YXJkZW4udjEuTG9iYnlVcGRhdGVIABIuCgdwcm9maWxlGAQgASgLMhsucmlmdHdhcmRlbi52MS5Qcm9maWxlU3RhdGVIABIsCglvcF9yZXN1bHQYBSABKAsyFy5yaWZ0d2FyZGVuLnYxLk9wUmVzdWx0SAASMAoIcHJlc2VuY2UYBiABKAsyHC5yaWZ0d2FyZGVuLnYxLlByZXNlbmNlU3RhdGVIABIoCgdob3N0X2hxGAcgASgLMhUucmlmdHdhcmRlbi52MS5Ib3N0SHFIABIsCglydW5fc3RhcnQYCCABKAsyFy5yaWZ0d2FyZGVuLnYxLlJ1blN0YXJ0SAASJwoEc25hcBgJIAEoCzIXLnJpZnR3YXJkZW4udjEuU25hcHNob3RIABIrCgZldmVudHMYCiABKAsyGS5yaWZ0d2FyZGVuLnYxLkV2ZW50QmF0Y2hIABIuCgphY3RfcmVzdWx0GAsgASgLMhgucmlmdHdhcmRlbi52MS5BY3RSZXN1bHRIABIoCgdydW5fZW5kGAwgASgLMhUucmlmdHdhcmRlbi52MS5SdW5FbmRIABIjCgRwb25nGA0gASgLMhMucmlmdHdhcmRlbi52MS5Qb25nSABCBQoDbXNnIjcKBUhlbGxvEhAKCHByb3RvY29sGAEgASgNEg4KBnNlY3JldBgCIAEoCRIMCgRuYW1lGAMgASgJInYKB1dlbGNvbWUSEAoIcHJvdG9jb2wYASABKA0SEQoJcGxheWVyX2lkGAIgASgJEgwKBG5hbWUYAyABKAkSEwoLaGFzX3Byb2ZpbGUYBCABKAgSIwoHcHJvZmlsZRgFIAEoCzISLnJpZnR3YXJkZW4udjEuRG9jIg0KC1Byb2ZpbGVJbml0IkcKCVByb2ZpbGVPcBIMCgRuYW1lGAEgASgJEiAKBGFyZ3MYAiABKAsyEi5yaWZ0d2FyZGVuLnYxLkRvYxIKCgJ0eBgDIAEoCSIyCghPcFJlc3VsdBIKCgJ0eBgBIAEoCRIKCgJvaxgCIAEoCBIOCgZyZWFzb24YAyABKAkiMAoMUHJvZmlsZVN0YXRlEiAKBHNhdmUYASABKAsyEi5yaWZ0d2FyZGVuLnYxLkRvYyI3CghQcmVzZW5jZRIeCgFwGAEgASgLMhMucmlmdHdhcmRlbi52MS5WZWMzEgsKA3lhdxgCIAEoASJXCg5QcmVzZW5jZVBsYXllchIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJEh4KAXAYAyABKAsyEy5yaWZ0d2FyZGVuLnYxLlZlYzMSCwoDeWF3GAQgASgBIj8KDVByZXNlbmNlU3RhdGUSLgoHcGxheWVycxgBIAMoCzIdLnJpZnR3YXJkZW4udjEuUHJlc2VuY2VQbGF5ZXIiEwoFVmlzaXQSCgoCb24YASABKAgiOQoGSG9zdEhxEg0KBW93bmVyGAEgASgJEiAKBGJhc2UYAiABKAsyEi5yaWZ0d2FyZGVuLnYxLkRvYyI3CgtMb2JieVVwZGF0ZRIoCgVsb2JieRgBIAEoCzIZLnJpZnR3YXJkZW4udjEuTG9iYnlTdGF0ZSIyCgpFdmVudEJhdGNoEiQKBmV2ZW50cxgBIAMoCzIULnJpZnR3YXJkZW4udjEuRXZlbnQiEQoEUGluZxIJCgFjGAEgASgBIhwKBFBvbmcSCQoBYxgBIAEoARIJCgFzGAIgASgBYgZwcm90bzM", [file_riftwarden_v1_common, file_riftwarden_v1_coop, file_riftwarden_v1_events, file_riftwarden_v1_lobby, file_riftwarden_v1_snapshot]);
+  fileDesc("ChxyaWZ0d2FyZGVuL3YxL2VudmVsb3BlLnByb3RvEg1yaWZ0d2FyZGVuLnYxIuQECgtDbGllbnRGcmFtZRIlCgVoZWxsbxgBIAEoCzIULnJpZnR3YXJkZW4udjEuSGVsbG9IABIsCgZjcmVhdGUYAiABKAsyGi5yaWZ0d2FyZGVuLnYxLkxvYmJ5Q3JlYXRlSAASKAoEam9pbhgDIAEoCzIYLnJpZnR3YXJkZW4udjEuTG9iYnlKb2luSAASKgoFbGVhdmUYBCABKAsyGS5yaWZ0d2FyZGVuLnYxLkxvYmJ5TGVhdmVIABIqCgVyZWFkeRgFIAEoCzIZLnJpZnR3YXJkZW4udjEuTG9iYnlSZWFkeUgAEigKBHRpZXIYBiABKAsyGC5yaWZ0d2FyZGVuLnYxLkxvYmJ5VGllckgAEigKBG1vZGUYByABKAsyGC5yaWZ0d2FyZGVuLnYxLkxvYmJ5TW9kZUgAEigKBG5vZGUYCCABKAsyGC5yaWZ0d2FyZGVuLnYxLkxvYmJ5Tm9kZUgAEioKBXN0YXJ0GAkgASgLMhkucmlmdHdhcmRlbi52MS5Mb2JieVN0YXJ0SAASKwoIcHJlc2VuY2UYDCABKAsyFy5yaWZ0d2FyZGVuLnYxLlByZXNlbmNlSAASJQoFdmlzaXQYDSABKAsyFC5yaWZ0d2FyZGVuLnYxLlZpc2l0SAASJQoFaW5wdXQYDiABKAsyFC5yaWZ0d2FyZGVuLnYxLklucHV0SAASIQoDYWN0GA8gASgLMhIucmlmdHdhcmRlbi52MS5BY3RIABIjCgRwaW5nGBAgASgLMhMucmlmdHdhcmRlbi52MS5QaW5nSABCBQoDbXNnSgQIChALSgQICxAMIv4DCgtTZXJ2ZXJGcmFtZRIpCgd3ZWxjb21lGAEgASgLMhYucmlmdHdhcmRlbi52MS5XZWxjb21lSAASJQoFZXJyb3IYAiABKAsyFC5yaWZ0d2FyZGVuLnYxLkVycm9ySAASKwoFbG9iYnkYAyABKAsyGi5yaWZ0d2FyZGVuLnYxLkxvYmJ5VXBkYXRlSAASMAoIcHJlc2VuY2UYBiABKAsyHC5yaWZ0d2FyZGVuLnYxLlByZXNlbmNlU3RhdGVIABIoCgdob3N0X2hxGAcgASgLMhUucmlmdHdhcmRlbi52MS5Ib3N0SHFIABIsCglydW5fc3RhcnQYCCABKAsyFy5yaWZ0d2FyZGVuLnYxLlJ1blN0YXJ0SAASJwoEc25hcBgJIAEoCzIXLnJpZnR3YXJkZW4udjEuU25hcHNob3RIABIrCgZldmVudHMYCiABKAsyGS5yaWZ0d2FyZGVuLnYxLkV2ZW50QmF0Y2hIABIuCgphY3RfcmVzdWx0GAsgASgLMhgucmlmdHdhcmRlbi52MS5BY3RSZXN1bHRIABIoCgdydW5fZW5kGAwgASgLMhUucmlmdHdhcmRlbi52MS5SdW5FbmRIABIjCgRwb25nGA0gASgLMhMucmlmdHdhcmRlbi52MS5Qb25nSABCBQoDbXNnSgQIBBAFSgQIBRAGIiUKBUhlbGxvEhAKCHByb3RvY29sGAEgASgNSgQIAhADSgQIAxAEIkgKB1dlbGNvbWUSEAoIcHJvdG9jb2wYASABKA0SEQoJcGxheWVyX2lkGAIgASgJEgwKBG5hbWUYAyABKAlKBAgEEAVKBAgFEAYiNwoIUHJlc2VuY2USHgoBcBgBIAEoCzITLnJpZnR3YXJkZW4udjEuVmVjMxILCgN5YXcYAiABKAEiVwoOUHJlc2VuY2VQbGF5ZXISCgoCaWQYASABKAkSDAoEbmFtZRgCIAEoCRIeCgFwGAMgASgLMhMucmlmdHdhcmRlbi52MS5WZWMzEgsKA3lhdxgEIAEoASI/Cg1QcmVzZW5jZVN0YXRlEi4KB3BsYXllcnMYASADKAsyHS5yaWZ0d2FyZGVuLnYxLlByZXNlbmNlUGxheWVyIhMKBVZpc2l0EgoKAm9uGAEgASgIIjkKBkhvc3RIcRINCgVvd25lchgBIAEoCRIgCgRiYXNlGAIgASgLMhIucmlmdHdhcmRlbi52MS5Eb2MiNwoLTG9iYnlVcGRhdGUSKAoFbG9iYnkYASABKAsyGS5yaWZ0d2FyZGVuLnYxLkxvYmJ5U3RhdGUiMgoKRXZlbnRCYXRjaBIkCgZldmVudHMYASADKAsyFC5yaWZ0d2FyZGVuLnYxLkV2ZW50IhEKBFBpbmcSCQoBYxgBIAEoASIcCgRQb25nEgkKAWMYASABKAESCQoBcxgCIAEoAWIGcHJvdG8z", [file_riftwarden_v1_common, file_riftwarden_v1_coop, file_riftwarden_v1_events, file_riftwarden_v1_lobby, file_riftwarden_v1_snapshot]);
 
 /**
  * @generated from message riftwarden.v1.ClientFrame
@@ -83,18 +83,6 @@ export type ClientFrame = Message<"riftwarden.v1.ClientFrame"> & {
      */
     value: LobbyStart;
     case: "start";
-  } | {
-    /**
-     * @generated from field: riftwarden.v1.ProfileInit profile_init = 10;
-     */
-    value: ProfileInit;
-    case: "profileInit";
-  } | {
-    /**
-     * @generated from field: riftwarden.v1.ProfileOp op = 11;
-     */
-    value: ProfileOp;
-    case: "op";
   } | {
     /**
      * @generated from field: riftwarden.v1.Presence presence = 12;
@@ -162,18 +150,6 @@ export type ServerFrame = Message<"riftwarden.v1.ServerFrame"> & {
     case: "lobby";
   } | {
     /**
-     * @generated from field: riftwarden.v1.ProfileState profile = 4;
-     */
-    value: ProfileState;
-    case: "profile";
-  } | {
-    /**
-     * @generated from field: riftwarden.v1.OpResult op_result = 5;
-     */
-    value: OpResult;
-    case: "opResult";
-  } | {
-    /**
      * @generated from field: riftwarden.v1.PresenceState presence = 6;
      */
     value: PresenceState;
@@ -238,16 +214,6 @@ export type Hello = Message<"riftwarden.v1.Hello"> & {
    * @generated from field: uint32 protocol = 1;
    */
   protocol: number;
-
-  /**
-   * @generated from field: string secret = 2;
-   */
-  secret: string;
-
-  /**
-   * @generated from field: string name = 3;
-   */
-  name: string;
 };
 
 /**
@@ -275,16 +241,6 @@ export type Welcome = Message<"riftwarden.v1.Welcome"> & {
    * @generated from field: string name = 3;
    */
   name: string;
-
-  /**
-   * @generated from field: bool has_profile = 4;
-   */
-  hasProfile: boolean;
-
-  /**
-   * @generated from field: riftwarden.v1.Doc profile = 5;
-   */
-  profile?: Doc | undefined;
 };
 
 /**
@@ -293,92 +249,6 @@ export type Welcome = Message<"riftwarden.v1.Welcome"> & {
  */
 export const WelcomeSchema: GenMessage<Welcome> = /*@__PURE__*/
   messageDesc(file_riftwarden_v1_envelope, 3);
-
-/**
- * @generated from message riftwarden.v1.ProfileInit
- */
-export type ProfileInit = Message<"riftwarden.v1.ProfileInit"> & {
-};
-
-/**
- * Describes the message riftwarden.v1.ProfileInit.
- * Use `create(ProfileInitSchema)` to create a new message.
- */
-export const ProfileInitSchema: GenMessage<ProfileInit> = /*@__PURE__*/
-  messageDesc(file_riftwarden_v1_envelope, 4);
-
-/**
- * A named profile operation (progression/ops.ts); args are JSON (their shapes are owned by the rules).
- *
- * @generated from message riftwarden.v1.ProfileOp
- */
-export type ProfileOp = Message<"riftwarden.v1.ProfileOp"> & {
-  /**
-   * @generated from field: string name = 1;
-   */
-  name: string;
-
-  /**
-   * @generated from field: riftwarden.v1.Doc args = 2;
-   */
-  args?: Doc | undefined;
-
-  /**
-   * @generated from field: string tx = 3;
-   */
-  tx: string;
-};
-
-/**
- * Describes the message riftwarden.v1.ProfileOp.
- * Use `create(ProfileOpSchema)` to create a new message.
- */
-export const ProfileOpSchema: GenMessage<ProfileOp> = /*@__PURE__*/
-  messageDesc(file_riftwarden_v1_envelope, 5);
-
-/**
- * @generated from message riftwarden.v1.OpResult
- */
-export type OpResult = Message<"riftwarden.v1.OpResult"> & {
-  /**
-   * @generated from field: string tx = 1;
-   */
-  tx: string;
-
-  /**
-   * @generated from field: bool ok = 2;
-   */
-  ok: boolean;
-
-  /**
-   * @generated from field: string reason = 3;
-   */
-  reason: string;
-};
-
-/**
- * Describes the message riftwarden.v1.OpResult.
- * Use `create(OpResultSchema)` to create a new message.
- */
-export const OpResultSchema: GenMessage<OpResult> = /*@__PURE__*/
-  messageDesc(file_riftwarden_v1_envelope, 6);
-
-/**
- * @generated from message riftwarden.v1.ProfileState
- */
-export type ProfileState = Message<"riftwarden.v1.ProfileState"> & {
-  /**
-   * @generated from field: riftwarden.v1.Doc save = 1;
-   */
-  save?: Doc | undefined;
-};
-
-/**
- * Describes the message riftwarden.v1.ProfileState.
- * Use `create(ProfileStateSchema)` to create a new message.
- */
-export const ProfileStateSchema: GenMessage<ProfileState> = /*@__PURE__*/
-  messageDesc(file_riftwarden_v1_envelope, 7);
 
 /**
  * @generated from message riftwarden.v1.Presence
@@ -400,7 +270,7 @@ export type Presence = Message<"riftwarden.v1.Presence"> & {
  * Use `create(PresenceSchema)` to create a new message.
  */
 export const PresenceSchema: GenMessage<Presence> = /*@__PURE__*/
-  messageDesc(file_riftwarden_v1_envelope, 8);
+  messageDesc(file_riftwarden_v1_envelope, 4);
 
 /**
  * @generated from message riftwarden.v1.PresencePlayer
@@ -432,7 +302,7 @@ export type PresencePlayer = Message<"riftwarden.v1.PresencePlayer"> & {
  * Use `create(PresencePlayerSchema)` to create a new message.
  */
 export const PresencePlayerSchema: GenMessage<PresencePlayer> = /*@__PURE__*/
-  messageDesc(file_riftwarden_v1_envelope, 9);
+  messageDesc(file_riftwarden_v1_envelope, 5);
 
 /**
  * @generated from message riftwarden.v1.PresenceState
@@ -449,7 +319,7 @@ export type PresenceState = Message<"riftwarden.v1.PresenceState"> & {
  * Use `create(PresenceStateSchema)` to create a new message.
  */
 export const PresenceStateSchema: GenMessage<PresenceState> = /*@__PURE__*/
-  messageDesc(file_riftwarden_v1_envelope, 10);
+  messageDesc(file_riftwarden_v1_envelope, 6);
 
 /**
  * @generated from message riftwarden.v1.Visit
@@ -466,7 +336,7 @@ export type Visit = Message<"riftwarden.v1.Visit"> & {
  * Use `create(VisitSchema)` to create a new message.
  */
 export const VisitSchema: GenMessage<Visit> = /*@__PURE__*/
-  messageDesc(file_riftwarden_v1_envelope, 11);
+  messageDesc(file_riftwarden_v1_envelope, 7);
 
 /**
  * @generated from message riftwarden.v1.HostHq
@@ -488,7 +358,7 @@ export type HostHq = Message<"riftwarden.v1.HostHq"> & {
  * Use `create(HostHqSchema)` to create a new message.
  */
 export const HostHqSchema: GenMessage<HostHq> = /*@__PURE__*/
-  messageDesc(file_riftwarden_v1_envelope, 12);
+  messageDesc(file_riftwarden_v1_envelope, 8);
 
 /**
  * Absent lobby = not in a session.
@@ -507,7 +377,7 @@ export type LobbyUpdate = Message<"riftwarden.v1.LobbyUpdate"> & {
  * Use `create(LobbyUpdateSchema)` to create a new message.
  */
 export const LobbyUpdateSchema: GenMessage<LobbyUpdate> = /*@__PURE__*/
-  messageDesc(file_riftwarden_v1_envelope, 13);
+  messageDesc(file_riftwarden_v1_envelope, 9);
 
 /**
  * @generated from message riftwarden.v1.EventBatch
@@ -524,7 +394,7 @@ export type EventBatch = Message<"riftwarden.v1.EventBatch"> & {
  * Use `create(EventBatchSchema)` to create a new message.
  */
 export const EventBatchSchema: GenMessage<EventBatch> = /*@__PURE__*/
-  messageDesc(file_riftwarden_v1_envelope, 14);
+  messageDesc(file_riftwarden_v1_envelope, 10);
 
 /**
  * @generated from message riftwarden.v1.Ping
@@ -541,7 +411,7 @@ export type Ping = Message<"riftwarden.v1.Ping"> & {
  * Use `create(PingSchema)` to create a new message.
  */
 export const PingSchema: GenMessage<Ping> = /*@__PURE__*/
-  messageDesc(file_riftwarden_v1_envelope, 15);
+  messageDesc(file_riftwarden_v1_envelope, 11);
 
 /**
  * @generated from message riftwarden.v1.Pong
@@ -563,5 +433,5 @@ export type Pong = Message<"riftwarden.v1.Pong"> & {
  * Use `create(PongSchema)` to create a new message.
  */
 export const PongSchema: GenMessage<Pong> = /*@__PURE__*/
-  messageDesc(file_riftwarden_v1_envelope, 16);
+  messageDesc(file_riftwarden_v1_envelope, 12);
 

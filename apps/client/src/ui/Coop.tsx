@@ -8,6 +8,7 @@ import { rarity } from '@riftwarden/rules/loot/rarity';
 import { THREAT_TIERS } from '@riftwarden/rules/progression/tiers';
 import { SLOT_CSS } from '@riftwarden/game/visuals/droneModel';
 import { useSave } from './App';
+import { useAccount } from '../account/store';
 
 function useNet(flow: Flow): NetState | null {
   const [s, setS] = useState<NetState | null>(flow.net?.state ?? null);
@@ -35,14 +36,13 @@ export function urlJoinCode(): string {
 }
 
 /**
- * Co-op operations panel (main menu tab and deployment terminal): connect with a guest identity,
- * create an online profile, create/join a private session by code or link, ready up,
+ * Co-op operations panel (main menu tab and deployment terminal): join with the signed-in account, create/join a private session by code or link, ready up,
  * pick the threat tier (host) and deploy the team.
  */
 export function CoopPanel({ flow, compact }: { flow: Flow; compact?: boolean }) {
   const net = useNet(flow);
   const save = useSave(flow);
-  const [name, setName] = useState(flow.net?.name ?? localName());
+  const account = useAccount();
   const [code, setCode] = useState(urlJoinCode());
   const [copied, setCopied] = useState(false);
   const status = net?.status ?? 'offline';
@@ -51,54 +51,44 @@ export function CoopPanel({ flow, compact }: { flow: Flow; compact?: boolean }) 
   const host = lobby?.hostId === me;
   const mine = lobby?.players.find((p) => p.id === me);
 
-  const connect = () => void flow.coopConnect(name.trim() || undefined);
+  const connect = () => void flow.coopConnect();
 
   // Auto-join from an invite link once the online profile is ready.
   useEffect(() => {
-    if (status === 'online' && net?.hasProfile && !lobby && code && urlJoinCode() === code) flow.net?.send({ t: 'join', code });
+    if (status === 'online' && !lobby && code && urlJoinCode() === code) flow.net?.send({ t: 'join', code });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, net?.hasProfile]);
+  }, [status]);
 
   if (status === 'offline' || status === 'error' || status === 'connecting') {
+    const signedIn = account.status === 'signedIn';
     return (
       <div className={`coop ${compact ? 'compact' : ''}`} data-testid="coop-panel">
         <div className="coop-lead">Defend the reactor with up to {MAX_PLAYERS - 1} friends. Each warden keeps their own equipment and loot; towers, cores and the reactor are shared.</div>
-        <label className="coop-field">
-          <span>CALLSIGN</span>
-          <input data-testid="coop-name" maxLength={18} value={name} onChange={(e) => setName(e.target.value)} />
-        </label>
+        {signedIn ? (
+          <div className="coop-note">
+            Playing as <b>{account.account!.name}</b>
+          </div>
+        ) : (
+          <div className="coop-note" data-testid="coop-signin">Co-op needs an account: open ACCOUNT in the main menu to sign in with a passkey.</div>
+        )}
         {code && <div className="coop-note">Invite code <b>{code}</b> will be joined after connecting.</div>}
-        <button className="primary" data-testid="coop-connect" disabled={status === 'connecting'} onClick={connect}>
-          {status === 'connecting' ? 'CONNECTING…' : 'CONNECT TO CO-OP SERVER'}
+        <button className="primary" data-testid="coop-connect" disabled={!signedIn || status === 'connecting'} onClick={connect}>
+          {status === 'connecting' ? 'CONNECTING…' : 'GO ONLINE'}
         </button>
         {net?.error && <div className="term-msg bad">{net.error}</div>}
-        <div className="coop-fine">Co-op uses an online profile stored on the server. Your single-player save is never changed by co-op.</div>
+        <div className="coop-fine">Co-op results (loot, resources, records) are saved to your account, which syncs with this device.</div>
       </div>
     );
   }
 
   if (status === 'reconnecting') return <div className="coop"><div className="coop-note">Connection lost · reconnecting…</div></div>;
-
-  if (!net?.hasProfile) {
-    return (
-      <div className="coop" data-testid="coop-profile">
-        <div className="coop-title">ONLINE PROFILE</div>
-        <div className="coop-lead">Create a profile to save your online equipment, resources, records, and headquarters.</div>
-        <div className="coop-choices">
-          <button className="primary" data-testid="coop-fresh" onClick={() => flow.coopProfileInit()}>
-            CREATE ONLINE PROFILE
-          </button>
-        </div>
-        <button className="mini" onClick={() => flow.coopDisconnect()}>CANCEL</button>
-      </div>
-    );
-  }
+  if (!net) return null;
 
   if (!lobby) {
     return (
       <div className="coop" data-testid="coop-online">
         <div className="coop-status">
-          <i className="dot on" /> ONLINE as <b>{net.name}</b> · {net.rtt} ms · online profile active
+          <i className="dot on" /> ONLINE as <b>{net.name}</b> · {net.rtt} ms
         </div>
         <div className="coop-row">
           <button className="primary" data-testid="coop-create" onClick={() => flow.net?.send({ t: 'create', tier: save.threat.selected })}>
@@ -113,7 +103,7 @@ export function CoopPanel({ flow, compact }: { flow: Flow; compact?: boolean }) 
         </div>
         {net.error && <div className="term-msg bad">{net.error}</div>}
         <button className="mini" data-testid="coop-disconnect" onClick={() => flow.coopDisconnect()}>
-          DISCONNECT · BACK TO SINGLE PLAYER
+          LEAVE CO-OP
         </button>
       </div>
     );
@@ -209,19 +199,9 @@ export function CoopPanel({ flow, compact }: { flow: Flow; compact?: boolean }) 
         </button>
       </div>
       {net.error && <div className="term-msg bad">{net.error}</div>}
-      <div className="coop-fine">Prepare your loadout at HQ terminals while you wait: changes are saved to your online profile instantly.</div>
+      <div className="coop-fine">Prepare your loadout at HQ terminals while you wait: changes sync to your account before the operation starts.</div>
     </div>
   );
-}
-
-function localName(): string {
-  try {
-    const raw = localStorage.getItem('riftwarden.identity');
-    if (raw) return (JSON.parse(raw) as { name?: string }).name ?? 'Warden';
-  } catch {
-    /* ignore */
-  }
-  return 'Warden';
 }
 
 /** Lobby: the Rift War sector the team deploys to (the host picks on the map; default: the front's landing). */

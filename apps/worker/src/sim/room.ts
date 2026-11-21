@@ -1,8 +1,8 @@
 import { CODE_ALPHABET, type LobbyState, MAX_PLAYERS, RECONNECT_WINDOW, type ServerMsg } from '@riftwarden/protocol/protocol';
 import { equippedItem, deployBlocker } from '@riftwarden/rules/progression/save';
 import { THREAT_TIERS } from '@riftwarden/rules/progression/tiers';
-import type { OnlineProfile, ProfileStore } from './profiles';
-import type { CoopSim } from './sim';
+import type { OnlineProfile, SimStore } from './store';
+import type { CoopSim } from './coopSim';
 
 export interface Peer {
   id: string;
@@ -26,7 +26,7 @@ export interface Member {
 }
 
 export interface RoomDeps {
-  store: ProfileStore;
+  store: SimStore;
   log(msg: string): void;
   createSim(room: Room): Promise<CoopSim>;
 }

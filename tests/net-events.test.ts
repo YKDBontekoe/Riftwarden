@@ -15,7 +15,7 @@ describe('replicated events', () => {
 
   it('every tag the server emits is part of the union', () => {
     const emitted = new Set<string>();
-    for (const f of ['packages/game/src/net/recorder.ts', 'packages/game/src/net/ServerGame.ts', 'apps/server/sim.ts']) {
+    for (const f of ['packages/game/src/net/recorder.ts', 'packages/game/src/net/ServerGame.ts', 'apps/worker/src/sim/coopSim.ts']) {
       for (const m of read(f).matchAll(/(?:push|pushExcept)\(\s*\[\s*'([A-Za-z+-]+)'/g)) emitted.add(m[1]);
     }
     expect(emitted.size).toBeGreaterThan(15);

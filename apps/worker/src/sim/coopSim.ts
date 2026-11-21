@@ -1,7 +1,8 @@
 import { generateArena } from '@riftwarden/rules/world/arenaGen';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { NullEngine } from '@babylonjs/core';
 import HavokPhysics from '@babylonjs/havok';
 import { hashRunSeed } from '@riftwarden/rules/roguelite/upgrades';
@@ -9,25 +10,32 @@ import { type ClientMsg, type RunStart, SIM_HZ, SNAP_HZ } from '@riftwarden/prot
 import { type Avatar, ServerGame, type ServerPlayerInit } from '@riftwarden/game/net/ServerGame';
 import { newUid, SLOT_IDS } from '@riftwarden/rules/progression/items';
 import { RunLedger, type RunOutcome } from '@riftwarden/rules/progression/run';
-import { applyLoadout, bankNodeRewards, bankRewards, equippedItem, recordRun } from '@riftwarden/rules/progression/save';
+import { equippedItem } from '@riftwarden/rules/progression/save';
+import { emptyRewards } from '@riftwarden/rules/progression/run';
 import { getTier, type ThreatTier } from '@riftwarden/rules/progression/tiers';
 import { actEffects, type RunCarry } from '@riftwarden/rules/runmap/carry';
 import { combineEffects, type MapNode, nodeEffect, segmentTier } from '@riftwarden/rules/runmap/map';
 import { defaultEntry, findNode, liveNode, nodePlayable, pathCode, reachable } from '@riftwarden/rules/war/world';
 import { buffEffect } from '@riftwarden/rules/war/state';
-import type { WarService } from './war';
+import type { SimWar } from './war';
 import { MODE_EFFECT } from '@riftwarden/rules/runmap/defs';
 import { newMapState, type RunMapState } from '@riftwarden/rules/runmap/state';
 import type { SlotId } from '@riftwarden/rules/progression/items';
 import type { ItemInstance } from '@riftwarden/rules/loot/types';
-import type { OnlineProfile, ProfileStore } from './profiles';
+import type { OnlineProfile, SimStore } from './store';
 import type { Peer, Room } from './room';
 
+/** Havok's wasm: next to the production bundle (apps/worker/build.mjs copies it), else from node_modules. */
 export async function loadHavok(): Promise<unknown> {
-  const req = createRequire(import.meta.url);
-  let dir = dirname(req.resolve('@babylonjs/havok'));
-  while (!dir.endsWith('havok') && dir.length > 1) dir = dirname(dir);
-  const wasm = readFileSync(join(dir, 'lib/esm/HavokPhysics.wasm'));
+  const bundled = process.env.RIFT_HAVOK_WASM ?? join(dirname(fileURLToPath(import.meta.url)), 'HavokPhysics.wasm');
+  let file = bundled;
+  if (!existsSync(file)) {
+    const req = createRequire(import.meta.url);
+    let dir = dirname(req.resolve('@babylonjs/havok'));
+    while (!dir.endsWith('havok') && dir.length > 1) dir = dirname(dir);
+    file = join(dir, 'lib/esm/HavokPhysics.wasm');
+  }
+  const wasm = readFileSync(file);
   return HavokPhysics({ wasmBinary: wasm.buffer.slice(wasm.byteOffset, wasm.byteOffset + wasm.byteLength) as ArrayBuffer });
 }
 
@@ -75,7 +83,7 @@ export class CoopSim {
   private whyLast = '{}';
   stats = { ticks: 0, simMs: 0, maxMs: 0, bytes: 0, snaps: 0, events: 0 };
 
-  static async create(room: Room, store: ProfileStore, havok: unknown, log: (m: string) => void, war: WarService): Promise<CoopSim> {
+  static async create(room: Room, store: SimStore, havok: unknown, log: (m: string) => void, war: SimWar): Promise<CoopSim> {
     const players = room.connected.map((m) => ({ id: m.id, name: m.name, profile: store.get(m.id)! }));
     const runId = newUid('run');
     const mapSeed = coopMapMode() ? war.state.seed : 0;
@@ -84,7 +92,7 @@ export class CoopSim {
       return new CoopSim(room, store, havok, log, runId, players, war);
     } catch (error) {
       await Promise.all(players.map(async ({ profile }) => {
-        await store.mutate(profile, (data) => { data.activeRun = null; });
+        await store.run(profile, { kind: 'interrupt', at: Date.now() });
         profile.inRun = null;
       }));
       throw error;
@@ -93,13 +101,13 @@ export class CoopSim {
 
   private constructor(
     private room: Room,
-    private store: ProfileStore,
+    private store: SimStore,
     private havok: unknown,
     private log: (m: string) => void,
     readonly runId: string,
     members: { id: string; name: string; profile: OnlineProfile }[],
     /** The shared Rift War (map operations play on it and report secured sectors). */
-    private war: WarService,
+    private war: SimWar,
   ) {
     this.engine = new NullEngine();
     this.tier = getTier(room.tier);
@@ -164,7 +172,7 @@ export class CoopSim {
         bank: async (id, wave, rewards, bosses) => {
           const p = this.store.get(id);
           if (!p) return false;
-          const ok = await this.store.mutate(p, (d) => bankRewards(d, this.runId, wave, rewards, { bosses }));
+          const ok = await this.store.run(p, { kind: 'bank', runId: this.runId, wave, rewards: { ...emptyRewards(), ...rewards }, bosses, loot: [] });
           this.log(`run ${this.runId.slice(-6)}: banked wave ${wave} for ${id.slice(0, 6)} (${rewards.items.length} items, ok=${ok})`);
           return ok;
         },
@@ -220,7 +228,7 @@ export class CoopSim {
     if (!moved || !p || this.game.cfg.run.survival.dev) return;
     if (!moved.items.length && !moved.salvage && !moved.credits && !moved.components && !moved.shards && !moved.xp) return;
     const step = ++this.nodeStep;
-    await this.store.mutate(p, (d) => bankNodeRewards(d, this.runId, step, moved));
+    await this.store.run(p, { kind: 'nodeBank', runId: this.runId, step, rewards: { ...emptyRewards(), ...moved }, loot: [] });
     a.inventoryDirty = true;
   }
 
@@ -459,15 +467,11 @@ export class CoopSim {
     const result = a.run.finalize(outcome);
     if (p) {
       const owned = a.inventory.ownedLoadout();
-      const saved = await this.store.mutate(p, (d) => {
-        const recorded = recordRun(d, result);
-        if (recorded) applyLoadout(d, owned, { ignoreActiveRun: true });
-        return recorded;
-      });
+      const saved = await this.store.run(p, { kind: 'end', result, loadout: owned });
       p.inRun = null;
       if (!saved) (this.peer(a.id) ?? peer)?.send({ t: 'error', code: 'save', msg: 'The operation summary could not be saved' });
     }
-    (this.peer(a.id) ?? peer)?.send({ t: 'runEnd', result, save: p?.data ?? null });
+    (this.peer(a.id) ?? peer)?.send({ t: 'runEnd', result });
     this.log(`run ${this.runId.slice(-6)}: ${a.name} ${outcome} (wave ${result.finalWave}, ${result.itemsSecured} items secured, ${result.itemsLost} lost)`);
   }
 

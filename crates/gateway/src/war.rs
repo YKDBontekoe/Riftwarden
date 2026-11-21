@@ -88,6 +88,9 @@ impl War {
             riftwarden_db::war::save(&state.db, &doc).await?;
         }
         Self::keep(&mut slot, doc);
+        if changed || fresh {
+            state.coop.war_changed(&format!(r#"{{"war":{}}}"#, slot.as_ref().map(|s| s.war_json.as_str()).unwrap_or("null")));
+        }
         Ok(())
     }
 
@@ -111,6 +114,9 @@ impl War {
             riftwarden_db::war::save(&state.db, &doc).await?;
         }
         Self::keep(&mut slot, doc);
+        if changed {
+            state.coop.war_changed(&format!(r#"{{"war":{}}}"#, slot.as_ref().map(|s| s.war_json.as_str()).unwrap_or("null")));
+        }
         Ok(result.unwrap_or(serde_json::json!({ "ok": false, "reason": "No result", "gain": 0, "lib": 0, "messages": [] })))
     }
 }
@@ -129,7 +135,8 @@ pub fn spawn_ticker(state: State) {
 }
 
 pub fn routes() -> Router<State> {
-    Router::new().route("/war", get(snapshot)).route("/war/report", post(report))
+    // Reports are tiny: refuse anything larger than 2 KB before parsing it.
+    Router::new().route("/war", get(snapshot)).route("/war/report", post(report).layer(axum::extract::DefaultBodyLimit::max(2048)))
 }
 
 async fn snapshot(Extract(state): Extract<State>, ip: ClientIp) -> ApiResult<Response> {

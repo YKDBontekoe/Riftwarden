@@ -203,5 +203,6 @@ message RunStart {
 
 message RunEnd {
   Doc result = 1;
-  Doc save = 2;
+  // 2: the online profile after the run (clients sync their account instead since v13).
+  reserved 2;
 }

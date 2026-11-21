@@ -40,6 +40,7 @@ import { MOVE, type Player } from '../player/Player';
 import { poundBlast } from '@riftwarden/rules/player/movement';
 import type { Kit } from '../visuals/kit';
 import type { Palette } from '../visuals/materials';
+import { BLEND_S, blendStep, SNAP_M } from '@riftwarden/rules/net/lagComp';
 
 /** Connection used by the replica (implemented by NetClient). */
 export interface NetLink {
@@ -176,6 +177,19 @@ export class ClientGame extends Game {
   defeatedByServer = false;
   /** Diagnostics. */
   netStats = { snaps: 0, events: 0, corrections: 0, rejected: 0, bytes: 0, badEvents: 0 };
+  /** Server correction still being blended into the predicted drone position. */
+  private correction: { off: Vector3; left: number } | null = null;
+
+  private blendCorrection(dt: number): void {
+    const c = this.correction;
+    if (!c) return;
+    const k = blendStep(dt, c.left);
+    const step = c.off.scale(k);
+    c.off.subtractInPlace(step);
+    c.left -= dt;
+    this.player.controller.setPosition(this.player.controller.getPosition().add(step));
+    if (c.left <= 0) this.correction = null;
+  }
   readonly puppet: EnemyContext;
 
   constructor(engine: Engine, canvas: HTMLCanvasElement, havok: unknown, settings: Settings, input: Input, cfg: ArenaConfig & { you: string; slot: number; players: { id: string; name: string; slot: number }[] }, link: NetLink) {
@@ -530,6 +544,7 @@ export class ClientGame extends Game {
     this.hazards?.decay(hdt, this.hostileT);
     this.hazards?.affectPlayer(0);
     this.player.update(dt, input, this.stats.moveSpeedMult * (this.hazards?.playerSpeed ?? 1), controls);
+    this.blendCorrection(dt);
     if (this.player.dashedThisFrame) {
       this.player.dashedThisFrame = false;
       this.dashFlag = true;
@@ -1062,8 +1077,13 @@ export class ClientGame extends Game {
       case 'mv': {
         this.netStats.corrections++;
         const p = vec(ev[1]);
-        this.player.controller.setPosition(p);
-        this.player.controller.setVelocity(Vector3.Zero());
+        const off = p.subtract(this.player.controller.getPosition());
+        // Small corrections blend in over BLEND_S (no visible pop); large ones (respawn, blink, teleport) snap.
+        if (off.length() > SNAP_M) {
+          this.correction = null;
+          this.player.controller.setPosition(p);
+          this.player.controller.setVelocity(Vector3.Zero());
+        } else this.correction = { off, left: BLEND_S };
         return;
       }
       case 'def':

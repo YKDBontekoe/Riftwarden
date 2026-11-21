@@ -17,7 +17,21 @@ export interface SyncStatus {
   error: string;
 }
 
-export class SessionClient {
+/** Co-op frames tunnelled on the session socket (NetClient speaks the co-op protocol over it). */
+export interface CoopTunnel {
+  readonly connected: boolean;
+  send(frame: Uint8Array): boolean;
+  /** Frames, socket open and close; returns the unsubscribe function. */
+  listen(h: TunnelListener): () => void;
+}
+
+export interface TunnelListener {
+  frame(bytes: Uint8Array): void;
+  open(): void;
+  close(): void;
+}
+
+export class SessionClient implements CoopTunnel {
   readonly status = new Store<SyncStatus>({ state: 'offline', rev: 0, pending: 0, rejected: [], claimed: false, error: '' });
   private ws: WebSocket | null = null;
   private nextId = 1;
@@ -28,6 +42,8 @@ export class SessionClient {
   private again = false;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private nudgeTimer: ReturnType<typeof setTimeout> | null = null;
+
+  private listeners = new Set<TunnelListener>();
 
   /** Off until the owner has set the profile up for this account (a guest upload must come first). */
   autoSync = false;
@@ -63,6 +79,7 @@ export class SessionClient {
       this.retry = 0;
       this.status.set({ state: 'idle', error: '' });
       void this.sync();
+      for (const l of [...this.listeners]) l.open();
     };
     ws.onmessage = (ev) => {
       if (!(ev.data instanceof ArrayBuffer)) return;
@@ -79,6 +96,8 @@ export class SessionClient {
       } else if (f.msg.case === 'changed') {
         // Another device changed the profile: pull the new copy.
         if (BigInt(this.status.get().rev) < f.msg.value.rev) void this.sync();
+      } else if (f.msg.case === 'coop') {
+        for (const l of [...this.listeners]) l.frame(f.msg.value);
       } else if (f.msg.case === 'error') {
         this.status.set({ error: f.msg.value.msg });
       }
@@ -88,6 +107,7 @@ export class SessionClient {
       for (const [, done] of this.waiting) done({ id: 0, error: { code: 'offline', msg: 'Connection lost' } } as SessionResponse);
       this.waiting.clear();
       this.status.set({ state: 'offline' });
+      for (const l of [...this.listeners]) l.close();
       this.scheduleReconnect();
     };
   }
@@ -100,6 +120,18 @@ export class SessionClient {
 
   get connected(): boolean {
     return !!this.ws && this.ws.readyState === WebSocket.OPEN;
+  }
+
+  send(frame: Uint8Array): boolean {
+    const ws = this.ws;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return false;
+    ws.send(toBinary(SessionClientFrameSchema, create(SessionClientFrameSchema, { call: { case: 'coop', value: frame } })));
+    return true;
+  }
+
+  listen(h: TunnelListener): () => void {
+    this.listeners.add(h);
+    return () => this.listeners.delete(h);
   }
 
   private call(init: Parameters<typeof create<typeof SessionClientFrameSchema>>[1], timeoutMs = 30_000): Promise<SessionResponse> {
@@ -141,7 +173,7 @@ export class SessionClient {
     this.syncing = (async () => {
       do {
         this.again = false;
-        if (!this.autoSync || !this.connected || this.profile.online) break;
+        if (!this.autoSync || !this.connected) break;
         const j = this.profile.journal;
         const pending = j.pending.slice();
         const upTo = pending.reduce((m, e) => Math.max(m, e.seq), 0);

@@ -1,5 +1,5 @@
 // Walker / Bulwark / Rush Drone through the real EnemyManager on a Babylon NullEngine scene (as the server runs it).
-import '../apps/server/headless';
+import '../apps/worker/src/sim/headless';
 import { NullEngine, Scene, Vector3 } from '@babylonjs/core';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { CORE_BEHAVIORS } from '@riftwarden/game/enemies/coreBehaviors';

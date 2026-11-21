@@ -37,7 +37,7 @@ const multiplier = (value: number) => `${Number(value.toFixed(2))}×`;
 export function DeployTerminal({ flow, close }: { flow: Flow; close: () => void }) {
   const save = useSave(flow);
   const [busy, setBusy] = useState(false);
-  const [mode, setMode] = useState<'solo' | 'coop'>(flow.profile.online || flow.net ? 'coop' : 'solo');
+  const [mode, setMode] = useState<'solo' | 'coop'>(flow.net ? 'coop' : 'solo');
   const selected = THREAT_TIERS.find((t) => t.id === save.threat.selected) ?? THREAT_TIERS[0];
   const weapon = equippedItem(save, 'weapon');
   const blocker = deployBlocker(save);
@@ -62,8 +62,6 @@ export function DeployTerminal({ flow, close }: { flow: Flow; close: () => void 
       </div>
       {mode === 'coop' ? (
         <CoopPanel flow={flow} />
-      ) : flow.profile.online ? (
-        <div className="deploy-block">Your online profile is active. Online operations are deployed through the co-op lobby; disconnect from the co-op server to play solo with your local profile.</div>
       ) : (
       <div className={`deploy-grid${flow.mapMode ? ' war' : ''}`}>
         <div className="arena-card">
