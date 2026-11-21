@@ -1,7 +1,7 @@
 # Deploying Riftwarden
 
 The backend runs on one server with Docker Compose; the static client is on Cloudflare Pages. Design and reasoning:
-[docs/architecture-v2.md](../docs/architecture-v2.md), sections 9-10.
+[docs/architecture-v2.md](../docs/architecture-v2.md), section 9.
 
 ## One-time setup on the server
 
@@ -9,8 +9,7 @@ The backend runs on one server with Docker Compose; the static client is on Clou
 2. Log Docker in to GHCR for the deploy script: `DOCKER_CONFIG=~/stacks/riftwarden/.docker docker login ghcr.io`.
 3. Install the systemd user units from `systemd/` (`riftwarden-deploy.timer`, `riftwarden-deploy.service`,
    `riftwarden-tunnel.service`) and `systemctl --user enable --now riftwarden-deploy.timer riftwarden-tunnel.service`.
-4. Point the tunnel at the gateway and Grafana (`cloudflared.example.yml`), and put `grafana.riftwarden.ykdbonte.dev`
-   behind a Cloudflare Access application.
+4. Point the tunnel at the gateway (`cloudflared.example.yml`).
 5. Cloudflare Pages: create the project `riftwarden` (custom domain `riftwarden.ykdbonte.dev`) and add the repository
    secrets `CLOUDFLARE_API_TOKEN` (Pages: edit) and `CLOUDFLARE_ACCOUNT_ID`. Until they exist the deploy job skips
    the client with a warning.
@@ -31,8 +30,8 @@ so running co-op operations finish on the old version (up to `DRAIN_TIMEOUT`, 30
 | --- | --- |
 | Status of sim workers and rooms | `docker exec riftwarden-gateway riftwarden-gateway admin status` |
 | Stop new rooms on a slot | `docker exec riftwarden-gateway riftwarden-gateway admin drain sim-blue:7201 on` (`off` to resume) |
-| Logs | `docker compose --env-file .env --env-file images.env logs -f gateway sim-blue` or Grafana |
+| Logs | `docker compose --env-file .env --env-file images.env logs -f gateway sim-blue` |
 | Force a retry of a failed build | `rm .failed-build` |
 | Health | `curl -s 127.0.0.1:18084/health` |
 
-Grafana: `https://grafana.riftwarden.ykdbonte.dev` (admin password from `.env`), dashboard *Riftwarden overview*.
+Logs are JSON lines on stdout (`docker compose ... logs`). Observability (OpenTelemetry -> ClickHouse -> Grafana) is postponed; the gateway and workers export OTLP only when `OTEL_EXPORTER_OTLP_ENDPOINT` is set.

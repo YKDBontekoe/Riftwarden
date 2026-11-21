@@ -2,7 +2,7 @@
 
 A first-person sci-fi action tower-defense roguelite for the browser. You are a hovering combat drone defending an energy reactor against endless waves of robotic machines, with procedural loot, a branching run map on a shared war map, towers, and 2-4 player co-op.
 
-**Status: Architecture v2** (prototype -> production, [docs/architecture-v2.md](docs/architecture-v2.md)): a Rust gateway is the only backend, gameplay rules stay in one TypeScript copy executed by internal Node workers, Protobuf over one WebSocket, passkey accounts, offline play with server-validated sync, ClickHouse + Grafana observability, and a Vite + React 19 + Tailwind client with an optional WebGPU renderer.
+**Status: Architecture v2** (prototype -> production, [docs/architecture-v2.md](docs/architecture-v2.md)): a Rust gateway is the only backend, gameplay rules stay in one TypeScript copy executed by internal Node workers, Protobuf over one WebSocket, passkey accounts, offline play with server-validated sync, and a Vite + React 19 + Tailwind client with an optional WebGPU renderer.
 
 ## Repository layout
 
@@ -15,7 +15,7 @@ A first-person sci-fi action tower-defense roguelite for the browser. You are a 
 | `apps/worker` | Internal workers: `rules` (profile replay, run validation, war steps) and `sim` (co-op lobbies and operations) |
 | `crates/gateway` | Rust gateway (axum): passkeys, sessions, sync, war, co-op routing, admin listener |
 | `crates/db`, `crates/proto` | PostgreSQL access + migrations (sqlx), Rust protobuf types |
-| `deploy/` | Images, Compose stack, deploy script, OpenTelemetry/ClickHouse/Grafana config ([deploy/README.md](deploy/README.md)) |
+| `deploy/` | Images, Compose stack, deploy script ([deploy/README.md](deploy/README.md)) |
 | `scripts/`, `tests/` | Browser + protocol suites, Vitest suites |
 
 ## Run it
@@ -76,7 +76,7 @@ See the [security policy](.github/SECURITY.md) for private vulnerability reporti
 
 Merges to `main` run the tests (unit, Rust, co-op protocol suites against a real stack, browser suites), build the gateway and worker images, smoke-test the whole Compose stack, and publish both images to GitHub Container Registry. The server's deploy timer pulls them: it restarts the gateway in place (players reconnect; co-op operations keep running in the sim workers), then drains and replaces each sim slot only when its operations have finished, and rolls back a gateway that does not come up healthy. The static client is published to Cloudflare Pages once the API serves the new build. Details, first-time setup and operating notes: [deploy/README.md](deploy/README.md).
 
-Play at [riftwarden.ykdbonte.dev](https://riftwarden.ykdbonte.dev) (API: `api.riftwarden.ykdbonte.dev`). Traces, logs and metrics go to ClickHouse and are viewed in Grafana (`grafana.riftwarden.ykdbonte.dev`, behind Cloudflare Access).
+Play at [riftwarden.ykdbonte.dev](https://riftwarden.ykdbonte.dev) (API: `api.riftwarden.ykdbonte.dev`). Logs are JSON on stdout (observability with ClickHouse + Grafana is postponed).
 
 ## Controls
 

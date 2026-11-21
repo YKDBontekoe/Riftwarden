@@ -17,7 +17,7 @@ Status: **approved 2026-11-21, implemented** (steps 1-11, section 13; the open i
 | Scale | Hundreds of concurrent players, one machine for now (4 cores, **4 GB RAM allocated** to the stack); topology must not block more later. |
 | Hosting | The owner's personal server (Docker Compose, Cloudflare Tunnel, pull-based deploy timer kept). Static client on Cloudflare (CDN). API at `api.riftwarden.ykdbonte.dev`. No staging. |
 | Deploys | Running co-op sessions are **drained**, not dropped. |
-| Observability | OpenTelemetry traces, logs and metrics stored in **ClickHouse**, viewed in **Grafana** (no Sentry). Grafana behind Cloudflare Access. |
+| Observability | (Postponed, see section 10.) OpenTelemetry traces, logs and metrics stored in **ClickHouse**, viewed in **Grafana** (no Sentry). Grafana behind Cloudflare Access. |
 | Frontend | Vite + React 19 + TanStack Router (chosen over Next.js: the game is one canvas, no SSR, no website), Tailwind v4 with design tokens keeping the current look, lighter in-game HUD, Babylon **WebGPU** with WebGL2 fallback. |
 | Repo | Monorepo (Cargo + pnpm workspaces). |
 | Process | Feature freeze. One PR on `claude/dreamy-euler-ca3v9i`, many sessions, every step leaves the game working. Small gameplay differences are acceptable. All tests stay green (legacy suites rebuilt where the architecture removes what they drove). Dev tools kept for admin accounts and test servers. |
@@ -145,7 +145,7 @@ As built in step 7 (the first draft put the lobby in Rust; it stayed in TypeScri
 As built in step 8 (operator notes: `deploy/README.md`):
 
 - **Images** (GHCR, both labelled with the git revision): `riftwarden-gateway` (`deploy/gateway.Dockerfile`: release build, distroless `cc` image, 14 MB compressed; `riftwarden-gateway health` is the healthcheck, `riftwarden-gateway admin status|drain` replace curl) and `riftwarden-worker` (`deploy/worker.Dockerfile`: one esbuild bundle from `apps/worker/build.mjs` + Havok wasm on node:24-slim, no node_modules; `RIFT_WORKER_ROLE` picks rules or sim).
-- **Compose** (`deploy/compose.yml`): `gateway` (127.0.0.1:18084), `rules`, two sim slots `sim-blue` / `sim-green`, `db` (PostgreSQL 18), `redis` (no persistence, LRU), `clickhouse`, `otel-collector`, `grafana` (127.0.0.1:18085), all with memory limits (~3.3 GB of 4 GB; idle ~0.5 GB measured). cloudflared stays a systemd unit (`deploy/cloudflared.example.yml`: `api.` -> gateway, `grafana.` -> Grafana behind Cloudflare Access). Secrets in `.env` (`deploy/.env.example`); image digests in `images.env`, written by the deploy script.
+- **Compose** (`deploy/compose.yml`): `gateway` (127.0.0.1:18084), `rules`, two sim slots `sim-blue` / `sim-green`, `db` (PostgreSQL 18), `redis` (no persistence, LRU), all with memory limits (~2 GB of 4 GB; the observability services were removed, section 10). cloudflared stays a systemd unit (`deploy/cloudflared.example.yml`: `api.` -> gateway). Secrets in `.env` (`deploy/.env.example`); image digests in `images.env`, written by the deploy script.
 - **Gateway admin listener** (`crates/gateway/src/admin.rs`, `RIFT_ADMIN_LISTEN`, never published): sim workers with connected / draining / running, per-worker drain.
 - **Pull-based deploy** (`deploy/deploy.sh`, systemd timer every minute, flock): pull both `:production` images; skip when they are from different builds or the build already failed here (`.failed-build`). Then infrastructure `up` (no-op unless compose changed), rules worker, gateway (migrations run at gateway start; players' sockets drop and reconnect, operations keep running in the sims, which re-send their room bindings to the new gateway so rejoining players are routed back), health + build check with rollback of gateway and rules. Then each sim slot in turn: drain, wait until its operations end (`DRAIN_TIMEOUT`, default 30 min; then SIGTERM ends them: secured rewards stay), replace, undrain. The other slot takes new rooms meanwhile. Verified locally on the real images: first deploy, rolling update with an operation held on a slot (rejoin after the gateway restart, drain until the operation ended), drain timeout, broken gateway rollback, no retry of a failed build.
 - **Static client**: Cloudflare Pages (`wrangler pages deploy` in the deploy job, after the API is live; skipped with a warning until the `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` secrets exist). The production build sets `VITE_API_URL=https://api.riftwarden.ykdbonte.dev`; the session cookie is host-only on `api.` (same site as the client, SameSite=Lax), WebAuthn RP id `riftwarden.ykdbonte.dev`.
@@ -153,11 +153,7 @@ As built in step 8 (operator notes: `deploy/README.md`):
 
 ## 10. Observability (OpenTelemetry -> ClickHouse -> Grafana)
 
-As built in step 8:
-
-- **Pipeline**: the gateway exports traces, logs and metrics over OTLP/gRPC (`telemetry.rs`); the workers export logs over OTLP/HTTP JSON (`apps/worker/src/telemetry.ts`, no SDK: batched every 2 s, stdout stays the fallback). The collector (`deploy/otel-collector.yml`: memory limiter, health-check spans filtered, batch) writes to ClickHouse (`otel` database, tables created by the exporter, 30-day TTL). ClickHouse runs with small caches and compact system logs (`deploy/clickhouse/low-memory.xml`).
-- **Grafana**: ClickHouse datasource and the "Riftwarden overview" dashboard are provisioned (`deploy/grafana/`): gateway requests and latency, warnings/errors per service, co-op rooms and operations, syncs, sessions, latest warnings/errors. Every query was run against a live stack. Grafana's own login stays as a second layer behind Cloudflare Access.
-- **Not done yet**: browser error reporting (`/telemetry`), worker traces/metrics (sim tick time is in the operation's end log line), alert rules, more dashboards (RPC, anti-cheat).
+**Postponed (owner, 2026-11-21).** The stack was built and verified in step 8 (collector, ClickHouse, provisioned Grafana dashboard) and then removed from the deployment to keep it small; it is in git history (commit "Architecture v2 step 8: deployment"). What stays: JSON logs on stdout for every service (`docker compose logs`), and dormant OTLP exporters in the gateway (`telemetry.rs`) and the workers (`apps/worker/src/telemetry.ts`) that only run when `OTEL_EXPORTER_OTLP_ENDPOINT` is set.
 
 ## 11. Frontend
 
@@ -210,17 +206,13 @@ Steps 9-10 do not depend on 3-8 and can be interleaved when a session is blocked
   | worker-sim (2) | 2 x 512 MB |
   | postgres | 512 MB (`shared_buffers` 128 MB) |
   | redis | 96 MB (`maxmemory`, `allkeys-lru` for caches only) |
-  | clickhouse | 1 GB |
-  | otel-collector | 128 MB |
-  | grafana | 192 MB |
-  | **total** | ~3.3 GB (headroom for spikes) |
+  | **total** | ~2 GB (ClickHouse, collector and Grafana, 1.3 GB, postponed) |
 
   Idle stack measured at ~0.5 GB (step 8). The gateway refuses new co-op sessions when every sim worker is at capacity (`RIFT_SIM_CAPACITY` operations each; "servers full", solo unaffected; co-op protocol K1-K3). The room directory and worker links allow a second sim host later.
 
 ## 15. Owner actions (what the code cannot do)
 
 1. **Cloudflare Pages**: create the project `riftwarden` with the custom domain `riftwarden.ykdbonte.dev`, add the repository secrets `CLOUDFLARE_API_TOKEN` (Pages: edit) and `CLOUDFLARE_ACCOUNT_ID`. Until then the deploy job publishes the API and skips the client with a warning.
-2. **Server**: install the new `deploy/` files in `~/stacks/riftwarden` (`.env` from `.env.example`, systemd units, tunnel ingress from `cloudflared.example.yml`: `api.` and `grafana.`), see `deploy/README.md`. Everyone starts fresh (the old `profiles` volume is no longer used).
-3. **Cloudflare Access** application for `grafana.riftwarden.ykdbonte.dev`.
+2. **Server**: install the new `deploy/` files in `~/stacks/riftwarden` (`.env` from `.env.example`, systemd units, tunnel ingress from `cloudflared.example.yml`: `api.`), see `deploy/README.md`. Everyone starts fresh (the old `profiles` volume is no longer used).
 4. **Real-GPU check of WebGPU** (Settings > Renderer > WebGPU beta, or `?webgpu`): the HQ and an arena on Chrome/Edge with a real GPU. If it looks and plays right, make WebGPU the default in `packages/game/src/core/settings.ts` (`renderer`).
 5. **Backups**: none yet (owner decision); `pg_dump` of the `riftwarden` database is the first thing to schedule when that changes.

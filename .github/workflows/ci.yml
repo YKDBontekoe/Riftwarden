@@ -218,13 +218,12 @@ jobs:
       - name: Smoke-test the stack
         run: |
           cd deploy
-          { echo "RIFT_POSTGRES_PASSWORD=$(openssl rand -hex 24)"; echo "RIFT_CLICKHOUSE_PASSWORD=$(openssl rand -hex 24)"
-            echo "RIFT_GRAFANA_PASSWORD=$(openssl rand -hex 24)"; echo RIFT_COOKIE_SECURE=0; echo RIFT_TRUST_CF_IP=0; } > .env
+          { echo "RIFT_POSTGRES_PASSWORD=$(openssl rand -hex 24)"; echo RIFT_COOKIE_SECURE=0; echo RIFT_TRUST_CF_IP=0; } > .env
           { echo "RIFT_GATEWAY_IMAGE=$REGISTRY/riftwarden-gateway:$GITHUB_SHA"; echo "RIFT_BUILD=$GITHUB_SHA"
             for k in RULES SIM_BLUE SIM_GREEN; do echo "RIFT_${k}_IMAGE=$REGISTRY/riftwarden-worker:$GITHUB_SHA"; done; } > images.env
           compose=(docker compose --env-file .env --env-file images.env -f compose.yml)
           trap '"${compose[@]}" down --volumes >/dev/null 2>&1 || true' EXIT
-          if ! "${compose[@]}" up --detach --wait --wait-timeout 180; then "${compose[@]}" logs --tail 80; exit 1; fi
+          if ! "${compose[@]}" up --detach --wait --wait-timeout 120; then "${compose[@]}" logs --tail 80; exit 1; fi
           for _ in $(seq 1 30); do curl -fs http://127.0.0.1:18084/health | grep -q '"sims":2' && break; sleep 2; done
           node ../scripts/smoke-stack.mjs http://127.0.0.1:18084 "$GITHUB_SHA"
           docker exec riftwarden-gateway /usr/local/bin/riftwarden-gateway admin status

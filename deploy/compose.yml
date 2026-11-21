@@ -1,7 +1,7 @@
 # Riftwarden backend on the personal server (docs/architecture-v2.md sections 9-10). The static client is on
-# Cloudflare Pages; cloudflared publishes the gateway (api.) and Grafana (grafana., behind Cloudflare Access).
+# Cloudflare Pages; cloudflared publishes the gateway (api.). Logs: JSON on stdout (`docker compose logs`).
 # Images are pinned by digest in images.env, written by deploy.sh (one per sim slot, so slots roll one at a time).
-# Memory budget: ~3.3 GB of the 4 GB allocated to the stack.
+# Memory budget: ~2 GB of the 4 GB allocated to the stack.
 name: riftwarden
 
 x-hardening: &hardening
@@ -33,7 +33,6 @@ services:
       RIFT_RULES_WORKERS: rules:7101
       RIFT_SIM_WORKERS: sim-blue:7201,sim-green:7201
       RIFT_DB_POOL: "12"
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     depends_on:
       db: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -49,7 +48,6 @@ services:
       RIFT_WORKER_ROLE: rules
       RIFT_WORKER_LISTEN: 0.0.0.0:7101
       RIFT_BUILD: ${RIFT_BUILD:-unknown}
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
       NODE_OPTIONS: --max-old-space-size=192
     mem_limit: 256m
 
@@ -61,7 +59,6 @@ services:
       RIFT_WORKER_LISTEN: 0.0.0.0:7201
       RIFT_SIM_CAPACITY: "6"
       RIFT_BUILD: ${RIFT_BUILD:-unknown}
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
       NODE_OPTIONS: --max-old-space-size=420
     mem_limit: 512m
 
@@ -100,59 +97,5 @@ services:
     restart: unless-stopped
     mem_limit: 96m
 
-  clickhouse:
-    image: clickhouse/clickhouse-server:25.8
-    environment:
-      CLICKHOUSE_DB: otel
-      CLICKHOUSE_USER: otel
-      CLICKHOUSE_PASSWORD: ${RIFT_CLICKHOUSE_PASSWORD:?Set RIFT_CLICKHOUSE_PASSWORD in .env}
-      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "0"
-    volumes:
-      - clickhouse:/var/lib/clickhouse
-      - ./clickhouse/low-memory.xml:/etc/clickhouse-server/config.d/low-memory.xml:ro
-    ulimits:
-      nofile: { soft: 262144, hard: 262144 }
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8123/ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 20
-    restart: unless-stopped
-    mem_limit: 1g
-
-  otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.137.0
-    command: [--config=/etc/otelcol/config.yml]
-    environment:
-      RIFT_CLICKHOUSE_PASSWORD: ${RIFT_CLICKHOUSE_PASSWORD:?Set RIFT_CLICKHOUSE_PASSWORD in .env}
-    volumes:
-      - ./otel-collector.yml:/etc/otelcol/config.yml:ro
-    depends_on:
-      clickhouse: { condition: service_healthy }
-    restart: unless-stopped
-    mem_limit: 128m
-
-  grafana:
-    image: grafana/grafana:12.2.0
-    environment:
-      GF_SERVER_ROOT_URL: ${RIFT_GRAFANA_URL:-https://grafana.riftwarden.ykdbonte.dev}
-      GF_SECURITY_ADMIN_PASSWORD: ${RIFT_GRAFANA_PASSWORD:?Set RIFT_GRAFANA_PASSWORD in .env}
-      GF_AUTH_ANONYMOUS_ENABLED: "false"
-      GF_ANALYTICS_REPORTING_ENABLED: "false"
-      GF_PLUGINS_PREINSTALL: grafana-clickhouse-datasource
-      RIFT_CLICKHOUSE_PASSWORD: ${RIFT_CLICKHOUSE_PASSWORD:?Set RIFT_CLICKHOUSE_PASSWORD in .env}
-    volumes:
-      - grafana:/var/lib/grafana
-      - ./grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
-    depends_on:
-      clickhouse: { condition: service_healthy }
-    ports:
-      - "127.0.0.1:18085:3000"
-    restart: unless-stopped
-    mem_limit: 192m
-
 volumes:
   postgres:
-  clickhouse:
-  grafana:

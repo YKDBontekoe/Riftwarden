@@ -1,10 +1,8 @@
 # ~/.cloudflared/riftwarden.yml on the server (riftwarden-tunnel.service). The client is on Cloudflare Pages, so the
-# tunnel only publishes the API and Grafana; put grafana.* behind a Cloudflare Access application.
+# tunnel only publishes the API.
 tunnel: riftwarden
 credentials-file: /home/USER/.cloudflared/riftwarden.json
 ingress:
   - hostname: api.riftwarden.ykdbonte.dev
     service: http://127.0.0.1:18084
-  - hostname: grafana.riftwarden.ykdbonte.dev
-    service: http://127.0.0.1:18085
   - service: http_status:404

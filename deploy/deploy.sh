@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Pull-based deploy (systemd timer, every minute): when GHCR's :production images changed, roll the stack.
-#   1. infrastructure (PostgreSQL, Redis, ClickHouse, collector, Grafana): `up` is a no-op unless compose changed
+#   1. infrastructure (PostgreSQL, Redis): `up` is a no-op unless compose changed
 #   2. rules worker, then the gateway (players' sockets drop and reconnect; operations keep running in the sims)
 #   3. each sim slot in turn: drain (no new rooms), wait for its operations to finish (DRAIN_TIMEOUT), replace it,
 #      undrain. The other slot takes new rooms meanwhile, so co-op never stops.
@@ -60,7 +60,7 @@ if [[ "$(get RIFT_GATEWAY_IMAGE)" == "$gateway" && "$(get RIFT_RULES_IMAGE)" == 
 fi
 log "deploying $build"
 
-"${compose[@]}" up --detach --wait --wait-timeout 120 db redis clickhouse otel-collector grafana
+"${compose[@]}" up --detach --wait --wait-timeout 120 db redis
 
 previous_gateway=$(get RIFT_GATEWAY_IMAGE)
 previous_rules=$(get RIFT_RULES_IMAGE)
