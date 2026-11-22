@@ -730,6 +730,11 @@ export class Flow {
       stage(1);
       await nextPaint();
       const t0 = performance.now();
+      // Babylon's asynchronous BRDF texture decode still calls into the old scene's post-process manager.
+      const brdf = this.world?.scene.environmentBRDFTexture;
+      while (brdf && !brdf.isReady() && performance.now() - t0 < 8000) {
+        await new Promise<void>((resolve) => setTimeout(resolve, 16));
+      }
       this.building = true;
       this.disposeWorld();
       const t1 = performance.now();
