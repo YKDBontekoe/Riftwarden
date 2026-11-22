@@ -1,0 +1,458 @@
+import { Color3 } from '@babylonjs/core/Maths/math.color';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { type Mesh } from '@babylonjs/core/Meshes/mesh';
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
+import { type Scene } from '@babylonjs/core/scene';
+import { assemblyPose } from '../towers/assembly';
+import { woundSeverity } from '../fx/wounds';
+import { sfx } from '../audio/Sfx';
+import type { CombatStats } from '@riftwarden/rules/combat/stats';
+import type { Enemy } from '../enemies/EnemyManager';
+import type { Effects } from '../fx/Effects';
+import { BASES, composeTower, configCost, DEFAULT_CONFIG, levelCost, partDef, type TowerConfig, type TowerRunInput, type TowerStats, WEAPONS } from '@riftwarden/rules/towers/components';
+import type { Kit } from '../visuals/kit';
+import type { Palette } from '../visuals/materials';
+import type { TurretRig } from '../visuals/models';
+import { buildTowerRig } from '../visuals/towers';
+import { recycleRefund, repairCost, towerMaxHp } from '@riftwarden/rules/towers/durability';
+
+export interface TurretContext {
+  enemies: readonly Enemy[];
+  effects: Effects;
+  stats: CombatStats;
+  /** Bumped whenever run stats/upgrades change: towers recompose their numbers lazily. */
+  statsVersion: number;
+  los(a: Vector3, b: Vector3): boolean;
+  /** Run-level inputs (stats, upgrades, empowerment) for composeTower. */
+  input(t: Turret): TowerRunInput;
+  /** Performs the tower's archetype attack (damage goes through the shared pipeline). `target` is null for field emitters. */
+  attack(t: Turret, target: Enemy | null, mult: number): void;
+  panFor(p: Vector3): { pan: number; volume: number };
+}
+
+export interface TurretHitboxMeta {
+  turret: Turret;
+}
+
+const TMP = new Vector3();
+const POSE = assemblyPose(0);
+const BUILD_RING = new Color3(0.4, 2.2, 2.8);
+let nextTowerId = 1;
+
+/**
+ * Modular tower. Separation of concerns: targeting (pickTarget), aiming (rotate yaw/pitch nodes), firing
+ * (cooldown -> ctx.attack, resolved by the combat director), numbers (composeTower, lazily recomposed) and
+ * presentation (rig rebuilt from the configuration).
+ */
+export class Turret {
+  readonly id = nextTowerId++;
+  building = true;
+  buildT = 0;
+  /** Assembly animation: rest height of the head node, rest scale of the core glow, core lit flag. */
+  private yawY0 = 0;
+  private glow0 = new Vector3(1, 1, 1);
+  private lit = false;
+  cooldown = 0;
+  target: Enemy | null = null;
+  retargetT = 0;
+  barrel = 0;
+  kills = 0;
+  damageDealt = 0;
+  attacks = 0;
+  /** Cores spent so far (construction + refits + upgrades); recycling refunds a share of it. */
+  paid: number;
+  level = 1;
+  yaw = 0;
+  pitch = 0;
+  scanT = Math.random() * 10;
+  /** Seconds of remaining empowerment (synergy upgrades). */
+  empowerT = 0;
+  readonly head = new Vector3();
+  hitbox: Mesh;
+  st: TowerStats;
+  private seenVersion = -1;
+  private wasEmpowered = false;
+  refundRatio = 0.75;
+  buildTime = 0.8;
+  /** M6: seconds the tower stays offline (artillery hits, enforcer slams, EMP). Never destroyed. */
+  disabledT = 0;
+  /** M6: total seconds spent suppressed (statistics). */
+  suppressedFor = 0;
+
+  /** Knock the tower offline for `seconds` (longest wins; does not stack). */
+  /** M7: boost from the strongest covering Support Amplifier (0 = none; set when stats recompose). */
+  amplified = 0;
+  /** Durability (mazing arenas: breaching enemies hit it). A wreck neither fires nor blocks. */
+  hp = 0;
+  maxHp = 0;
+  wrecked = false;
+  /** Damage-flash timer (visual). */
+  hurtT = 0;
+  /** Max HP scale (follows the wave's hostile damage multiplier). */
+  hpScale = 1;
+  /** Mini-Sentry ability: free, short-lived, never blocks lanes, cannot be refitted/recycled/repaired. */
+  temporary = false;
+  /** Seconds left for a temporary tower. */
+  expiresT = 0;
+
+  /** Apply damage; returns true when this hit wrecked the tower. */
+  damage(amount: number): boolean {
+    if (this.wrecked || this.building || !(amount > 0)) return false;
+    this.hp = Math.max(0, this.hp - amount);
+    this.hurtT = 0.25;
+    if (this.hp > 0) return false;
+    this.wrecked = true;
+    this.target = null;
+    this.empowerT = 0;
+    return true;
+  }
+
+  /** Restore to full; returns the cores it costs (0 = nothing to repair). */
+  get repairCost(): number {
+    return repairCost(this.paid, this.hp, this.maxHp, this.wrecked);
+  }
+  get recycleValue(): number {
+    return recycleRefund(this.paid, this.refundRatio, this.wrecked);
+  }
+  repair(): void {
+    this.wrecked = false;
+    this.hp = this.maxHp;
+    this.rig.root.rotation.x = this.rig.root.rotation.z = 0;
+    this.rig.root.position.y = this.pos.y;
+    this.cooldown = Math.max(this.cooldown, 0.5);
+  }
+  /** Re-derive max HP (level / scale change) keeping the current HP fraction. */
+  rescaleHp(scale = this.hpScale): void {
+    const frac = this.maxHp > 0 ? this.hp / this.maxHp : 1;
+    this.hpScale = scale;
+    this.maxHp = towerMaxHp(this.config.base, this.level, scale);
+    if (!this.wrecked) this.hp = Math.max(1, Math.round(this.maxHp * frac));
+  }
+  /** Mend a share of max HP (wave clear); wrecks stay wrecked. */
+  mend(share: number): void {
+    if (!this.wrecked) this.hp = Math.min(this.maxHp, this.hp + this.maxHp * share);
+  }
+  get blocking(): boolean {
+    return !this.wrecked && !this.building && !this.temporary;
+  }
+
+  disable(seconds: number): void {
+    if (!(seconds > 0) || this.building) return;
+    this.disabledT = Math.max(this.disabledT, seconds);
+    this.target = null;
+  }
+  get disabled(): boolean {
+    return this.disabledT > 0;
+  }
+
+  constructor(public config: TowerConfig, public rig: TurretRig, readonly pos: Vector3, scene: Scene, ctx: TurretContext, private rebuildRig: (cfg: TowerConfig, level: number) => TurretRig) {
+    this.paid = configCost(config);
+    this.maxHp = this.hp = towerMaxHp(config.base, 1);
+    this.st = composeTower(config, 1);
+    this.recompose(ctx);
+    rig.root.position.copyFrom(pos);
+    this.head.set(pos.x, pos.y + 1.45 + (config.base === 'spire' ? 1.1 : 0), pos.z);
+    this.hitbox = MeshBuilder.CreateCylinder('turretHit', { diameter: this.radius * 2, height: 2.2 }, scene);
+    this.hitbox.position.set(pos.x, pos.y + 1.1, pos.z);
+    this.hitbox.isVisible = false;
+    this.hitbox.isPickable = true;
+    this.hitbox.metadata = { turret: this } satisfies TurretHitboxMeta;
+  }
+
+  get radius(): number {
+    return BASES[this.config.base]?.radius ?? 1.1;
+  }
+  get weaponName(): string {
+    return WEAPONS[this.config.weapon]?.name ?? 'Tower';
+  }
+  get archetype(): TowerStats['archetype'] {
+    return this.st.archetype;
+  }
+  get name(): string {
+    const a = this.st.archetype;
+    return a === 'arc' ? 'ARC TOWER' : a === 'cryo' ? 'CRYO FIELD PROJECTOR' : 'BALLISTIC TURRET';
+  }
+  get empowered(): boolean {
+    return this.empowerT > 0;
+  }
+
+  /** Recompute numbers from scratch (never accumulates old bonuses). */
+  recompose(ctx: TurretContext): void {
+    this.st = composeTower(this.config, this.level, ctx.input(this));
+    this.seenVersion = ctx.statsVersion;
+    this.wasEmpowered = this.empowerT > 0;
+  }
+
+  /** Replace the configuration/level and rebuild the model. Resets cooldown/target so no stale attack state survives. */
+  refit(config: TowerConfig, level: number, ctx: TurretContext): void {
+    this.config = { ...config };
+    this.level = level;
+    const old = this.rig;
+    const rig = this.rebuildRig(this.config, level);
+    rig.root.position.copyFrom(old.root.position);
+    rig.root.scaling.copyFrom(old.root.scaling);
+    rig.yaw.rotation.y = this.yaw;
+    old.root.dispose(false, false);
+    this.rig = rig;
+    this.head.set(this.pos.x, this.pos.y + 1.45 + (config.base === 'spire' ? 1.1 : 0), this.pos.z);
+    this.target = null;
+    this.barrel = 0;
+    this.cooldown = Math.max(this.cooldown, 0.3);
+    this.rescaleHp();
+    this.recompose(ctx);
+  }
+
+  range(): number {
+    return this.st.range;
+  }
+
+  private validTarget(e: Enemy | null, range: number, ctx: TurretContext): boolean {
+    if (!e || !e.alive || e.hidden) return false;
+    const c = e.center(TMP);
+    const dx = c.x - this.pos.x;
+    const dz = c.z - this.pos.z;
+    if (dx * dx + dz * dz > range * range) return false;
+    return ctx.los(this.head, c);
+  }
+
+  pickTarget(range: number, ctx: TurretContext): Enemy | null {
+    let best: Enemy | null = null;
+    let bestScore = Infinity;
+    for (const e of ctx.enemies) {
+      if (!e.alive || e.hidden) continue;
+      const c = e.center(TMP);
+      const dx = c.x - this.pos.x;
+      const dz = c.z - this.pos.z;
+      if (dx * dx + dz * dz > range * range) continue;
+      // Priority: closest to the reactor (least remaining path); missile batteries prefer bosses and elites.
+      const score = e.remaining - (this.st.archetype === 'missile' ? (e.def.role === 'boss' ? 1e6 : 0) + (e.elite || e.def.role === 'hvt' ? 1e4 : 0) : 0);
+      if (score >= bestScore) continue;
+      if (!ctx.los(this.head, c)) continue;
+      best = e;
+      bestScore = score;
+    }
+    return best;
+  }
+
+  private anyInRange(range: number, ctx: TurretContext): boolean {
+    const r2 = range * range;
+    for (const e of ctx.enemies) {
+      if (!e.alive || e.hidden) continue;
+      const dx = e.pos.x - this.pos.x;
+      const dz = e.pos.z - this.pos.z;
+      if (dx * dx + dz * dz <= r2) return true;
+    }
+    return false;
+  }
+
+  /** Fire immediately regardless of cooldown/aim (network discharge, conductor link). */
+  forceFire(ctx: TurretContext, mult = 1): boolean {
+    if (this.building || this.disabledT > 0 || this.wrecked) return false;
+    if (this.st.archetype === 'support') return false;
+    if (this.st.archetype === 'cryo') {
+      if (!this.anyInRange(this.st.range, ctx)) return false;
+      ctx.attack(this, null, mult);
+    } else {
+      const tgt = this.validTarget(this.target, this.st.range, ctx) ? this.target : this.pickTarget(this.st.range, ctx);
+      if (!tgt) return false;
+      this.target = tgt;
+      ctx.attack(this, tgt, mult);
+    }
+    this.attacks++;
+    this.cooldown = Math.max(this.cooldown, 0.15);
+    return true;
+  }
+
+  update(dt: number, ctx: TurretContext): void {
+    const r = this.rig;
+    if (this.building) {
+      if (this.buildT === 0) {
+        this.yawY0 = r.yaw.position.y;
+        this.glow0.copyFrom(r.coreGlow.scaling);
+      }
+      this.buildT += dt;
+      const f = Math.min(1, this.buildT / this.buildTime);
+      const p = assemblyPose(f, POSE);
+      r.root.position.y = this.pos.y - p.sink;
+      r.root.scaling.set(1, p.stretch, 1);
+      r.yaw.position.y = this.yawY0 + p.headLift / Math.max(0.25, p.stretch);
+      r.yaw.rotation.y = this.yaw + p.headSpin;
+      r.coreGlow.scaling.copyFrom(this.glow0).scaleInPlace(Math.max(0.001, p.glow));
+      // Weld sparks: at the deck while the pedestal prints, at the bearing while the head docks.
+      if (Math.random() < dt * 30) {
+        if (p.stage === 0) ctx.effects.burst('impact', TMP.set(this.pos.x + (Math.random() - 0.5) * 1.6, this.pos.y + 0.1, this.pos.z + (Math.random() - 0.5) * 1.6), 2, undefined, 0.7);
+        else if (p.stage === 1) ctx.effects.burst('zap', TMP.set(this.pos.x, this.head.y - 0.45, this.pos.z), 2, undefined, 0.45);
+      }
+      if (p.stage === 2 && !this.lit) {
+        this.lit = true;
+        ctx.effects.ring(TMP.set(this.pos.x, this.pos.y + 0.1, this.pos.z), this.radius * 3.2, 0.45, BUILD_RING, true);
+      }
+      if (f >= 1) {
+        this.building = false;
+        r.root.position.y = this.pos.y;
+        r.root.scaling.setAll(1);
+        r.yaw.position.y = this.yawY0;
+        r.yaw.rotation.y = this.yaw;
+        r.coreGlow.scaling.copyFrom(this.glow0);
+        ctx.effects.burst('build', this.head, 30);
+      }
+      return;
+    }
+    if (this.hurtT > 0) this.hurtT = Math.max(0, this.hurtT - dt);
+    // Structural damage state: a breached tower smokes, then sparks, and a wreck burns until repaired.
+    const sev = this.wrecked ? 1 : woundSeverity(this.hp, this.maxHp);
+    if (sev > 0) ctx.effects.wound(TMP.set(this.pos.x, this.head.y - 0.5, this.pos.z), this.radius * 1.2, sev);
+    if (this.wrecked) {
+      // Wreck: slumped, sunk and dark; smoulders until repaired or recycled.
+      r.root.rotation.x += (0.32 - r.root.rotation.x) * Math.min(1, dt * 5);
+      r.root.rotation.z += (-0.18 - r.root.rotation.z) * Math.min(1, dt * 5);
+      r.root.position.y += (this.pos.y - 0.45 - r.root.position.y) * Math.min(1, dt * 5);
+      r.coreGlow.scaling.setAll(Math.random() < 0.05 ? 0.12 : 0.01);
+      if (Math.random() < dt * 3) ctx.effects.burst('zap', this.head, 1, undefined, 0.5);
+      return;
+    }
+    if (this.empowerT > 0) this.empowerT = Math.max(0, this.empowerT - dt);
+    if (this.disabledT > 0) {
+      // Offline: head slumps, sparks; no targeting or firing until it reboots.
+      this.disabledT = Math.max(0, this.disabledT - dt);
+      this.suppressedFor += dt;
+      this.pitch += (0.55 - this.pitch) * Math.min(1, dt * 6);
+      r.pitch.rotation.x = this.pitch;
+      r.coreGlow.scaling.setAll(0.05 + (Math.random() < 0.2 ? 0.25 : 0));
+      if (Math.random() < dt * 6) ctx.effects.burst('zap', this.head, 2, undefined, 0.6);
+      if (this.disabledT === 0) {
+        ctx.effects.burst('build', this.head, 12);
+        this.cooldown = 0.4;
+      }
+      return;
+    }
+    if (this.seenVersion !== ctx.statsVersion || this.wasEmpowered !== this.empowerT > 0) this.recompose(ctx);
+    const st = this.st;
+    const range = st.range;
+    this.cooldown -= dt;
+    const pulse = this.empowerT > 0 ? 1.4 + Math.sin(performance.now() * 0.02) * 0.3 : 1;
+
+    if (st.archetype === 'support') {
+      // Amplifier: rotating field rings, periodic field pulse (no target).
+      this.scanT += dt;
+      this.yaw += dt * 0.6;
+      r.yaw.rotation.y = this.yaw;
+      r.pitch.rotation.y = -this.scanT * 2.2;
+      if (this.cooldown <= 0) {
+        this.cooldown = 1 / st.fireRate;
+        ctx.attack(this, null, 1);
+      }
+      r.coreGlow.scaling.setAll(0.42 + Math.sin(this.scanT * 2.4) * 0.06);
+      return;
+    }
+    if (st.archetype === 'cryo') {
+      this.scanT += dt;
+      this.yaw += dt * 0.9;
+      r.yaw.rotation.y = this.yaw;
+      if (this.cooldown <= 0 && this.anyInRange(range, ctx)) {
+        this.cooldown = 1 / st.fireRate;
+        this.attacks++;
+        ctx.attack(this, null, 1);
+      }
+      r.coreGlow.scaling.setAll(0.4 * pulse + Math.sin(this.scanT * 3) * 0.05);
+      return;
+    }
+
+    this.retargetT -= dt;
+    if (this.retargetT <= 0) {
+      this.retargetT = 0.15;
+      if (!this.validTarget(this.target, range, ctx)) this.target = null;
+      // Re-evaluate priority even with a valid target, so towers swap to leaking enemies.
+      const cand = this.pickTarget(range, ctx);
+      if (cand) this.target = cand;
+    } else if (this.target && !this.target.alive) this.target = null;
+
+    let aimed = false;
+    if (this.target) {
+      const c = this.target.center(TMP);
+      const dx = c.x - this.head.x;
+      const dz = c.z - this.head.z;
+      const dy = c.y - this.head.y;
+      const desiredYaw = Math.atan2(dx, dz);
+      const desiredPitch = -Math.atan2(dy, Math.hypot(dx, dz));
+      const dYaw = wrap(desiredYaw - this.yaw);
+      const step = st.turnRate * dt;
+      this.yaw += Math.abs(dYaw) <= step ? dYaw : Math.sign(dYaw) * step;
+      this.pitch += (desiredPitch - this.pitch) * Math.min(1, dt * 10);
+      aimed = Math.abs(wrap(desiredYaw - this.yaw)) < 0.14;
+    } else {
+      this.scanT += dt;
+      this.yaw += Math.sin(this.scanT * 0.6) * dt * 0.6;
+      this.pitch += (0 - this.pitch) * Math.min(1, dt * 3);
+    }
+    r.yaw.rotation.y = this.yaw;
+    r.pitch.rotation.x = this.pitch;
+
+    if (aimed && this.target && this.cooldown <= 0) {
+      this.cooldown = 1 / st.fireRate;
+      this.attacks++;
+      ctx.attack(this, this.target, 1);
+    }
+    r.coreGlow.scaling.y = (0.12 + (this.cooldown > 0 ? Math.min(0.3, this.cooldown * 0.15) : 0)) * (this.empowerT > 0 ? pulse : 1);
+  }
+
+  /** Next muzzle node (alternating barrels). */
+  nextMuzzle(): TurretRig['muzzles'][number] {
+    const m = this.rig.muzzles[this.barrel % this.rig.muzzles.length];
+    this.barrel = (this.barrel + 1) % this.rig.muzzles.length;
+    return m;
+  }
+
+  dispose(): void {
+    this.rig.root.dispose(false, false);
+    this.hitbox.dispose();
+  }
+}
+
+function wrap(a: number): number {
+  while (a > Math.PI) a -= Math.PI * 2;
+  while (a < -Math.PI) a += Math.PI * 2;
+  return a;
+}
+
+export class TurretManager {
+  readonly turrets: Turret[] = [];
+  statsVersion = 0;
+  constructor(private scene: Scene, private kit: Kit, private P: Palette) {}
+
+  build(cfg: TowerConfig, level: number, unique?: Parameters<typeof buildTowerRig>[4]): TurretRig {
+    return buildTowerRig(this.kit, this.P, cfg, level, unique);
+  }
+
+  add(pos: Vector3, yaw: number, ctx: TurretContext, config: TowerConfig = DEFAULT_CONFIG): Turret {
+    const cfg = { ...config };
+    const rig = this.build(cfg, 1);
+    const t = new Turret(cfg, rig, pos.clone(), this.scene, ctx, (c, l) => this.build(c, l));
+    t.yaw = yaw;
+    rig.yaw.rotation.y = yaw;
+    this.turrets.push(t);
+    sfx.play('build');
+    return t;
+  }
+
+  byId(id: number): Turret | undefined {
+    return this.turrets.find((t) => t.id === id);
+  }
+
+  remove(t: Turret): void {
+    const i = this.turrets.indexOf(t);
+    if (i >= 0) this.turrets.splice(i, 1);
+    t.dispose();
+  }
+
+  clear(): void {
+    for (const t of this.turrets) t.dispose();
+    this.turrets.length = 0;
+  }
+
+  update(dt: number, ctx: TurretContext): void {
+    for (const t of this.turrets) t.update(dt, ctx);
+  }
+}
+
+export { levelCost, partDef };

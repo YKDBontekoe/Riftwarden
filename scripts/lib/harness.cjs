@@ -2,7 +2,9 @@
 // Needs `playwright` + Chromium (set NODE_PATH to the global node_modules if installed globally).
 // Suites run in `?test` mode: fixed-step simulation, low graphics preset, no real pointer lock.
 const { chromium } = require('playwright');
+const fs = require('node:fs/promises');
 const os = require('os');
+const path = require('node:path');
 
 /** Screenshot directory ($E2E_OUT, default: OS temp dir). */
 const OUT = process.env.E2E_OUT || os.tmpdir();
@@ -28,12 +30,22 @@ const ev = (p, fn, arg) => p.evaluate(fn, arg);
 const waitFor = (p, fn, arg, t = 120000) => p.waitForFunction(fn, arg, { timeout: t, polling: 100 });
 
 /** Collect page errors / console.error output into `errs` (or `page.errs` when no array is given). */
-function collectErrors(p, errs = (p.errs = []), max = 300) {
-  p.on('pageerror', (e) => errs.push('PAGEERR ' + e.message));
+function collectErrors(p, errs = (p.errs = []), max = Infinity) {
+  p.on('pageerror', (e) => errs.push('PAGEERR ' + (e.stack || e.message)));
   p.on('console', (m) => {
     if (m.type() === 'error') errs.push('console.error ' + m.text().slice(0, max));
   });
   return errs;
+}
+
+async function saveBrowserFailure(ctx, page, errors, name) {
+  if (!name || !process.env.E2E_OUT) return;
+  const files = await Promise.allSettled([
+    ctx.tracing.stop({ path: path.join(OUT, `${name}-trace.zip`) }),
+    page.screenshot({ path: path.join(OUT, `${name}-failure.png`), timeout: 5000 }),
+    fs.writeFile(path.join(OUT, `${name}-errors.log`), errors.join('\n\n') + '\n'),
+  ]);
+  for (const file of files) if (file.status === 'rejected') console.warn('Could not save browser diagnostics:', file.reason);
 }
 
 /** Navigate to the app in ?test mode (or reload) and wait for the menu; stops the render loop unless `keepLoop`. */
@@ -49,7 +61,7 @@ async function boot(p, { reload = false, skipUpgrades = false, keepLoop = false,
  * Launch Chromium (SwiftShader) with one context + page and boot the app.
  * opts: viewport, query (extra URL params, e.g. '&map'), init (localStorage entries seeded once per tab), storageState, skipUpgrades, gc (expose gc for leak checks).
  */
-async function launch({ viewport = { width: 1280, height: 720 }, init = null, storageState, skipUpgrades = false, gc = false, query = '' } = {}) {
+async function launch({ viewport = { width: 1280, height: 720 }, init = null, storageState, skipUpgrades = false, gc = false, query = '', diagnostics } = {}) {
   const b = await chromium.launch({ args: gc ? [...GL_ARGS, '--js-flags=--expose-gc'] : GL_ARGS });
   const ctx = await b.newContext({ viewport, storageState });
   if (!storageState) {
@@ -64,7 +76,14 @@ async function launch({ viewport = { width: 1280, height: 720 }, init = null, st
   if (skipUpgrades) await ctx.addInitScript(() => { window.__skipUpgrades = true; });
   const p = await ctx.newPage();
   const errs = collectErrors(p, []);
-  await boot(p, { skipUpgrades, query });
+  if (diagnostics && process.env.E2E_OUT) await ctx.tracing.start({ screenshots: true, snapshots: true });
+  try {
+    await boot(p, { skipUpgrades, query });
+  } catch (error) {
+    await saveBrowserFailure(ctx, p, [...errs, error.stack || String(error)], diagnostics);
+    await b.close();
+    throw error;
+  }
   return { b, ctx, p, errs };
 }
 
@@ -74,4 +93,4 @@ async function shot(p, name, { frames = 1, timeout = 120000 } = {}) {
   await p.screenshot({ path: `${OUT}/${name}.png`, timeout });
 }
 
-module.exports = { chromium, OUT, URL, SETTINGS, GL_ARGS, stats, check, sectionFilter, S, ev, waitFor, collectErrors, boot, launch, shot };
+module.exports = { chromium, OUT, URL, SETTINGS, GL_ARGS, stats, check, sectionFilter, S, ev, waitFor, collectErrors, saveBrowserFailure, boot, launch, shot };

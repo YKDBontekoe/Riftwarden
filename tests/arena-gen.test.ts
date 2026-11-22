@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { arenaStats, generateArena, sectorName } from '../src/world/arenaGen';
-import { distToBoxXZ } from '../src/world/geometry';
-import { ARENA, type GateId } from '../src/world/layout';
-import { KIT } from '../src/player/movement';
-import { NAV, NavGrid } from '../src/world/navgrid';
-import { EnemyNavigator, FLYERS, type NavAgent } from '../src/enemies/navigation';
-import { recycleRefund, repairCost, towerMaxHp } from '../src/towers/durability';
+import { arenaStats, generateArena, sectorName } from '@riftwarden/rules/world/arenaGen';
+import { distToBoxXZ } from '@riftwarden/rules/world/geometry';
+import { ARENA, type GateId } from '@riftwarden/rules/world/layout';
+import { KIT } from '@riftwarden/rules/player/movement';
+import { NAV, NavGrid } from '@riftwarden/rules/world/navgrid';
+import { EnemyNavigator, FLYERS, type NavAgent } from '@riftwarden/rules/enemies/navigation';
+import { recycleRefund, repairCost, towerMaxHp } from '@riftwarden/rules/towers/durability';
 
 const GATES: GateId[] = ['north', 'east', 'west', 'south'];
 

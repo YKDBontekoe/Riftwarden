@@ -1,67 +1,24 @@
-// M7 co-op acceptance (protocol level, no rendering): lobby, 2-4 player runs, authoritative combat,
-// towers, tactical, individual loot + banking, votes, disconnect/reconnect, persistence across a
-// server restart, and the failure cases of the M7 spec (section 35).
-// Usage: node scripts/e2e-coop-protocol.mjs [filter]   (starts its own test server on :8799)
-import { spawn } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
-import pg from 'pg';
+// Co-op acceptance (protocol level, no rendering) through the gateway: lobby, 2-4 player runs, authoritative
+// combat, towers, tactical, individual loot + banking into each account, votes, disconnect/reconnect, a sim
+// worker crash, and the failure cases of the M7 spec (section 35).
+// Usage: node --import tsx scripts/e2e-coop-protocol.mjs [filter]
+//   (starts its own stack on :8799: fresh database, rules + sim workers, gateway; needs RIFT_TEST_DATABASE_URL
+//   and RIFT_TEST_REDIS_URL)
 import { Bot, sleep } from './bot.mjs';
+import { profileDoc, startStack } from './lib/stack.mjs';
 
-const PORT = 8799;
-const WS_URL = `ws://localhost:${PORT}/ws`;
-if (!process.env.RIFT_TEST_DATABASE_URL) throw new Error('Set RIFT_TEST_DATABASE_URL to a PostgreSQL test database');
-const schema = `coop_${randomBytes(8).toString('hex')}`;
-const databaseUrl = new URL(process.env.RIFT_TEST_DATABASE_URL);
-databaseUrl.searchParams.set('options', `-c search_path=${schema}`);
-const db = new pg.Pool({ connectionString: databaseUrl.href });
 const FILTER = process.argv[2] || '';
 const want = (k) => !FILTER || FILTER.split(',').some((f) => k.startsWith(f));
 let passes = 0, failures = 0;
 const pickFailures = [];
 const check = (n, ok, info = '') => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${n}${info ? '  ' + info : ''}`); ok ? passes++ : failures++; };
 
-let server = null;
-function startServer() {
-  const child = spawn(process.execPath, ['--import', 'tsx', 'server/main.ts'], {
-    env: { ...process.env, RIFT_PORT: String(PORT), DATABASE_URL: databaseUrl.href, RIFT_TEST: '1' },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  server = child;
-  child.log = '';
-  return new Promise((res, rej) => {
-    const timeout = setTimeout(() => rej(new Error(`Server startup timed out\n${child.log}`)), 20000);
-    child.once('exit', () => {
-      clearTimeout(timeout);
-      rej(new Error(`Server exited\n${child.log}`));
-    });
-    child.stdout.on('data', (d) => {
-      child.log += d;
-      if (child.log.includes('Riftwarden co-op server')) {
-        clearTimeout(timeout);
-        res();
-      }
-    });
-    child.stderr.on('data', (d) => (child.log += d));
-  });
-}
-async function stopServer(sig = 'SIGTERM') {
-  const s = server;
-  server = null;
-  if (!s) return;
-  if (s.exitCode !== null || s.signalCode !== null) return;
-  const done = new Promise((r) => s.on('exit', r));
-  s.kill(sig);
-  await done;
-}
+let stack = null;
 
-async function bot(name, secret) {
-  const b = new Bot(name, WS_URL, secret);
+async function bot(name) {
+  const b = new Bot(name, stack);
   const w = await b.connect();
   if (w.t !== 'welcome') throw new Error(`${name}: ${JSON.stringify(w)}`);
-  if (!w.hasProfile) {
-    b.send({ t: 'profileInit' });
-    await b.wait((m) => m.t === 'profile');
-  }
   return b;
 }
 
@@ -77,9 +34,10 @@ async function team(n, tier = 1, names = ['Alpha', 'Bravo', 'Charlie', 'Delta'])
     b.send({ t: 'ready', ready: true });
   }
   await host.wait((m) => m.t === 'lobby' && m.lobby && m.lobby.players.length === n && m.lobby.players.every((p) => p.host || p.ready));
+  // Waiters first: a later bot's runStart can arrive while an earlier one is still being awaited.
+  const started = bots.map((b) => b.waitNew((m) => m.t === 'runStart', 40000).then(() => b.waitNew((m) => m.t === 'snap')));
   host.send({ t: 'start' });
-  for (const b of bots) await b.waitNew((m) => m.t === 'runStart', 40000);
-  for (const b of bots) await b.waitNew((m) => m.t === 'snap');
+  await Promise.all(started);
   return bots;
 }
 
@@ -139,23 +97,16 @@ async function pickUpgrade(chooser, actor) {
 }
 
 async function profileRows(id) {
-  const { rows } = await db.query(`
-    SELECT
-      ARRAY(SELECT uid FROM profile_items WHERE player_id = $1 AND scope = 'owned' ORDER BY position) AS items,
-      ARRAY(SELECT id FROM profile_run_history WHERE player_id = $1 ORDER BY position) AS history,
-      EXISTS(SELECT 1 FROM profile_active_runs WHERE player_id = $1) AS active_run,
-      (SELECT xp FROM profiles WHERE player_id = $1) AS xp
-  `, [id]);
-  return rows[0];
+  const doc = await profileDoc(stack, id);
+  return { items: (doc?.items ?? []).map((i) => i.uid), history: (doc?.history ?? []).map((h) => h.id), active_run: !!doc?.activeRun, xp: doc?.progress?.xp ?? 0, doc };
 }
 
 (async () => {
   try {
-    await db.query(`CREATE SCHEMA ${schema}`);
-    await startServer();
+    stack = await startStack({ port: 8799 });
     // ------------------------------------------------------------ B: session creation
     if (want('B')) {
-      const a = await bot('Alpha'), b = await bot('Bravo');
+      const a = await bot('Able'), b = await bot('Baker');
       a.send({ t: 'create', tier: 1 });
       await a.waitNew((m) => m.t === 'lobby' && m.lobby);
       check('B1 lobby created with a 5-char join code', /^[A-Z2-9]{5}$/.test(a.lobby.code), a.lobby.code);
@@ -167,10 +118,10 @@ async function profileRows(id) {
       const notReady = await a.waitNew((m) => m.t === 'error');
       check('B3 host cannot deploy before everyone is ready', /not ready/i.test(notReady.msg), notReady.msg);
       b.send({ t: 'ready', ready: true });
-      await a.wait((m) => m.t === 'lobby' && m.lobby?.players.every((p) => p.host || p.ready));
+      await a.wait((m) => m.t === 'lobby' && m.lobby?.players.length === 2 && m.lobby.players.every((p) => p.host || p.ready));
+      const started = [a, b].map((x) => x.waitNew((m) => m.t === 'runStart', 40000));
       a.send({ t: 'start' });
-      await a.waitNew((m) => m.t === 'runStart', 40000);
-      await b.waitNew((m) => m.t === 'runStart', 40000);
+      await Promise.all(started);
       check('B4 both clients receive the run start with both wardens', a.run.players.length === 2 && b.run.runId === a.run.runId);
       a.close(); b.close();
       await sleep(400);
@@ -284,12 +235,14 @@ async function profileRows(id) {
       check('D7 checkpoint vote opens for the team', A.snap.cp[2] === 1, JSON.stringify(A.snap.cp));
       await Promise.all([A.act({ a: 'vote', home: true }), B.act({ a: 'vote', home: true }), Cc.act({ a: 'vote', home: true })]);
       await sleep(250);
-      check('D8 run continues while a vote is incomplete', !A.end && A.snap.cp[2] === 1);
+      check('D8 run continues while a vote is incomplete', !A.end && A.snap.cp[2] === 1, JSON.stringify({ end: A.end?.result?.outcome, cp: A.snap.cp, conn: A.snap.a.map((x) => x[16]) }));
       await D.act({ a: 'vote', home: true });
       await A.waitNew((m) => m.t === 'runEnd', 15000);
       for (const b of bots) await b.wait((m) => m.t === 'runEnd', 15000);
       stop();
       check('D9 unanimous vote returns the whole team home', bots.every((b) => b.end?.result?.outcome === 'returned'), bots.map((b) => b.end?.result?.outcome).join(','));
+      // The run's end entries reach the accounts through the gateway's queue: wait until they are applied.
+      for (let i = 0; i < 50 && (await Promise.all(bots.map((b) => profileRows(b.welcome.playerId)))).some((p) => p.active_run); i++) await sleep(100);
       const profA2 = await profileRows(A.welcome.playerId);
       const uids = profA2.items;
       check('D10 inventory after return: secured items kept, no duplicates', new Set(uids).size === uids.length && A.end.result.itemsSecured === A.snap.me.run.is && !profA2.active_run, `${uids.length} items, secured ${A.end.result.itemsSecured}`);
@@ -306,15 +259,14 @@ async function profileRows(id) {
       let stop = heartbeat(bots, true);
       await A.act({ a: 'startWave' });
       await sleep(800);
-      const secretB = B.secret;
-      B.ws.terminate();
+      B.terminate();
       await sleep(600);
       const w = A.snap.w[0];
       check('E1 remaining players continue after a disconnect', !A.end && A.snap.a.find((x) => x[0] === B.welcome.playerId)?.[16] === 0, `B connected flag ${A.snap.a.find((x) => x[0] === B.welcome.playerId)?.[16]}`);
       await clearWave([A, C], A);
       check('E2 server stays stable; waves keep completing', A.snap.w[0] > w);
       stop();
-      const B2 = new Bot('Fox', WS_URL, secretB);
+      const B2 = new Bot('Fox', stack);
       await B2.connect();
       await B2.wait((m) => m.t === 'runStart', 10000);
       await B2.wait((m) => m.t === 'snap');
@@ -330,7 +282,7 @@ async function profileRows(id) {
       // Everyone gone -> server ends the run, nothing leaks.
       A.close(); B2.close();
       await sleep(1500);
-      check('E6 server survives the whole team disconnecting', !server.killed && server.exitCode === null);
+      check('E6 server survives the whole team disconnecting', (await stack.health()).sims === 1);
     }
 
     // ------------------------------------------------------------ R: team defeat
@@ -353,7 +305,7 @@ async function profileRows(id) {
     if (want('S')) {
       // Full lobby
       const five = [];
-      for (const n of ['H1', 'H2', 'H3', 'H4', 'H5']) five.push(await bot(n));
+      for (const n of ['Hotel1', 'Hotel2', 'Hotel3', 'Hotel4', 'Hotel5']) five.push(await bot(n));
       five[0].send({ t: 'create', tier: 1 });
       await five[0].waitNew((m) => m.t === 'lobby' && m.lobby);
       for (const b of five.slice(1, 4)) { b.send({ t: 'join', code: five[0].lobby.code }); await b.waitNew((m) => m.t === 'lobby' && m.lobby); }
@@ -366,30 +318,26 @@ async function profileRows(id) {
       check('S2 lobby host leaving transfers host to another player', five[1].lobby.hostId === five[1].welcome.playerId && five[1].lobby.players.length === 3);
       for (const b of five) b.close();
       // Incompatible protocol
-      const old = new Bot('Old', WS_URL);
+      const old = new Bot('Old', stack);
       const r = await old.connect(1);
       check('S3 incompatible protocol version is refused with a message', r.t === 'error' && r.code === 'version', r.msg);
       // Malformed + rate limit
       const bad = await bot('Mal');
-      bad.ws.send('{not json');
-      bad.ws.send(JSON.stringify({ t: 'act', id: 1, a: 'place', cfg: 5 }));
+      // Binary garbage, then a decodable frame whose act carries no variant.
+      bad.sendRaw(new Uint8Array([0xff, 0xff, 0xff, 0xff]));
+      bad.sendRaw(new Uint8Array([0x7a, 0x02, 0x08, 0x01]));
       const err = await bad.waitNew((m) => m.t === 'error');
       check('S4 malformed messages are rejected safely', err.code === 'malformed');
-      // Repeat purchase / craft request (same tx id)
-      bad.send({ t: 'op', name: 'refreshMarket', args: [], tx: 'tx_repeat_1' });
-      const o1 = await bad.waitNew((m) => m.t === 'opResult');
-      bad.send({ t: 'op', name: 'refreshMarket', args: [], tx: 'tx_repeat_1' });
-      const o2 = await bad.waitNew((m) => m.t === 'opResult');
-      check('S5 a repeated purchase (same transaction id) is refused', o1.ok && !o2.ok, o2.reason);
+      // Profile changes go through the account sync (named operations replayed by the rules worker).
+      const rep = await bad.sync([{ op: { name: 'refreshMarket', args: [], tx: 'tx_repeat_1' } }, { op: { name: 'refreshMarket', args: [], tx: 'tx_repeat_1' } }]);
+      check('S5 a repeated purchase (same transaction id) is refused', rep.results[0].ok && !rep.results[1].ok, rep.results[1].reason);
       // Another player's equipment
       const other = await bot('Victim');
       const victimItem = (await profileRows(other.welcome.playerId)).items[0];
-      bad.send({ t: 'op', name: 'sellItems', args: [[victimItem]], tx: 'tx_steal' });
-      const o3 = await bad.waitNew((m) => m.t === 'opResult');
-      check('S6 cannot sell/equip another player\'s equipment', !o3.ok, o3.reason);
-      bad.send({ t: 'op', name: 'grantEverything', args: [], tx: 'tx_x' });
-      const o4 = await bad.waitNew((m) => m.t === 'opResult');
-      check('S7 unknown operations cannot award anything', !o4.ok, o4.reason);
+      const steal = await bad.sync([{ op: { name: 'sellItems', args: [[victimItem]], tx: 'tx_steal' } }]);
+      check('S6 cannot sell/equip another player\'s equipment', !steal.results[0].ok, steal.results[0].reason);
+      const grant = await bad.sync([{ op: { name: 'grantEverything', args: [], tx: 'tx_x' } }]);
+      check('S7 unknown operations cannot award anything', !grant.results[0].ok, grant.results[0].reason);
       bad.close(); other.close();
       // Invalid damage claims
       const bots = await team(2, 1, ['India', 'Juliet']);
@@ -418,31 +366,60 @@ async function profileRows(id) {
       stop();
       A.close(); B.close();
       await sleep(500);
-      // Server closes unexpectedly: profiles persisted, interrupted runs resolved on restart.
+      // The sim worker crashes mid-operation: the gateway tells the players and records the run as interrupted.
       const bots2 = await team(2, 1, ['Kilo', 'Lima']);
-      const ids = bots2.map((b) => [b.welcome.playerId, b.secret]);
       const runId = bots2[0].run.runId;
-      await stopServer('SIGKILL');
-      await sleep(300);
-      check('S11 clients notice the server closing', bots2.every((b) => b.closed));
-      await startServer();
-      const back = new Bot('Kilo', WS_URL, ids[0][1]);
-      const w2 = await back.connect();
-      const prof = w2.profile;
-      check('S12 after a crash the profile is intact and the run is recorded as interrupted', w2.hasProfile && !prof.activeRun && prof.history.some((h) => h.id === runId), `history ${prof.history.length}`);
-      back.close();
+      const lost = bots2.map((b) => b.waitNew((m) => m.t === 'error' && /restarted/.test(m.msg), 15000).catch(() => null));
+      await stack.restartSim('SIGKILL');
+      const told = await Promise.all(lost);
+      check('S11 clients are told the operation was lost when the sim worker dies', told.every(Boolean) && bots2.every((b) => !b.closed && b.lobby === null));
+      let prof = null;
+      for (let i = 0; i < 40; i++) {
+        prof = (await profileRows(bots2[0].welcome.playerId)).doc;
+        if (!prof.activeRun) break;
+        await sleep(150);
+      }
+      check('S12 after a crash the profile is intact and the run is recorded as interrupted', !prof.activeRun && prof.history.some((h) => h.id === runId && h.outcome === 'interrupted'), `history ${prof.history.map((h) => h.outcome)}`);
+      const again = await bots2[0].pull();
+      check('S13 the player can open a new session on the restarted worker', !again.activeRun && (await (async () => { bots2[0].send({ t: 'create', tier: 1 }); return bots2[0].waitNew((m) => m.t === 'lobby' && m.lobby, 10000).then(() => true, () => false); })()));
+      for (const b of bots2) b.close();
+    }
+    // ------------------------------------------------------------ K: capacity (own stack, one operation slot)
+    if (want('K')) {
+      const main = stack;
+      stack = await startStack({ port: 8780, simEnv: { RIFT_SIM_CAPACITY: '1' } });
+      try {
+        const busy = await team(2, 1, ['Kappa1', 'Kappa2']);
+        const late = await bot('Kappa3');
+        late.send({ t: 'create', tier: 1 });
+        const full = await late.waitNew((m) => m.t === 'error' || (m.t === 'lobby' && m.lobby), 10000);
+        check('K1 a new session is refused while every sim worker is at capacity', full.t === 'error' && full.code === 'full', JSON.stringify(full));
+        const health = await stack.health();
+        check('K2 health reports the running operation', health.running === 1, JSON.stringify(health));
+        // The slot frees when the operation ends.
+        for (const b of busy) b.send({ t: 'leave' });
+        await Promise.all(busy.map((b) => b.waitNew((m) => m.t === 'runEnd', 15000).catch(() => null)));
+        let opened = null;
+        for (let i = 0; i < 20 && !opened; i++) {
+          await sleep(500);
+          late.send({ t: 'create', tier: 1 });
+          opened = await late.waitNew((m) => (m.t === 'lobby' && m.lobby) || m.t === 'error', 5000).then((m) => (m.t === 'lobby' ? m : null), () => null);
+        }
+        check('K3 sessions open again once the slot is free', !!opened, opened?.lobby?.code);
+        for (const b of [...busy, late]) b.close();
+      } finally {
+        await stack.stop();
+        stack = main;
+      }
     }
   } catch (e) {
     console.error(e);
     failures++;
   }
   check('Z team-upgrade picks are accepted by the server (never left to the auto-pick)', pickFailures.length === 0, JSON.stringify(pickFailures.slice(0, 3)));
-  if (failures && server) console.log('--- server log (tail) ---\n' + server.log.split('\n').slice(-30).join('\n'));
-  await stopServer();
-  await db.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
-  await db.end();
+  if (failures && stack) console.log(stack.log(30));
+  await stack?.stop();
   console.log(`\n${failures === 0 ? 'ALL PASSED' : 'FAILURES'}  ${passes} passed, ${failures} failed`);
-  if (failures) console.log(server?.log ?? '');
   process.exit(failures ? 1 : 0);
 })().catch((error) => {
   console.error(error);

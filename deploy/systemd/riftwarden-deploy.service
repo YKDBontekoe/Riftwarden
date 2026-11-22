@@ -5,4 +5,5 @@ Description=Deploy the latest Riftwarden production image
 Type=oneshot
 WorkingDirectory=%h/stacks/riftwarden
 ExecStart=/usr/bin/bash %h/stacks/riftwarden/deploy.sh
-TimeoutStartSec=3min
+# A sim slot may drain for up to DRAIN_TIMEOUT (30 min) per slot.
+TimeoutStartSec=75min

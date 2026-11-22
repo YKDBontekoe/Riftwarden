@@ -1,0 +1,69 @@
+syntax = "proto3";
+
+package riftwarden.v1;
+
+import "riftwarden/v1/common.proto";
+
+message LobbyPlayer {
+  string id = 1;
+  string name = 2;
+  bool ready = 3;
+  bool connected = 4;
+  bool host = 5;
+  // Short loadout summary: weapon name + rarity.
+  string weapon = 6;
+  string rarity = 7;
+  uint32 level = 8;
+}
+
+enum LobbyPhase {
+  LOBBY_PHASE_UNSPECIFIED = 0;
+  LOBBY_PHASE_LOBBY = 1;
+  LOBBY_PHASE_DEPLOYING = 2;
+  LOBBY_PHASE_RUNNING = 3;
+}
+
+message LobbyState {
+  string code = 1;
+  string host_id = 2;
+  uint32 tier = 3;
+  GameMode mode = 4;
+  // Rift War sector the host picked (empty = the front's landing).
+  string node = 5;
+  uint32 max_tier = 6;
+  uint32 capacity = 7;
+  LobbyPhase phase = 8;
+  repeated LobbyPlayer players = 9;
+  // Run in progress (wave) for joiners / rejoiners.
+  uint32 wave = 10;
+}
+
+// Lobby commands (client -> server).
+message LobbyCreate {
+  uint32 tier = 1;
+}
+
+message LobbyJoin {
+  string code = 1;
+}
+
+message LobbyLeave {}
+
+message LobbyReady {
+  bool ready = 1;
+}
+
+message LobbyTier {
+  uint32 tier = 1;
+}
+
+message LobbyMode {
+  GameMode mode = 1;
+}
+
+message LobbyNode {
+  // Empty = the front's landing.
+  string node = 1;
+}
+
+message LobbyStart {}

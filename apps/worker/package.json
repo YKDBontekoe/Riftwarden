@@ -1,0 +1,22 @@
+{
+  "name": "@riftwarden/worker",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Internal TypeScript workers behind the gateway: rules (profile replay, war ticks) and sim (co-op lobbies and operations).",
+  "dependencies": {
+    "@babylonjs/core": "catalog:",
+    "@babylonjs/havok": "catalog:",
+    "@bufbuild/protobuf": "catalog:",
+    "@riftwarden/game": "workspace:*",
+    "@riftwarden/protocol": "workspace:*",
+    "@riftwarden/rules": "workspace:*",
+    "tsx": "catalog:"
+  },
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "catalog:"
+  }
+}

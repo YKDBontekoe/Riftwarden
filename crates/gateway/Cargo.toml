@@ -1,0 +1,48 @@
+[package]
+name = "riftwarden-gateway"
+description = "The Riftwarden backend: the only public service (HTTP + WebSocket), see docs/architecture-v2.md."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = "1.0.104"
+argon2 = "0.6.0"
+axum = { version = "0.8.9", features = ["ws", "macros"] }
+axum-extra = { version = "0.12.6", features = ["cookie"] }
+base64 = "0.23.1"
+bytes = "1.12.2"
+chrono = { version = "0.4.45", features = ["serde"] }
+opentelemetry = "0.33.1"
+opentelemetry-appender-tracing = "0.33.1"
+opentelemetry-otlp = { version = "0.33.1", features = ["grpc-tonic", "trace", "logs", "metrics"] }
+opentelemetry_sdk = { version = "0.33.1", features = ["rt-tokio"] }
+prost = "0.14.6"
+rand = "0.10.4"
+redis = { version = "1.8.2", features = ["tokio-comp", "connection-manager", "aio"] }
+riftwarden-db = { path = "../db" }
+riftwarden-proto = { version = "0.1.0", path = "../proto" }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+sha2 = "0.11.1"
+sqlx = { version = "0.9.1", default-features = false, features = ["postgres"] }
+thiserror = "2.0.21"
+time = "0.3.55"
+tokio = { version = "1.54.1", features = ["full"] }
+tower-http = { version = "0.7.1", features = ["trace", "timeout", "limit", "cors"] }
+tracing = "0.1.44"
+tracing-opentelemetry = "0.34.0"
+tracing-subscriber = { version = "0.3.23", features = ["json", "env-filter"] }
+url = "2.5.9"
+uuid = { version = "1.29.3", features = ["v4", "serde"] }
+webauthn-rs = { version = "0.6.2", features = ["danger-allow-state-serialisation"] }
+
+[dev-dependencies]
+riftwarden-db = { path = "../db" }
+riftwarden-proto = { path = "../proto" }
+tower = { version = "0.5.3", features = ["util"] }
+uuid = { version = "1.29.3", features = ["v4"] }

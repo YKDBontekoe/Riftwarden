@@ -3,7 +3,9 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const SRC = resolve(__dirname, '../src');
+// Every package keeps the old src/ sub-paths, so module keys below ('core/Game.ts', ...) are package-relative.
+const ROOTS = { rules: resolve(__dirname, '../packages/rules/src'), protocol: resolve(__dirname, '../packages/protocol/src'), game: resolve(__dirname, '../packages/game/src'), client: resolve(__dirname, '../apps/client/src') } as const;
+type Pkg = keyof typeof ROOTS;
 
 function walk(dir: string, out: string[] = []): string[] {
   for (const f of readdirSync(dir)) {
@@ -34,8 +36,9 @@ function imports(file: string): Imp[] {
 }
 
 function resolveLocal(from: string, spec: string): string | null {
-  if (!spec.startsWith('.')) return null;
-  const base = resolve(dirname(from), spec);
+  const pkg = /^@riftwarden\/(rules|protocol|game|client)\/(.+)$/.exec(spec);
+  if (!spec.startsWith('.') && !pkg) return null;
+  const base = pkg ? join(ROOTS[pkg[1] as Pkg], pkg[2]) : resolve(dirname(from), spec);
   for (const c of [base + '.ts', base + '.tsx', join(base, 'index.ts'), join(base, 'index.tsx')]) {
     try {
       if (statSync(c).isFile()) return c;
@@ -46,8 +49,9 @@ function resolveLocal(from: string, spec: string): string | null {
   return null;
 }
 
-const rel = (f: string) => relative(SRC, f).replace(/\\/g, '/');
-const files = walk(SRC);
+const pkgOf = (f: string): Pkg => (Object.keys(ROOTS) as Pkg[]).find((p) => f.startsWith(ROOTS[p]))!;
+const rel = (f: string) => relative(ROOTS[pkgOf(f)], f).replace(/\\/g, '/');
+const files = Object.values(ROOTS).flatMap((r) => walk(r));
 
 /** Value (non type-only) local dependencies of a file. */
 const valueDeps = (f: string) => imports(f).filter((i) => !i.typeOnly).map((i) => resolveLocal(f, i.spec)).filter((x): x is string => !!x);
@@ -81,6 +85,44 @@ function findCycle(group: string[]): string[] | null {
 const inDir = (d: string) => files.filter((f) => rel(f).startsWith(d));
 
 describe('architecture boundaries', () => {
+  it('packages depend downward only: client -> game -> protocol -> rules', () => {
+    const allowed: Record<Pkg, Pkg[]> = { rules: ['rules'], protocol: ['rules', 'protocol'], game: ['rules', 'protocol', 'game'], client: ['rules', 'protocol', 'game', 'client'] };
+    const bad: string[] = [];
+    for (const f of files) {
+      for (const i of imports(f)) {
+        const d = resolveLocal(f, i.spec);
+        if (d && !allowed[pkgOf(f)].includes(pkgOf(d))) bad.push(`${pkgOf(f)}:${rel(f)} -> ${pkgOf(d)}:${rel(d)}`);
+      }
+    }
+    expect(bad).toEqual([]);
+  });
+
+  it('the rules package imports no engine, UI or runtime library (type-only included)', () => {
+    const bad: string[] = [];
+    for (const f of files.filter((x) => pkgOf(x) === 'rules')) {
+      if (f.endsWith('.tsx')) bad.push(rel(f));
+      for (const i of imports(f)) if (!i.spec.startsWith('.') && !i.spec.startsWith('@riftwarden/rules/')) bad.push(`${rel(f)} -> ${i.spec}`);
+    }
+    expect(bad).toEqual([]);
+  });
+
+  it('the protocol package uses only protobuf-es besides the rules (no engine, no DOM libraries)', () => {
+    const bad: string[] = [];
+    for (const f of files.filter((x) => pkgOf(x) === 'protocol')) {
+      for (const i of imports(f)) if (!i.spec.startsWith('.') && !/^@riftwarden\/(rules|protocol)\//.test(i.spec) && !i.spec.startsWith('@bufbuild/protobuf')) bad.push(`${rel(f)} -> ${i.spec}`);
+    }
+    expect(bad).toEqual([]);
+  });
+
+  it('the game package does not use React', () => {
+    const bad: string[] = [];
+    for (const f of files.filter((x) => pkgOf(x) === 'game')) {
+      if (f.endsWith('.tsx')) bad.push(rel(f));
+      for (const i of imports(f)) if (/^react(-dom)?(\/|$)/.test(i.spec)) bad.push(`${rel(f)} -> ${i.spec}`);
+    }
+    expect(bad).toEqual([]);
+  });
+
   it('progression/save modules form an acyclic graph', () => {
     expect(findCycle(inDir('progression/save/'))).toBeNull();
   });

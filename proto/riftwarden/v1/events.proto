@@ -1,0 +1,201 @@
+syntax = "proto3";
+
+package riftwarden.v1;
+
+import "riftwarden/v1/common.proto";
+import "riftwarden/v1/coop.proto";
+
+// Replicated events (server -> clients): one message per tag of the tuple union in net/events.ts,
+// fields in tuple order. Ids are integers; other numbers are doubles (some emitters send unrounded values).
+
+message Event {
+  oneof ev {
+    // ['f' | 'w' | 'u', call name, encoded args]: effect / weapon-fx / UI event (net/replicated.ts).
+    Call fx = 1;
+    Call wfx = 2;
+    Call ui = 3;
+    Sound sound = 4;
+    // ['t' | 'o', op, server id, args]: telegraph / ordnance.
+    IdCall telegraph = 5;
+    IdCall ordnance = 6;
+    Evolution evolution = 7;
+    Hazard hazard = 8;
+    EnemySpawn enemy_spawn = 9;
+    IdFlag enemy_kill = 10;
+    IdOnly enemy_release = 11;
+    IdFlag enemy_damage = 12;
+    EnemyLimbs enemy_limbs = 13;
+    TowerAdd tower_add = 14;
+    IdOnly tower_remove = 15;
+    TowerChange tower_change = 16;
+    Deployable deployable = 17;
+    LootAdd loot_add = 18;
+    IdFlag loot_remove = 19;
+    UpgradePicked upgrade = 20;
+    UpgradeOffer offer = 21;
+    VoteState vote = 22;
+    Bank bank = 23;
+    Defeat defeat = 24;
+    Hurt hurt = 25;
+    Knock knock = 26;
+    Move move = 27;
+    Left left = 28;
+    RemoteShot shot = 29;
+  }
+}
+
+message Call {
+  string name = 1;
+  Value args = 2;
+}
+
+message IdCall {
+  string op = 1;
+  uint32 id = 2;
+  Value args = 3;
+}
+
+// ['s', name, opts | null, at | null]: opts are the sound call's options (volume, pitch, ...).
+message Sound {
+  string name = 1;
+  Value opts = 2;
+  Vec3 at = 3;
+  // Number of fields after the tag as sent (1-3), so trailing nulls round-trip exactly.
+  uint32 arity = 4;
+}
+
+message Evolution {
+  string id = 1;
+  bool flag = 2;
+}
+
+message Hazard {
+  double x = 1;
+  double z = 2;
+  double r = 3;
+  string kind = 4;
+  double life = 5;
+}
+
+// ['es', id, kind, mods, tag | null, encounter, maxHp, maxShield, x, z, yaw, seg, lane]
+message EnemySpawn {
+  uint32 id = 1;
+  string kind = 2;
+  repeated string mods = 3;
+  optional string tag = 4;
+  double encounter = 5;
+  double max_hp = 6;
+  double max_shield = 7;
+  double x = 8;
+  double z = 9;
+  double yaw = 10;
+  double seg = 11;
+  string lane = 12;
+}
+
+message IdFlag {
+  uint32 id = 1;
+  bool flag = 2;
+}
+
+message IdOnly {
+  uint32 id = 1;
+}
+
+message EnemyLimbs {
+  uint32 id = 1;
+  uint32 mask = 2;
+}
+
+// ['T+', id, config, position, yaw, owner, extra]
+message TowerAdd {
+  uint32 id = 1;
+  TowerConfig cfg = 2;
+  Vec3 p = 3;
+  double yaw = 4;
+  string owner = 5;
+  string extra = 6;
+}
+
+message TowerChange {
+  uint32 id = 1;
+  TowerConfig cfg = 2;
+  double level = 3;
+}
+
+// ['dp', kind, ground point, yaw, seconds, size]
+message Deployable {
+  string kind = 1;
+  Vec3 at = 2;
+  double yaw = 3;
+  double seconds = 4;
+  double size = 5;
+}
+
+// ['L+', id, item, from, to, wave]
+message LootAdd {
+  uint32 id = 1;
+  Doc item = 2;
+  Vec3 from = 3;
+  Vec3 to = 4;
+  double wave = 5;
+}
+
+message UpgradePicked {
+  string id = 1;
+  string by = 2;
+}
+
+// ['offer', ids, chooser | null, source, seconds]
+message UpgradeOffer {
+  repeated string ids = 1;
+  optional string chooser = 2;
+  string source = 3;
+  double seconds = 4;
+}
+
+// ['vote', 0 | 1 | 2, flag?]
+message VoteState {
+  uint32 state = 1;
+  optional bool flag = 2;
+}
+
+// ['bank', wave, ok, four amounts]
+message Bank {
+  double wave = 1;
+  bool ok = 2;
+  double a = 3;
+  double b = 4;
+  double c = 5;
+  double d = 6;
+}
+
+message Defeat {}
+
+// ['h', amount, flag, from | null]
+message Hurt {
+  double amount = 1;
+  bool flag = 2;
+  Vec3 from = 3;
+}
+
+// ['k', vector, amount]
+message Knock {
+  Vec3 v = 1;
+  double amount = 2;
+}
+
+message Move {
+  Vec3 p = 1;
+}
+
+message Left {
+  string id = 1;
+  string name = 2;
+}
+
+message RemoteShot {
+  string id = 1;
+  string family = 2;
+  Vec3 dir = 3;
+}

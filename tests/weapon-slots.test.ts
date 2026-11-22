@@ -1,16 +1,16 @@
 // Primary + secondary weapon: slot rules, save v9, holstered cooling, swap state, loadout scoring.
 import { describe, expect, it } from 'vitest';
-import { otherSlot, WeaponSlots, type WeaponSlotsHost } from '../src/arena/WeaponSlots';
-import { coolHolstered, HEAT_PACE } from '../src/combat/heat';
-import { BASE_STATS } from '../src/combat/stats';
-import { equipmentModifiers, weaponDefFor } from '../src/loot/equipment';
-import { generateItem, starterWeapon } from '../src/loot/generate';
-import { loadoutScore, swapped } from '../src/loot/loadoutScore';
-import { RunInventory } from '../src/loot/runInventory';
-import type { ItemInstance } from '../src/loot/types';
-import { defaultSlot, fitsSlot, getSlot } from '../src/progression/items';
-import { RunLedger } from '../src/progression/run';
-import { createDefaultSave, equipFromStorage, migrate, MIGRATIONS, SAVE_VERSION, sanitizeSave } from '../src/progression/save';
+import { otherSlot, WeaponSlots, type WeaponSlotsHost } from '@riftwarden/game/arena/WeaponSlots';
+import { coolHolstered, HEAT_PACE } from '@riftwarden/rules/combat/heat';
+import { BASE_STATS } from '@riftwarden/rules/combat/stats';
+import { equipmentModifiers, weaponDefFor } from '@riftwarden/rules/loot/equipment';
+import { generateItem, starterWeapon } from '@riftwarden/rules/loot/generate';
+import { loadoutScore, swapped } from '@riftwarden/rules/loot/loadoutScore';
+import { RunInventory } from '@riftwarden/rules/loot/runInventory';
+import type { ItemInstance } from '@riftwarden/rules/loot/types';
+import { defaultSlot, fitsSlot, getSlot } from '@riftwarden/rules/progression/items';
+import { RunLedger } from '@riftwarden/rules/progression/run';
+import { createDefaultSave, equipFromStorage, migrate, MIGRATIONS, SAVE_VERSION, sanitizeSave } from '@riftwarden/rules/progression/save';
 
 const gen = (seed: number, o: Partial<Parameters<typeof generateItem>[0]> = {}): ItemInstance =>
   generateItem({ uid: `u${seed}`, seed, level: 10, rarity: 'rare', category: 'weapon', source: 'test', now: 1, ...o });

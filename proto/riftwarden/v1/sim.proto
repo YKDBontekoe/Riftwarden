@@ -1,0 +1,87 @@
+syntax = "proto3";
+
+package riftwarden.v1;
+
+import "riftwarden/v1/common.proto";
+import "riftwarden/v1/session.proto";
+import "riftwarden/v1/worker.proto";
+
+// Gateway <-> sim worker (internal TCP stream, frames prefixed with a big-endian u32 length). A sim worker runs
+// co-op lobbies and operations (Room + CoopSim); the gateway authenticates players, routes their co-op frames
+// (envelope.proto ClientFrame / ServerFrame bytes) to the worker that holds their room, keeps the room
+// directory, applies the operations' profile entries and owns the war.
+
+message SimDown {
+  oneof msg {
+    // A signed-in player talks to this worker (sent before their first frame and on every reconnect).
+    SimAttach attach = 1;
+    // One co-op frame from a player.
+    SimInput input = 2;
+    // The player's session closed (the worker keeps their slot for the reconnect window).
+    string detach = 3;
+    // A player's profile changed outside the worker (another device, a sync).
+    SimProfile profile = 4;
+    // The current shared war (on connect and whenever it changes).
+    Doc war = 5;
+    // Draining: finish running operations, open no new rooms.
+    bool drain = 6;
+  }
+}
+
+message SimUp {
+  oneof msg {
+    SimHello hello = 1;
+    // A co-op frame for the listed players.
+    SimOutput output = 2;
+    // Run entries for one account (rules: runRules.ts), applied as trusted.
+    SimEntries entries = 3;
+    WarReport report = 4;
+    // The player is now in room `code` (empty = in no room): the gateway routes them here.
+    SimBind bind = 5;
+    // Rooms on this worker changed: open room codes and running operations.
+    SimLoad load = 6;
+  }
+}
+
+message SimHello {
+  string build = 1;
+  uint32 capacity = 2;
+}
+
+message SimAttach {
+  string account = 1;
+  string name = 2;
+  Doc profile = 3;
+}
+
+message SimInput {
+  string account = 1;
+  bytes frame = 2;
+}
+
+message SimProfile {
+  string account = 1;
+  Doc profile = 2;
+}
+
+message SimOutput {
+  repeated string accounts = 1;
+  bytes frame = 2;
+}
+
+message SimEntries {
+  string account = 1;
+  repeated SyncEntry entries = 2;
+  // Log id for de-duplication (unique per operation and account, e.g. `op:<run id>`).
+  string device = 3;
+}
+
+message SimBind {
+  string account = 1;
+  string code = 2;
+}
+
+message SimLoad {
+  repeated string codes = 1;
+  uint32 running = 2;
+}

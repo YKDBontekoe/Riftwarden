@@ -1,33 +1,80 @@
+# Riftwarden backend on the personal server (docs/architecture-v2.md sections 9-10). The static client is on
+# Cloudflare Pages; cloudflared publishes the gateway (api.). Logs: JSON on stdout (`docker compose logs`).
+# Images are pinned by digest in images.env, written by deploy.sh (one per sim slot, so slots roll one at a time).
+# Memory budget: ~2 GB of the 4 GB allocated to the stack.
 name: riftwarden
+
+x-hardening: &hardening
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  restart: unless-stopped
+
+x-worker: &worker
+  <<: *hardening
+  tmpfs:
+    - /tmp:rw,noexec,nosuid,size=16m
+  # SIGTERM: a sim worker ends its operations (secured rewards stay) before exiting.
+  stop_grace_period: 40s
+
 services:
-  web:
-    image: ${RIFTWARDEN_IMAGE:?The deploy script must select the image digest}
-    container_name: riftwarden-web
+  gateway:
+    <<: *hardening
+    image: ${RIFT_GATEWAY_IMAGE:?deploy.sh selects the image digest}
+    container_name: riftwarden-gateway
     environment:
-      PGHOST: db
-      PGDATABASE: riftwarden
-      PGUSER: riftwarden
-      PGPASSWORD: ${RIFT_POSTGRES_PASSWORD:?Set RIFT_POSTGRES_PASSWORD in .env}
+      DATABASE_URL: postgres://riftwarden:${RIFT_POSTGRES_PASSWORD:?Set RIFT_POSTGRES_PASSWORD in .env}@db/riftwarden
+      REDIS_URL: redis://redis:6379
+      RIFT_BUILD: ${RIFT_BUILD:-unknown}
+      RIFT_RP_ID: ${RIFT_RP_ID:-riftwarden.ykdbonte.dev}
+      RIFT_CLIENT_ORIGINS: ${RIFT_CLIENT_ORIGINS:-https://riftwarden.ykdbonte.dev}
+      RIFT_COOKIE_SECURE: ${RIFT_COOKIE_SECURE:-1}
+      RIFT_TRUST_CF_IP: ${RIFT_TRUST_CF_IP:-1}
+      RIFT_RULES_WORKERS: rules:7101
+      RIFT_SIM_WORKERS: sim-blue:7201,sim-green:7201
+      RIFT_DB_POOL: "12"
     depends_on:
-      db:
-        condition: service_healthy
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
     ports:
       - "127.0.0.1:18084:8080"
-    volumes:
-      - profiles:/var/lib/riftwarden
-    read_only: true
-    cap_drop: [ALL]
-    security_opt: [no-new-privileges:true]
-    tmpfs:
-      - /tmp:rw,noexec,nosuid,size=16m
-    stop_grace_period: 30s
-    restart: unless-stopped
+    stop_grace_period: 15s
+    mem_limit: 128m
+
+  rules:
+    <<: *worker
+    image: ${RIFT_RULES_IMAGE:?deploy.sh selects the image digest}
+    environment:
+      RIFT_WORKER_ROLE: rules
+      RIFT_WORKER_LISTEN: 0.0.0.0:7101
+      RIFT_BUILD: ${RIFT_BUILD:-unknown}
+      NODE_OPTIONS: --max-old-space-size=192
+    mem_limit: 256m
+
+  sim-blue:
+    <<: *worker
+    image: ${RIFT_SIM_BLUE_IMAGE:?deploy.sh selects the image digest}
+    environment: &sim-env
+      RIFT_WORKER_ROLE: sim
+      RIFT_WORKER_LISTEN: 0.0.0.0:7201
+      RIFT_SIM_CAPACITY: "6"
+      RIFT_BUILD: ${RIFT_BUILD:-unknown}
+      NODE_OPTIONS: --max-old-space-size=420
+    mem_limit: 512m
+
+  sim-green:
+    <<: *worker
+    image: ${RIFT_SIM_GREEN_IMAGE:?deploy.sh selects the image digest}
+    environment: *sim-env
+    mem_limit: 512m
+
   db:
     image: postgres:18
     environment:
       POSTGRES_DB: riftwarden
       POSTGRES_USER: riftwarden
       POSTGRES_PASSWORD: ${RIFT_POSTGRES_PASSWORD:?Set RIFT_POSTGRES_PASSWORD in .env}
+    command: [postgres, -c, shared_buffers=128MB, -c, max_connections=40, -c, work_mem=4MB]
     volumes:
       - postgres:/var/lib/postgresql
     healthcheck:
@@ -36,8 +83,19 @@ services:
       timeout: 3s
       retries: 15
     restart: unless-stopped
+    mem_limit: 512m
+
+  # Ceremonies, session cache, rate limits: nothing here needs to survive a restart.
+  redis:
+    image: redis:8-alpine
+    command: [redis-server, --save, "", --appendonly, "no", --maxmemory, 64mb, --maxmemory-policy, allkeys-lru]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+    restart: unless-stopped
+    mem_limit: 96m
 
 volumes:
-  # The previous app image needs this mount if the deploy script rolls back.
-  profiles:
   postgres:

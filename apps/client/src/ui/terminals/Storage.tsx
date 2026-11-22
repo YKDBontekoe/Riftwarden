@@ -1,0 +1,83 @@
+import { useMemo } from 'react';
+import { sfx } from '@riftwarden/game/audio/Sfx';
+import type { Flow } from '../../core/Flow';
+import { STORAGE_EXPANSION, storageExpansionCost } from '@riftwarden/rules/loot/economy';
+import { SLOTS } from '@riftwarden/rules/progression/items';
+import { equippedItem, type SaveData, storedItems } from '@riftwarden/rules/progression/save';
+import { useSave } from '../App';
+import { Shell } from '../shell';
+import { ResourceBar, useTx, TxMessage, CostLine } from '../economy';
+import { dismantleYield } from '@riftwarden/rules/economy/config';
+import { type InvEntry, InventoryView, RarityLegend } from '../items';
+import { useEquipped } from './Loadout';
+
+export function saveEntries(save: SaveData): InvEntry[] {
+  const out: InvEntry[] = [];
+  for (const s of SLOTS) {
+    const it = equippedItem(save, s.id);
+    if (it) out.push({ item: it, status: 'equipped', equippedIn: s.id });
+  }
+  for (const it of storedItems(save)) out.push({ item: it, status: 'stored', equippedIn: null });
+  return out;
+}
+
+export function StorageTerminal({ flow, close }: { flow: Flow; close: () => void }) {
+  const save = useSave(flow);
+  const equipped = useEquipped(save);
+  const entries = useMemo(() => saveEntries(save), [save]);
+  const used = save.storage.uids.length;
+  const over = used > save.storage.capacity;
+  const cost = storageExpansionCost(save.storage.expansions);
+  const act = (op: string, args: unknown[]) => {
+    const ok = flow.profile.op(op, args).ok;
+    sfx.play(ok ? 'equip' : 'buildDeny');
+  };
+  const tx = useTx(flow, 'salvage');
+  return (
+    <Shell code="ST-03" title="SECURE STORAGE" sub="Persistent equipment · secured at checkpoints" close={close} wide>
+      <InventoryView
+        entries={entries}
+        equipped={equipped}
+        actions={{
+          canChange: true,
+          lockedReason: '',
+          equip: (uid, slot) => act('equipFromStorage', [uid, slot ?? null]),
+          unequip: (slot) => act('unequipToStorage', [slot]),
+          remove: {
+            label: (e) => {
+              const y = dismantleYield(e.item);
+              return `DISMANTLE · +${y.salvage} SALVAGE${y.components ? ` · +${y.components} COMP` : ''}`;
+            },
+            allowed: (e) => e.status === 'stored' && !e.item.locked,
+            run: (uid) => void tx.run('dismantle', 'dismantleItems', [[uid]], (r) => `Dismantled · +${r.salvage} salvage${r.components ? ` · +${r.components} components` : ''}`),
+            confirm: 'Dismantle permanently?',
+          },
+          extra: (e) =>
+            e.status === 'stored' || e.status === 'equipped' ? (
+              <button className="mini" onClick={() => void tx.run('lock', 'setItemLock', [e.item.uid, !e.item.locked], () => (e.item.locked ? 'Unlocked' : 'Locked: protected from selling and dismantling'))}>
+                {e.item.locked ? 'UNLOCK' : 'LOCK'}
+              </button>
+            ) : null,
+        }}
+        header={
+          <div className="storage-bar">
+            <ResourceBar save={save} compact />
+            <div className={`cap ${over ? 'over' : ''}`}>
+              <span>
+                BAYS {used} / {save.storage.capacity} {over && '· OVER CAPACITY: DEPLOYMENT LOCKED'}
+              </span>
+              <div className="cap-bar">
+                <i style={{ width: `${Math.min(100, (used / save.storage.capacity) * 100)}%` }} />
+              </div>
+            </div>
+            <button className="mini expand" disabled={save.resources.salvage < cost} onClick={() => act('expandStorage', [])}>
+              +{STORAGE_EXPANSION} BAYS · <CostLine cost={{ salvage: cost }} save={save} />
+            </button>
+            <RarityLegend />
+            <TxMessage msg={tx.msg} />
+          </div>
+        }
+      />
+    </Shell>
+  );
+}

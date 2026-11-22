@@ -1,6 +1,6 @@
 // M5 acceptance (A-L subset in the browser): upgrade flow, seeds, run reset, statuses + reactions, tower customisation,
 // tactical refit, synergy, trigger-safety stress, performance, research persistence.
-// Usage: npm run dev (5173), then node scripts/e2e-m5.cjs
+// Usage: pnpm dev (5173), then node scripts/e2e-m5.cjs
 const H = require('./lib/harness.cjs');
 const { OUT, check, S, ev } = H;
 const waitFor = (p, fn, arg, t = 120000) => H.waitFor(p, fn, arg, t);

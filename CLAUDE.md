@@ -1,244 +1,251 @@
 # Riftwarden: project notes for future sessions
 
-Browser FPS + tower-defense roguelite. **Design direction (owner Q&A, wins over older notes): `docs/design-direction.md`** (FPS first, loot chasers, branching run map, two weapons + abilities, six elements; build order: Game.ts refactor -> combat kit -> M11 loot -> map -> enemies). Current milestone: **The Rift War (shared war map)**: one persistent war for every player (solo and co-op) on a small 3D globe of regions; each region is a free network of sectors that any run can land on, replay and travel between; securing sectors liberates them (scaled by average players online, ~1 day per region), corruption spreads in real time, distress calls / threats / convoys / war orders appear, a conquered region unlocks the next and a fully corrupted one falls back (see "Rift War" under Key design decisions). Before it **Survival mode + node intel**: a Defense / Survival switch for map runs (survival: no towers, every machine hunts the drone, one life; solo and co-op) and a run map screen with enemy intel, a reward breakdown and route lookahead (see "Survival mode" under Key design decisions). Before it the **Branching run map (Roadmap step 4, done)**: a run is an endless series of seeded acts of map nodes (combat / elite / boss sectors of five waves, merchant / forge / anomaly / vault / rest hubs), bank + travel or extract at every node, act bosses, node modifiers, act curses/blessings, resume after a closed tab, co-op map votes (see "Run map" under Key design decisions). Before it **M11 loot depth, part 1**: Drone Swarm weapon family, the Ascended tier + rift shards, 15 hand-made uniques with target farming (see "Loot depth"). Before that **Elements** (six damage types, affinities, corrode, void pierce) and the **combat kit**. Next = the rest of M11 (Launcher / Flamer families, sets, conditional affixes, build-aware score, pinnacle keys, tower parts, trading). See "Roadmap" at the end. Built on **M10** (biomes with factions, ground hazards, enemy mutations, faction archetypes), **M9** (procedural arenas: seeded 170-200 m sectors with districts, nav-grid pathing with tower mazing + breaching, forward rifts, loading screens), M8 and the fast-pace pass (see "Key design decisions"). Read this before changing code.
+Browser FPS + tower-defense roguelite. **Architecture v2 is done** (`docs/architecture-v2.md`, the reference for how the system is built: Rust gateway as the only backend, TypeScript rules in internal Node workers, Protobuf over the account's session WebSocket, passkey accounts, offline play with server-validated sync, co-op in sim workers behind the gateway, Docker Compose deploy with draining (ClickHouse + Grafana postponed), React 19 + TanStack Router + Tailwind v4 client, optional WebGPU). The feature freeze of that milestone is over; see "Architecture v2" under Key design decisions for the working rules. Packages: `packages/rules` (pure rules), `packages/game` (simulation + Babylon presentation), `packages/protocol` (generated protobuf + codecs), `apps/client` (shell, Flow, React UI), `apps/worker` (rules + sim workers), `crates/gateway` + `crates/db` + `crates/proto` (Rust); pnpm + Cargo workspaces, imports across packages use `@riftwarden/<pkg>/<path>`. **Design direction (owner Q&A, wins over older notes): `docs/design-direction.md`** (FPS first, loot chasers, branching run map, two weapons + abilities, six elements; build order: Game.ts refactor -> combat kit -> M11 loot -> map -> enemies). Current milestone: **The Rift War (shared war map)**: one persistent war for every player (solo and co-op) on a small 3D globe of regions; each region is a free network of sectors that any run can land on, replay and travel between; securing sectors liberates them (scaled by average players online, ~1 day per region), corruption spreads in real time, distress calls / threats / convoys / war orders appear, a conquered region unlocks the next and a fully corrupted one falls back (see "Rift War" under Key design decisions). Before it **Survival mode + node intel**: a Defense / Survival switch for map runs (survival: no towers, every machine hunts the drone, one life; solo and co-op) and a run map screen with enemy intel, a reward breakdown and route lookahead (see "Survival mode" under Key design decisions). Before it the **Branching run map (Roadmap step 4, done)**: a run is an endless series of seeded acts of map nodes (combat / elite / boss sectors of five waves, merchant / forge / anomaly / vault / rest hubs), bank + travel or extract at every node, act bosses, node modifiers, act curses/blessings, resume after a closed tab, co-op map votes (see "Run map" under Key design decisions). Before it **M11 loot depth, part 1**: Drone Swarm weapon family, the Ascended tier + rift shards, 15 hand-made uniques with target farming (see "Loot depth"). Before that **Elements** (six damage types, affinities, corrode, void pierce) and the **combat kit**. Next = the rest of M11 (Launcher / Flamer families, sets, conditional affixes, build-aware score, pinnacle keys, tower parts, trading). See "Roadmap" at the end. Built on **M10** (biomes with factions, ground hazards, enemy mutations, faction archetypes), **M9** (procedural arenas: seeded 170-200 m sectors with districts, nav-grid pathing with tower mazing + breaching, forward rifts, loading screens), M8 and the fast-pace pass (see "Key design decisions"). Read this before changing code.
 
 ## Stack
 
 - **Babylon.js 8** (`@babylonjs/core`) for rendering, picking, particles, post-processing.
 - **Havok** (`@babylonjs/havok`, Babylon Physics v2) for the static level collider, the player's `PhysicsCharacterController`, and line-of-sight raycasts.
-- **React 18** for HUD and menus (`src/ui`), fed by a tiny external store.
-- **Vite 7 + TypeScript (strict)**, **Vitest** for unit tests.
-- **M7 co-op server**: Node + `ws` + `tsx` (`server/`), runs the real `Game` headless (Babylon `NullEngine` + Havok wasm).
+- **React 19** for menus, terminals and HUD structure (`{apps/client,packages/game}/src/ui`), fed by a tiny external store; 20 Hz HUD values bind through `@preact/signals-core` (`ui/hud/live.tsx`). **TanStack Router** (hash history) for menu sheets and invites. **Tailwind v4** (`ui/app.css`, no preflight, tokens from `style.css`).
+- **Vite 7 + TypeScript (strict)**, **Vitest** for unit tests. Babylon is imported **deep** (`@babylonjs/core/<Module>/<file>`), never from the barrel.
+- **Rust gateway** (`crates/gateway`: axum, sqlx, Redis, webauthn-rs, OpenTelemetry) is the only public service; **workers** (`apps/worker`, Node) run the TypeScript rules (`rules` role) and co-op (`sim` role: the real `Game` headless with `NullEngine` + Havok wasm).
 
 Use engine features before writing custom systems (user direction): collision, picking, raycasts and particles come from Babylon/Havok.
 
 ## Layout
 
+Workspace (pnpm, `pnpm-workspace.yaml` with a version catalog): every package keeps the old `src/` sub-paths, so `core/Game.ts` lives at `packages/game/src/core/Game.ts`. Dependency direction is enforced by `tests/architecture.test.ts`: `apps/client` -> `packages/game` -> `packages/protocol` -> `packages/rules`; `packages/rules` imports nothing outside itself (no Babylon, React, DOM libraries or Node modules); `packages/game` never imports React (`useHud` lives in `apps/client/src/ui/useHud.ts`). Cross-package imports use the package name (`@riftwarden/rules/loot/roll`); directory barrels have explicit `exports` entries (`progression/save`, `enemies/bosses`). The client build writes to the repository root `dist/` (server, Docker image and CI read it there). Tests stay in the root `tests/`; browser suites import modules in the page with `/@id/@riftwarden/<pkg>/<path>`.
+
+
 ```
-src/main.tsx               boot: Havok WASM, Engine, Flow, React root, ?test hook; the ONLY render loop
-server/main.ts             M7: HTTP (serves dist/, /health) + WebSocket /ws, hello/version, rate limit, rooms, profile ops, presence
-server/room.ts             M7: lobby (code, ready, tier = min unlocked, host transfer, reconnect window 120 s)
-server/sim.ts              M7: CoopSim: 60 Hz fixed loop around ServerGame, snapshots 20 Hz, banking/closing per player
-server/profiles.ts         Online profile cache, derived guest IDs, committed profile mutations
-server/profileDatabase.ts  Transactional PostgreSQL persistence, with table definitions in server/migrations
-server/profileRows.ts      Maps SaveData to typed relational rows and back
-server/headless.ts         M7: browser stubs (canvas 2D, document, localStorage) so Game runs in Node
-src/war/regions.ts         RIFT WAR: regionLayout(seed, k) (memoised): free sector network (MST + short non-crossing links), landing / capital / rift source, biome-coherent arena seeds, globe lat/lon, cross-region links; regionNode, parseRegionId [pure]
-src/war/state.ts           RIFT WAR: WarState + rules: newWar, tickWar (hourly, seeded per hour: resistance, corruption spread + defense events + fallback, distress, convoys, orders), secureNode (liberation / avg online, purge, repel, order progress, conquest -> next region), liveMods, buffEffect, sanitizeWar; WAR tuning [pure]
-src/war/world.ts           RIFT WAR: run view: findNode, liveNode (live mods), reachable (links in unlocked regions), defaultEntry, regionOf, pathCode [pure]
-src/war/client.ts          RIFT WAR: WarClient (GET /war, POST /war/report, local war in localStorage when offline / ?test, seen marker for reactions)
-src/war/GlobeView.ts       RIFT WAR: Babylon mini globe on its own canvas (grid, region markers by status, selection ring, spin to region)
-src/ui/WarMap.tsx          RIFT WAR: Globe, RegionMap (territory glow, liberation rings, corruption, live events with timers, path, lookahead, fresh-change pings), RegionStrip, RegionTabs, OrderBanner, WarReport, WarHeader
-server/war.ts              RIFT WAR: WarService (PostgreSQL row, 30 s tick, online samples every 10 min over 24 h, snapshot JSON, rate-limited reports, trusted co-op reports)
-server/migrations/009_war.sql RIFT WAR: war_state table
-src/runmap/defs.ts         RUN MAP: node kinds, node modifiers (NODE_MODS), curses/blessings, anomalies, forge/rest/merchant services, ACT_BOSSES, priceScale [pure]
-src/runmap/map.ts          RUN MAP: MapNode shape, rollMods, nodeEffect/combineEffects, actEffect, segmentTier, nodeInfo (layouts now come from war/regions) [pure]
-src/runmap/carry.ts        RUN MAP: RunCarry (what crosses nodes), towerRefund, carryStats (curses/blessings/forge), curse rules, sanitizeCarry [pure]
-src/runmap/hub.ts          RUN MAP: merchantStock, forgePrice, resolveAnomaly (seeded outcomes), GUARDIAN tuning [pure]
-src/runmap/state.ts        RUN MAP: RunMapState (persisted on activeRun.map), resumable, sanitizeMapState [pure]
-src/runmap/brief.ts, view.ts RUN MAP: NodeBrief (map/loading cards), NodeHud / RunMapView / StationPanel view models [pure]
-src/arena/RunNode.ts       RUN MAP: the arena side of a node (NodeHost): carry restore, segment completion + rewards, hub stations (E), panels, guardians, map trigger, exportCarry; replica mode for co-op clients (netState/applyNet)
-src/core/mapSession.ts     RUN MAP: solo map session (Flow helper): entered/leave bookkeeping, node leftovers banking, resume point, map view
-src/visuals/nodeProps.ts   RUN MAP: station rigs (merchant, forge, rest, anomaly obelisk, vault, exit rift) from kit primitives
-src/runmap/intel.ts        NODE INTEL: nodeIntel (the arena planner's real roster for a node: hostiles, elites, boss, events, total HP, time to clear at your DPS, threat 1-5, effect deltas, reward lines), lookahead (downstream nodes, rows to boss, fight range, shop/rest ahead) [pure]
-src/arena/Hunt.ts          SURVIVAL: Hunt (enemy layout whose reactor follows the hunted drone, nav re-seeding on the living drones), HUNT tuning
-server/migrations/008_survival_mode.sql SURVIVAL: activeRun/history mode, survival records
-src/net/mapVote.ts         RUN MAP: resolveMapVote / voteComplete (majority, host tie-break, home voters) [pure]
-src/ui/RunMap.tsx          RUN MAP: MapChart (SVG star chart), RunMapScreen, StationScreen, NodeChip (HUD), NodeCard, DeployMapPreview;  src/ui/DeployMap.tsx: deploy terminal panel + resume card + codex
+apps/client/src/main.tsx               boot: Havok WASM, Engine, Flow, React root, ?test hook; the ONLY render loop
+crates/gateway/src/            V2: lib.rs (router, state), auth/ (passkeys, sessions, names, recovery, test login), session.rs (/session socket: sync calls + co-op tunnel),
+                           sync.rs (profile sync via the rules worker, trusted entries), coop.rs (sim worker links, room directory, routing, capacity, lost operations),
+                           war.rs (war document, tick, GET /war, POST /war/report), admin.rs (drain/status listener + CLI client), workers.rs, limits.rs, telemetry.rs
+crates/db/                 V2: sqlx queries + migrations (accounts, passkeys, sessions, recovery codes, profiles, profile_devices, war_state)
+apps/worker/src/           V2: main.ts (role rules|sim, framed TCP), rules.ts (replay/war calls), telemetry.ts (OTLP logs), sim/host.ts (players, rooms, bindings,
+                           load, capacity), sim/room.ts (lobby), sim/coopSim.ts (CoopSim: 60 Hz loop around ServerGame), sim/store.ts (profiles + run entries), sim/headless.ts
+apps/worker/build.mjs      V2: production esbuild bundle + Havok wasm
+apps/client/src/main.tsx   V2: 1 KB shell (styles, splash, service worker registration) -> boot.tsx (engine, Havok, Flow, React root); core/engine.ts (WebGL2 / WebGPU)
+apps/client/src/ui/router.tsx, ui/hud/live.tsx, ui/app.css, sw-plugin.ts   V2: routes, signal HUD bindings, Tailwind entry, service worker generator
+apps/client/src/account/   V2: passkey API + WebAuthn, account store, AccountPanel, sync.ts (account <-> profile namespace, guest adoption, SessionClient)
+packages/game/src/net/SessionClient.ts, NetClient.ts   V2: session socket (sync, change notices, co-op tunnel); co-op client over that tunnel
+packages/game/src/progression/SyncJournal.ts            V2: offline log per profile namespace (genesis + entries)
+packages/rules/src/progression/sync.ts, runRules.ts, runCheck.ts   V2: replay, run entries, run validation (loot stream replay, ceilings)
+packages/rules/src/net/lagComp.ts                       V2: hostile position trails for shot claims, correction blending [pure]
+packages/game/src/babylonSideEffects.ts, visuals/wgsl.ts    V2: Babylon side-effect imports; WGSL twins of every custom shader
+deploy/                    V2: gateway/worker Dockerfiles, compose.yml, deploy.sh (drain + rollback), README (observability stack postponed)
+scripts/lib/stack.mjs, with-stack.mjs, dev-stack.mjs, bot.mjs, smoke-stack.mjs, check-wgsl.mjs   V2: test/dev stacks, protocol bot, deploy smoke, WGSL compile check
+packages/rules/src/war/regions.ts         RIFT WAR: regionLayout(seed, k) (memoised): free sector network (MST + short non-crossing links), landing / capital / rift source, biome-coherent arena seeds, globe lat/lon, cross-region links; regionNode, parseRegionId [pure]
+packages/rules/src/war/state.ts           RIFT WAR: WarState + rules: newWar, tickWar (hourly, seeded per hour: resistance, corruption spread + defense events + fallback, distress, convoys, orders), secureNode (liberation / avg online, purge, repel, order progress, conquest -> next region), liveMods, buffEffect, sanitizeWar; WAR tuning [pure]
+packages/rules/src/war/world.ts           RIFT WAR: run view: findNode, liveNode (live mods), reachable (links in unlocked regions), defaultEntry, regionOf, pathCode [pure]
+packages/game/src/war/client.ts          RIFT WAR: WarClient (GET /war, POST /war/report, local war in localStorage when offline / ?test, seen marker for reactions)
+apps/client/src/war/GlobeView.ts       RIFT WAR: Babylon mini globe on its own canvas (grid, region markers by status, selection ring, spin to region)
+apps/client/src/ui/WarMap.tsx          RIFT WAR: Globe, RegionMap (territory glow, liberation rings, corruption, live events with timers, path, lookahead, fresh-change pings), RegionStrip, RegionTabs, OrderBanner, WarReport, WarHeader
+packages/rules/src/war/service.ts         RIFT WAR: stored document, population samples, steps, reports (run by the rules worker; crates/gateway/src/war.rs schedules and serves it) [pure]
+packages/rules/src/runmap/defs.ts         RUN MAP: node kinds, node modifiers (NODE_MODS), curses/blessings, anomalies, forge/rest/merchant services, ACT_BOSSES, priceScale [pure]
+packages/rules/src/runmap/map.ts          RUN MAP: MapNode shape, rollMods, nodeEffect/combineEffects, actEffect, segmentTier, nodeInfo (layouts now come from war/regions) [pure]
+packages/rules/src/runmap/carry.ts        RUN MAP: RunCarry (what crosses nodes), towerRefund, carryStats (curses/blessings/forge), curse rules, sanitizeCarry [pure]
+packages/rules/src/runmap/hub.ts          RUN MAP: merchantStock, forgePrice, resolveAnomaly (seeded outcomes), GUARDIAN tuning [pure]
+packages/rules/src/runmap/state.ts        RUN MAP: RunMapState (persisted on activeRun.map), resumable, sanitizeMapState [pure]
+packages/rules/src/runmap/brief.ts, view.ts RUN MAP: NodeBrief (map/loading cards), NodeHud / RunMapView / StationPanel view models [pure]
+packages/game/src/arena/RunNode.ts       RUN MAP: the arena side of a node (NodeHost): carry restore, segment completion + rewards, hub stations (E), panels, guardians, map trigger, exportCarry; replica mode for co-op clients (netState/applyNet)
+packages/game/src/core/mapSession.ts     RUN MAP: solo map session (Flow helper): entered/leave bookkeeping, node leftovers banking, resume point, map view
+packages/game/src/visuals/nodeProps.ts   RUN MAP: station rigs (merchant, forge, rest, anomaly obelisk, vault, exit rift) from kit primitives
+packages/rules/src/runmap/intel.ts        NODE INTEL: nodeIntel (the arena planner's real roster for a node: hostiles, elites, boss, events, total HP, time to clear at your DPS, threat 1-5, effect deltas, reward lines), lookahead (downstream nodes, rows to boss, fight range, shop/rest ahead) [pure]
+packages/rules/src/arena/Hunt.ts          SURVIVAL: Hunt (enemy layout whose reactor follows the hunted drone, nav re-seeding on the living drones), HUNT tuning
+packages/rules/src/net/mapVote.ts         RUN MAP: resolveMapVote / voteComplete (majority, host tie-break, home voters) [pure]
+apps/client/src/ui/RunMap.tsx          RUN MAP: MapChart (SVG star chart), RunMapScreen, StationScreen, NodeChip (HUD), NodeCard, DeployMapPreview;  apps/client/src/ui/DeployMap.tsx: deploy terminal panel + resume card + codex
 scripts/e2e-runmap.cjs     RUN MAP browser suite (A deploy, B completion + map, C travel + carry, D five hub kinds, F resume after reload, E extraction + records + HQ preview, G null field, V screenshots); `?test&map`
 scripts/e2e-coop-map.mjs   RUN MAP co-op protocol suite (own server, RIFT_MAP=1): map runStart, vote, home voter extracts alone, travel + carry, PostgreSQL records
-server/migrations/007_run_map.sql RUN MAP: activeRun map/node_bank, map records/totals, history act/nodes/path
-src/world/arenaGen.ts      M9: generateArena(seed) -> ArenaLayout (memoised): perimeter, lane benders, platforms+ramps, blocks, pillars, wall machines, lanes traced on the nav grid, forward rifts, vents, reserved zones; sectorName, arenaStats [pure]
-src/world/biomes.ts        M10: BIOMES (outpost / cryo / foundry: fog, horizon, sun, palette tints, air particles, lane colour, hazard, faction, name words), biomeForSeed, biomeOf, factionMix [pure]
-src/arena/Hazards.ts       M10: frost fields / slag pools (static from the layout, transient slag trails): drone slow + burn, enemy chill/burn; split decay / affectPlayer / affectEnemyList for co-op
-src/enemies/mutations.ts   M10: runtime of the six mutations (regenerating, splitting, shielded, blinking, frostbound, molten); state in Enemy.mut
-src/enemies/factionBehaviors.ts M10: Sapper, Skimmer, Marksman, Burrower behaviours (shared walker/drone/crawler rigs + extra kit parts)
-src/visuals/biomeLook.ts   M10: tintPalette (biome albedo multipliers on the outdoor palette)
+packages/rules/src/world/arenaGen.ts      M9: generateArena(seed) -> ArenaLayout (memoised): perimeter, lane benders, platforms+ramps, blocks, pillars, wall machines, lanes traced on the nav grid, forward rifts, vents, reserved zones; sectorName, arenaStats [pure]
+packages/rules/src/world/biomes.ts        M10: BIOMES (outpost / cryo / foundry: fog, horizon, sun, palette tints, air particles, lane colour, hazard, faction, name words), biomeForSeed, biomeOf, factionMix [pure]
+packages/game/src/arena/Hazards.ts       M10: frost fields / slag pools (static from the layout, transient slag trails): drone slow + burn, enemy chill/burn; split decay / affectPlayer / affectEnemyList for co-op
+packages/game/src/enemies/mutations.ts   M10: runtime of the six mutations (regenerating, splitting, shielded, blinking, frostbound, molten); state in Enemy.mut
+packages/game/src/enemies/factionBehaviors.ts M10: Sapper, Skimmer, Marksman, Burrower behaviours (shared walker/drone/crawler rigs + extra kit parts)
+packages/game/src/visuals/biomeLook.ts   M10: tintPalette (biome albedo multipliers on the outdoor palette)
 scripts/e2e-m10.cjs        M10 browser suite (A biomes, B hazards, C archetypes, D mutations, E planner factions, V screenshots)
-src/world/districts.ts     M9: district kits in a local frame + orient (quarter turns): maze (backtracker + loops), serpentine, containerYard (staggered), overpass (platforms + bridge + underpass baffles), redoubt, skyway, withWings, barrierX/Z [pure]
-src/world/navgrid.ts       M9: NavGrid: 1 m flow field (Dijkstra from the reactor ring), towers = high cost (not blocked), pathFrom + string pulling   [pure]
-src/enemies/navigation.ts  M9: EnemyNavigator (EnemyManager.nav): ground/air fields, spawn at gate or forward rift, re-plan on field change, breaching  [no Babylon values]
-src/towers/durability.ts   M9: tower max HP / repair cost / wreck refund rules                                  [pure]
-src/arena/TowerWear.ts     M9: breach hits, wrecks, repairs (F), wave-clear mending (narrow host, no Game import)
-src/visuals/riftAnchors.ts M9: forward rift anchors (scorch pad, ring, additive tear; flare on spawn)
-src/ui/LoadingScreen.tsx   M9: scene-swap loading screen (sector briefing + SVG map, stages, tips; HQ recovery art); src/ui/loadingTips.ts [pure]
+packages/rules/src/world/districts.ts     M9: district kits in a local frame + orient (quarter turns): maze (backtracker + loops), serpentine, containerYard (staggered), overpass (platforms + bridge + underpass baffles), redoubt, skyway, withWings, barrierX/Z [pure]
+packages/rules/src/world/navgrid.ts       M9: NavGrid: 1 m flow field (Dijkstra from the reactor ring), towers = high cost (not blocked), pathFrom + string pulling   [pure]
+packages/rules/src/enemies/navigation.ts  M9: EnemyNavigator (EnemyManager.nav): ground/air fields, spawn at gate or forward rift, re-plan on field change, breaching  [no Babylon values]
+packages/rules/src/towers/durability.ts   M9: tower max HP / repair cost / wreck refund rules                                  [pure]
+packages/game/src/arena/TowerWear.ts     M9: breach hits, wrecks, repairs (F), wave-clear mending (narrow host, no Game import)
+packages/game/src/visuals/riftAnchors.ts M9: forward rift anchors (scorch pad, ring, additive tear; flare on spawn)
+apps/client/src/ui/LoadingScreen.tsx   M9: scene-swap loading screen (sector briefing + SVG map, stages, tips; HQ recovery art); apps/client/src/ui/loadingTips.ts [pure]
 scripts/e2e-arenas.cjs     M9: browser suite (A loading screen, B generated arena, C rifts + re-planning, D breach/wreck/repair, E HQ screen + determinism, V screenshots)
-src/waves/pace.ts          Run tempo: prep / clear timings, spawn schedule compression, early-call core bonus      [pure]
-src/combat/elements.ts     ELEMENTS (kinetic/thermal/electric/cryo/corrosive/void): info + colours, FACTION_AFFINITY / BOSS_AFFINITY + overrides (affinity, sectorAffinity), rollElement, procWeight, elementPayload, elementEnergy [pure]
-src/loot/uniques.ts        M11: UNIQUES (15 hand-made items: base, fixed affixes, extra stats, flavour, weapon signature or gear effect, drop sources/faction/chance), uniqueForDrop (seed-decided), generateUnique, gearUniques [pure]
-src/loot/ascend.ts         M11: Ascended tier: ASCEND tuning, ascendDrop (seed-based promotion of exotic drops), ascendItem / ascendBlock / perfectAffix [pure]
-src/weapons/swarmModel.ts  M11: Drone Swarm hive chassis (hive / brood / wasp) + launch pods (hex pod, twin racks, hive cluster, long uplink); tubes are the muzzles
-src/weapons/shapes.ts      vertex-data helpers shared by the weapon model builders (alongZ/X, lathe, cylZ, tubeZ, cylX)
-server/migrations/006_loot_depth.sql M11: weapon roll drones/seek_cone, profiles.shards, profile_items.unique_id
-src/ui/ElementTag.tsx      element chip (item readout, weapon card, holster row, briefing AffinityRow)
-server/migrations/005_elements.sql element column on profile_weapon_rolls
-src/combat/heat.ts         Global heat tempo applied at fire time (and in weaponSummary) on top of stored item heat   [pure]
-src/core/frameClock.ts     Frame pacing filter (jitter -> steady dt, time debt repaid, hitches clamped)              [pure]
+packages/rules/src/waves/pace.ts          Run tempo: prep / clear timings, spawn schedule compression, early-call core bonus      [pure]
+packages/rules/src/combat/elements.ts     ELEMENTS (kinetic/thermal/electric/cryo/corrosive/void): info + colours, FACTION_AFFINITY / BOSS_AFFINITY + overrides (affinity, sectorAffinity), rollElement, procWeight, elementPayload, elementEnergy [pure]
+packages/rules/src/loot/uniques.ts        M11: UNIQUES (15 hand-made items: base, fixed affixes, extra stats, flavour, weapon signature or gear effect, drop sources/faction/chance), uniqueForDrop (seed-decided), generateUnique, gearUniques [pure]
+packages/rules/src/loot/ascend.ts         M11: Ascended tier: ASCEND tuning, ascendDrop (seed-based promotion of exotic drops), ascendItem / ascendBlock / perfectAffix [pure]
+packages/game/src/weapons/swarmModel.ts  M11: Drone Swarm hive chassis (hive / brood / wasp) + launch pods (hex pod, twin racks, hive cluster, long uplink); tubes are the muzzles
+packages/game/src/weapons/shapes.ts      vertex-data helpers shared by the weapon model builders (alongZ/X, lathe, cylZ, tubeZ, cylX)
+apps/client/src/ui/ElementTag.tsx      element chip (item readout, weapon card, holster row, briefing AffinityRow)
+packages/rules/src/combat/heat.ts         Global heat tempo applied at fire time (and in weaponSummary) on top of stored item heat   [pure]
+packages/game/src/core/frameClock.ts     Frame pacing filter (jitter -> steady dt, time debt repaid, hitches clamped)              [pure]
 scripts/playtest.cjs       Bot playtest: plays N waves (aims, fires, strafes, dashes, builds towers, picks upgrades), prints pacing metrics + screenshots
 scripts/feel-shots.cjs     Close-up captures: walker gait at speed, kill pop / knock-back / merged numbers
-src/progression/level.ts   M8: Warden XP formula (xpFor from run statistics), level curve, points/rings per level     [pure]
-src/progression/skilltree.ts M8: procedural radial skill tree (seeded per profile, ring per 5 levels), allocation rules, soft-capped modifiers, keystone rules [pure]
-src/progression/treeOps.ts M8: treeAllocate / treeRespec profile operations                                       [pure]
-src/economy/currencies.ts  M8: one table for every currency (name, icon, earned/spent/banking) for tooltips and cost text [pure]
-src/home/stationInfo.ts    M8: purpose + currencies per HQ station (terminal headers, HQ prompt, Command Console directory) [pure]
-src/home/stationScreens.ts M8: live station screen drawing (moved out of HomeBase)
-src/loot/loadoutScore.ts   loadout headline scores (firepower/survivability/mobility/towers), swapImpact + verdict, statSources  [pure]
-src/ui/compare.tsx         ImpactBanner / ImpactChips / VerdictTag / ScoreCards / statTooltip (shared comparison widgets)
-src/ui/statHelp.ts         one-line help text per stat key (tooltips)                                         [pure]
-src/ui/DroneStats.tsx      drone configuration stat panel (score cards, per-stat source tooltips)
-src/visuals/hqTextures.ts  HQ-only surface sets with emissive maps: deck plates (LED seam, grates), wall panels (lit recess band, hatch, stencils), ceiling tiles (light slots)
-src/home/roomStyle.ts      accent colour + light tint per HQ room (room identity)                             [pure]
-src/world/rubblePlan.ts    where arena rubble/wreckage goes (piles at wall bases + block corners, wall wrecks, deck scatter), kept off lanes/reactor/spawn/reserved/vents/ramps [pure]
-src/visuals/arenaFloor.ts  arena floor zoning: reactor steel plaza + hazard border, wall gutters with grates, gate-mouth chevrons (8 mm inlays under decals 16 mm / lane lights 28 mm, not pickable)
-src/visuals/riftMist.ts    RiftMist: additive noise vapour rolling out of each gate (floor + waist layers, orange open / grey sealed; Game.openGate lights it)
-src/home/hqAtmosphere.ts   HQ window light shafts (slanted additive sheets along the moonlight) + dust motes (density follows the particle setting)
-src/combat/weaponFeel.ts   shotFeel(family, mechanism, power): lens punch, sideways kick share, shake, flash/light, recoil recovery rates; yawPattern(n) [pure]
-src/visuals/rubble.ts      RubbleBuilder: blocky concrete chunks (corner-jittered boxes, flat shaded, per-chunk vertex tint), rusty plates, rebar, fallen I-beams, drums, cracked slabs; HQ scrap heaps
-src/ui/SkillTree.tsx       M8: Neural Lattice terminal (SVG radial tree, pan/zoom, allocate, respec);  src/ui/Directory.tsx: level/XP widgets + station directory
-server/migrations/002_progress.sql M8: xp/tree columns, veteran XP, version 7 -> 8
-src/net/teamLedger.ts      TeamLedger (shared co-op ledger mirrored into each player's ledger)
-src/net/protocol.ts        M7: message types, PROTOCOL_VERSION, structural validation, RateLimiter         [pure]
-src/net/ServerGame.ts      M7: authoritative Game subclass: Avatars per player, shot validation, acts, TeamLedger, votes
-src/net/recorder.ts        M7: Recorder + capturePresentation (fx/sfx/ui/telegraph/ordnance -> event tuples), withRecorder scoping
-src/net/replicated.ts      M7: the replicated presentation call names (FX_CALLS, ...) shared by server capture and client replay
-src/net/ClientGame.ts      M7: replica Game subclass: puppet enemies (interpolated 100 ms), shot claims, actions with replies, remote wardens
-src/net/NetClient.ts       M7: browser WebSocket session: identity, reconnect/backoff, act() with timeout, RTT
-src/progression/ops.ts     M7: named profile operations shared by client (Profile.op) and server (ProfileStore.op) [pure]
-src/progression/tutorial.ts M7: onboarding steps + ops                                                      [pure]
-src/core/TutorialDirector.ts M7: shows one tutorial card at a time (F10 skips)
-src/home/build/            M7: catalog.ts (pieces, limits), model.ts (grid, validation, reachability) [pure], ops.ts (BUILD_OPS) [pure],
+packages/rules/src/progression/level.ts   M8: Warden XP formula (xpFor from run statistics), level curve, points/rings per level     [pure]
+packages/rules/src/progression/skilltree.ts M8: procedural radial skill tree (seeded per profile, ring per 5 levels), allocation rules, soft-capped modifiers, keystone rules [pure]
+packages/rules/src/progression/treeOps.ts M8: treeAllocate / treeRespec profile operations                                       [pure]
+packages/rules/src/economy/currencies.ts  M8: one table for every currency (name, icon, earned/spent/banking) for tooltips and cost text [pure]
+packages/rules/src/home/stationInfo.ts    M8: purpose + currencies per HQ station (terminal headers, HQ prompt, Command Console directory) [pure]
+packages/game/src/home/stationScreens.ts M8: live station screen drawing (moved out of HomeBase)
+packages/rules/src/loot/loadoutScore.ts   loadout headline scores (firepower/survivability/mobility/towers), swapImpact + verdict, statSources  [pure]
+apps/client/src/ui/compare.tsx         ImpactBanner / ImpactChips / VerdictTag / ScoreCards / statTooltip (shared comparison widgets)
+apps/client/src/ui/statHelp.ts         one-line help text per stat key (tooltips)                                         [pure]
+apps/client/src/ui/DroneStats.tsx      drone configuration stat panel (score cards, per-stat source tooltips)
+packages/game/src/visuals/hqTextures.ts  HQ-only surface sets with emissive maps: deck plates (LED seam, grates), wall panels (lit recess band, hatch, stencils), ceiling tiles (light slots)
+packages/game/src/home/roomStyle.ts      accent colour + light tint per HQ room (room identity)                             [pure]
+packages/rules/src/world/rubblePlan.ts    where arena rubble/wreckage goes (piles at wall bases + block corners, wall wrecks, deck scatter), kept off lanes/reactor/spawn/reserved/vents/ramps [pure]
+packages/game/src/visuals/arenaFloor.ts  arena floor zoning: reactor steel plaza + hazard border, wall gutters with grates, gate-mouth chevrons (8 mm inlays under decals 16 mm / lane lights 28 mm, not pickable)
+packages/game/src/visuals/riftMist.ts    RiftMist: additive noise vapour rolling out of each gate (floor + waist layers, orange open / grey sealed; Game.openGate lights it)
+packages/game/src/home/hqAtmosphere.ts   HQ window light shafts (slanted additive sheets along the moonlight) + dust motes (density follows the particle setting)
+packages/game/src/combat/weaponFeel.ts   shotFeel(family, mechanism, power): lens punch, sideways kick share, shake, flash/light, recoil recovery rates; yawPattern(n) [pure]
+packages/game/src/visuals/rubble.ts      RubbleBuilder: blocky concrete chunks (corner-jittered boxes, flat shaded, per-chunk vertex tint), rusty plates, rebar, fallen I-beams, drums, cracked slabs; HQ scrap heaps
+apps/client/src/ui/SkillTree.tsx       M8: Neural Lattice terminal (SVG radial tree, pan/zoom, allocate, respec);  apps/client/src/ui/Directory.tsx: level/XP widgets + station directory
+packages/rules/src/net/teamLedger.ts      TeamLedger (shared co-op ledger mirrored into each player's ledger)
+packages/game/src/net/protocol.ts        M7: message types, PROTOCOL_VERSION, structural validation, RateLimiter         [pure]
+packages/game/src/net/ServerGame.ts      M7: authoritative Game subclass: Avatars per player, shot validation, acts, TeamLedger, votes
+packages/game/src/net/recorder.ts        M7: Recorder + capturePresentation (fx/sfx/ui/telegraph/ordnance -> event tuples), withRecorder scoping
+packages/game/src/net/replicated.ts      M7: the replicated presentation call names (FX_CALLS, ...) shared by server capture and client replay
+packages/game/src/net/ClientGame.ts      M7: replica Game subclass: puppet enemies (interpolated 100 ms), shot claims, actions with replies, remote wardens
+packages/game/src/net/NetClient.ts       M7: browser WebSocket session: identity, reconnect/backoff, act() with timeout, RTT
+packages/rules/src/progression/ops.ts     M7: named profile operations shared by client (Profile.op) and server (ProfileStore.op) [pure]
+packages/rules/src/progression/tutorial.ts M7: onboarding steps + ops                                                      [pure]
+packages/game/src/core/TutorialDirector.ts M7: shows one tutorial card at a time (F10 skips)
+{packages/game,packages/rules}/src/home/build/            M7: catalog.ts (pieces, limits), model.ts (grid, validation, reachability) [pure], ops.ts (BUILD_OPS) [pure],
                            ExpansionLayer.ts (incremental meshes/colliders/lights), BuildMode.ts (construction camera + tools)
-src/enemies/jammerCrawlerBehaviors.ts M7: Jammer Drone, Siege Crawler behaviours
-src/enemies/coreBehaviors.ts Walker / Bulwark / Rush Drone as Behavior plug-ins (CORE_BEHAVIORS); EnemyManager has one dispatch path
-src/visuals/anim.ts        Spring, damp, smoothstep, impulse (shared by weapons, enemies, HQ)                                             [pure]
-src/visuals/hitFlashPlugin.ts per-instance additive hit flash: PBR material plugin + `instanceFlash` instanced buffer (Kit flash mode)
-src/visuals/mood.ts        moodFor(): fog/exposure/sun tint/tension from tier, boss, event, reactor (blendMood smoothing)                  [pure]
-src/visuals/moodDirector.ts applies the mood to scene fog, sun colour and PostFx offsets
-src/enemies/deathAnims.ts  DEATH_TIME per kind + deathPose(): collapse animation of destroyed regular enemies                              [pure]
-src/home/ambientNav.ts     waypoint graph (rooms, doorways, stations) + Dijkstra for ambient drones                                       [pure]
-src/home/AmbientDrones.ts  3 cosmetic service drones patrolling between stations (hum emitters follow them)
-src/home/hqVista.ts        3D middle ground outside the observation window (landing deck, dropship, lit towers, blinking beacons), merged, unlit glows only
-src/home/StationFocus.ts   HQ station floor ring under the targeted station + camera push-in while a terminal is open
-src/arena/PlayerCombat.ts  player weapon combat: shoot (hit resolution + damage), legacy damage entry (crit, situational upgrades, signatures, Arc Conductor), kill feel (hitstop/chain/dash refund), per-family shot fx (CombatHost)
-src/arena/shotTrace.ts     traceShot(): hitscan geometry (pierce, weakpoint overlap, beam aim assist) shared by Game and ClientGame (claims); shotOutcome in PlayerCombat
-src/arena/WeaponSlots.ts   primary + secondary weapon: active slot, swap (Z / 1), holstered heat (coolHolstered in combat/heat.ts), stat exclusion of the holstered weapon (WeaponSlotsHost)
-src/abilities/defs.ts      ABILITIES (frag, cryo, emp, blink, aegis; ultimates orbital, overdrive): power from item level x rarity x abilityPowerMult, cooldown/radius/ult charge rules, blink clamp, throw physics, AbilityHudRow [pure]
-src/arena/Abilities.ts     ability runtime (AbilityHost): RMB ability I, F ability II, T ultimate (combat); thrown charges, pulse, blink, aegis/overdrive buffs, orbital mark + strike, ult charge from Director.deal
-src/arena/LootPickups.ts   loot landing point (Havok), landing/pickup/refused presentation, pickup targeting (LootHost)
-src/arena/TowerControl.ts  tower inspection (crosshair pick), hold-X recycle, F repair, refit hotkeys, build template, refit/place local rules (TowerHost; ClientGame overrides recycleTower/repairTower/modifyTower/tryPlace)
-src/arena/DevTools.ts      dev lab actions behind `game.dev` (narrow DevHost interface, no Game dependency)
-src/arena/shadows.ts       createSunShadows(): cascaded / single sun shadow generator
-src/loot/roll.ts           rollLoot(): one pure roll+generate for run, team and per-player streams (Game.rollFrom, ServerGame.rollFor)   [pure]
-src/towers/refit.ts        planRefit / planBuildConfig: tower refit + build-template rules; Game applies the plan (spend, model, fx)      [pure]
-src/combat/blast.ts        planBlast(): hostile area-blast rules (falloff, cover via injected clearShot, tower suppression)              [pure]
-src/ui/hudModel.ts         hintFor / lootTargetInfo / runHud: HUD view-model pieces from plain data                                       [pure]
-src/ui/hud/                Hud.tsx parts: widgets (SegBar, Key, Num, fmtClock), Radar, Feedback (crosshair, hitmarker, numbers, bars), Panels
-src/net/events.ts          ReplicatedEvent union + parseEvent (structural validation); ClientGame.applyEvent switches on it exhaustively
-src/loot/signatures.ts     M7: legendary/exotic signature effects                                          [pure]
-src/visuals/droneModel.ts  M7: warden drone rig for teammates (slot colours)
-src/ui/Coop.tsx, TeamHud.tsx, Construction.tsx, SettingsPanel.tsx, TutorialCard.tsx   M7 UI
+packages/game/src/enemies/jammerCrawlerBehaviors.ts M7: Jammer Drone, Siege Crawler behaviours
+packages/game/src/enemies/coreBehaviors.ts Walker / Bulwark / Rush Drone as Behavior plug-ins (CORE_BEHAVIORS); EnemyManager has one dispatch path
+packages/game/src/visuals/anim.ts        Spring, damp, smoothstep, impulse (shared by weapons, enemies, HQ)                                             [pure]
+packages/game/src/visuals/hitFlashPlugin.ts per-instance additive hit flash: PBR material plugin + `instanceFlash` instanced buffer (Kit flash mode)
+packages/game/src/visuals/mood.ts        moodFor(): fog/exposure/sun tint/tension from tier, boss, event, reactor (blendMood smoothing)                  [pure]
+packages/game/src/visuals/moodDirector.ts applies the mood to scene fog, sun colour and PostFx offsets
+packages/game/src/enemies/deathAnims.ts  DEATH_TIME per kind + deathPose(): collapse animation of destroyed regular enemies                              [pure]
+packages/game/src/home/ambientNav.ts     waypoint graph (rooms, doorways, stations) + Dijkstra for ambient drones                                       [pure]
+packages/game/src/home/AmbientDrones.ts  3 cosmetic service drones patrolling between stations (hum emitters follow them)
+packages/game/src/home/hqVista.ts        3D middle ground outside the observation window (landing deck, dropship, lit towers, blinking beacons), merged, unlit glows only
+packages/game/src/home/StationFocus.ts   HQ station floor ring under the targeted station + camera push-in while a terminal is open
+packages/game/src/arena/PlayerCombat.ts  player weapon combat: shoot (hit resolution + damage), legacy damage entry (crit, situational upgrades, signatures, Arc Conductor), kill feel (hitstop/chain/dash refund), per-family shot fx (CombatHost)
+packages/game/src/arena/shotTrace.ts     traceShot(): hitscan geometry (pierce, weakpoint overlap, beam aim assist) shared by Game and ClientGame (claims); shotOutcome in PlayerCombat
+packages/game/src/arena/WeaponSlots.ts   primary + secondary weapon: active slot, swap (Z / 1), holstered heat (coolHolstered in combat/heat.ts), stat exclusion of the holstered weapon (WeaponSlotsHost)
+packages/rules/src/abilities/defs.ts      ABILITIES (frag, cryo, emp, blink, aegis; ultimates orbital, overdrive): power from item level x rarity x abilityPowerMult, cooldown/radius/ult charge rules, blink clamp, throw physics, AbilityHudRow [pure]
+packages/game/src/arena/Abilities.ts     ability runtime (AbilityHost): RMB ability I, F ability II, T ultimate (combat); thrown charges, pulse, blink, aegis/overdrive buffs, orbital mark + strike, ult charge from Director.deal
+packages/game/src/arena/LootPickups.ts   loot landing point (Havok), landing/pickup/refused presentation, pickup targeting (LootHost)
+packages/game/src/arena/TowerControl.ts  tower inspection (crosshair pick), hold-X recycle, F repair, refit hotkeys, build template, refit/place local rules (TowerHost; ClientGame overrides recycleTower/repairTower/modifyTower/tryPlace)
+packages/game/src/arena/DevTools.ts      dev lab actions behind `game.dev` (narrow DevHost interface, no Game dependency)
+packages/game/src/arena/shadows.ts       createSunShadows(): cascaded / single sun shadow generator
+packages/rules/src/loot/roll.ts           rollLoot(): one pure roll+generate for run, team and per-player streams (Game.rollFrom, ServerGame.rollFor)   [pure]
+packages/rules/src/towers/refit.ts        planRefit / planBuildConfig: tower refit + build-template rules; Game applies the plan (spend, model, fx)      [pure]
+packages/rules/src/combat/blast.ts        planBlast(): hostile area-blast rules (falloff, cover via injected clearShot, tower suppression)              [pure]
+packages/game/src/ui/hudModel.ts         hintFor / lootTargetInfo / runHud: HUD view-model pieces from plain data                                       [pure]
+apps/client/src/ui/hud/                Hud.tsx parts: widgets (SegBar, Key, Num, fmtClock), Radar, Feedback (crosshair, hitmarker, numbers, bars), Panels
+packages/game/src/net/events.ts          ReplicatedEvent union + parseEvent (structural validation); ClientGame.applyEvent switches on it exhaustively
+packages/rules/src/loot/signatures.ts     M7: legendary/exotic signature effects                                          [pure]
+packages/game/src/visuals/droneModel.ts  M7: warden drone rig for teammates (slot colours)
+apps/client/src/ui/Coop.tsx, TeamHud.tsx, Construction.tsx, SettingsPanel.tsx, TutorialCard.tsx   M7 UI
 scripts/e2e-coop-protocol.mjs M7: protocol suite with bot clients (scripts/bot.mjs) against a spawned server
 scripts/e2e-construction-coop.cjs M7: browser suite: G construction, H decorations, I station relocation, J blueprint progression, X real browser co-op
-src/core/Flow.ts           session controller: Input, Profile, HQ <-> arena scene swaps, run lifecycle, debug API
-src/core/Game.ts           ONE survival run (arena world): scene/lights/pipeline, damage pipeline, checkpoints, HUD
-src/home/HomeBase.ts       HQ world: scene, lights, Player reuse, station interaction, live station screens
-src/home/HqBuilder.ts      HQ static shell from modular components (wall run, floor, ceiling, door frame, window...)
-src/home/props.ts          station rigs (launch ring, holo-table, drone cradle, racks, workshop) + placeable builders
-src/home/layout.ts         HQ rooms/portals/stations data + wallSegments()            [pure]
-src/home/interaction.ts    pickInteractable: view cone + range + occlusion callback   [pure]
-src/home/placeables.ts     persistent customisable HQ objects + defaults               [pure]
-src/progression/save/      versioned/checksummed SaveData [pure]: types, defaults, coerce, sanitize, migrations, codec, ownership (leaf lookups),
+apps/client/src/core/Flow.ts           session controller: Input, Profile, HQ <-> arena scene swaps, run lifecycle, debug API
+packages/game/src/core/Game.ts           ONE survival run (arena world): scene/lights/pipeline, damage pipeline, checkpoints, HUD
+packages/game/src/home/HomeBase.ts       HQ world: scene, lights, Player reuse, station interaction, live station screens
+packages/game/src/home/HqBuilder.ts      HQ static shell from modular components (wall run, floor, ceiling, door frame, window...)
+packages/game/src/home/props.ts          station rigs (launch ring, holo-table, drone cradle, racks, workshop) + placeable builders
+packages/rules/src/home/layout.ts         HQ rooms/portals/stations data + wallSegments()            [pure]
+packages/game/src/home/interaction.ts    pickInteractable: view cone + range + occlusion callback   [pure]
+packages/rules/src/home/placeables.ts     persistent customisable HQ objects + defaults               [pure]
+packages/rules/src/progression/save/      versioned/checksummed SaveData [pure]: types, defaults, coerce, sanitize, migrations, codec, ownership (leaf lookups),
                            rules (game-rule mutations), engineering (M3 modules); index.ts re-exports (import from '.../progression/save')
-src/progression/run.ts     RunLedger: unsecured/secured/lost rewards, idempotent finalize [pure]
-src/progression/items.ts   equipment slots (7, structured) + slot/category compatibility [pure]
-src/loot/types.ts          Category, ItemInstance (persisted, fully rolled), RolledStat/Affix [pure]
-src/loot/rarity.ts         6 rarities: weights, affix counts, quality floor, tier bias, sockets, colours; rollRarity [pure]
-src/loot/affixes.ts        affix pool: one real stat each, per-category weights, groups, tier multipliers [pure]
-src/loot/bases.ts          base item definitions (weapon family variants, armor, shields, reactors...) [pure]
-src/loot/generate.ts       seeded generator, level scaling, naming, validation, starter weapon [pure]
-src/loot/drops.ts          drop sources (walker/rusher/bulwark/wave/checkpoint/boss), item level, luck [pure]
-src/loot/equipment.ts      items -> StatModifiers / WeaponDef, item comparison, stat preview [pure]
-src/loot/runInventory.ts   run loadout + cargo + carried/secured/unsecured status, prep-only changes [pure]
-src/loot/economy.ts        scrap value (= dismantle salvage), storage expansion cost [pure]
-src/economy/config.ts      M4: ALL economy formulas: prices, dismantle yields, enhancement, reroll/swap costs, run income, market config [pure]
-src/economy/engineering.ts affix rerolls (single stat/value, full w/ locks), component swaps (roll rescaled by effect ratios) [pure]
-src/economy/market.ts      merchant stock generation (seeded by profile+rotation), progressLevel [pure]
-src/economy/recipes.ts     fabrication recipes + quality grades, craft costs, odds, fabricate() [pure]
-src/economy/transactions.ts every economy transaction: validate-all-then-apply, tx-id guard, ownership/protection [pure]
-src/home/economyProps.ts   exchange wall, module vault/broker, reclamation press, fabricator, calibration ring (live displays)
-src/combat/events.ts       M5: EffectBus (typed events, chain id/depth, per-effect cooldown/chance/chainLimit, budgeted queue)  [pure]
-src/combat/status.ts       M5: burn/shock/chill statuses + 3 reactions (thermal shock, overload, superconduct)         [pure]
-src/combat/gameEvents.ts   M5: HitEv/StatusEv/ReactionEv/TowerAttackEv payload types
-src/combat/Director.ts     M5: per-run director: shared damage pipeline deal(), inflict(), blast(), chainLightning(), towerFire(), buffs, upgrade effects (effectsFor)
-src/roguelite/upgrades.ts  M5: 36 run upgrades (UP numbers shared by text + effects), seeded 3-choice offers, RunBuild  [pure]
-src/towers/components.ts   M5: tower bases/weapons/cores/modifiers, compatibility, composeTower, costs, tech list      [pure]
-src/visuals/towers.ts      M5: procedural modular tower models (one builder, instanced kit)
-src/ui/Roguelite.tsx       M5: UpgradePanel, BuildOverview (U), TowerPanel (T), RunBadges;  src/ui/TowerTech.tsx: HQ research tab
-src/survival/plan.ts       M6: SurvivalPlanner (seeded per run+tier): encounter budgets, themes, events, boss + evolution scheduling, composeSpawns [pure]
-src/survival/elites.ts     M6: elite modifier defs (overcharged/armored/accelerated/volatile), compatibility, rolls  [pure]
-src/survival/events.ts     M6: dynamic event defs (swarm, eliteAssault, instability, hvt) + tuning                  [pure]
-src/survival/bosses.ts     M6: boss defs, phase thresholds, repeat-encounter scaling                              [pure]
-src/survival/records.ts    M6: survival milestones                                                                [pure]
-src/survival/SurvivalRuntime.ts M6: per-run arena side: announcements, evolution, event mechanics/rewards/cleanup, HVT, milestones, tower boosts, HUD
-src/enemies/behaviors.ts   M6: Behavior plug-ins: Shielded Enforcer, Artillery Drone, Support Engineer, Vault Courier
-src/enemies/bosses/        M6: colossus.ts (Siege Colossus), overseer.ts (Overseer Core + shield emitters), index.ts
-src/fx/Hostile.ts          M6: Telegraphs (ground markers fill-to-ring, laser lines) + Ordnance (lobbed shells/bombs, orbs, homing missiles)
-src/world/ArenaDynamics.ts M6: evolving arena: south blast door, containment bulkheads (player-safe), plasma vents
-src/visuals/enemyModels.ts M6: enforcer/artillery/engineer/courier rigs + shared enemy/boss materials (enemyMats)
-src/visuals/bossModels.ts  M6: Siege Colossus, Overseer Core, shield emitter rigs
-src/visuals/eliteParts.ts  M6: elite modifier hardware + threat marks
-src/ui/SurvivalHud.tsx     M6: boss bar, event/HVT chips, alert feed;  src/ui/DevPanel.tsx: F4 survival lab (?dev/?test only)
-src/loot/LootField.ts      physical pickups (instanced holograms, beams, rings), lifetime + saturation rules
-src/progression/tiers.ts   threat tiers + checkpoint interval                          [pure]
-src/progression/Profile.ts owns the SaveData; mutate() persists + publishes a snapshot store
-src/visuals/envCapture.ts  one-shot reflection-probe IBL capture (shared by arena and HQ)
-src/core/Input.ts          keyboard/mouse edges, pointer lock, simulateKey/simulateMouse for automation
-src/core/tactical.ts       TacticalEnergy (time dilation rules) + Wallet  [pure]
-src/core/settings.ts       versioned/validated localStorage settings     [pure]
-src/world/layout.ts        ARENA data: boxes, ramps, lane routes, reactor, spawn [pure, single source of truth]
-src/world/geometry.ts      distance helpers                              [pure]
-src/world/physicsGroups.ts Havok filter masks (ENV vs PLAYER)
-src/visuals/arenaDressing.ts arena set dressing (wall services, partition detail, tunnel ribs, drains, industrial skyline): visual only, no collision, merged per material
-src/visuals/arena.ts       builds arena meshes (merged per material, box-projected world UVs) + one static compound Havok body
-src/visuals/kit.ts         unit-primitive model kit; one hidden source mesh per (shape, material), GPU instances everywhere
-src/visuals/models.ts      walker/bulwark, rush drone, Sentinel turret, reactor rigs (animated plasma core, glass shell, beam)
-src/visuals/materials.ts   PBR palette (metal/roughness + textures) and `unlit()` HDR emissives (> 1 feeds bloom)
-src/visuals/textures.ts    procedural textures: tileable fbm, height->normal, floor/wall/wear PBR sets, particle sprites
-src/visuals/uv.ts          box-projected UVs for merged static meshes
-src/visuals/atmosphere.ts  storm sky shader + rift tear + lightning, rift portal shader, lamp light shafts, wall sconces,
+packages/rules/src/progression/run.ts     RunLedger: unsecured/secured/lost rewards, idempotent finalize [pure]
+packages/rules/src/progression/items.ts   equipment slots (7, structured) + slot/category compatibility [pure]
+packages/rules/src/loot/types.ts          Category, ItemInstance (persisted, fully rolled), RolledStat/Affix [pure]
+packages/rules/src/loot/rarity.ts         6 rarities: weights, affix counts, quality floor, tier bias, sockets, colours; rollRarity [pure]
+packages/rules/src/loot/affixes.ts        affix pool: one real stat each, per-category weights, groups, tier multipliers [pure]
+packages/rules/src/loot/bases.ts          base item definitions (weapon family variants, armor, shields, reactors...) [pure]
+packages/rules/src/loot/generate.ts       seeded generator, level scaling, naming, validation, starter weapon [pure]
+packages/rules/src/loot/drops.ts          drop sources (walker/rusher/bulwark/wave/checkpoint/boss), item level, luck [pure]
+packages/rules/src/loot/equipment.ts      items -> StatModifiers / WeaponDef, item comparison, stat preview [pure]
+packages/rules/src/loot/runInventory.ts   run loadout + cargo + carried/secured/unsecured status, prep-only changes [pure]
+packages/rules/src/loot/economy.ts        scrap value (= dismantle salvage), storage expansion cost [pure]
+packages/rules/src/economy/config.ts      M4: ALL economy formulas: prices, dismantle yields, enhancement, reroll/swap costs, run income, market config [pure]
+packages/rules/src/economy/engineering.ts affix rerolls (single stat/value, full w/ locks), component swaps (roll rescaled by effect ratios) [pure]
+packages/rules/src/economy/market.ts      merchant stock generation (seeded by profile+rotation), progressLevel [pure]
+packages/rules/src/economy/recipes.ts     fabrication recipes + quality grades, craft costs, odds, fabricate() [pure]
+packages/rules/src/economy/transactions.ts every economy transaction: validate-all-then-apply, tx-id guard, ownership/protection [pure]
+packages/game/src/home/economyProps.ts   exchange wall, module vault/broker, reclamation press, fabricator, calibration ring (live displays)
+packages/rules/src/combat/events.ts       M5: EffectBus (typed events, chain id/depth, per-effect cooldown/chance/chainLimit, budgeted queue)  [pure]
+packages/rules/src/combat/status.ts       M5: burn/shock/chill statuses + 3 reactions (thermal shock, overload, superconduct)         [pure]
+packages/game/src/combat/gameEvents.ts   M5: HitEv/StatusEv/ReactionEv/TowerAttackEv payload types
+packages/game/src/combat/Director.ts     M5: per-run director: shared damage pipeline deal(), inflict(), blast(), chainLightning(), towerFire(), buffs, upgrade effects (effectsFor)
+packages/rules/src/roguelite/upgrades.ts  M5: 36 run upgrades (UP numbers shared by text + effects), seeded 3-choice offers, RunBuild  [pure]
+packages/rules/src/towers/components.ts   M5: tower bases/weapons/cores/modifiers, compatibility, composeTower, costs, tech list      [pure]
+packages/game/src/visuals/towers.ts      M5: procedural modular tower models (one builder, instanced kit)
+apps/client/src/ui/Roguelite.tsx       M5: UpgradePanel, BuildOverview (U), TowerPanel (T), RunBadges;  apps/client/src/ui/TowerTech.tsx: HQ research tab
+packages/rules/src/survival/plan.ts       M6: SurvivalPlanner (seeded per run+tier): encounter budgets, themes, events, boss + evolution scheduling, composeSpawns [pure]
+packages/rules/src/survival/elites.ts     M6: elite modifier defs (overcharged/armored/accelerated/volatile), compatibility, rolls  [pure]
+packages/rules/src/survival/events.ts     M6: dynamic event defs (swarm, eliteAssault, instability, hvt) + tuning                  [pure]
+packages/rules/src/survival/bosses.ts     M6: boss defs, phase thresholds, repeat-encounter scaling                              [pure]
+packages/rules/src/survival/records.ts    M6: survival milestones                                                                [pure]
+packages/game/src/survival/SurvivalRuntime.ts M6: per-run arena side: announcements, evolution, event mechanics/rewards/cleanup, HVT, milestones, tower boosts, HUD
+packages/game/src/enemies/behaviors.ts   M6: Behavior plug-ins: Shielded Enforcer, Artillery Drone, Support Engineer, Vault Courier
+packages/game/src/enemies/bosses/        M6: colossus.ts (Siege Colossus), overseer.ts (Overseer Core + shield emitters), index.ts
+packages/game/src/fx/Hostile.ts          M6: Telegraphs (ground markers fill-to-ring, laser lines) + Ordnance (lobbed shells/bombs, orbs, homing missiles)
+packages/game/src/world/ArenaDynamics.ts M6: evolving arena: south blast door, containment bulkheads (player-safe), plasma vents
+packages/game/src/visuals/enemyModels.ts M6: enforcer/artillery/engineer/courier rigs + shared enemy/boss materials (enemyMats)
+packages/game/src/visuals/bossModels.ts  M6: Siege Colossus, Overseer Core, shield emitter rigs
+packages/game/src/visuals/eliteParts.ts  M6: elite modifier hardware + threat marks
+apps/client/src/ui/SurvivalHud.tsx     M6: boss bar, event/HVT chips, alert feed;  apps/client/src/ui/DevPanel.tsx: F4 survival lab (?dev/?test only)
+packages/game/src/loot/LootField.ts      physical pickups (instanced holograms, beams, rings), lifetime + saturation rules
+packages/rules/src/progression/tiers.ts   threat tiers + checkpoint interval                          [pure]
+packages/game/src/progression/Profile.ts owns the SaveData; mutate() persists + publishes a snapshot store
+packages/game/src/visuals/envCapture.ts  one-shot reflection-probe IBL capture (shared by arena and HQ)
+packages/game/src/core/Input.ts          keyboard/mouse edges, pointer lock, simulateKey/simulateMouse for automation
+packages/rules/src/core/tactical.ts       TacticalEnergy (time dilation rules) + Wallet  [pure]
+packages/game/src/core/settings.ts       versioned/validated localStorage settings     [pure]
+packages/rules/src/world/layout.ts        ARENA data: boxes, ramps, lane routes, reactor, spawn [pure, single source of truth]
+packages/rules/src/world/geometry.ts      distance helpers                              [pure]
+packages/game/src/world/physicsGroups.ts Havok filter masks (ENV vs PLAYER)
+packages/game/src/visuals/arenaDressing.ts arena set dressing (wall services, partition detail, tunnel ribs, drains, industrial skyline): visual only, no collision, merged per material
+packages/game/src/visuals/arena.ts       builds arena meshes (merged per material, box-projected world UVs) + one static compound Havok body
+packages/game/src/visuals/kit.ts         unit-primitive model kit; one hidden source mesh per (shape, material), GPU instances everywhere
+packages/game/src/visuals/models.ts      walker/bulwark, rush drone, Sentinel turret, reactor rigs (animated plasma core, glass shell, beam)
+packages/game/src/visuals/materials.ts   PBR palette (metal/roughness + textures) and `unlit()` HDR emissives (> 1 feeds bloom)
+packages/game/src/visuals/textures.ts    procedural textures: tileable fbm, height->normal, floor/wall/wear PBR sets, particle sprites
+packages/game/src/visuals/uv.ts          box-projected UVs for merged static meshes
+packages/game/src/visuals/atmosphere.ts  storm sky shader + rift tear + lightning, rift portal shader, lamp light shafts, wall sconces,
                            distant skyline, dust/ash/gate embers, one-shot reflection-probe environment capture
-src/visuals/postfx.ts      SSAO2 + SSR (high), HDR bloom, ACES, colour grade, grain, chromatic aberration kicks
-src/player/Player.ts       hover drone movement on PhysicsCharacterController, camera, health/respawn
-src/player/movement.ts     KIT: slide / wall-run / grapple / ground pound rules (entry, friction, slope pull, wall tests, rope pull, pound blast) [pure]
-src/player/MoveKit.ts      movement-kit state machine on a KitBody (Player implements it; collision probes injected), owns velocity while active
-src/arena/Deployables.ts   Shield Wall (temporary ENV collider), Holo Decoy (stand-in Player body enemies focus), Mini-Sentry (temporary tower); co-op hooks onPlaced/onSentry
-src/fx/Thrown.ts           visual of thrown ability charges (replicated fx call `thrown` / `thrownEnd`)
-src/arena/Movement.ts      arena side of the kit (MovementHost): grapple input (R / MMB), pound blast via director, grapple line, MoveHud
-src/combat/Weapon.ts       equipped weapon: mechanisms (auto/burst/charge/cycle/beam), heat, spread, viewmodel (group 1)
-src/weapons/components.ts  weapon components (barrels/emitters, cores, cooling, mechanisms, attachments) + effects [pure]
-src/weapons/build.ts       WeaponBuild (persisted config), FAMILIES, rollBuild, socket kinds, buildEffects     [pure]
-src/weapons/modules.ts     module types (socket kind, families, visual), canInstall, removalCost              [pure]
-src/weapons/geometry.ts    chamfered lathe / profile-prism / box vertex generators (ear clipping)            [pure]
-src/weapons/materials.ts   weapon material library per scene (graphite, satin, dark, polymer, glass, finishes)
-src/weapons/model.ts       buildWeaponModel(build, installed): chassis per family + mounts, merged meshes, anim hooks
-src/weapons/animator.ts    WeaponAnimator: springs for recoil/sway/sprint/dash/jump/land, heat/charge visuals
-src/fx/WeaponFx.ts         plasma bolts, rail trails, continuous beam, arc lightning (camera-facing ribbons)
-src/home/WeaponPreview.ts  HQ 3D inspection: small dedicated engine on its own canvas (studio env, ArcRotate)
-src/ui/WeaponViewer.tsx    React wrapper for WeaponPreview (created/disposed with the terminal)
-src/combat/damage.ts       rollDamage / applyDamage / mulberry32     [pure]
-src/combat/stats.ts        CombatStats + StatModifier stacking         [pure]
-src/enemies/EnemyManager.ts pooled enemies, route following, attacks, separation, stuck watchdog
-src/defense/placement.ts   placement rules                            [pure]
-src/defense/Construction.ts build mode: engine picks + footprint samples -> validatePlacement
-src/defense/Turrets.ts     Sentinel targeting/aiming/firing
-src/waves/waves.ts         wave definitions + endless generator       [pure]
-src/waves/WaveManager.ts   prep/combat/cleared lifecycle, spawn cap   [pure, hooks-based]
-src/fx/Effects.ts          pooled tracers, debris, enemy projectiles, particle bursts, flash light, styled explosions (+ Fragments, Smolder)
-src/audio/Sfx.ts           procedural WebAudio bank
-src/ui/Market.tsx          M4 terminals: equipment exchange / module broker (buy, sell, exchange), reclamation, fabricator
-src/ui/Engineering.tsx     M4 engineering workshop: MODULES (M3 ModuleBench) / AFFIXES / ENHANCE / COMPONENTS tabs
-src/ui/economy.tsx         ResourceBar, CostLine, ConfirmButton, useTx (one tx at a time, fresh tx id, econ feedback event)
-src/ui/                    React App (menus, pause, checkpoint, defeat, summary, transit), Hud (arena), HomeHud,
+packages/game/src/visuals/postfx.ts      SSAO2 + SSR (high), HDR bloom, ACES, colour grade, grain, chromatic aberration kicks
+packages/game/src/player/Player.ts       hover drone movement on PhysicsCharacterController, camera, health/respawn
+packages/rules/src/player/movement.ts     KIT: slide / wall-run / grapple / ground pound rules (entry, friction, slope pull, wall tests, rope pull, pound blast) [pure]
+packages/game/src/player/MoveKit.ts      movement-kit state machine on a KitBody (Player implements it; collision probes injected), owns velocity while active
+packages/game/src/arena/Deployables.ts   Shield Wall (temporary ENV collider), Holo Decoy (stand-in Player body enemies focus), Mini-Sentry (temporary tower); co-op hooks onPlaced/onSentry
+packages/game/src/fx/Thrown.ts           visual of thrown ability charges (replicated fx call `thrown` / `thrownEnd`)
+packages/game/src/arena/Movement.ts      arena side of the kit (MovementHost): grapple input (R / MMB), pound blast via director, grapple line, MoveHud
+packages/game/src/combat/Weapon.ts       equipped weapon: mechanisms (auto/burst/charge/cycle/beam), heat, spread, viewmodel (group 1)
+packages/rules/src/weapons/components.ts  weapon components (barrels/emitters, cores, cooling, mechanisms, attachments) + effects [pure]
+packages/rules/src/weapons/build.ts       WeaponBuild (persisted config), FAMILIES, rollBuild, socket kinds, buildEffects     [pure]
+packages/rules/src/weapons/modules.ts     module types (socket kind, families, visual), canInstall, removalCost              [pure]
+packages/game/src/weapons/geometry.ts    chamfered lathe / profile-prism / box vertex generators (ear clipping)            [pure]
+packages/game/src/weapons/materials.ts   weapon material library per scene (graphite, satin, dark, polymer, glass, finishes)
+packages/game/src/weapons/model.ts       buildWeaponModel(build, installed): chassis per family + mounts, merged meshes, anim hooks
+packages/game/src/weapons/animator.ts    WeaponAnimator: springs for recoil/sway/sprint/dash/jump/land, heat/charge visuals
+packages/game/src/fx/WeaponFx.ts         plasma bolts, rail trails, continuous beam, arc lightning (camera-facing ribbons)
+apps/client/src/home/WeaponPreview.ts  HQ 3D inspection: small dedicated engine on its own canvas (studio env, ArcRotate)
+apps/client/src/ui/WeaponViewer.tsx    React wrapper for WeaponPreview (created/disposed with the terminal)
+packages/rules/src/combat/damage.ts       rollDamage / applyDamage / mulberry32     [pure]
+packages/rules/src/combat/stats.ts        CombatStats + StatModifier stacking         [pure]
+packages/game/src/enemies/EnemyManager.ts pooled enemies, route following, attacks, separation, stuck watchdog
+packages/rules/src/defense/placement.ts   placement rules                            [pure]
+packages/game/src/defense/Construction.ts build mode: engine picks + footprint samples -> validatePlacement
+packages/game/src/defense/Turrets.ts     Sentinel targeting/aiming/firing
+packages/rules/src/waves/waves.ts         wave definitions + endless generator       [pure]
+packages/game/src/waves/WaveManager.ts   prep/combat/cleared lifecycle, spawn cap   [pure, hooks-based]
+packages/game/src/fx/Effects.ts          pooled tracers, debris, enemy projectiles, particle bursts, flash light, styled explosions (+ Fragments, Smolder)
+packages/game/src/audio/Sfx.ts           procedural WebAudio bank
+apps/client/src/ui/Market.tsx          M4 terminals: equipment exchange / module broker (buy, sell, exchange), reclamation, fabricator
+apps/client/src/ui/Engineering.tsx     M4 engineering workshop: MODULES (M3 ModuleBench) / AFFIXES / ENHANCE / COMPONENTS tabs
+apps/client/src/ui/economy.tsx         ResourceBar, CostLine, ConfirmButton, useTx (one tx at a time, fresh tx id, econ feedback event)
+{apps/client,packages/game}/src/ui/                    React App (menus, pause, checkpoint, defeat, summary, transit), Hud (arena), HomeHud,
                            Terminals (deploy/loadout/storage/workshop/command), items.tsx (shared inventory view,
                            item detail, comparison), LootHud (prompt, feed, world labels, arena cargo), store + uiEvents
 tests/                     Vitest suites for the [pure] modules
@@ -262,7 +269,7 @@ scripts/e2e-m6.cjs         M6 browser acceptance suite (A-L: plans, enemies, eli
 - **Rules before effects**: decision logic (what is rolled, what a refit costs, who a blast hits, which hint shows) lives in pure functions with injected randomness/ids/line-of-sight; `Game` only applies the result. New logic of that kind goes in a pure module with an equivalence/property test, not into `Game`.
 - **Typed wire events**: every server-emitted tuple tag is in `net/events.ts` and handled in `ClientGame.applyEvent`; `tests/net-events.test.ts` greps the emitters and the handler so neither side can drift, and the e2e asserts the client rejected nothing.
 - **No milestone names in APIs**: name by intent (`nextTowerCost`, `shaderWarmup`, `towerHud`). The HUD snapshot keys `m5`/`m6` are legacy store shape.
-- **Architecture tests** (`tests/architecture.test.ts`) enforce the boundaries above (acyclic `progression/save`, no behaviour imports in `EnemyManager`, no `Game` value import in `src/arena`, pure modules free of Babylon values); `tests/save-surface.test.ts` pins the save barrel's exports. Extend them when adding a boundary.
+- **Architecture tests** (`tests/architecture.test.ts`) enforce the boundaries above (acyclic `progression/save`, no behaviour imports in `EnemyManager`, no `Game` value import in `{packages/game,packages/rules}/src/arena`, pure modules free of Babylon values); `tests/save-surface.test.ts` pins the save barrel's exports. Extend them when adding a boundary.
 - **e2e scripts import `scripts/lib/harness.cjs`**; do not copy launch/boot helpers again. Restart `vite` if you delete/rename files while it runs (it caches module resolution and the page then never boots).
 
 ## Refactoring backlog (not done yet)
@@ -270,13 +277,23 @@ scripts/e2e-m6.cjs         M6 browser acceptance suite (A-L: plans, enemies, eli
 - `Game.ts` (~1640 lines) is still the largest hotspot. Done so far: dev tools, shadows, loot rolling, tower refit rules, blast rules, HUD hint/loot/run pieces, **player combat** (`arena/PlayerCombat` + shared `shotTrace`, which also replaced ClientGame's copy of the hit scan), **loot pickups** (`arena/LootPickups`), **tower control** (`arena/TowerControl`; ClientGame no longer monkeypatches `Input` to suppress local recycle/repair, it overrides `recycleTower`/`repairTower`), wave lifecycle hooks moved out of the constructor (`waveStarted`/`waveCleared`/`prepStarted`). Systems get a host built by a private `*Host()` method of lazy getters + closures over overridable Game methods, so ServerGame/ClientGame overrides keep working. Still inside: the upgrade flow, summon/ordnance impact, the rest of `publishHud`/`snapshot` and the constructor's scene setup.
 - Presentation is still captured by wrapping `fx/wfx/tele/ordnance/enemies` at runtime (`capturePresentation`). The next step is an observer/sink on `Telegraphs` and `Ordnance` (7 methods, constructor-injected) before touching `fx`/`wfx`, which have hundreds of call sites.
 - UI: `Terminals.tsx` (642) and `items.tsx` (593) could be split per panel; the run-phase booleans on Game (`checkpointOpen`, `upgradeDue`, `screen`) want a small state machine with a transition-table test.
-- Browser co-op section X of `e2e-construction-coop.cjs` needs a test server (`RIFT_TEST=1 RIFT_PORT=8787 npx tsx server/main.ts`) and runs both clients with the render loop stopped: two live software-GL render loops starve Playwright's actionability checks and clicks time out. It passes (13/13, including "no replicated event rejected") and is the real test of the client replay path, along with `e2e-coop-protocol.mjs`.
+- Browser co-op section X of `e2e-construction-coop.cjs` starts its own gateway stack on :8090 (run it with `node --import tsx`) and runs both clients with the render loop stopped: two live software-GL render loops starve Playwright's actionability checks and clicks time out. It passes (13/13, including "no replicated event rejected") and is the real test of the client replay path, along with `e2e-coop-protocol.mjs`.
 
 ## Key design decisions
 
+### Architecture v2 (done; details in `docs/architecture-v2.md`)
+
+- **Accounts and sync.** Passkeys (webauthn-rs) + one recovery code, unique names, session cookie `rw_session` (host-only, SameSite=Lax). Playing never needs an account: the device keeps an offline log per profile namespace (`SyncJournal`: genesis + entries `{op}` / `{run}`); signed in, `SessionClient` sends pending entries over `/session` and the gateway replays them through the rules worker (`progression/sync.ts` `replay`; runs are validated by `runCheck.ts`, which replays the loot streams), then the device rebases on the server copy (`Profile.adoptServer`). A guest profile with a complete log is adopted by an account without a profile. **Every profile change must be a named op (`progression/ops.ts`) or a run entry (`runRules.ts`)**, or it will not survive a sync.
+- **Co-op.** Frames ride inside the session socket; the gateway (`coop.rs`) routes them to the sim worker holding the player's room (room directory + bindings reported by the workers), attaches the account's profile, applies the operation's run entries as trusted entries in arrival order, and records lost operations as interrupted. Rooms, operations and the run map vote stay TypeScript (`apps/worker/src/sim`). Protocol v13: hello carries only the version (the player is the account). Capacity: `RIFT_SIM_CAPACITY` operations per worker; new sessions are refused when all are full. Lag compensation: shot claims are checked against 0.5 s hostile position trails (`net/lagComp.ts`); small client corrections blend over 0.2 s.
+- **Deploy.** `deploy/deploy.sh` pulls `riftwarden-gateway` / `riftwarden-worker` `:production`, restarts rules + gateway in place (sim workers keep their rooms and re-send bindings to the new gateway), drains and replaces each sim slot (`sim-blue`, `sim-green`) once its operations end, rolls back a gateway that is not healthy, never retries a failed build. The worker counts a TCP connection as the gateway only after its first frame (health probes must not steal the stream).
+- **Client rules.** Import Babylon deep (`scripts/babylon-deep-imports.mjs` can rewrite barrel imports); a Babylon feature that registers by side effect goes in `packages/game/src/babylonSideEffects.ts` (or the module that needs it). A new custom shader needs a WGSL twin in `visuals/wgsl.ts` and `shaderLanguage: shaderLanguageFor(scene)`; `node --import tsx scripts/check-wgsl.mjs` compiles them. HUD values that change every tick use `LiveText` / `LiveBar` / `useLiveStyle`, not `useHud`. New UI uses Tailwind utilities with the tokens in `app.css`; `style.css` is the components layer (compound/state rules). Style refactors: `node scripts/ui-shots.cjs <dir> [profile.json]` before and after, `node scripts/ui-diff.cjs <before> <after>` (canvases hidden, animations frozen; the loading screen differs ~0.3% run to run); `scripts/css-to-tailwind.mjs --cascade <dir>/cascade.json` moves cascade-safe rules. WebGPU is opt-in (Settings > Renderer, `?webgpu`) until it has been checked on a real GPU: headless SwiftShader cannot present WebGPU frames.
+- **Running things.** `pnpm dev` (client) + `pnpm backend` (gateway :8090 + workers; `DATABASE_URL`, `REDIS_URL`). Tests: `pnpm test`, `cargo test` (`RIFT_TEST_DATABASE_URL`, `RIFT_TEST_REDIS_URL`), co-op suites `node --import tsx scripts/e2e-coop-{protocol,map}.mjs` (own stack via `scripts/lib/stack.mjs`, needs a role that may create databases), backend browser suites via `node --import tsx scripts/with-stack.mjs node scripts/e2e-<suite>.cjs`. The local test databases in this container: initdb cluster on 55432 (`postgres://rift@127.0.0.1:55432/rift_test`), Redis on 56379. After renaming client files restart Vite; do not edit client-served files while a browser suite runs (HMR reloads the page).
+- **Results at the end of v2**: unit 512, Rust tests, co-op protocol 55/55 (incl. K capacity), co-op map 28/28, polish 21/21, browser co-op X 13/13, accounts 19/19, sync 14/14, run map 54/54, m4 39/39, combat 37/37, arenas 16/16, m1 69/70 (known Z), m2 51/54 (known C8/C9/I4), 15/15 WGSL shaders compile, lint 6 warnings (ratchet).
+
+
 ### Rift War (shared war map, replaces the per-run act maps)
 
-- **One war for everyone.** The server owns the war (`server/war.ts`, one PostgreSQL row `war_state`), advances it in real time (30 s timer; whole-hour steps seeded by `(war seed, hour index)`, catch-up capped at 72 h) and publishes it at `GET /war` (Vite proxies `/war` in dev). Solo clients report secured sectors with `POST /war/report {node, mode, id}` (2 KB body cap; rate limit per address + profile id: 45 s gap, 40/h; `RIFT_WAR_GAP_MS` for tests); co-op operations report through `ServerHooks.secured` as trusted reports with one share per warden still in. Solo reports are not cheat-proof (the client simulates solo). `WarClient` falls back to a **local war** (localStorage, same rules, never counted) when the server is unreachable; `?test` uses the local war unless `&war`.
+- **One war for everyone.** The server owns the war (since v2: `crates/gateway/src/war.rs` + the rules worker's `war/service.ts`, one PostgreSQL row `war_state`), advances it in real time (30 s timer; whole-hour steps seeded by `(war seed, hour index)`, catch-up capped at 72 h) and publishes it at `GET /war` (Vite proxies `/war` in dev). Solo clients report secured sectors with `POST /war/report {node, mode, id}` (2 KB body cap; rate limit per address + profile id: 45 s gap, 40/h; `RIFT_WAR_GAP_MS` for tests); co-op operations report through `ServerHooks.secured` as trusted reports with one share per warden still in. Solo reports are not cheat-proof (the client simulates solo). `WarClient` falls back to a **local war** (localStorage, same rules, never counted) when the server is unreachable; `?test` uses the local war unless `&war`.
 - **Regions** (`war/regions.ts`): 10-13 sectors per region (landing, capital = boss + stronghold until 60%, rift source corrupted at start, weighted kinds, always a rest + merchant), all sectors of the region's biome (arena seeds searched per biome). Regions chain on the globe (golden-angle spiral); a capital links to the next region's landing. Node ids `r{region}n{index}`; `act` = region + 1 (difficulty `actEffect`, curse scope, records), `row` = hops from the landing.
 - **Rules** (`war/state.ts`, `WAR`): secured combat sector +`baseGain` (9) x players / average players online (10-minute samples over 24 h, >= 1) liberation, x2 on a distress call; a region falls in ~13-35 h of steady play at any population (test). Resistance -1.5%/h on unfinished sectors; every 4 h corruption spreads from corrupted sectors (through hubs), a liberated target gets a 6 h **defense** event first (falls to the rift if nobody secures it); securing a corrupted sector purges it; all combat sectors corrupted = **fallback** (every sector corrupted until pushed back). Distress calls (every 3 h, 60%, 6 h), rift **convoys** (start at the rift source, move one link per hour, 6 h: securing their sector destroys them), one **war order** at a time (secure N / elites / survival / purge, 24 h) whose completion gives every run +20% luck or +25% income for 24 h (`buffEffect`). All combat sectors liberated = region liberated, the next unlocks; liberated regions stay playable.
 - **Live modifiers** (`NODE_MODS` with `dynamic`, never rolled): corrupted, stronghold, distress, defense, convoy (forced HVT). `MapSession.configFor` / `CoopSim.createGame` apply `liveNode` + `buffEffect` when a run enters a sector. Map runs: deploy to any sector of an unlocked region (deploy terminal map; co-op host picks with `{t:'node'}` / `LobbyState.node`, default `defaultEntry` = the front's landing), travel along links (other regions through the capital/landing links), `RunMapState.seed` = war seed; `RunNode` calls `NodeHost.secured` at completion -> `Game.hooks.nodeSecured` -> `Flow.reportSecured` (alert with the liberation gain) / `ServerHooks.secured`.
@@ -383,7 +400,7 @@ scripts/e2e-m6.cjs         M6 browser acceptance suite (A-L: plans, enemies, eli
 
 ### M9: procedural arenas, mazing, loading screens
 
-- **One layout per run.** `ArenaConfig.layout` (default: the classic `ARENA`); `Game.layout` is a getter on it and every arena system (builder, dressing, floor, atmosphere, dynamics, placement, effects, radar, dev tools, server/client) reads it. Solo: `Flow.arenaSeedFor(runId)` = `hash(run id) ^ 0x2545f491` (independent of the upgrade/planner seed), `flow.nextArenaSeed` forces one. Co-op: `CoopSim.arenaSeed` -> `RunStart.arena` (protocol v6); both sides call the memoised pure `generateArena(seed)`. `arena: 0` / `flow.arenaMode = 'classic'` = hand-built arena. **`?test` defaults to classic** (legacy suites measure its geometry; `?test&procedural` opts in); test servers too unless `RIFT_ARENA=procedural`.
+- **One layout per run.** `ArenaConfig.layout` (default: the classic `ARENA`); `Game.layout` is a getter on it and every arena system (builder, dressing, floor, atmosphere, dynamics, placement, effects, radar, dev tools, sim worker/client) reads it. Solo: `Flow.arenaSeedFor(runId)` = `hash(run id) ^ 0x2545f491` (independent of the upgrade/planner seed), `flow.nextArenaSeed` forces one. Co-op: `CoopSim.arenaSeed` -> `RunStart.arena` (protocol v6); both sides call the memoised pure `generateArena(seed)`. `arena: 0` / `flow.arenaMode = 'classic'` = hand-built arena. **`?test` defaults to classic** (legacy suites measure its geometry; `?test&procedural` opts in); test servers too unless `RIFT_ARENA=procedural`.
 - **Generator** (`world/arenaGen.ts`): half 84-100 m, gates stay at the wall midpoints (shared `perimeterBoxes`/`southDoorBox`, so gate frames, mist, lights, tunnels and dressing line up). Keep-outs: reactor plaza (19 m), drop point, gate mouths. Order: districts (below), 4-7 platforms (h 3-5) with one ramp (x or z axis), 7-12 blocks, 10-19 pillars, 4-8 wall machines (south wall along x, east/west along z: the builder dresses those faces), rejection-sampled with 4.2 m walkable gaps. Lanes (`routes`) are traced on the terrain-only nav grid, vents sit halfway along them, 2 forward rifts per gate sector 34-62 m out. Reserved: bulkheads, gate mouths, rift pads, vents. Tests: `tests/arena-gen.test.ts` (determinism, size, reachability of gates/rifts/spawn, lanes off solids, plaza clear, re-plan speed).
 - **Districts** (`world/districts.ts`, staged in `arenaGen`: `districtStage`, `scatterStage`, `skywayStage`): new `SolidKind`s `barrier` (0.9 m concrete walls, 3.2 m: the drone vaults them with jump + boost), `container` (2.6 m per level, top is a `platform` surface) and `bridge` (deck whose underside is at h - 0.45: the nav grid ignores it, its pylons block). Each gate gets an **inner district inside a bastion ring** (a rectangle of barrier walls whose sides meet at the corners, 22% chance of a 4.5 m breach per long segment), so every ground lane passes through a maze, a serpentine chicane, a staggered container yard or under an overpass (staggered baffles at both mouths); then an **outer winged district** (wings 30-48 m, 35% chance of a tip gap) further out, plus off-lane redoubts, yards, a second maze, platforms, blocks, pillars, machines and up to 4 **skyways** (bridges between facing platforms of equal height). Overlap tests are per box for multi-part pieces (bounding rects of winged pieces overlap everywhere). Connectivity safety net: while a gate cannot reach the reactor, the latest piece on its approach is dropped. `layout.features` lists the set pieces (briefing chips). Average lane length is >1.1x the straight line (test). Visuals in `ArenaBuilder.buildBarrier/buildContainer/buildBridge` (railings have thin colliders). Towers standing above 1 m (decks, bridges, container tops) never block the ground field and are never breached.
 - **Navigation** (`world/navgrid.ts`): 1 m cells over the arena + tunnels, solids inflated by 1.5 m (perimeter, boxes, bulkheads, ramps). Towers add cost (45 per metre) instead of blocking, so a sealed maze still yields a path through the cheapest tower. One Dijkstra from the reactor ring (radius 7) per change (~30 ms at 200 m); `pathFrom` descends the field and string-pulls with segments that avoid solids **and** tower cells. `version` bumps on every change.
@@ -467,7 +484,7 @@ Goal: high-tempo play (think VOIDBREAKER): fast enemies, little dead time, momen
 
 ### M7: co-op, HQ construction, content, presentation
 
-- **Co-op architecture.** The server runs the *same* `Game` code (`ServerGame extends Game`) in Node: `server/headless.ts` stubs the browser, Babylon `NullEngine`, Havok loaded from wasm. One `Avatar` (a real `Player` body, stats, weapon def, RunLedger, RunInventory) per player; `as(avatar, fn)` swaps `this.player/stats/weapon.def` so every existing pipeline (damage, director, upgrades, loot, banking) works unchanged per player. Presentation is captured by the `Recorder` (fx/wfx/telegraph/ordnance/sfx/uiEvents are monkeypatched) and streamed as event tuples (`ev`), with per-player routing (`to`/`not`). Snapshots (20 Hz) carry wave/reactor/cores/tactical, enemy rows + deltas of AI primitives, avatars, towers, ordnance, boss/survival HUD, checkpoint/vote/offer state and a personal block (`me`: ledger view, inventory when dirty).
+- **Co-op architecture.** The server runs the *same* `Game` code (`ServerGame extends Game`) in Node: `apps/worker/src/sim/headless.ts` (formerly `apps/server`) stubs the browser, Babylon `NullEngine`, Havok loaded from wasm. One `Avatar` (a real `Player` body, stats, weapon def, RunLedger, RunInventory) per player; `as(avatar, fn)` swaps `this.player/stats/weapon.def` so every existing pipeline (damage, director, upgrades, loot, banking) works unchanged per player. Presentation is captured by the `Recorder` (fx/wfx/telegraph/ordnance/sfx/uiEvents are monkeypatched) and streamed as event tuples (`ev`), with per-player routing (`to`/`not`). Snapshots (20 Hz) carry wave/reactor/cores/tactical, enemy rows + deltas of AI primitives, avatars, towers, ordnance, boss/survival HUD, checkpoint/vote/offer state and a personal block (`me`: ledger view, inventory when dirty).
 - **Replica.** `ClientGame extends Game` never simulates hostiles: enemies are spawned from `es` events and their behaviour code runs only as an animation driver through a puppet context; positions are interpolated 100 ms behind (`Track`). The local drone is client-predicted; the server checks movement (`MAX_SPEED` 46 m/s + slack, arena bounds) and sends `mv` corrections. Shots are resolved locally for feedback and sent as **claims** (`ShotClaim`: family, origin, dir, power, heat, hits [netId, weak, point]); the server checks family, fire-rate budget, origin vs its eye (3.5 m), range, reach around the enemy (latency allowance), LOS (Havok), then computes damage itself from the server-side loadout. Rejections are counted per reason (`ServerGame.why`, logged on test servers). All other intents are `act` messages with replies (place/recycle/modify towers, tactical, startWave, collect, upgrade, vote, equip/unequip/discard, `test` only with `RIFT_TEST=1`).
 - **Shared vs personal.** Shared: reactor, towers (any player refits/recycles; refunds to the shared cores), cores, tactical energy (anyone toggles), waves. Personal: equipment, run cargo, loot (drops are rolled per player with their own RNG and only visible/collectable by the owner), ledgers. `TeamLedger` mirrors shared resource rewards into each player's ledger; each player banks at checkpoints into their own online profile (`bankRewards`, guarded per player). Team upgrades: the chooser rotates between players, 30 s auto-pick. Checkpoint vote: unanimous among connected players to return; 45 s timeout = continue. Team defeat ends the run for everyone; unsecured rewards are lost per player.
 - **Online profiles.** PostgreSQL stores structured player, inventory, run, economy, and HQ data under a derived ID. The client keeps its guest secret in localStorage (`riftwarden.identity`). Online profiles start fresh. HQ mutations are named ops (`progression/ops.ts`) executed by the same code on both sides: `Profile.op` runs locally in single player and is forwarded (`op` message, tx id) when online (`attachRemote`/`adoptRemote`). Ops are refused while the profile is in a run. The server commits deployment, checkpoint awards, and run results before publishing the saved state.
@@ -583,7 +600,7 @@ Goal: high-tempo play (think VOIDBREAKER): fast enemies, little dead time, momen
 - **Screen-space passes** (SSAO/SSR) use a separate geometry buffer (`forceGeometryBuffer`), not the prepass MRT, because prepass breaks particle rendering. Sprite-sheet particle systems also rendered incorrectly; use single sprites with random rotation.
 - **Explosions** go through `Effects.explode(pos, {scale, debris, color})`: star flash, additive fireball, stretched sparks, embers, rising smoke, ground + air shockwave rings, smoke-trailing debris, flash light, scorch decal and a camera-shake request (`onShake` -> `Player.addTrauma` + lens kick). Shots on level geometry use `Effects.impact` (sparks, dust puff, burn decal).
 - **UI.** Game publishes a HUD snapshot to `hudStore` at 20 Hz; instant feedback goes through `uiEvents`. Damage numbers animate imperatively (no per-frame React renders).
-- **Data-driven content** in `src/data/defs.ts` (weapon, enemies, tower, economy).
+- **Data-driven content** in `packages/rules/src/data/defs.ts` (weapon, enemies, tower, economy).
 
 ## Testing
 

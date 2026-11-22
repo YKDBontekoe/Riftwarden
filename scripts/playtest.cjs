@@ -120,7 +120,7 @@ const BOT = () => {
     await p.waitForFunction(() => window.__rift.state().location === 'arena' && !window.__rift.state().busy, null, { timeout: 180000 });
     await ev(p, BOT);
     if (process.env.BOT_TOWERS !== '0') await ev(p, async () => {
-      const { validatePlacement } = await import('/src/defense/placement.ts');
+      const { validatePlacement } = await import('/@id/@riftwarden/rules/defense/placement');
       const ARENA = window.__rift.game.layout;
       const dist = (x, z, pts) => { let b = 1e9; for (let i = 1; i < pts.length; i++) { const a = pts[i - 1], c = pts[i]; const dx = c.x - a.x, dz = c.z - a.z; const t = Math.max(0, Math.min(1, ((x - a.x) * dx + (z - a.z) * dz) / (dx * dx + dz * dz))); b = Math.min(b, Math.hypot(a.x + dx * t - x, a.z + dz * t - z)); } return b; };
       const spots = [];

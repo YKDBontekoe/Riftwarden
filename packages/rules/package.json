@@ -1,0 +1,11 @@
+{
+  "name": "@riftwarden/rules",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Pure gameplay and economy rules (no Babylon, no DOM, no React). Shared by the client, the workers and the tests.",
+  "exports": {
+    "./progression/save": "./src/progression/save/index.ts",
+    "./*": "./src/*.ts"
+  }
+}

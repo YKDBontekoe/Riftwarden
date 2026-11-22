@@ -1,0 +1,70 @@
+syntax = "proto3";
+
+package riftwarden.v1;
+
+import "riftwarden/v1/common.proto";
+import "riftwarden/v1/session.proto";
+
+// Gateway <-> rules worker (internal TCP, frames prefixed with a big-endian u32 length).
+
+message WorkerRequest {
+  uint32 id = 1;
+  oneof call {
+    ReplayRequest replay = 2;
+    WarRequest war = 3;
+  }
+}
+
+message WorkerResponse {
+  uint32 id = 1;
+  Error error = 2;
+  oneof result {
+    ReplayResult replay = 3;
+    WarResult war = 4;
+  }
+}
+
+message ReplayRequest {
+  // The server copy (absent = new account).
+  Doc doc = 1;
+  // A new account adopting a guest profile: replay on this genesis (validated) instead of a fresh default.
+  Doc genesis = 2;
+  repeated SyncEntry entries = 3;
+  double now = 4;
+  // Entries from a co-op operation the server simulated: applied without run validation.
+  bool trusted = 5;
+}
+
+message ReplayResult {
+  Doc doc = 1;
+  repeated EntryResult results = 2;
+  uint32 rules_version = 3;
+  uint32 applied = 4;
+}
+
+// The shared Rift War (packages/rules: war/service.ts). The gateway holds the stored document; every call
+// samples the population and advances the war, and may apply one secured-node report.
+message WarRequest {
+  // {war, samples, lastSample}; absent = start a new war with `seed`.
+  Doc stored = 1;
+  double now = 2;
+  // Wardens online right now.
+  uint32 online = 3;
+  uint32 seed = 4;
+  WarReport report = 5;
+}
+
+message WarReport {
+  string node = 1;
+  string mode = 2;
+  uint32 players = 3;
+  // Co-op operations played on the server (several wardens, no rate limit).
+  bool trusted = 4;
+}
+
+message WarResult {
+  Doc stored = 1;
+  bool changed = 2;
+  // SecureResult of the report, when there was one.
+  Doc report = 3;
+}

@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { THREAT_TIERS, getTier, unlocksNextTier } from '../src/progression/tiers';
-import { SurvivalPlanner, waveBudget, spawnCap, MAX_WAVE_SPAWNS, eliteChance, maxModsFor } from '../src/survival/plan';
-import { ELITE_IDS, rollMods, validMods } from '../src/survival/elites';
-import { bossScaling } from '../src/survival/bosses';
-import { mulberry32 } from '../src/combat/damage';
-import { ARENA } from '../src/world/layout';
-import { distToPolyline } from '../src/world/geometry';
-import { validatePlacement } from '../src/defense/placement';
-import { WaveManager } from '../src/waves/WaveManager';
+import { THREAT_TIERS, getTier, unlocksNextTier } from '@riftwarden/rules/progression/tiers';
+import { SurvivalPlanner, waveBudget, spawnCap, MAX_WAVE_SPAWNS, eliteChance, maxModsFor } from '@riftwarden/rules/survival/plan';
+import { ELITE_IDS, rollMods, validMods } from '@riftwarden/rules/survival/elites';
+import { bossScaling } from '@riftwarden/rules/survival/bosses';
+import { mulberry32 } from '@riftwarden/rules/combat/damage';
+import { ARENA } from '@riftwarden/rules/world/layout';
+import { distToPolyline } from '@riftwarden/rules/world/geometry';
+import { validatePlacement } from '@riftwarden/rules/defense/placement';
+import { WaveManager } from '@riftwarden/game/waves/WaveManager';
 
 const sig = (p: SurvivalPlanner, n: number) => Array.from({ length: n }, (_, i) => { const q = p.plan(i + 1); return `${q.theme}:${q.event ?? '-'}:${q.boss?.id ?? '-'}:${q.evolution ?? '-'}`; }).join('|');
 
@@ -182,9 +182,9 @@ describe('M6 arena evolution layout', () => {
   });
 });
 
-import { createDefaultSave, recordRun, beginRun, migrate, sanitizeSave, SAVE_VERSION } from '../src/progression/save';
-import { RunLedger } from '../src/progression/run';
-import { newMilestones } from '../src/survival/records';
+import { createDefaultSave, recordRun, beginRun, migrate, sanitizeSave, SAVE_VERSION } from '@riftwarden/rules/progression/save';
+import { RunLedger } from '@riftwarden/rules/progression/run';
+import { newMilestones } from '@riftwarden/rules/survival/records';
 
 describe('M6 survival records', () => {
   const runWith = (tier: number, f: (r: RunLedger) => void, outcome: 'returned' | 'defeat' = 'defeat') => {

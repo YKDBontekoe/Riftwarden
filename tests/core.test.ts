@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { applyDamage, mulberry32, rollDamage } from '../src/combat/damage';
-import { BASE_STATS, computeStats } from '../src/combat/stats';
-import { TacticalEnergy, Wallet } from '../src/core/tactical';
-import { FOOTPRINT_SAMPLES, validatePlacement, type PlacementQuery } from '../src/defense/placement';
-import { getWave, hpMultiplier, waveThreat } from '../src/waves/waves';
-import { distToBoxXZ, distToPolyline } from '../src/world/geometry';
-import { ARENA, GATES } from '../src/world/layout';
+import { applyDamage, mulberry32, rollDamage } from '@riftwarden/rules/combat/damage';
+import { BASE_STATS, computeStats } from '@riftwarden/rules/combat/stats';
+import { TacticalEnergy, Wallet } from '@riftwarden/rules/core/tactical';
+import { FOOTPRINT_SAMPLES, validatePlacement, type PlacementQuery } from '@riftwarden/rules/defense/placement';
+import { getWave, hpMultiplier, waveThreat } from '@riftwarden/rules/waves/waves';
+import { distToBoxXZ, distToPolyline } from '@riftwarden/rules/world/geometry';
+import { ARENA, GATES } from '@riftwarden/rules/world/layout';
 
 
 describe('damage', () => {

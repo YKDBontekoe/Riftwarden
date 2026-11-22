@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { GATEWAY_PORTALS, HQ_PORTALS, HQ_ROOMS, HQ_STATIONS } from '../src/home/layout';
-import { buildNav, findPath, nearestNode } from '../src/home/ambientNav';
+import { GATEWAY_PORTALS, HQ_PORTALS, HQ_ROOMS, HQ_STATIONS } from '@riftwarden/rules/home/layout';
+import { buildNav, findPath, nearestNode } from '@riftwarden/game/home/ambientNav';
 
 const g = buildNav(HQ_ROOMS, HQ_PORTALS, HQ_STATIONS);
 

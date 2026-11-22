@@ -1,5 +1,5 @@
 // Combat kit browser suite (A two weapons ... H loot depth: swarm, salvo, uniques, ascended) against a running dev server.
-// Usage: npm run dev (port 5173), then: node scripts/e2e-combat.cjs [A]
+// Usage: pnpm dev (port 5173), then: node scripts/e2e-combat.cjs [A]
 const H = require('./lib/harness.cjs');
 const { check, S, ev, stats } = H;
 const want = H.sectionFilter();

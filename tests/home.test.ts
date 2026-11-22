@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { pickInteractable } from '../src/home/interaction';
-import { areaAt, HQ_PORTALS, HQ_ROOMS, HQ_STATIONS, wallSegments } from '../src/home/layout';
-import { DEFAULT_PLACEABLES, PLACEABLE_BOUNDS } from '../src/home/placeables';
+import { pickInteractable } from '@riftwarden/game/home/interaction';
+import { areaAt, HQ_PORTALS, HQ_ROOMS, HQ_STATIONS, wallSegments } from '@riftwarden/rules/home/layout';
+import { DEFAULT_PLACEABLES, PLACEABLE_BOUNDS } from '@riftwarden/rules/home/placeables';
 
 const C = (id: string, x: number, y: number, z: number, range = 4) => ({ id, point: { x, y, z }, range });
 

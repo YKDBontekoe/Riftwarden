@@ -1,49 +1,62 @@
 # Riftwarden
 
-A first-person sci-fi action tower-defense roguelite for the browser. You are a hovering combat drone defending an energy reactor against endless waves of robotic machines, using a plasma repeater, fast movement and automated Sentinel turrets.
+A first-person sci-fi action tower-defense roguelite for the browser. You are a hovering combat drone defending an energy reactor against endless waves of robotic machines, with procedural loot, a branching run map on a shared war map, towers, and 2-4 player co-op.
 
-**Status: Milestone M7: online co-op for 2-4 players (authoritative server), HQ construction, new weapons/towers/enemies/upgrades/signatures, onboarding, settings and audio overhaul.**
+**Status: Architecture v2** (prototype -> production, [docs/architecture-v2.md](docs/architecture-v2.md)): a Rust gateway is the only backend, gameplay rules stay in one TypeScript copy executed by internal Node workers, Protobuf over one WebSocket, passkey accounts, offline play with server-validated sync, and a Vite + React 19 + Tailwind client with an optional WebGPU renderer.
+
+## Repository layout
+
+| Path | What |
+| --- | --- |
+| `packages/rules` | Pure gameplay, loot, economy, progression and war rules (no Babylon, no DOM) |
+| `packages/game` | Simulation and Babylon presentation (arena, HQ, enemies, weapons, co-op replica/authority) |
+| `packages/protocol` | Protobuf types generated from `proto/` plus the frame codecs |
+| `apps/client` | Browser client: shell, routes, React UI, account + sync glue, service worker |
+| `apps/worker` | Internal workers: `rules` (profile replay, run validation, war steps) and `sim` (co-op lobbies and operations) |
+| `crates/gateway` | Rust gateway (axum): passkeys, sessions, sync, war, co-op routing, admin listener |
+| `crates/db`, `crates/proto` | PostgreSQL access + migrations (sqlx), Rust protobuf types |
+| `deploy/` | Images, Compose stack, deploy script ([deploy/README.md](deploy/README.md)) |
+| `scripts/`, `tests/` | Browser + protocol suites, Vitest suites |
 
 ## Run it
 
-Use Node 24 (the version used in CI) and a desktop browser with WebGL2.
+Node 24, pnpm 10 (`corepack enable`), Rust 1.97 (`rust-toolchain.toml`), a desktop browser with WebGL2.
 
 ```bash
-npm install
-npm run dev            # single player: http://localhost:5173
+pnpm install
+pnpm dev                # client on http://localhost:5173 (solo play works without a backend)
 ```
 
 Click **ENTER HEADQUARTERS**, walk to the launch bay and press **E** at the deployment terminal. A first-time profile gets a short onboarding tutorial (skip with F10 or in Settings).
 
-### Co-op (2-4 players)
+### Backend (accounts, sync, Rift War, co-op)
 
-For local co-op development, run PostgreSQL alongside the game server.
+PostgreSQL and Redis, then the gateway with its workers next to `pnpm dev` (Vite proxies `/auth`, `/session` and `/war` to it):
 
 ```bash
-docker run -d --name riftwarden-dev-db -p 127.0.0.1:5432:5432 \
-  -e POSTGRES_DB=riftwarden -e POSTGRES_USER=riftwarden -e POSTGRES_PASSWORD=riftwarden-dev \
-  -v riftwarden_dev_db:/var/lib/postgresql postgres:18
-export DATABASE_URL=postgresql://riftwarden:riftwarden-dev@127.0.0.1:5432/riftwarden
-npm run serve          # builds the client, then serves it AND the co-op server on http://<host>:8787
+docker run -d --name rift-pg -p 127.0.0.1:5432:5432 -e POSTGRES_USER=rift -e POSTGRES_PASSWORD=rift -e POSTGRES_DB=rift postgres:18
+docker run -d --name rift-redis -p 127.0.0.1:6379:6379 redis:8-alpine
+DATABASE_URL=postgres://rift:rift@127.0.0.1:5432/rift REDIS_URL=redis://127.0.0.1:6379 pnpm backend
 ```
 
-Every player opens `http://<host>:8787`, chooses **CO-OP** in the menu (or the *Co-op* tab of the deployment terminal), connects and creates a fresh online profile. The host clicks **CREATE SESSION** and shares the 5-letter code or the invite link (`?join=CODE`); the others join, press **READY**, and the host picks the threat tier (every player must have unlocked it) and deploys. A host can also deploy alone with their online profile. While waiting in the lobby, guests can **VISIT HOST HQ** (read-only; only the owner can construct).
+`pnpm backend` builds the gateway with cargo and starts it on :8090 with a rules worker and a sim worker (migrations run at gateway start). In **ACCOUNT** (main menu) create an account with a passkey; your progress then syncs to the server and to every device you sign in on, and play continues offline (changes sync when the connection is back). **CO-OP** needs a signed-in account: one player creates a session and shares the code or the invite link (`#/join/CODE`), the others join and ready up, the host picks the threat tier, mode and Rift War sector and deploys.
 
-For development run `npm run server` (co-op server on :8787, overridable with `RIFT_PORT`) next to `npm run dev`; the dev server proxies `/ws`. The server creates the database tables on first startup. It accepts either `DATABASE_URL` or the standard PostgreSQL connection variables `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, and `PGPASSWORD`. A different game server can be chosen with `?server=ws://host:port/ws`.
-
-In a co-op run the server owns enemies, waves, the reactor, towers, loot, rewards and profiles. Each player keeps their own equipment and loot drops (ownership per player), banks individually at every 5th wave, and the team votes unanimously at checkpoints to continue or return. Towers, cores, tactical time and the reactor are shared. Disconnected players keep their slot for 120 s and rejoin the running operation.
+In a co-op run the sim worker owns enemies, waves, the reactor, towers and loot; each player keeps their own equipment and drops, banks individually at checkpoints into their own account, and the team votes on the run map. Disconnected players keep their slot for 120 s and rejoin the running operation.
 
 | Command | Purpose |
 | --- | --- |
-| `npm run dev` | Dev server with hot reload |
-| `npm run build` | Typecheck + production build into `dist/` |
-| `npm run preview` | Serve the production build locally (proxies `/ws` like dev) |
-| `npm run server` | Co-op server (WebSocket `/ws`, also serves `dist/`) |
-| `npm run serve` | Build + co-op server: a complete deployment on one port |
-| `npm test` | Unit tests (Vitest) |
-| `node scripts/e2e-m1.cjs` … `e2e-m6.cjs` | Browser acceptance suites per earlier milestone (Playwright; `RIFT_URL` selects the client) |
-| `node scripts/e2e-construction-coop.cjs [G,H,I,J,X]` | Browser suite: HQ construction, decorations, station relocation, blueprints, real browser co-op |
-| `node scripts/e2e-coop-protocol.mjs` | Co-op protocol suite (starts its own server and uses an isolated schema in `RIFT_TEST_DATABASE_URL`) |
+| `pnpm dev` | Client dev server with hot reload |
+| `pnpm backend` | Gateway + workers for development (`DATABASE_URL`, `REDIS_URL`) |
+| `pnpm build` | Typecheck + production client build into `dist/` |
+| `pnpm test` / `pnpm lint` | Unit tests (Vitest) / lint (ESLint ratchet) |
+| `cargo test` | Rust tests (`RIFT_TEST_DATABASE_URL`, `RIFT_TEST_REDIS_URL` for the database suites) |
+| `pnpm proto` | Regenerate protocol code after changing `proto/` |
+| `node --import tsx scripts/e2e-coop-protocol.mjs` | Co-op protocol suite (own stack; `RIFT_TEST_DATABASE_URL`, `RIFT_TEST_REDIS_URL`) |
+| `node --import tsx scripts/with-stack.mjs node scripts/e2e-accounts.cjs` | A browser suite that needs the backend |
+| `node scripts/e2e-m1.cjs` … | Solo browser acceptance suites (Playwright; `RIFT_URL` selects the client) |
+| `node --import tsx scripts/check-wgsl.mjs` | Compile the WebGPU shaders with the browser's WGSL compiler |
+
+Graphics: WebGL2 by default; **Settings > Graphics > Renderer > WebGPU (beta)** (or `?webgpu`) switches to Babylon's WebGPU renderer on the next start.
 
 ### HQ construction
 
@@ -53,7 +66,7 @@ The **Architect console** in the command deck opens construction mode: an overhe
 
 Start short-lived branches from an up-to-date `main` and open a pull request back into `main`. For example, use `fix/pause-menu` for a pause menu fix.
 
-Before merging, resolve review conversations and wait for **Build and unit tests** and **Dependency review** to pass. Update the branch from `main` if GitHub requests it. The dependency check blocks newly introduced high or critical vulnerabilities. Run the relevant browser acceptance suite locally for gameplay changes.
+Before merging, resolve review conversations and wait for **Build and unit tests**, **Rust gateway** (Rust tests and the co-op protocol suites), **Browser suites** and **Dependency review** to pass. Update the branch from `main` if GitHub requests it. The dependency check blocks newly introduced high or critical vulnerabilities. Run the relevant browser acceptance suite locally for gameplay changes.
 
 GitHub squash-merges pull requests and automatically deletes merged branches in this repository. Use the pull request title to summarize the change in `main` history.
 
@@ -61,13 +74,9 @@ See the [security policy](.github/SECURITY.md) for private vulnerability reporti
 
 ## Production deployment
 
-Merges to `main` run the tests and build, smoke-test the game and co-op WebSocket inside the production container, and publish the image to GitHub Container Registry. CI checks the deployed commit and repeats the WebSocket handshake and ping through Cloudflare. The `production` GitHub environment only accepts `main`. You can also run the CI workflow manually on `main` to redeploy it.
+Merges to `main` run the tests (unit, Rust, co-op protocol suites against a real stack, browser suites), build the gateway and worker images, smoke-test the whole Compose stack, and publish both images to GitHub Container Registry. The server's deploy timer pulls them: it restarts the gateway in place (players reconnect; co-op operations keep running in the sim workers), then drains and replaces each sim slot only when its operations have finished, and rolls back a gateway that does not come up healthy. The static client is published to Cloudflare Pages once the API serves the new build. Details, first-time setup and operating notes: [deploy/README.md](deploy/README.md).
 
-Play at [riftwarden.ykdbonte.dev](https://riftwarden.ykdbonte.dev) and select **CO-OP**. The Cloudflare Tunnel publishes both the game and `wss://riftwarden.ykdbonte.dev/ws` from the container's loopback port. PostgreSQL runs on the private Compose network. Online profiles and banked rewards live in the `riftwarden_postgres` volume and survive container updates. Lobbies and in-progress sessions end when the server restarts.
-
-Before publishing the PostgreSQL build, install the updated Compose file and deploy script in `~/stacks/riftwarden`. Generate a secret with `openssl rand -hex 32` and set it as `RIFT_POSTGRES_PASSWORD` in that directory's `.env`. Back up the `riftwarden` database off-host with `pg_dump`. The first PostgreSQL deployment starts fresh online profiles. The Solo tab uses browser saves. [Compose file](deploy/compose.yml) · [Deploy script](deploy/deploy.sh)
-
-The Ubuntu server checks for a new image every minute and restores the previous image if the update fails its local health or revision check. Run `systemctl --user start riftwarden-deploy.service` to check for an update immediately and `journalctl --user -u riftwarden-deploy.service` to inspect deployment logs. [Systemd units](deploy/systemd/)
+Play at [riftwarden.ykdbonte.dev](https://riftwarden.ykdbonte.dev) (API: `api.riftwarden.ykdbonte.dev`). Logs are JSON on stdout (observability with ClickHouse + Grafana is postponed).
 
 ## Controls
 

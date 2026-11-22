@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { STAT_KEYS } from '../src/combat/stats';
-import { generateItem, starterWeapon } from '../src/loot/generate';
-import { impactBetween, loadoutScore, pctText, statSources, swapImpact, swapped } from '../src/loot/loadoutScore';
-import type { ItemInstance } from '../src/loot/types';
-import { STAT_HELP } from '../src/ui/statHelp';
+import { STAT_KEYS } from '@riftwarden/rules/combat/stats';
+import { generateItem, starterWeapon } from '@riftwarden/rules/loot/generate';
+import { impactBetween, loadoutScore, pctText, statSources, swapImpact, swapped } from '@riftwarden/rules/loot/loadoutScore';
+import type { ItemInstance } from '@riftwarden/rules/loot/types';
+import { STAT_HELP } from '@riftwarden/client/ui/statHelp';
 
 const gen = (seed: number, o: Partial<Parameters<typeof generateItem>[0]> = {}): ItemInstance =>
   generateItem({ uid: `u${seed}`, seed, level: 10, rarity: 'rare', category: 'weapon', source: 'test', now: 1, ...o });
@@ -93,8 +93,8 @@ describe('loadout score', () => {
 
 describe('HQ room styles', () => {
   it('every HQ room has a distinct accent colour and an in-range light tint', async () => {
-    const { roomStyle } = await import('../src/home/roomStyle');
-    const { HQ_ROOMS } = await import('../src/home/layout');
+    const { roomStyle } = await import('@riftwarden/game/home/roomStyle');
+    const { HQ_ROOMS } = await import('@riftwarden/rules/home/layout');
     const seen = new Set<string>();
     for (const r of HQ_ROOMS) {
       const s = roomStyle(r.id);

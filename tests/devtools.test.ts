@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { DevTools, type DevHost } from '../src/arena/DevTools';
-import { uiEvents } from '../src/ui/store';
+import { DevTools, type DevHost } from '@riftwarden/game/arena/DevTools';
+import { uiEvents } from '@riftwarden/game/ui/store';
 
 function fakeHost(over: Partial<{ phase: 'prep' | 'combat'; number: number }> = {}) {
   const calls: string[] = [];

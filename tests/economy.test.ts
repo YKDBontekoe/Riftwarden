@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { STAT_DEFS } from '../src/combat/stats';
+import { STAT_DEFS } from '@riftwarden/rules/combat/stats';
 import {
   buyPrice,
   dismantleYield,
@@ -11,10 +11,10 @@ import {
   sellPrice,
   STARTING_CREDITS,
   componentSwapCost,
-} from '../src/economy/config';
-import { affixValueRange, rerollPool, swapOptions } from '../src/economy/engineering';
-import { generateMarket } from '../src/economy/market';
-import { craftCost, QUALITIES, qualityDef, qualityOdds, RECIPES, recipeDef } from '../src/economy/recipes';
+} from '@riftwarden/rules/economy/config';
+import { affixValueRange, rerollPool, swapOptions } from '@riftwarden/rules/economy/engineering';
+import { generateMarket } from '@riftwarden/rules/economy/market';
+import { craftCost, QUALITIES, qualityDef, qualityOdds, RECIPES, recipeDef } from '@riftwarden/rules/economy/recipes';
 import {
   buyExchange,
   buyItem,
@@ -30,15 +30,15 @@ import {
   sellItems,
   setAffixLock,
   setItemLock,
-} from '../src/economy/transactions';
-import { affixDef } from '../src/loot/affixes';
-import { BASES, baseDef } from '../src/loot/bases';
-import { itemModifiers, weaponDefFor } from '../src/loot/equipment';
-import { generateItem, isValidItem, maxTierFor, MAX_ITEM_LEVEL } from '../src/loot/generate';
-import { RARITIES, rarity, type RarityId } from '../src/loot/rarity';
-import type { Category, ItemInstance } from '../src/loot/types';
-import { Profile } from '../src/progression/Profile';
-import { RunLedger } from '../src/progression/run';
+} from '@riftwarden/rules/economy/transactions';
+import { affixDef } from '@riftwarden/rules/loot/affixes';
+import { BASES, baseDef } from '@riftwarden/rules/loot/bases';
+import { itemModifiers, weaponDefFor } from '@riftwarden/rules/loot/equipment';
+import { generateItem, isValidItem, maxTierFor, MAX_ITEM_LEVEL } from '@riftwarden/rules/loot/generate';
+import { RARITIES, rarity, type RarityId } from '@riftwarden/rules/loot/rarity';
+import type { Category, ItemInstance } from '@riftwarden/rules/loot/types';
+import { Profile } from '@riftwarden/game/progression/Profile';
+import { RunLedger } from '@riftwarden/rules/progression/run';
 import {
   allOwnedUids,
   bankRewards,
@@ -53,9 +53,9 @@ import {
   SAVE_KEY,
   SAVE_VERSION,
   serializeSave,
-} from '../src/progression/save';
-import { buildMechanism, isValidBuild } from '../src/weapons/build';
-import { componentDef } from '../src/weapons/components';
+} from '@riftwarden/rules/progression/save';
+import { buildMechanism, isValidBuild } from '@riftwarden/rules/weapons/build';
+import { componentDef } from '@riftwarden/rules/weapons/components';
 
 let n = 0;
 const gen = (o: { category?: Category; baseId?: string; rarity?: RarityId; level?: number; seed?: number } = {}): ItemInstance =>

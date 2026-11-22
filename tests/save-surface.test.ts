@@ -1,7 +1,7 @@
 // The save barrel must keep exporting the surface the rest of the app (and server) imports.
 // Names captured from the pre-split src/progression/save.ts; additions are fine, removals are not.
 import { describe, expect, it } from 'vitest';
-import * as save from '../src/progression/save';
+import * as save from '@riftwarden/rules/progression/save';
 
 const RUNTIME_EXPORTS = [
   'ANNEX_BAYS',

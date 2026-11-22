@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { BLAST_EDGE_FALLOFF, BLAST_MAX_RISE, type BlastWorld, planBlast } from '../src/combat/blast';
+import { BLAST_EDGE_FALLOFF, BLAST_MAX_RISE, type BlastWorld, planBlast } from '@riftwarden/rules/combat/blast';
 
 const C = { x: 0, y: 0, z: 0 };
 const world = (over: Partial<BlastWorld> = {}): BlastWorld => ({

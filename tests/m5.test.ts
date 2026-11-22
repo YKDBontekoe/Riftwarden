@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { type BusEvent, EffectBus, MAX_DEPTH, MAX_QUEUE } from '../src/combat/events';
-import { applyBurn, applyChill, applyShock, isBurning, newStatus, resolveReactions, speedFactor, tickStatus, vulnerability } from '../src/combat/status';
-import { mulberry32 } from '../src/combat/damage';
-import { OFFER_SIZE, RunBuild, UPGRADES, UP, upgradeDef } from '../src/roguelite/upgrades';
-import { BASES, CORES, DEFAULT_CONFIG, MODIFIERS, WEAPONS, availableParts, canInstall, compatibility, composeTower, configCost, isUnlocked, levelCost, NO_RUN_INPUT, STARTER_TECH, swapCost, TECH_LIST, type TowerConfig } from '../src/towers/components';
+import { type BusEvent, EffectBus, MAX_DEPTH, MAX_QUEUE } from '@riftwarden/rules/combat/events';
+import { applyBurn, applyChill, applyShock, isBurning, newStatus, resolveReactions, speedFactor, tickStatus, vulnerability } from '@riftwarden/rules/combat/status';
+import { mulberry32 } from '@riftwarden/rules/combat/damage';
+import { OFFER_SIZE, RunBuild, UPGRADES, UP, upgradeDef } from '@riftwarden/rules/roguelite/upgrades';
+import { BASES, CORES, DEFAULT_CONFIG, MODIFIERS, WEAPONS, availableParts, canInstall, compatibility, composeTower, configCost, isUnlocked, levelCost, NO_RUN_INPUT, STARTER_TECH, swapCost, TECH_LIST, type TowerConfig } from '@riftwarden/rules/towers/components';
 
 interface Ev extends BusEvent {
   type: 'a' | 'b' | 'c';
@@ -350,8 +350,8 @@ describe('determinism helpers', () => {
   });
 });
 
-import { researchBlocker, researchTower } from '../src/economy/transactions';
-import { createDefaultSave, MIGRATIONS, parseSave, sanitizeSave, serializeSave } from '../src/progression/save';
+import { researchBlocker, researchTower } from '@riftwarden/rules/economy/transactions';
+import { createDefaultSave, MIGRATIONS, parseSave, sanitizeSave, serializeSave } from '@riftwarden/rules/progression/save';
 
 describe('tower research & save v5', () => {
   it('research needs milestone + resources, is permanent, atomic and idempotent by tx id', () => {

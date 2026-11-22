@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { runOp } from '../src/progression/ops';
-import { createDefaultSave, migrate, parseSave, sanitizeSave, SAVE_VERSION, serializeSave } from '../src/progression/save';
-import { checkEdge, checkFloor, checkFree, checkRemoveFloor, connectedFloors, coreCell, emptyStructure, walkableFloors } from '../src/home/build/model';
-import { blueprintStatus } from '../src/home/build/ops';
-import { pieceDef } from '../src/home/build/catalog';
+import { runOp } from '@riftwarden/rules/progression/ops';
+import { createDefaultSave, migrate, parseSave, sanitizeSave, SAVE_VERSION, serializeSave } from '@riftwarden/rules/progression/save';
+import { checkEdge, checkFloor, checkFree, checkRemoveFloor, connectedFloors, coreCell, emptyStructure, walkableFloors } from '@riftwarden/rules/home/build/model';
+import { blueprintStatus } from '@riftwarden/rules/home/build/ops';
+import { pieceDef } from '@riftwarden/rules/home/build/catalog';
 
 const rich = () => {
   const d = createDefaultSave(1);

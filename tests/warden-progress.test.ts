@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { levelForXp, levelInfo, pointsAt, ringsAt, xpFor, xpForLevel, xpToNext, XP } from '../src/progression/level';
-import { RunLedger } from '../src/progression/run';
-import { BRANCHES, CORE_ID, allocateBlocker, generateTree, pruneAllocation, respecCost, treeModifiers, treeRules } from '../src/progression/skilltree';
-import { MIGRATIONS, SAVE_VERSION, bankRewards, beginRun, createDefaultSave, migrate, recordRun, sanitizeSave, treeSeedFor } from '../src/progression/save';
-import { runOp } from '../src/progression/ops';
-import { STAT_DEFS } from '../src/combat/stats';
+import { levelForXp, levelInfo, pointsAt, ringsAt, xpFor, xpForLevel, xpToNext, XP } from '@riftwarden/rules/progression/level';
+import { RunLedger } from '@riftwarden/rules/progression/run';
+import { BRANCHES, CORE_ID, allocateBlocker, generateTree, pruneAllocation, respecCost, treeModifiers, treeRules } from '@riftwarden/rules/progression/skilltree';
+import { MIGRATIONS, SAVE_VERSION, bankRewards, beginRun, createDefaultSave, migrate, recordRun, sanitizeSave, treeSeedFor } from '@riftwarden/rules/progression/save';
+import { runOp } from '@riftwarden/rules/progression/ops';
+import { STAT_DEFS } from '@riftwarden/rules/combat/stats';
 
 const sv = { elitesKilled: 0, bossesKilled: 0, events: [] as string[], milestones: [] as string[], hvtKilled: 0, dev: false };
 

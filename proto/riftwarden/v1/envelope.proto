@@ -1,0 +1,106 @@
+syntax = "proto3";
+
+package riftwarden.v1;
+
+import "riftwarden/v1/common.proto";
+import "riftwarden/v1/coop.proto";
+import "riftwarden/v1/events.proto";
+import "riftwarden/v1/lobby.proto";
+import "riftwarden/v1/snapshot.proto";
+
+// One binary WebSocket frame = one ClientFrame or ServerFrame.
+
+message ClientFrame {
+  oneof msg {
+    Hello hello = 1;
+    LobbyCreate create = 2;
+    LobbyJoin join = 3;
+    LobbyLeave leave = 4;
+    LobbyReady ready = 5;
+    LobbyTier tier = 6;
+    LobbyMode mode = 7;
+    LobbyNode node = 8;
+    LobbyStart start = 9;
+    Presence presence = 12;
+    Visit visit = 13;
+    Input input = 14;
+    Act act = 15;
+    Ping ping = 16;
+  }
+  // 10, 11: guest profile init / operations (profiles sync through the session socket since v13).
+  reserved 10, 11;
+}
+
+message ServerFrame {
+  oneof msg {
+    Welcome welcome = 1;
+    Error error = 2;
+    LobbyUpdate lobby = 3;
+    PresenceState presence = 6;
+    HostHq host_hq = 7;
+    RunStart run_start = 8;
+    Snapshot snap = 9;
+    EventBatch events = 10;
+    ActResult act_result = 11;
+    RunEnd run_end = 12;
+    Pong pong = 13;
+  }
+  // 4, 5: online profile state / operation results (removed in v13).
+  reserved 4, 5;
+}
+
+message Hello {
+  uint32 protocol = 1;
+  // 2, 3: guest secret and name (the player is the signed-in account since v13).
+  reserved 2, 3;
+}
+
+message Welcome {
+  uint32 protocol = 1;
+  string player_id = 2;
+  string name = 3;
+  reserved 4, 5;
+}
+
+message Presence {
+  Vec3 p = 1;
+  double yaw = 2;
+}
+
+message PresencePlayer {
+  string id = 1;
+  string name = 2;
+  Vec3 p = 3;
+  double yaw = 4;
+}
+
+message PresenceState {
+  repeated PresencePlayer players = 1;
+}
+
+message Visit {
+  bool on = 1;
+}
+
+message HostHq {
+  string owner = 1;
+  Doc base = 2;
+}
+
+// Absent lobby = not in a session.
+message LobbyUpdate {
+  LobbyState lobby = 1;
+}
+
+message EventBatch {
+  repeated Event events = 1;
+}
+
+message Ping {
+  double c = 1;
+}
+
+message Pong {
+  double c = 1;
+  double s = 2;
+}

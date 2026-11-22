@@ -1,0 +1,14 @@
+{
+  "name": "@riftwarden/protocol",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Wire protocol: TypeScript types generated from proto/ (protobuf-es) and the codec between game messages and frames.",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "catalog:",
+    "@riftwarden/rules": "workspace:*"
+  }
+}

@@ -1,0 +1,71 @@
+syntax = "proto3";
+
+package riftwarden.v1;
+
+import "riftwarden/v1/common.proto";
+
+// The gateway session socket (/session): one per signed-in client. Request/response calls carry ids;
+// the server also pushes notices (another device changed the profile).
+
+message SessionClientFrame {
+  uint32 id = 1;
+  oneof call {
+    SyncRequest sync = 2;
+    // A co-op frame (envelope.proto ClientFrame bytes), routed to the sim worker that holds the player's room.
+    bytes coop = 3;
+  }
+}
+
+message SessionServerFrame {
+  oneof msg {
+    SessionResponse response = 1;
+    ProfileChanged changed = 2;
+    Error error = 3;
+    // A co-op frame (envelope.proto ServerFrame bytes).
+    bytes coop = 4;
+  }
+}
+
+message SessionResponse {
+  uint32 id = 1;
+  // Set when the call failed as a whole.
+  Error error = 2;
+  oneof result {
+    SyncResult sync = 3;
+  }
+}
+
+// One logged change; `body` is `{op: {...}}` or `{run: {...}}` (shapes owned by packages/rules: sync.ts).
+message SyncEntry {
+  uint64 seq = 1;
+  double at = 2;
+  Doc body = 3;
+}
+
+message SyncRequest {
+  // Stable id of this device's log (entries are de-duplicated per device by seq).
+  string device = 1;
+  repeated SyncEntry entries = 2;
+  // First upload of a guest profile: its genesis document; `entries` are then the guest log. Ignored (and
+  // the entries with it) when the account already has a profile.
+  Doc genesis = 3;
+}
+
+message EntryResult {
+  uint64 seq = 1;
+  bool ok = 2;
+  string reason = 3;
+}
+
+message SyncResult {
+  int64 rev = 1;
+  // The server copy after the sync (the device replaces its copy and replays what is still pending).
+  Doc doc = 2;
+  repeated EntryResult results = 3;
+  // A guest profile was adopted as the account's profile.
+  bool claimed = 4;
+}
+
+message ProfileChanged {
+  int64 rev = 1;
+}

@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { mulberry32 } from '../src/combat/damage';
-import { nodeEffect } from '../src/runmap/map';
-import { regionLayout } from '../src/war/regions';
-import { actEffects, addCurse, carryStats, emptyCarry, endAct, purgeCurse, sanitizeCarry, towerRefund } from '../src/runmap/carry';
-import { ANOMALIES, ANOMALY_IDS, CURSES, MAX_CURSES } from '../src/runmap/defs';
-import { forgePrice, merchantStock, resolveAnomaly } from '../src/runmap/hub';
-import { newMapState, resumable, sanitizeMapState } from '../src/runmap/state';
+import { mulberry32 } from '@riftwarden/rules/combat/damage';
+import { nodeEffect } from '@riftwarden/rules/runmap/map';
+import { regionLayout } from '@riftwarden/rules/war/regions';
+import { actEffects, addCurse, carryStats, emptyCarry, endAct, purgeCurse, sanitizeCarry, towerRefund } from '@riftwarden/rules/runmap/carry';
+import { ANOMALIES, ANOMALY_IDS, CURSES, MAX_CURSES } from '@riftwarden/rules/runmap/defs';
+import { forgePrice, merchantStock, resolveAnomaly } from '@riftwarden/rules/runmap/hub';
+import { newMapState, resumable, sanitizeMapState } from '@riftwarden/rules/runmap/state';
 
 
 describe('node effects', () => {
@@ -113,8 +113,8 @@ describe('hub nodes', () => {
   });
 });
 
-import { bankNodeRewards, beginRun, createDefaultSave, recordRun, resolveInterruptedRun, saveMapProgress, sanitizeSave } from '../src/progression/save';
-import { RunLedger } from '../src/progression/run';
+import { bankNodeRewards, beginRun, createDefaultSave, recordRun, resolveInterruptedRun, saveMapProgress, sanitizeSave } from '@riftwarden/rules/progression/save';
+import { RunLedger } from '@riftwarden/rules/progression/run';
 
 describe('run map persistence', () => {
   it('beginRun with a map seed stores progress; node banking is guarded per step', () => {
@@ -178,7 +178,7 @@ describe('run map persistence', () => {
   });
 });
 
-import { resolveMapVote, voteComplete } from '../src/net/mapVote';
+import { resolveMapVote, voteComplete } from '@riftwarden/rules/net/mapVote';
 
 describe('co-op map vote', () => {
   const reach = ['r0n4', 'r0n5', 'r0n2'];

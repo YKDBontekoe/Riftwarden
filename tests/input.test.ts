@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { Input } from '../src/core/Input';
+import { Input } from '@riftwarden/game/core/Input';
 
 type KeyEvent = { code?: string; repeat?: boolean; preventDefault?: () => void };
 

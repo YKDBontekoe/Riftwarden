@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { nextStep, TUTORIAL } from '../src/progression/tutorial';
-import { runOp } from '../src/progression/ops';
-import { createDefaultSave } from '../src/progression/save';
+import { nextStep, TUTORIAL } from '@riftwarden/rules/progression/tutorial';
+import { runOp } from '@riftwarden/rules/progression/ops';
+import { createDefaultSave } from '@riftwarden/rules/progression/save';
 
 describe('onboarding tutorial', () => {
   it('tutorial steps run in order per location and stop once complete', () => {

@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { ENEMIES } from '../src/data/defs';
-import { DROP_SOURCES } from '../src/loot/drops';
-import { ELITE_IDS, ELITE_MODS, MUTATION_WAVE, rollMods, validMods } from '../src/survival/elites';
-import { ENEMY_COST, ENEMY_UNLOCK, SurvivalPlanner } from '../src/survival/plan';
-import { generateArena } from '../src/world/arenaGen';
-import { BIOME_IDS, BIOMES, biomeForSeed, biomeOf, factionMix } from '../src/world/biomes';
-import { mulberry32 } from '../src/combat/damage';
-import { ARENA } from '../src/world/layout';
-import { NavGrid } from '../src/world/navgrid';
-import { PASS_TOWERS } from '../src/enemies/navigation';
+import { ENEMIES } from '@riftwarden/rules/data/defs';
+import { DROP_SOURCES } from '@riftwarden/rules/loot/drops';
+import { ELITE_IDS, ELITE_MODS, MUTATION_WAVE, rollMods, validMods } from '@riftwarden/rules/survival/elites';
+import { ENEMY_COST, ENEMY_UNLOCK, SurvivalPlanner } from '@riftwarden/rules/survival/plan';
+import { generateArena } from '@riftwarden/rules/world/arenaGen';
+import { BIOME_IDS, BIOMES, biomeForSeed, biomeOf, factionMix } from '@riftwarden/rules/world/biomes';
+import { mulberry32 } from '@riftwarden/rules/combat/damage';
+import { ARENA } from '@riftwarden/rules/world/layout';
+import { NavGrid } from '@riftwarden/rules/world/navgrid';
+import { PASS_TOWERS } from '@riftwarden/rules/enemies/navigation';
 
 const NEW_KINDS = ['sapper', 'skimmer', 'marksman', 'burrower'] as const;
 

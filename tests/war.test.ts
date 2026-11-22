@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { mulberry32 } from '../src/combat/damage';
-import { isCombatKind } from '../src/runmap/defs';
-import { parseRegionId, regionLayout, regionNode } from '../src/war/regions';
-import { HOUR, liveMods, newWar, regionLiberation, regionState, sanitizeWar, secureNode, tickWar, WAR, type WarState } from '../src/war/state';
+import { mulberry32 } from '@riftwarden/rules/combat/damage';
+import { isCombatKind } from '@riftwarden/rules/runmap/defs';
+import { parseRegionId, regionLayout, regionNode } from '@riftwarden/rules/war/regions';
+import { HOUR, liveMods, newWar, regionLiberation, regionState, sanitizeWar, secureNode, tickWar, WAR, type WarState } from '@riftwarden/rules/war/state';
 
 const T0 = 1_800_000_000_000;
 

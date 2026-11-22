@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { ARENA } from '../src/world/layout';
-import { distToPolyline } from '../src/world/geometry';
-import { planRubble, spotBlocked } from '../src/world/rubblePlan';
+import { ARENA } from '@riftwarden/rules/world/layout';
+import { distToPolyline } from '@riftwarden/rules/world/geometry';
+import { planRubble, spotBlocked } from '@riftwarden/rules/world/rubblePlan';
 
 describe('arena rubble plan', () => {
   const spots = planRubble(ARENA);
@@ -32,8 +32,8 @@ describe('arena rubble plan', () => {
 
 describe('build pads', () => {
   it('flank lane bends, never touch a lane, solid, reserved area or each other', async () => {
-    const { planPads } = await import('../src/world/rubblePlan');
-    const { distToBoxXZ } = await import('../src/world/geometry');
+    const { planPads } = await import('@riftwarden/rules/world/rubblePlan');
+    const { distToBoxXZ } = await import('@riftwarden/rules/world/geometry');
     const pads = planPads(ARENA);
     expect(pads.length).toBeGreaterThanOrEqual(8);
     for (const p of pads) {

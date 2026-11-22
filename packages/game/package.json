@@ -1,0 +1,19 @@
+{
+  "name": "@riftwarden/game",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "The simulation and its presentation (Babylon): arena, HQ, enemies, visuals, effects, audio, networking replicas.",
+  "exports": {
+    "./enemies/bosses": "./src/enemies/bosses/index.ts",
+    "./assets/*": "./src/assets/*",
+    "./*": "./src/*.ts"
+  },
+  "dependencies": {
+    "@babylonjs/core": "catalog:",
+    "@babylonjs/loaders": "catalog:",
+    "@bufbuild/protobuf": "catalog:",
+    "@riftwarden/protocol": "workspace:*",
+    "@riftwarden/rules": "workspace:*"
+  }
+}
