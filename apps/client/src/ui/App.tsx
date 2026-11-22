@@ -124,12 +124,18 @@ const CONTROLS = [
   [<kbd>F3</kbd>, 'Performance stats'],
 ] as const;
 
+const BRIEFING = [
+  ['Deploy from headquarters', <>Use the deployment terminal with <BoundKey action="use" /> to select a threat tier.</>],
+  ['Hold the reactor', <>Build turrets between waves. Collect equipment and salvage from fallen machines with <BoundKey action="use" />.</>],
+  ['Bank your salvage', 'Every five waves, a checkpoint secures your haul. Return home or stay for another wave. Losing the reactor costs your unsecured cargo.'],
+] as const;
+
 function Controls() {
   return (
-    <div className="controls">
+    <div className="grid grid-cols-[1fr_1fr] gap-x-[18px] gap-y-[9px] text-[15px] text-muted [.modal_&]:mt-[16px] [@media(max-width:900px)]:grid-cols-1">
       {CONTROLS.map(([k, v]) => (
-        <div key={v}>
-          <span className="flex flex-wrap items-center gap-[3px] min-w-[70px]">{k}</span>
+        <div key={v} className="flex items-center gap-[8px]">
+          <span className="flex min-w-[70px] flex-wrap items-center gap-[3px] [&_kbd]:m-0">{k}</span>
           <span>{v}</span>
         </div>
       ))}
@@ -173,10 +179,13 @@ function MainMenu({ flow }: { flow: Flow }) {
       ) : (
         <section className="menu-sheet" aria-label={MENU_SECTIONS[tab]}>
           <div className="menu-sheet-head"><h2>{MENU_SECTIONS[tab]}</h2><button aria-label="Back to main menu" onClick={() => setTab(null)}>×</button></div>
-          {tab === 'briefing' && <ol className="mission-steps">
-            <li><b>Deploy from headquarters</b><p>Use the deployment terminal with <BoundKey action="use" /> to select a threat tier.</p></li>
-            <li><b>Hold the reactor</b><p>Build turrets between waves. Collect equipment and salvage from fallen machines with <BoundKey action="use" />.</p></li>
-            <li><b>Bank your salvage</b><p>Every five waves, a checkpoint secures your haul. Return home or stay for another wave. Losing the reactor costs your unsecured cargo.</p></li>
+          {tab === 'briefing' && <ol className="m-0 py-0 pr-0 pl-[22px]">
+            {BRIEFING.map(([title, detail]) => (
+              <li key={title} className="mt-[15px] pl-[6px] marker:font-mono marker:text-[12px] marker:text-orange">
+                <b className="text-[15px]">{title}</b>
+                <p className="m-0 mt-[5px] text-[14px] leading-[1.5] text-muted">{detail}</p>
+              </li>
+            ))}
           </ol>}
           {tab === 'co-op' && <CoopPanel flow={flow} compact />}
           {tab === 'account' && <AccountPanel />}
