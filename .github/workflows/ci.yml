@@ -148,10 +148,17 @@ jobs:
           --health-timeout 3s
           --health-retries 15
     env:
-      RIFT_TEST_DATABASE_URL: postgresql://riftwarden:test-only@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/riftwarden
-      RIFT_TEST_REDIS_URL: redis://127.0.0.1:${{ job.services.redis.ports['6379'] }}
       E2E_OUT: e2e-out
     steps:
+      - name: Export test service URLs
+        env:
+          POSTGRES_PORT: ${{ job.services.postgres.ports['5432'] }}
+          REDIS_PORT: ${{ job.services.redis.ports['6379'] }}
+        run: |
+          {
+            printf 'RIFT_TEST_DATABASE_URL=postgresql://riftwarden:test-only@127.0.0.1:%s/riftwarden\n' "$POSTGRES_PORT"
+            printf 'RIFT_TEST_REDIS_URL=redis://127.0.0.1:%s\n' "$REDIS_PORT"
+          } >> "$GITHUB_ENV"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
