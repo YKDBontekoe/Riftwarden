@@ -70,7 +70,7 @@ export class LootField {
     grad.update(false);
     for (const r of RARITIES) {
       this.glow.set(r.id, unlit(scene, `lootGlow_${r.id}`, r.glow));
-      const c = r.glow.map((v) => v * 0.6) as [number, number, number];
+      const c = r.glow.map((v) => v * 0.42) as [number, number, number];
       this.beam.set(r.id, unlit(scene, `lootBeam_${r.id}`, c, { tex: grad, opacity: grad, additive: true, twoSided: true }));
     }
     // Compile every loot shader up front (instanced variant), so the first drop of each
@@ -107,12 +107,20 @@ export class LootField {
     k.part('cyl', this.P.graphite, root, { pos: [0, 0.03, 0], scale: [0.7, 0.05, 0.7], shadow: false });
     let halo: AbstractMesh | null = null;
     if (r.index >= 3) halo = k.part('torusThin', glow, holo, { scale: [0.9, 1, 0.9], rot: [Math.PI / 2.4, 0, 0], shadow: false });
+    if (r.index >= 3 || item.uniqueId) for (const i of [0, 1, 2, 3]) {
+      const turn = Math.PI * i / 2 + Math.PI / 4;
+      const radius = item.uniqueId ? 0.8 : 0.66;
+      k.part('box', glow, root, { pos: [Math.sin(turn) * radius, 0.06, Math.cos(turn) * radius], rot: [0, turn, 0], scale: [0.29, 0.025, 0.065], shadow: false });
+    }
     let halo2: AbstractMesh | null = null;
     if (r.id === 'ascended') {
       halo2 = k.part('torusThin', glow, holo, { scale: [1.1, 1, 1.1], rot: [-Math.PI / 2.6, 0, 0.6], shadow: false });
       k.part('torusThin', glow, root, { pos: [0, 0.04, 0], scale: [1.9, 1, 1.9], shadow: false });
     }
-    if (r.beam > 0) k.part('cyl', this.beam.get(r.id)!, root, { pos: [0, r.beam / 2, 0], scale: [0.12 + r.index * 0.03, r.beam, 0.12 + r.index * 0.03], shadow: false });
+    if (r.beam > 0) {
+      const width = 0.1 + r.index * 0.02;
+      k.part('cyl', this.beam.get(r.id)!, root, { pos: [0, r.beam / 2, 0], scale: [width, r.beam, width], shadow: false });
+    }
     const p: Pickup = {
       id: this.nextId++,
       item,

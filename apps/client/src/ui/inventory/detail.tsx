@@ -16,6 +16,8 @@ import { enhanceLevel, enhanceStatMult, maxEnhance } from '@riftwarden/rules/eco
 import { EntryStatus, STATUS_LABEL, catLabel, itemTitle } from './entry';
 import { ItemGlyph, RarityTag, TierPips } from './glyphs';
 
+import { FieldArt } from '../FieldArt';
+
 /** Full item readout: identity, base stats, affixes, weapon block, sockets/modules. */
 export function ItemDetail({ item, status }: { item: ItemInstance; status?: EntryStatus }) {
   const base = baseDef(item.defId);
@@ -25,7 +27,7 @@ export function ItemDetail({ item, status }: { item: ItemInstance; status?: Entr
   return (
     <div className="idetail" style={{ ['--rc' as string]: r.color }}>
       <div className="id-head">
-        <ItemGlyph item={item} size={54} />
+        <ItemGlyph item={item} size={54} portrait={false} />
         <div>
           <div className="font-display text-[21px] font-[700] tracking-[0.05em] [color:var(--rc)]">{itemTitle(item)}</div>
           <div className="flex flex-wrap gap-[8px] items-center mt-[3px] font-mono text-[10.5px] tracking-[0.12em] text-muted">
@@ -43,6 +45,7 @@ export function ItemDetail({ item, status }: { item: ItemInstance; status?: Entr
           </div>
         </div>
       </div>
+      {item.uniqueId && <FieldArt name={`unique-${item.uniqueId}`} className="item-portrait" />}
       <p className="id-blurb">{base ? base.blurb : 'This item’s definition is missing from this build. It is kept safely in storage but cannot be equipped.'}</p>
       {ws && w && <WeaponBlock item={item} />}
       {item.base.length > 0 && (

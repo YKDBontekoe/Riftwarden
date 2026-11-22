@@ -459,3 +459,36 @@ fn main(input: FragmentInputs) -> FragmentOutputs {
   let color = pow(max(vec3f(0.0), sprite.rgb * fragmentInputs.vColor.rgb), vec3f(2.2));
   fragmentOutputs.color = vec4f(color, sprite.a * fragmentInputs.vColor.a * fade);
 }`;
+
+// ---------------------------------------------------------------- area attack warning (telegraphBoundary.ts)
+
+W.rwTelegraphVertexShader = /* wgsl */ `
+attribute position: vec3f;
+attribute uv: vec2f;
+uniform worldViewProjection: mat4x4f;
+varying vUV: vec2f;
+@vertex
+fn main(input: VertexInputs) -> FragmentInputs {
+  vertexOutputs.vUV = vertexInputs.uv * 2.0 - vec2f(1.0);
+  vertexOutputs.position = uniforms.worldViewProjection * vec4f(vertexInputs.position, 1.0);
+}`;
+
+W.rwTelegraphFragmentShader = /* wgsl */ `
+varying vUV: vec2f;
+uniform tone: vec3f;
+@fragment
+fn main(input: FragmentInputs) -> FragmentOutputs {
+  let uv = fragmentInputs.vUV;
+  let radius = length(uv) * 1.07;
+  let aa = clamp(fwidth(radius), 0.001, 0.016);
+  let d = abs(radius - 1.0);
+  let outline = 1.0 - smoothstep(0.027 - aa, 0.027 + aa, d);
+  let edge = 1.0 - smoothstep(0.009 - aa, 0.009 + aa, d);
+  let angle = atan2(uv.y, uv.x);
+  let tab = 1.0 - smoothstep(0.11, 0.26, abs(sin(angle * 6.0)));
+  let ticks = tab * smoothstep(0.892 - aa, 0.892 + aa, radius) * (1.0 - smoothstep(0.968 - aa, 0.968 + aa, radius));
+  let stroke = max(edge, ticks * 0.86);
+  let alpha = max(outline * 0.81, stroke);
+  if (alpha < 0.02) { discard; }
+  fragmentOutputs.color = vec4f(mix(vec3f(0.035, 0.024, 0.031), mix(uniforms.tone * 0.47, vec3f(1.0), 0.16), stroke), alpha);
+}`;

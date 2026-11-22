@@ -4,6 +4,7 @@
 @layer theme, components, utilities;
 @import 'tailwindcss/theme.css' layer(theme);
 @import './style.css' layer(components);
+@import './fieldArt.css' layer(components);
 @import 'tailwindcss/utilities.css' layer(utilities);
 
 /* Design tokens: the colours and fonts of style.css's :root, usable as utilities (text-cyan, bg-glass, font-mono...). */

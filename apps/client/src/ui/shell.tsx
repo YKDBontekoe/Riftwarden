@@ -3,11 +3,15 @@ import { useHud } from './useHud';
 import { type ReactNode, useEffect } from 'react';
 import { stationInfo } from '@riftwarden/rules/home/stationInfo';
 import { CURRENCIES, currencyTooltip } from '@riftwarden/rules/economy/currencies';
+import { stationArtwork } from '@riftwarden/game/visuals/fieldArtwork';
+import { FieldArt } from './FieldArt';
+import { CURRENCY_ICON, FieldIcon, STATION_ICON } from './FieldIcon';
 
 /** Terminal window frame shared by every HQ station. E / Esc close it (not while typing). */
 export function Shell({ code, title, sub, close, children, accent = 'cyan', wide }: { code: string; title: string; sub: string; close: () => void; children: ReactNode; accent?: 'cyan' | 'amber' | 'violet'; wide?: boolean }) {
   const useCode = useHud(s => s.bindings.use);
-  const info = stationInfo(useHud((s) => s.terminal));
+  const terminal = useHud((s) => s.terminal);
+  const info = stationInfo(terminal);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.repeat) return;
@@ -24,8 +28,9 @@ export function Shell({ code, title, sub, close, children, accent = 'cyan', wide
     <div className="screen terminal-screen">
       <div className={`terminal panel-frame ${accent} ${wide ? 'wide' : ''}`}>
         <div className="term-head">
-          <div className="term-code">{code}</div>
-          <div className="flex-[1]">
+          <FieldArt name={stationArtwork(terminal)} className="terminal-art" />
+          <div className="term-code">{terminal && <FieldIcon name={STATION_ICON[terminal]} />}{code}</div>
+          <div className="term-titles flex-[1]">
             <div className="term-title">{title}</div>
             <div className="term-sub">{sub}</div>
           </div>
@@ -41,7 +46,7 @@ export function Shell({ code, title, sub, close, children, accent = 'cyan', wide
                 USES
                 {info.uses.map((k) => (
                   <i key={k} className={CURRENCIES[k].cls} title={currencyTooltip(k)}>
-                    {CURRENCIES[k].icon} {CURRENCIES[k].name}
+                    <FieldIcon name={CURRENCY_ICON[k]} /> {CURRENCIES[k].name}
                   </i>
                 ))}
               </span>

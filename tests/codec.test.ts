@@ -127,6 +127,7 @@ describe('frame codec: events', () => {
       ['s', 'hit', null, null],
       ['s', 'hit', { volume: 0.4, pitch: 1.2, rate: 2 }, null],
       ['vote', 2],
+      ['shot', 'p1', 'swarm', V, 12],
       ['vote', 0, 0],
       ['offer', ['x'], null, '', 30],
       ['es', 9, 'walker', ['armored', 'volatile'], 'hvt', 3, 1200.5, 40, -12.25, 33.5, 1.5708, 2, 'east'],

@@ -86,7 +86,7 @@ export function eventToProto(e: ReplicatedEvent): EventInit {
     case 'left':
       return { ev: { case: 'left', value: { id: s(1), name: s(2) } } };
     case 'shot':
-      return { ev: { case: 'shot', value: { id: s(1), family: s(2), dir: vec(t[3]) } } };
+      return { ev: { case: 'shot', value: { id: e[1], family: e[2], dir: vec(e[3]), targetId: e[4] } } };
   }
   throw new Error(`unknown event tag ${String(e[0])}`);
 }
@@ -156,7 +156,9 @@ export function eventFromProto(m: Event): unknown[] | null {
     case 'left':
       return ['left', ev.value.id, ev.value.name];
     case 'shot':
-      return ['shot', ev.value.id, ev.value.family, unvec(ev.value.dir)];
+      return ev.value.targetId === undefined
+        ? ['shot', ev.value.id, ev.value.family, unvec(ev.value.dir)]
+        : ['shot', ev.value.id, ev.value.family, unvec(ev.value.dir), ev.value.targetId];
     default:
       return null;
   }

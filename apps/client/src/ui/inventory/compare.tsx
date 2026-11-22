@@ -1,21 +1,25 @@
 import { useMemo } from 'react';
 import { compareItems, statPreview } from '@riftwarden/rules/loot/equipment';
 import { swapImpact } from '@riftwarden/rules/loot/loadoutScore';
-import { ImpactBanner, statTooltip, useScore } from '../compare';
+import { ImpactBanner, statTooltip, useComparisonPriority, useScore } from '../compare';
 import { STAT_HELP } from '../statHelp';
 import type { StatKey } from '@riftwarden/rules/combat/stats';
 import { rarity } from '@riftwarden/rules/loot/rarity';
 import { type ItemInstance } from '@riftwarden/rules/loot/types';
 import { fmtNum } from '@riftwarden/rules/combat/stats';
 
+import { type SlotId, SLOTS } from '@riftwarden/rules/progression/items';
+
 const rowHelp = (key: string): string | undefined => (key.includes('|') ? STAT_HELP[key.split('|')[0] as StatKey] : undefined);
 
 /** Loadout impact banner, side-by-side item stats and effective drone stats before/after. */
-export function ComparePanel({ item, against, equipped }: { item: ItemInstance; against: ItemInstance | null; equipped: (ItemInstance | null)[] }) {
+export function ComparePanel({ item, against, equipped, slot }: { item: ItemInstance; against: ItemInstance | null; equipped: (ItemInstance | null)[]; slot: SlotId | null }) {
+  const priority = useComparisonPriority();
   const rows = useMemo(() => compareItems(item, against), [item, against]);
   const preview = useMemo(() => (item.category === 'module' ? [] : statPreview(equipped, item, against)), [item, against, equipped]);
   const base = useScore(equipped);
-  const impact = useMemo(() => (item.category === 'module' ? null : swapImpact(equipped, item, against, base)), [item, against, equipped, base]);
+  const targetIndex = slot ? SLOTS.findIndex((s) => s.id === slot) : undefined;
+  const impact = useMemo(() => (item.category === 'module' ? null : swapImpact(equipped, item, against, base, priority, targetIndex)), [item, against, equipped, base, priority, targetIndex]);
   if (item.category === 'module' || !impact) return null;
   const arrow = (v: number) => (v > 0 ? '▲' : v < 0 ? '▼' : '');
   return (

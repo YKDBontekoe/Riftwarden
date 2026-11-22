@@ -8,6 +8,7 @@ import { createRoot } from 'react-dom/client';
 import { Flow } from './core/Flow';
 import { loadSettings } from '@riftwarden/game/core/settings';
 import { createAppRouter, Root } from './ui/router';
+import { loadSurfaceSources } from '@riftwarden/game/visuals/surfaceSources';
 
 // The game: Babylon, Havok, the simulation and the React app. Loaded by main.tsx right after the shell.
 export async function boot(): Promise<void> {
@@ -18,7 +19,10 @@ export async function boot(): Promise<void> {
   const canvas = document.getElementById('game') as HTMLCanvasElement;
   const settings = loadSettings();
   const { engine, backend } = await createEngine(canvas, settings.renderer);
-  const havok = await HavokPhysics({ locateFile: () => havokWasmUrl });
+  const [havok] = await Promise.all([
+    HavokPhysics({ locateFile: () => havokWasmUrl }),
+    Promise.race([loadSurfaceSources(), new Promise((resolve) => setTimeout(resolve, 1800))]),
+  ]);
   // In-world screens and signs are drawn to canvases: make sure the UI fonts are ready (bounded wait).
   await Promise.race([document.fonts?.ready ?? Promise.resolve(), new Promise((r) => setTimeout(r, 2500))]);
   flow = new Flow(engine, canvas, havok, settings);

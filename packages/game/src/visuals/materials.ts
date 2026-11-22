@@ -9,7 +9,7 @@ import { Texture } from '@babylonjs/core/Materials/Textures/texture';
 import { Color3 } from '@babylonjs/core/Maths/math.color';
 import { type Scene } from '@babylonjs/core/scene';
 import type { ArenaLayout } from '@riftwarden/rules/world/layout';
-import { floorSet, type PbrSet, rustSet, wallSet, wearSet, yardDeckSet } from './textures';
+import { floorSet, industrialSet, type PbrSet, rustSet, wallSet, wearSet, yardDeckSet } from './textures';
 
 /**
  * Material palette. Surfaces are metallic/roughness PBR lit by the captured
@@ -131,6 +131,8 @@ export function createPalette(scene: Scene, high: boolean, indoor = false, layou
   const wallTex = wallSet(scene, high, indoor);
   // Outdoors (arena) the paint fails in patches; the HQ is maintained, so only light rust.
   const wear = wearSet(scene, high, indoor ? 0.3 : 0.6);
+  const bareSteel = industrialSet(scene, 'steel', high);
+  bareSteel.normal.level = 0.28;
 
   const floor = pbr(scene, indoor ? 'hqFloor' : 'floor', {
     albedo: indoor ? [0.59, 0.60, 0.54] : [0.80, 0.81, 0.82],
@@ -173,12 +175,13 @@ export function createPalette(scene: Scene, high: boolean, indoor = false, layou
   // Clean hard-surface set: off-white composite panels, dark gunmetal trims, bright machined metal.
   // Outdoors everything is weathered: grey cast concrete and dirty composite, no cream.
   const panel = pbr(scene, 'panel', { albedo: indoor ? [0.88, 0.87, 0.78] : [0.5, 0.52, 0.52], metallic: 0.12, roughness: 1, set: wallTex, clearCoat: indoor ? 0.3 : 0.1 });
-  const concrete = indoor ? panel : pbr(scene, 'castConcrete', { albedo: [0.4, 0.4, 0.39], metallic: 0, roughness: 0.9 });
+  const concrete = indoor ? panel : pbr(scene, 'castConcrete', { albedo: [0.45, 0.45, 0.44], metallic: 0, roughness: 1, set: industrialSet(scene, 'concrete', high) });
+  if (!indoor) concrete.bumpTexture!.level = 0.49;
   const glazing = pbr(scene, 'smokedFacade', { albedo: [0.06, 0.17, 0.20], metallic: 0.67, roughness: 0.17, clearCoat: 0.65 });
   const white = pbr(scene, 'white', { albedo: indoor ? [0.87, 0.86, 0.76] : [0.5, 0.5, 0.48], metallic: 0.08, roughness: 0.65, set: wear, noAlbedo: true, clearCoat: 0.18 });
   // Outdoors: painted steel, cooler and less metallic, so the low warm sun does not turn it tan-brown.
   const graphite = pbr(scene, 'graphite', indoor ? { albedo: [0.155, 0.185, 0.18], metallic: 0.44, roughness: 0.67, set: wear } : { albedo: [0.12, 0.135, 0.145], metallic: 0.22, roughness: 0.7, set: wear });
-  const metal = pbr(scene, 'metal', { albedo: [0.69, 0.74, 0.78], metallic: 0.78, roughness: 0.49, set: wear, noAlbedo: true });
+  const metal = pbr(scene, 'metal', { albedo: [0.78, 0.83, 0.88], metallic: 0.78, roughness: 1, set: bareSteel });
   const enamel = pbr(scene, 'safetyEnamel', { albedo: [0.84, 0.30, 0.14], metallic: 0.12, roughness: 0.65, set: wear });
   const enemyArmor = pbr(scene, 'enemyArmor', { albedo: [0.65, 0.29, 0.15], metallic: 0.24, roughness: 0.66, set: wear, clearCoat: 0.21 });
   const enemyDark = pbr(scene, 'enemyDark', { albedo: [0.12, 0.13, 0.15], metallic: 0.52, roughness: 0.59, set: wear });

@@ -12,7 +12,7 @@ import type { WeaponFamily } from '@riftwarden/rules/data/defs';
 import type { Enemy, EnemyManager } from '../enemies/EnemyManager';
 import type { Turret } from '../defense/Turrets';
 import type { Effects } from '../fx/Effects';
-import type { WeaponFx } from '../fx/WeaponFx';
+import { trackSeeker, type WeaponFx } from '../fx/WeaponFx';
 import { MOVE, type Player } from '../player/Player';
 import { hasLost, LIMB_IDS } from '@riftwarden/rules/enemies/limbs';
 import { UP } from '@riftwarden/rules/roguelite/upgrades';
@@ -109,7 +109,8 @@ export class PlayerCombat {
       }
       const impact = () => this.impactFx(family, out, power);
       if (family === 'swarm') {
-        wfx.seeker(from, out.point, speed, out.target === 'none' ? null : impact);
+        const enemy = out.enemyId === null ? undefined : this.h.enemies.active.find((e) => e.id === out.enemyId);
+        wfx.seeker(from, out.point, speed, out.target === 'none' ? null : (point) => this.impactFx(family, { ...out, point }, power), trackSeeker(enemy, out.point));
       } else if (family === 'plasma') {
         wfx.bolt(from, out.point, speed, 0.34, out.target === 'none' ? null : impact);
       } else if (family === 'rail') {
@@ -293,7 +294,7 @@ export class PlayerCombat {
       const near = d.enemiesNear(point, 14).filter((o) => o !== e).sort((a, b) => Vector3.DistanceSquared(a.pos, point) - Vector3.DistanceSquared(b.pos, point)).slice(0, 2);
       for (const o of near) {
         const c = o.center(new Vector3());
-        this.h.wfx.seeker(point, c, 34, null);
+        this.h.wfx.seeker(point, c, 34, null, trackSeeker(o, c));
         d.deal({ target: o, amount: amount * 0.5, base: amount * 0.5, element: this.h.weapon.def.element, source: src, chain: d.bus.newChain(), point: c, from: point.clone() });
       }
     }

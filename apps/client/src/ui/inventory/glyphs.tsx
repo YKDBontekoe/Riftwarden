@@ -3,12 +3,16 @@ import { RARITIES, rarity } from '@riftwarden/rules/loot/rarity';
 import { type Category, type ItemInstance } from '@riftwarden/rules/loot/types';
 import { fmtNum } from '@riftwarden/rules/combat/stats';
 
+import { fieldArtwork } from '@riftwarden/game/visuals/fieldArtwork';
+
 const CATEGORY_ICON: Record<Category, IconKind> = { weapon: 'rifle', armor: 'plate', shield: 'ring', reactor: 'core', processor: 'chip', accessory: 'gem', module: 'cube', ability: 'gem', ultimate: 'core' };
 
 /** Inline SVG glyph per base icon kind (matches the pickup holograms). */
-export function ItemGlyph({ item, size = 34 }: { item: Pick<ItemInstance, 'defId' | 'rarity' | 'category'>; size?: number }) {
+export function ItemGlyph({ item, size = 34, portrait = true }: { item: Pick<ItemInstance, 'defId' | 'rarity' | 'category' | 'uniqueId'>; size?: number; portrait?: boolean }) {
   const kind: IconKind = baseDef(item.defId)?.icon ?? CATEGORY_ICON[item.category] ?? 'cube';
   const c = rarity(item.rarity).color;
+  const art = portrait && item.uniqueId && fieldArtwork(`unique-${item.uniqueId}`);
+  if (art) return <img className="glyph glyph-art" src={art} width={size} height={size} alt="" decoding="async" draggable={false} style={{ ['--rc' as string]: c }} />;
   return (
     <svg className="glyph" viewBox="0 0 40 40" width={size} height={size} style={{ ['--rc' as string]: c }}>
       <rect x="1" y="1" width="38" height="38" className="gl-bg" />

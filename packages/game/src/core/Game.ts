@@ -36,6 +36,7 @@ import { hintFor, lootTargetInfo, runHud } from '../ui/hudModel';
 import { rollLoot } from '@riftwarden/rules/loot/roll';
 import { gearUniques } from '@riftwarden/rules/loot/uniques';
 import { loadoutScore } from '@riftwarden/rules/loot/loadoutScore';
+import { contactShadow } from '../visuals/grounding';
 import { createSunShadows } from '../arena/shadows';
 import { CORE_BEHAVIORS } from '../enemies/coreBehaviors';
 import { DROP_SOURCES, type DropSourceId } from '@riftwarden/rules/loot/drops';
@@ -331,7 +332,7 @@ export class Game {
     this.moon = moon;
     this.reactorLight = new PointLight('reactorLight', new Vector3(0, 5, 0), scene);
     this.reactorLight.diffuse = new Color3(0.3, 0.9, 1);
-    this.reactorLight.specular = new Color3(0.3, 0.9, 1);
+    this.reactorLight.specular = new Color3(0.12, 0.4, 0.52);
     this.reactorLight.intensity = 3;
     this.reactorLight.range = 30;
 
@@ -342,6 +343,7 @@ export class Game {
     this.arenaVisuals = arena;
     this.atmosphere.adoptPortals();
     this.reactor = buildReactor(scene, this.pal, high);
+    contactShadow(scene, this.layout.reactor.x, this.layout.reactor.z, 9.4, 9.4);
 
     this.player = new Player(scene, this.layout.playerSpawn);
     scene.activeCamera = this.player.camera;

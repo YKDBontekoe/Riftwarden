@@ -3,11 +3,12 @@ import { TutorialCard } from './TutorialCard';
 import { useEffect, useState } from 'react';
 import type { Flow } from '../core/Flow';
 import { RESOURCE_KEYS, type ResourceKey } from '@riftwarden/rules/economy/config';
-import { RES_CLASS, RES_ICON } from './economy';
+import { RES_CLASS } from './economy';
 import { currencyTooltip } from '@riftwarden/rules/economy/currencies';
 import { levelInfo, pointsAt } from '@riftwarden/rules/progression/level';
 import { uiEvents } from '@riftwarden/game/ui/store';
 import { getTier } from '@riftwarden/rules/progression/tiers';
+import { CURRENCY_ICON, FieldIcon } from './FieldIcon';
 import { useSave } from './App';
 import { Banner, Perf } from './Hud';
 import { useHud } from './useHud';
@@ -33,7 +34,7 @@ export function HomeHud({ flow }: { flow: Flow }) {
           <div className="res-line" data-testid="hq-resources">
             {RESOURCE_KEYS.map((k) => (
               <span key={k} className={RES_CLASS[k]} title={currencyTooltip(k)}>
-                <i>{RES_ICON[k]}</i>
+                <i><FieldIcon name={CURRENCY_ICON[k]} /></i>
                 {save.resources[k].toLocaleString()}
               </span>
             ))}
@@ -88,7 +89,7 @@ function Deltas() {
       {list.map((d, i) => (
         <b key={d.id} className={`res-delta ${RES_CLASS[d.k]}`} style={{ top: 46 + i * 18 }}>
           {d.v > 0 ? '+' : '−'}
-          {Math.abs(d.v).toLocaleString()} {RES_ICON[d.k]}
+          {Math.abs(d.v).toLocaleString()} <FieldIcon name={CURRENCY_ICON[d.k]} />
         </b>
       ))}
     </>

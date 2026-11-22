@@ -57,6 +57,14 @@ describe('loadout score', () => {
     expect(swapped([starter, a], a, a).map((i) => i.uid).sort()).toEqual([starter.uid, a.uid].sort());
   });
 
+  it('preserves the primary slot when refitting in place or filling an empty primary slot', () => {
+    const secondary = gen(33);
+    const refit = { ...starter, enhance: 2 };
+    expect(swapped([starter, secondary], refit, starter)).toEqual([refit, secondary]);
+    expect(swapped([null, secondary], refit, null, 0)).toEqual([refit, secondary]);
+    expect(swapped([starter, null], secondary, null, 1)).toEqual([starter, secondary]);
+  });
+
   it('stays finite at extreme item levels', () => {
     const big = gen(41, { level: 1e6, rarity: 'exotic' });
     const s = loadoutScore([big, gen(42, { level: 1e6, category: 'armor', rarity: 'exotic' }), gen(43, { level: 1e6, category: 'shield', rarity: 'exotic' })]);
@@ -79,6 +87,22 @@ describe('loadout score', () => {
     expect(impactBetween(b, mk({ mobility: b.mobility * 0.99 })).verdict).toBe('downgrade');
     expect(impactBetween(b, mk({ dps: b.dps * 1.02, ehp: b.ehp * 0.97 })).verdict).toBe('sidegrade');
     expect(impactBetween(b, mk({ dps: b.dps * 1.5, ehp: b.ehp * 0.97 })).verdict).toBe('upgrade');
+  });
+
+  it('changes tradeoff verdicts with priority while keeping the same raw deltas', () => {
+    const before = loadoutScore([starter]);
+    const after = { ...before, dps: before.dps * 1.12, ehp: before.ehp * 0.9 };
+    const balanced = impactBetween(before, after, 'balanced');
+    const firepower = impactBetween(before, after, 'firepower');
+    const survivability = impactBetween(before, after, 'survivability');
+    expect(balanced).toEqual(impactBetween(before, after));
+    expect(balanced.verdict).toBe('sidegrade');
+    expect(balanced.score).toBeCloseTo(0.019);
+    expect(firepower.verdict).toBe('upgrade');
+    expect(survivability.verdict).toBe('downgrade');
+    expect(firepower.deltas).toEqual(balanced.deltas);
+    expect(survivability.deltas).toEqual(balanced.deltas);
+    expect(impactBetween(before, { ...after, towers: before.towers * 0.88 }, 'towers').verdict).toBe('downgrade');
   });
 
   it('formats percentages with a sign', () => {

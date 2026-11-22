@@ -1,5 +1,5 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import { defaultEntry, findNode, nodePlayable } from '@riftwarden/rules/war/world';
+import { defaultEntry, liveNode, nodePlayable } from '@riftwarden/rules/war/world';
 import { RegionMap, RegionTabs, regionOfNode } from './WarMap';
 import type { Flow } from '../core/Flow';
 import { MAX_PLAYERS, normalizeCode } from '@riftwarden/protocol/protocol';
@@ -10,6 +10,7 @@ import { SLOT_CSS } from '@riftwarden/game/visuals/droneModel';
 import { useSave } from './App';
 import { inviteCode } from './router';
 import { useAccount } from '../account/store';
+import { NamedDrops } from './NamedDrops';
 
 function useNet(flow: Flow): NetState | null {
   const [s, setS] = useState<NetState | null>(flow.net?.state ?? null);
@@ -209,6 +210,7 @@ export function CoopPanel({ flow, compact }: { flow: Flow; compact?: boolean }) 
 function LobbyWar({ flow, host, node, disabled }: { flow: Flow; host: boolean; node: string | null; disabled: boolean }) {
   const wv = useSyncExternalStore(flow.war.store.subscribe, flow.war.store.get);
   const [k, setK] = useState<number | null>(null);
+  const [hover, setHover] = useState<string | null>(null);
   useEffect(() => {
     void flow.war.refresh();
   }, [flow]);
@@ -216,15 +218,17 @@ function LobbyWar({ flow, host, node, disabled }: { flow: Flow; host: boolean; n
   if (!war) return null;
   const chosen = node && nodePlayable(war, node) ? node : defaultEntry(war);
   const region = k ?? regionOfNode(war.seed, chosen, 0);
-  const n = findNode(war.seed, chosen);
+  const n = liveNode(war.seed, war, chosen);
+  const inspected = hover ? liveNode(war.seed, war, hover) : n;
   return (
     <div className="lobby-war" data-testid="lobby-war">
       <div className="lobby-tier">
         <span>DEPLOYMENT SECTOR</span>
         <em>{n ? `${n.region} · ${n.actBoss ? 'capital' : `sector ${n.col + 1}`}` : '—'}{host ? ' · click a sector to choose' : ' · the host chooses'}</em>
       </div>
-      <RegionTabs war={war} k={region} onPick={setK} />
-      <RegionMap war={war} k={region} pickAll={host && !disabled} selected={chosen} onSelect={(id) => flow.net?.send({ t: 'node', node: id })} seenAt={wv.seenAt} />
+      <RegionTabs war={war} k={region} onPick={(next) => { setHover(null); setK(next); }} />
+      <RegionMap war={war} k={region} pickAll={host && !disabled} selected={chosen} onSelect={(id) => flow.net?.send({ t: 'node', node: id })} onHover={setHover} seenAt={wv.seenAt} />
+      {inspected && <NamedDrops node={inspected} />}
     </div>
   );
 }

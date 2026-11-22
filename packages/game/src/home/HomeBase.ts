@@ -1,6 +1,6 @@
 import '../babylonSideEffects';
 import { stationInfo } from '@riftwarden/rules/home/stationInfo';
-import { drawStationScreen } from './stationScreens';
+import { drawStationScreen, loadStationIllustrations } from './stationScreens';
 import { levelForXp } from '@riftwarden/rules/progression/level';
 import { freePoints } from '@riftwarden/rules/progression/skilltree';
 import { placeScan } from '../visuals/scannedProps';
@@ -36,6 +36,7 @@ import { roomStyle, STYLED_ROOMS } from './roomStyle';
 import { RubbleBuilder } from '../visuals/rubble';
 import { buildHqAtmosphere } from './hqAtmosphere';
 import { hqCeilingSet, hqDeckSet, type HqSet, hqWallSet, windowRainNormal } from '../visuals/hqTextures';
+import { contactShadow } from '../visuals/grounding';
 import { StationFocus } from './StationFocus';
 import { AmbientDrones } from './AmbientDrones';
 import { buildNav } from './ambientNav';
@@ -194,7 +195,7 @@ export class HomeBase {
     };
     // Dark graphite deck, mid-grey composite walls, dark ceiling: the light comes from fixtures,
     // accents and screens, not from every surface being white.
-    const floor = surface('hqDeck', deckSet, [0.34, 0.36, 0.38], 0.32, 1.6, 0.25);
+    const floor = surface('hqDeck', deckSet, [0.34, 0.36, 0.38], 0.32, 1.6, 0.08);
     const wall = surface('hqWall', wallSet, [0.6, 0.62, 0.64], 0.28, 1.5, 0.1);
     const ceiling = surface('hqCeiling', ceilSet, [0.2, 0.21, 0.23], 0.25, 2.2, 0);
     const glass = new PBRMaterial('hqGlass', scene);
@@ -292,7 +293,7 @@ export class HomeBase {
     const point = (name: string, pos: [number, number, number], color: [number, number, number], intensity: number, range: number, pulse = false) => {
       const l = new PointLight(name, new Vector3(...pos), scene);
       l.diffuse = new Color3(...color);
-      l.specular = new Color3(...color);
+      l.specular = new Color3(...color).scaleInPlace(0.52);
       l.intensity = intensity;
       l.range = range;
       if (pulse) this.pulseLights.push({ light: l, base: intensity, phase: pos[0] + pos[2] });
@@ -385,11 +386,13 @@ export class HomeBase {
           break;
         case 'command':
           commandTable(ctx, st);
+          contactShadow(this.scene, st.pos[0], st.pos[1], 5.0, 4.1);
           break;
         case 'loadout':
           screen = makeScreen(this.scene, st.id);
           consoleDesk(ctx, st, screen);
           droneCradle(ctx, this.pal, [-18.2, 0]);
+          contactShadow(this.scene, -18.2, 0, 4.2, 3.1);
           break;
         case 'storage':
           screen = makeScreen(this.scene, st.id);
@@ -438,6 +441,7 @@ export class HomeBase {
     }
     if (!furnitureOccupied(ATRIUM_BED, save.base.placeables, save.base.stations)) this.buildAtriumGarden(ctx);
     this.refreshScreens();
+    void loadStationIllustrations(this.rigs.filter((rig) => rig.screen).map((rig) => rig.station.id)).then(() => this.refreshScreens());
   }
 
   private buildAtriumGarden(ctx: EconCtx): void {

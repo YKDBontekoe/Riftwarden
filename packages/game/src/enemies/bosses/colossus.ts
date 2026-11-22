@@ -6,6 +6,7 @@ import { BOSSES, bossPhase, bossScaling } from '@riftwarden/rules/survival/bosse
 import { buildColossus, COLOSSUS_HULL_Y, COLOSSUS_SCALE, type ColossusRig } from '../../visuals/bossModels';
 import type { Behavior, Enemy, EnemyContext } from '../EnemyManager';
 import { turnTowards } from '../EnemyManager';
+import { poseColossusLeg } from './colossusFeet';
 
 type AttackKind = 'volley' | 'stomp' | 'mortar' | 'missiles' | 'summon' | 'beam';
 
@@ -145,20 +146,19 @@ export const colossusBehavior: Behavior = {
     e.root.position.copyFrom(e.pos);
     e.root.rotation.y = e.yaw;
     const stepping = moved > 0.0005;
+    const bob = stepping ? Math.abs(Math.sin(a.walk)) * 0.14 : 0;
+    a.pitch += ((a.atk?.kind === 'stomp' ? -0.16 * a.lift / 0.9 : 0) - a.pitch) * Math.min(1, hdt * 6);
+    rig.hull.position.y = COLOSSUS_HULL_Y + bob + a.lift * 0.5;
+    rig.hull.rotation.x = a.pitch + e.flinch * 0.02;
+    rig.hull.rotation.z = stepping ? Math.sin(a.walk) * 0.025 : 0;
     for (const leg of rig.legs) {
       const off = leg.side === leg.front ? 0 : Math.PI;
       const s = Math.sin(a.walk + off);
       const swing = stepping ? s * 0.22 : 0;
       const lift = stepping ? Math.max(0, Math.cos(a.walk + off)) * 0.18 : 0;
       const stompLift = leg.front > 0 ? a.lift * 0.45 : -a.lift * 0.1;
-      leg.hip.rotation.x = -swing - stompLift;
-      leg.hip.rotation.z = leg.side * lift;
+      poseColossusLeg(leg, -swing - stompLift, leg.side * lift, ctx.layout.boxes);
     }
-    const bob = stepping ? Math.abs(Math.sin(a.walk)) * 0.14 : 0;
-    a.pitch += ((a.atk?.kind === 'stomp' ? -0.16 * a.lift / 0.9 : 0) - a.pitch) * Math.min(1, hdt * 6);
-    rig.hull.position.y = COLOSSUS_HULL_Y + bob + a.lift * 0.5;
-    rig.hull.rotation.x = a.pitch + e.flinch * 0.02;
-    rig.hull.rotation.z = stepping ? Math.sin(a.walk) * 0.025 : 0;
     // Cannons track the drone.
     const pp = ctx.player.position;
     for (const c of rig.cannons) {

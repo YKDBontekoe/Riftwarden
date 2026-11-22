@@ -4,9 +4,11 @@ import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
 import { type Scene } from '@babylonjs/core/scene';
 import type { ArenaLayout, Box } from '@riftwarden/rules/world/layout';
 import { biomeOf } from '@riftwarden/rules/world/biomes';
+import { NullEngine } from '@babylonjs/core/Engines/nullEngine';
 import { prismData } from '../weapons/geometry';
 import type { Palette } from './materials';
 import { loftData, smoothLatheData } from './sculpt';
+import { rimeSurface } from './rimeSurface';
 
 /** What the dressing needs from the arena builder: merged-by-material boxes and meshes. */
 export interface DressingHost {
@@ -24,10 +26,12 @@ type Axis = 'x' | 'y' | 'z';
  */
 export class ArenaDressing {
   private n = 0;
+  private frost: Material | null = null;
 
   constructor(private h: DressingHost, private P: Palette, private L: ArenaLayout) {}
 
   build(): void {
+    if (this.L.biome === 'cryo' && !(this.h.scene.getEngine() instanceof NullEngine)) this.frost = rimeSurface(this.h.scene);
     for (const b of this.L.boxes) {
       if (b.kind === 'wall') this.wall(b);
       else if (b.kind === 'block') this.block(b);
@@ -106,6 +110,13 @@ export class ArenaDressing {
       at(p, 2.42, 0.44, 0.20, 0.14, 0.06, P.enamel);
       const mid = p + 3.7;
       if (mid + 2.65 > e) continue;
+      if (this.frost && bay % 3 !== 2) {
+        const deposit = MeshBuilder.CreatePlane('wallRime', { width: 4.7 + bay % 2, height: 1.16 + bay % 3 * 0.28 }, this.h.scene);
+        if (alongX) deposit.position.set(mid, 0.77, face + s * 0.03);
+        else deposit.position.set(face + s * 0.03, 0.77, mid);
+        deposit.rotation.y = alongX ? 0 : Math.PI / 2;
+        this.h.add(deposit, this.frost, null);
+      }
       if (bay % 3 !== 1) {
         at(mid, 2.87, 0.02, 2.55, 1.76, 0.10, P.graphite, 'wall');
         at(mid, 2.88, 0.13, 2.24, 1.51, 0.045, P.panel, 'wall');
@@ -233,6 +244,15 @@ export class ArenaDressing {
           this.h.box(t - 0.05, 0.02, c - 0.3, t + 0.05, 0.035, c + 0.3, P.metal, null);
           this.h.box(c - 0.3, 0.02, t - 0.05, c + 0.3, 0.035, t + 0.05, P.metal, null);
         }
+        if (this.frost) for (let t = a + 2; t < b - 2; t += 4.9) {
+          const across = MeshBuilder.CreateGround('grateRime', { width: 2.8, height: 0.95 }, this.h.scene);
+          across.position.set(t, 0.04, c);
+          const lengthwise = across.clone('grateRimeTurned');
+          lengthwise.position.set(c, 0.04, t);
+          lengthwise.rotation.y = Math.PI / 2;
+          this.h.add(across, this.frost, null);
+          this.h.add(lengthwise, this.frost, null);
+        }
       }
     }
   }
@@ -266,7 +286,30 @@ export class ArenaDressing {
           face(t, y, width - .18, 1.17, .052, shell);
           face(t, y - .04, width - .40, .78, .093, vents);
           if (biome === 'cryo') {
-            for (let rib = -2; rib <= 2; rib++) face(t + rib * (width - .43) / 5, y - .04, .058, .61, .13, P.metal);
+            if (i % 3 === 0 && width > 1.6) {
+              // Wall-hung coolant manifold in the centre of a recessed service bay.
+              const offset = edge + side * .22;
+              face(t, y - .04, .65, .50, .17, P.steel);
+              face(t, y + .04, .34, .12, .22, P.cyanDim);
+              for (const dy of [-.25, .12]) {
+                const from = t - width * .32;
+                const to = t + width * .32;
+                if (alongX) this.pipe('x', from, to, y + dy, offset, .12, P.steel);
+                else this.pipe('z', from, to, offset, y + dy, .12, P.steel);
+                for (const clamp of [from + .06, to - .06]) face(clamp, y + dy, .15, .21, .19, P.graphite);
+              }
+              face(t, y - .19, .29, .12, .26, P.enamel);
+            } else for (let rib = -2; rib <= 2; rib++) face(t + rib * (width - .43) / 5, y - .04, .058, .61, .13, P.metal);
+            if (this.frost && i % 2 === 0) {
+              const deposit = MeshBuilder.CreatePlane('serviceRime', { width: width - .12, height: .57 }, this.h.scene);
+              if (alongX) deposit.position.set(t, y - .55, edge + side * .15);
+              else deposit.position.set(edge + side * .15, y - .55, t);
+              deposit.rotation.y = alongX ? 0 : Math.PI / 2;
+              this.h.add(deposit, this.frost, null);
+              face(t, y + .21, width * .64, .09, .17, P.cyanDim);
+            }
+          } else if (biome === 'foundry') {
+            for (let slot = -1; slot <= 1; slot++) face(t + slot * width * .24, y - .04, .14, .56, .15, P.orangeDim);
           } else {
             for (const slot of [-1, 0, 1]) face(t, y - .08 + slot * .21, width - .55, .075, .13, P.metal);
           }

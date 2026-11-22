@@ -2,6 +2,7 @@ import type { BiomeId } from '@riftwarden/rules/world/biomes';
 import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture';
 import { Texture } from '@babylonjs/core/Materials/Textures/texture';
 import { type Scene } from '@babylonjs/core/scene';
+import { surfaceGrain } from './surfaceSources';
 
 /**
  * Canvas-generated tileable noise, height-to-normal conversion, PBR texture sets
@@ -124,6 +125,33 @@ function ormPixel(d: Uint8ClampedArray, i: number, ao: number, rough: number, me
   d[i + 3] = 255;
 }
 
+/** Fine material maps for cast aggregate and bare metal. */
+export function industrialSet(scene: Scene, material: 'concrete' | 'steel', high: boolean): PbrSet {
+  const size = high ? 256 : 128;
+  const { c: albedo, ctx: a } = canvas(size);
+  const { c: orm, ctx: o } = canvas(size);
+  const pixels = a.createImageData(size, size);
+  const surface = o.createImageData(size, size);
+  const height = new Float32Array(size * size);
+  const grain = surfaceGrain(material, size);
+  const roughness = material === 'concrete' ? 0.87 : 0.53;
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const j = y * size + x;
+    const detail = grain(x, y) * 0.62 + (vnoise(x / 4, y / 4, size / 4, 213) - 0.5) * 0.13;
+    pixels.data[j * 4] = pixels.data[j * 4 + 1] = pixels.data[j * 4 + 2] = (0.83 + detail * 0.29) * 255;
+    pixels.data[j * 4 + 3] = 255;
+    height[j] = 0.5 + detail * (material === 'steel' ? 0.045 : 0.12);
+    ormPixel(surface.data, j * 4, 1, roughness - detail * 0.26, material === 'steel' ? 1 : 0);
+  }
+  a.putImageData(pixels, 0, 0);
+  o.putImageData(surface, 0, 0);
+  return {
+    albedo: toTexture(`${material}Grain`, albedo, scene, { aniso: 8 }),
+    normal: toTexture(`${material}Relief`, heightToNormal(height, size, 3), scene, { srgb: false }),
+    orm: toTexture(`${material}Surface`, orm, scene, { srgb: false }),
+  };
+}
+
 /** Sample the same puddle field used by the yard's roughness map. */
 export function arenaDeckWetness(x: number, z: number): number {
   const u = (x + 60) / 120;
@@ -141,6 +169,8 @@ export function yardDeckSet(scene: Scene, high: boolean, biome: BiomeId = 'outpo
   const albedo = a.createImageData(size, size);
   const orm = o.createImageData(size, size);
   const height = new Float32Array(size * size);
+  const concreteGrain = surfaceGrain('concrete', size, 16);
+  const frostGrain = surfaceGrain('frost', size, 8);
   // Cracks: jagged random walks drawn once, read back as a mask.
   const { ctx: crackCtx } = canvas(size);
   const cr = rng(2027 ^ seed);
@@ -179,22 +209,24 @@ export function yardDeckSet(scene: Scene, high: boolean, biome: BiomeId = 'outpo
       const oil = smooth(Math.max(0, Math.min(1, (fbm(u, v, 36, 3, 91) - 0.68) * 8))) * 0.8;
       const rustStain = smooth(Math.max(0, Math.min(1, (fbm(u, v, 40, 3, 133) - 0.64) * 6))) * (0.4 + expansionJoint * 0.6);
       const crack = cracks[i + 3] / 255;
-      const base = (0.46 + (grit - 0.5) * 0.16 + (stain - 0.5) * 0.12 - wet * 0.115 - expansionJoint * 0.12) * (1 - oil * 0.45) * (1 - crack * 0.6);
+      const grainDetail = concreteGrain(x, y);
+      const base = (0.46 + (grit - 0.5) * 0.16 + (stain - 0.5) * 0.12 + grainDetail * 0.17 - wet * 0.115 - expansionJoint * 0.12) * (1 - oil * 0.45) * (1 - crack * 0.6);
       let red = base * (1 + rustStain * 0.12);
       let green = base * 0.98 * (1 - rustStain * 0.2);
       let blue = base * 0.945 * (1 - rustStain * 0.42);
-      let relief = 0.5 + (grit - 0.5) * (0.035 - wet * 0.025) - expansionJoint * 0.19 - crack * 0.12;
-      let rough = 0.79 + (grit - 0.5) * 0.11 - wet * 0.66 - oil * 0.42 + crack * 0.1;
+      let relief = 0.5 + (grit - 0.5 + grainDetail * 0.55) * (0.035 - wet * 0.025) - expansionJoint * 0.19 - crack * 0.12;
+      let rough = 0.84 + (grit - 0.5) * 0.11 - grainDetail * 0.15 - wet * 0.63 - oil * 0.4 + crack * 0.1;
       if (biome === 'cryo') {
         // Rime feathers accumulate in the slab joints and around frozen depressions.
         const grain = Math.abs(Math.sin((u + v * 0.64) * 490 + stain * 20));
         const frost = Math.min(1, wet * 0.7 + expansionJoint * 0.4 + Math.max(0, stain + grit * 0.44 - 0.79) * 2);
-        const crystal = frost * (0.63 + 0.37 * grain);
+        const ice = frostGrain(x, y);
+        const crystal = frost * (0.65 + 0.31 * grain + ice * 0.32);
         red += crystal * 0.25;
         green += crystal * 0.35;
         blue += crystal * 0.43;
-        rough += (0.26 + 0.35 * grain - rough) * frost;
-        relief += crystal * 0.13;
+        rough += (0.48 + 0.30 * grain - ice * 0.19 - rough) * frost;
+        relief += (crystal + ice * frost * 0.24) * 0.13;
       } else if (biome === 'foundry') {
         // Cooled clinker collects in broken seams, with a rusty heat halo around it.
         const slag = Math.min(1, crack * 0.85 + Math.max(0, stain - grit * 0.25 - 0.42) * 2.5);
@@ -338,6 +370,7 @@ export function wallSet(scene: Scene, high: boolean, indoor: boolean): PbrSet {
   const rows = 2;
   const PW = S / cols;
   const PH = S / rows;
+  const paintGrain = surfaceGrain('paint', S, 2);
   for (let y = 0; y < S; y++) {
     for (let x = 0; x < S; x++) {
       const u = x / S;
@@ -351,12 +384,12 @@ export function wallSet(scene: Scene, high: boolean, indoor: boolean): PbrSet {
       const streak = vnoise(u * 20, v * 3, 20, 9, 3);
       const runoff = (indoor ? 0.12 : 1) * Math.max(0, streak - 0.43) * Math.max(0, 1 - py / (depth * 0.86));
       const grime = fbm(u, v, 8, 3, 2);
-      const grain = vnoise(u * 192, v * 192, 192, 25) - 0.5;
+      const grain = vnoise(u * 192, v * 192, 192, 25) - 0.5 + paintGrain(x, y) * 2.4;
       const panel = Math.floor(y / PH) * cols + Math.floor(x / PW);
       const tint = [0.04, -0.064, -0.026, 0.07][panel];
       let h = 0.6 + grain * 0.03;
       let alb = 0.72 + tint + (grime - 0.5) * (indoor ? 0.055 : 0.23) + grain * 0.034 - runoff * 0.31;
-      let rough = 0.42 + (grime - 0.5) * 0.12 + Math.max(0, streak - 0.6) * 0.2;
+      let rough = 0.57 + (grime - 0.5) * 0.12 + Math.max(0, streak - 0.6) * 0.2 - paintGrain(x, y) * 0.18;
       if (edge < 2) {
         h = 0.1;
         alb *= 0.35;
@@ -444,13 +477,14 @@ export function wearSet(scene: Scene, high: boolean, rust = 1): PbrSet {
   const { c: oc, ctx: o } = canvas(S);
   const oimg = o.createImageData(S, S);
   const height = new Float32Array(S * S);
+  const paintGrain = surfaceGrain('paint', S, 2);
   for (let y = 0; y < S; y++) {
     for (let x = 0; x < S; x++) {
       const u = x / S;
       const v = y / S;
       const g = fbm(u, v, 6, 5, 31);
       const speck = vnoise(u * 96, v * 96, 96, 4);
-      const brushing = vnoise(u * 7, v * 192, 7, 41, 192) - 0.5;
+      const brushing = vnoise(u * 7, v * 192, 7, 41, 192) - 0.5 + paintGrain(x, y) * 1.25;
       // Light speckle only: dense dark pits read as cork/plywood once warm light hits them.
       const alb = 0.93 + (g - 0.5) * 0.15 + brushing * 0.02 - Math.max(0, speck - 0.8) * 0.18;
       // Rust: blotches where the paint has failed (fbm threshold), pitted inside, with a soft halo.

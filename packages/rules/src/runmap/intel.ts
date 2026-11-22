@@ -6,6 +6,7 @@ import type { ThreatTier } from '../progression/tiers';
 import { BOSSES } from '../survival/bosses';
 import { EVENTS } from '../survival/events';
 import { bossMults, SurvivalPlanner } from '../survival/plan';
+import type { WaveDef } from '../waves/waves';
 import { BIOMES } from '../world/biomes';
 import { actEffects, type RunCarry } from './carry';
 import { ANOMALIES, FORGE, FORGE_IDS, isCombatKind, MODE_EFFECT, type NodeKind, type RunMode, SERVICES, SERVICE_IDS } from './defs';
@@ -13,6 +14,7 @@ import { forgePrice, GUARDIAN, merchantStock } from './hub';
 import { type MapNode, nodeEffect, type SegmentEffect, segmentTier, SEGMENT } from './map';
 import { findNode } from '../war/world';
 import { regionLayout } from '../war/regions';
+import { type NamedDrop, sectorNamedDrops } from './namedDrops';
 
 /**
  * Node intel for the run map (pure): the real expected roster of a combat node (the same planner the arena runs,
@@ -47,6 +49,7 @@ export interface NodeIntel {
   /** Multipliers versus a plain node at the same depth (1 = unchanged). */
   effect: SegmentEffect;
   rewards: RewardLine[];
+  namedDrops: NamedDrop[];
   faction: string;
   signature: string[];
 }
@@ -74,22 +77,24 @@ const cache = new Map<string, NodeIntel>();
 const pct = (x: number): string => `${x >= 1 ? '+' : ''}${Math.round((x - 1) * 100)}%`;
 
 export function nodeIntel(node: MapNode, ctx: IntelContext): NodeIntel {
-  const key = `${ctx.plannerSeed}|${node.id}|${node.kind}|${node.mods.join()}|${ctx.lastWave}|${ctx.tier.id}|${ctx.mode}|${ctx.act.curses.join()}|${ctx.act.blessings.join()}|${Math.round(ctx.dps)}`;
+  const key = `${ctx.plannerSeed}|${node.id}|${node.seed}|${node.biome}|${node.kind}|${node.boss}|${node.actBoss}|${node.anomaly}|${node.mods.join()}|${ctx.lastWave}|${ctx.tier.id}|${ctx.mode}|${ctx.act.curses.join()}|${ctx.act.blessings.join()}|${Math.round(ctx.dps)}`;
   const hit = cache.get(key);
   if (hit) return hit;
   const effect = nodeEffect(node, [...actEffects(ctx.act), MODE_EFFECT[ctx.mode]]);
   const tier = segmentTier(ctx.tier, effect);
   const faction = BIOMES[node.biome].faction;
   const signature = Object.keys(faction.extra) as EnemyKind[];
-  const out: NodeIntel = { roster: [], hostiles: 0, elites: 0, boss: null, events: [], totalHp: 0, peakHp: 0, fireSeconds: null, threat: 1, effect, rewards: [], faction: faction.name, signature: signature.map((k) => ENEMIES[k]?.name ?? k) };
+  const out: NodeIntel = { roster: [], hostiles: 0, elites: 0, boss: null, events: [], totalHp: 0, peakHp: 0, fireSeconds: null, threat: 1, effect, rewards: [], namedDrops: [], faction: faction.name, signature: signature.map((k) => ENEMIES[k]?.name ?? k) };
   const from = ctx.lastWave + 1;
   const to = ctx.lastWave + SEGMENT;
+  const waves: WaveDef[] = [];
   if (isCombatKind(node.kind)) {
     const planner = new SurvivalPlanner(ctx.plannerSeed, tier, faction);
     planner.setSegment({ from, to, boss: node.boss, event: effect.event ?? null, cores: effect.cores });
     const lines = new Map<EnemyKind, RosterLine>();
     for (let n = from; n <= to; n++) {
       const w = planner.compose(n);
+      waves.push(w);
       if (w.plan?.event) out.events.push(EVENTS[w.plan.event].name);
       for (const s of w.spawns) {
         const def = ENEMIES[s.kind];
@@ -117,6 +122,7 @@ export function nodeIntel(node: MapNode, ctx: IntelContext): NodeIntel {
     out.threat = Math.max(1, Math.min(5, Math.round(ctx.dps > 0 ? perWave / 6 : perWave)));
     out.rewards = combatRewards(node, ctx, tier, effect, from, to);
   } else out.rewards = hubRewards(node, from);
+  out.namedDrops = sectorNamedDrops(node, waves);
   if (cache.size > 200) cache.clear();
   cache.set(key, out);
   return out;
@@ -141,7 +147,7 @@ function combatRewards(node: MapNode, ctx: IntelContext, tier: ThreatTier, e: Se
   ];
   if (shards > 0) out.push({ label: 'Rift shards', value: String(shards), bonus: e.shards > 0 || node.actBoss });
   if (node.kind === 'elite') out.push({ label: 'Elite cache', value: `${DROP_SOURCES.eliteCache.rolls}× rare+ item`, bonus: true });
-  if (node.kind === 'boss') out.push({ label: 'Boss loot', value: `${DROP_SOURCES.boss.rolls}× epic+ · ~6% unique`, bonus: true });
+  if (node.boss) out.push({ label: 'Boss loot', value: `${DROP_SOURCES[node.boss].rolls}× epic+`, bonus: true });
   if (node.actBoss) out.push({ label: 'Act chest', value: '3 items (one epic+) · curses lifted', bonus: true });
   if (e.income !== 1) out.push({ label: 'Income', value: pct(e.income), bonus: e.income > 1 });
   if (e.luck !== 1) out.push({ label: 'Loot luck', value: pct(e.luck), bonus: e.luck > 1 });

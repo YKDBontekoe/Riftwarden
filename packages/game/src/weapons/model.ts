@@ -15,6 +15,7 @@ import { boxData, cylProfile, latheData, prismData, tubeProfile } from './geomet
 import { heatMetal, weaponGlow, type WeaponMaterials, weaponMaterials } from './materials';
 import { moduleTypeDef, type ModuleVisual } from '@riftwarden/rules/weapons/modules';
 import { alongX, alongZ, copyVd, cylX, cylZ, lathe, tubeZ } from './shapes';
+import { uniqueHardware } from './signatureHardware';
 import { swarmBarrel, swarmChassis } from './swarmModel';
 
 /**
@@ -68,6 +69,7 @@ export interface ModelOpts {
   mount?: boolean;
   /** Damage element: non-kinetic elements tint the energy parts. */
   element?: string;
+  uniqueId?: string;
 }
 
 export type V3 = [number, number, number];
@@ -856,6 +858,7 @@ export function buildWeaponModel(scene: Scene, build: WeaponBuild, installed: (I
   const front = build.family === 'swarm' ? swarmBarrel(c, mounts) : barrel(c, mounts);
   core(c, mounts);
   cooling(c, mounts);
+  uniqueHardware(c, mounts, front, opts.uniqueId);
   attachments(c, mounts, front);
   moduleHardware(c, mounts, front, installed);
   // Epic and above: machined accent inlays along the shell.

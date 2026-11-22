@@ -605,6 +605,7 @@ export class Flow {
 
   private rebuildHomeKeepScreen(): void {
     const screen = this.home!.screen;
+    const terminal = screen === 'terminal' ? hudStore.get().terminal : null;
     const pos = this.home!.player.position.clone();
     const yaw = this.home!.player.yaw;
     this.buildHome();
@@ -612,7 +613,8 @@ export class Flow {
     h.player.controller.setPosition(pos);
     h.player.yaw = yaw;
     if (screen === 'construct') h.enterConstruction();
-    else h.setScreen(screen);
+    else h.setScreen(terminal ? 'home' : screen);
+    if (terminal) h.openTerminal(terminal);
   }
 
   private async coopRunStart(run: RunStart): Promise<void> {
@@ -912,7 +914,7 @@ export class Flow {
         const cam = sc?.activeCamera;
         if (!sc || !cam) return null;
         const rigs = items.map((it, i) => {
-          const rig = buildWeaponModel(sc, it.build!, it.socketed, { renderingGroupId: 1, name: 'lab', mount: false }, rarity(it.rarity).index);
+          const rig = buildWeaponModel(sc, it.build!, it.socketed, { renderingGroupId: 1, name: 'lab', mount: false, element: it.weapon?.element, uniqueId: it.uniqueId }, rarity(it.rarity).index);
           rig.root.parent = cam;
           const sp = o.spacing ?? 0.3;
           rig.root.position.set(o.x ?? 0, ((items.length - 1) / 2 - i) * sp - 0.04, 1.25);

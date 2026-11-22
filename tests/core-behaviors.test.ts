@@ -9,6 +9,9 @@ import { type EnemyContext, EnemyManager } from '@riftwarden/game/enemies/EnemyM
 import { Kit } from '@riftwarden/game/visuals/kit';
 import { createPalette } from '@riftwarden/game/visuals/materials';
 import { ARENA } from '@riftwarden/rules/world/layout';
+import { colossusBehavior } from '@riftwarden/game/enemies/bosses/colossus';
+import { poseColossusLeg } from '@riftwarden/game/enemies/bosses/colossusFeet';
+import type { ColossusRig } from '@riftwarden/game/visuals/bossModels';
 
 let engine: NullEngine;
 let scene: Scene;
@@ -80,6 +83,26 @@ describe('core enemy behaviours', () => {
   it('a spawn without a registered behaviour fails loudly', () => {
     const bare = new EnemyManager(scene, new Kit(scene), createPalette(scene, false));
     expect(() => bare.spawn('walker', 'north', ARENA, 1, 1, 1, {})).toThrow(/No behaviour registered/);
+  });
+
+  it('tucks a Colossus foot around a cover corner and restores the open-lane pose', () => {
+    mgr.register('colossus', colossusBehavior);
+    const { c } = ctx();
+    const e = mgr.spawn('colossus', 'north', ARENA, 1, 1, 1, { ctx: c });
+    const { legs } = e.ai.rig as ColossusRig;
+    const leg = legs.find((l) => l.side === 1 && l.front === 1)!;
+    e.root.position.setAll(0);
+    e.root.rotation.setAll(0);
+    const foot = () => Vector3.TransformCoordinates(new Vector3(0, -2.75, 0), leg.knee.computeWorldMatrix(true));
+    poseColossusLeg(leg, 0, 0, []);
+    const rest = foot();
+    const edge = rest.x - 0.1;
+    poseColossusLeg(leg, 0, 0, [{ kind: 'block', min: [edge, -1, rest.z - 1], max: [edge + 2, 2, rest.z + 1] }]);
+    expect(foot().x).toBeLessThan(edge - 1);
+    expect(foot().y).toBeGreaterThanOrEqual(rest.y - 0.001);
+    poseColossusLeg(leg, 0, 0, []);
+    expect(Vector3.Distance(foot(), rest)).toBeLessThan(0.001);
+    mgr.despawn(e);
   });
 
   it('a walker follows its lane, reaches the reactor and starts hitting it', () => {

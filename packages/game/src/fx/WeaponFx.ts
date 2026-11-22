@@ -11,6 +11,7 @@ import { VertexData } from '@babylonjs/core/Meshes/mesh.vertexData';
 import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
 import { type Scene } from '@babylonjs/core/scene';
 import type { WeaponFamily } from '@riftwarden/rules/data/defs';
+import type { Enemy } from '../enemies/EnemyManager';
 import { starSprite } from '../visuals/textures';
 
 /**
@@ -92,6 +93,20 @@ function additive(scene: Scene, name: string, c: Color3, tex: DynamicTexture): P
   return m;
 }
 
+type SeekerTarget = (point: Vector3) => boolean;
+
+/** Keep the launch hit offset as the target moves, and release a dead or recycled enemy. */
+export function trackSeeker(enemy: Enemy | undefined, hit: Vector3): SeekerTarget | null {
+  if (!enemy?.alive) return null;
+  const generation = enemy.gen;
+  const offset = hit.subtract(enemy.center(new Vector3()));
+  return (point) => {
+    if (!enemy.alive || enemy.gen !== generation) return false;
+    enemy.center(point).addInPlace(offset);
+    return true;
+  };
+}
+
 interface Bolt {
   glow: Mesh;
   core: Mesh;
@@ -102,7 +117,8 @@ interface Bolt {
   width: number;
   speed: number;
   active: boolean;
-  arrive: (() => void) | null;
+  arrive: ((point: Vector3) => void) | null;
+  target: SeekerTarget | null;
   /** Swarm seeker: quadratic curve start / control / end and progress (0..1) over `dur` seconds. */
   curve: boolean;
   a: Vector3;
@@ -169,7 +185,7 @@ export class WeaponFx {
       glow.isPickable = core.isPickable = false;
       glow.setEnabled(false);
       core.setEnabled(false);
-      this.bolts.push({ glow, core, pos: new Vector3(), dir: new Vector3(), left: 0, travelled: 0, width: 0.3, speed: 0, active: false, arrive: null, curve: false, a: new Vector3(), c: new Vector3(), b: new Vector3(), u: 0, dur: 1 });
+      this.bolts.push({ glow, core, pos: new Vector3(), dir: new Vector3(), left: 0, travelled: 0, width: 0.3, speed: 0, active: false, arrive: null, target: null, curve: false, a: new Vector3(), c: new Vector3(), b: new Vector3(), u: 0, dur: 1 });
     }
     for (let i = 0; i < 5; i++) {
       const coreMat = additive(scene, 'railCore', new Color3(), tex);
@@ -245,15 +261,15 @@ export class WeaponFx {
 
   /** Plasma bolt from the muzzle to the hit point; `arrive` runs when it gets there. */
   bolt(from: Vector3, to: Vector3, speed: number, width: number, arrive: (() => void) | null): void {
-    const b = this.bolts.find((x) => !x.active) ?? this.bolts[0];
-    if (b.active && b.arrive) b.arrive();
-    const d = TMP.copyFrom(to).subtractInPlace(from);
-    const dist = d.length();
+    const dist = Vector3.Distance(from, to);
     if (dist < 0.05) {
       arrive?.();
       return;
     }
-    b.dir.copyFrom(d).scaleInPlace(1 / dist);
+    const b = this.bolts.find((x) => !x.active) ?? this.bolts[0];
+    if (b.active) b.arrive?.(b.b);
+    b.b.copyFrom(to);
+    b.dir.copyFrom(to).subtractInPlace(from).scaleInPlace(1 / dist);
     b.pos.copyFrom(from);
     b.left = dist;
     b.travelled = 0.3;
@@ -261,6 +277,7 @@ export class WeaponFx {
     b.speed = speed;
     b.active = true;
     b.arrive = arrive;
+    b.target = null;
     b.curve = false;
     b.glow.setEnabled(true);
     b.core.setEnabled(true);
@@ -271,15 +288,15 @@ export class WeaponFx {
    * Swarm seeker drone: flies a curved path (kicked out sideways / up from the pod, then homing in) from the muzzle
    * to the struck point; `arrive` runs on contact. Damage was already resolved at launch.
    */
-  seeker(from: Vector3, to: Vector3, speed: number, arrive: (() => void) | null): void {
-    const b = this.bolts.find((x) => !x.active) ?? this.bolts[0];
-    if (b.active && b.arrive) b.arrive();
-    const d = TMP.copyFrom(to).subtractInPlace(from);
-    const dist = d.length();
+  seeker(from: Vector3, to: Vector3, speed: number, arrive: ((point: Vector3) => void) | null, target: SeekerTarget | null = null): void {
+    const dist = Vector3.Distance(from, to);
     if (dist < 0.05) {
-      arrive?.();
+      arrive?.(to);
       return;
     }
+    const b = this.bolts.find((x) => !x.active) ?? this.bolts[0];
+    if (b.active) b.arrive?.(b.b);
+    const d = TMP.copyFrom(to).subtractInPlace(from);
     // Control point: a third of the way out, thrown sideways and up by up to 35% of the distance.
     const side = TMP2.set(-d.z, 0, d.x).normalize().scaleInPlace((Math.random() - 0.5) * 0.7 * Math.min(dist, 30));
     b.a.copyFrom(from);
@@ -296,6 +313,7 @@ export class WeaponFx {
     b.curve = true;
     b.active = true;
     b.arrive = arrive;
+    b.target = target;
     b.glow.setEnabled(true);
     b.core.setEnabled(true);
     this.placeBolt(b);
@@ -303,15 +321,16 @@ export class WeaponFx {
 
   /** Advance a seeker along its curve; true when it arrived. */
   private stepSeeker(b: Bolt, dt: number): boolean {
+    if (b.target && !b.target(b.b)) b.target = null;
     b.u = Math.min(1, b.u + dt / b.dur);
     const u = b.u;
     const k = 1 - u;
     const x = k * k * b.a.x + 2 * k * u * b.c.x + u * u * b.b.x;
     const y = k * k * b.a.y + 2 * k * u * b.c.y + u * u * b.b.y;
     const z = k * k * b.a.z + 2 * k * u * b.c.z + u * u * b.b.z;
-    b.dir.set(x - b.pos.x, y - b.pos.y, z - b.pos.z);
-    const step = b.dir.length();
-    if (step > 1e-5) b.dir.scaleInPlace(1 / step);
+    const delta = TMP.set(x - b.pos.x, y - b.pos.y, z - b.pos.z);
+    const step = delta.length();
+    if (step > 1e-5) b.dir.copyFrom(delta).scaleInPlace(1 / step);
     b.pos.set(x, y, z);
     b.travelled = Math.min(1.4, b.travelled + step);
     return u >= 1;
@@ -416,7 +435,8 @@ export class WeaponFx {
         b.core.setEnabled(false);
         const fn = b.arrive;
         b.arrive = null;
-        fn?.();
+        b.target = null;
+        fn?.(b.b);
         continue;
       }
       this.placeBolt(b);
@@ -446,6 +466,7 @@ export class WeaponFx {
     for (const b of this.bolts) {
       b.active = false;
       b.arrive = null;
+      b.target = null;
       b.glow.setEnabled(false);
       b.core.setEnabled(false);
     }

@@ -3,6 +3,7 @@ import { PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial';
 import { Texture } from '@babylonjs/core/Materials/Textures/texture';
 import { Color3 } from '@babylonjs/core/Maths/math.color';
 import { type Scene } from '@babylonjs/core/scene';
+import { surfaceGrain } from '../visuals/surfaceSources';
 import { canvas, fbm, heightToNormal, rng, toTexture, vnoise } from '../visuals/textures';
 import type { Finish } from '@riftwarden/rules/weapons/build';
 
@@ -18,6 +19,7 @@ export interface WeaponMaterials {
   dark: PBRMaterial;
   polymer: PBRMaterial;
   copper: PBRMaterial;
+  frostCeramic: PBRMaterial;
   glass: PBRMaterial;
   markings: PBRMaterial;
   shell(f: Finish): PBRMaterial;
@@ -56,12 +58,13 @@ function micro(scene: Scene): Micro {
     scratch.stroke();
   }
   const scratches = scratch.getImageData(0, 0, size, size).data;
+  const steel = surfaceGrain('steel', size);
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const u = x / size;
       const v = y / size;
       const grain = fbm(u, v, 8, 3, 77) - 0.5;
-      const brush = vnoise((u + v) * 5, v * 112, 5, 12, 112) - 0.5;
+      const brush = vnoise((u + v) * 5, v * 112, 5, 12, 112) - 0.5 + steel(x, y) * 0.6;
       const rub = Math.max(0, fbm(u, v, 5, 3, 40) - 0.55);
       const i = (y * size + x) * 4;
       const scrape = scratches[i + 3] / 255;
@@ -198,6 +201,7 @@ export function weaponMaterials(scene: Scene): WeaponMaterials {
     dark: surface(scene, m, 'wpnDark', [0.03, 0.031, 0.035], 0.85, 0.4),
     polymer: surface(scene, m, 'wpnPolymer', [0.028, 0.028, 0.03], 0, 0.82),
     copper: surface(scene, m, 'wpnCopper', [0.62, 0.32, 0.17], 0.73, 0.43),
+    frostCeramic: surface(scene, m, 'wpnFrostCeramic', [0.68, 0.82, 0.9], 0.06, 0.73),
     glass,
     markings: markingMaterial(scene),
     shell(f) {

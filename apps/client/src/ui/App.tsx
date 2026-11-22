@@ -25,6 +25,8 @@ import { DevPanel } from './DevPanel';
 import { RunMapScreen, StationScreen } from './RunMap';
 import { milestoneLabel } from '@riftwarden/rules/survival/records';
 import { EVENTS, type EventId } from '@riftwarden/rules/survival/events';
+import { FieldArt } from './FieldArt';
+import { FieldIcon } from './FieldIcon';
 
 interface Props {
   getFlow: () => Flow | null;
@@ -143,6 +145,8 @@ function Controls() {
   );
 }
 
+const MENU_ICON = { briefing: 'briefing', 'co-op': 'coop', account: 'drone', settings: 'settings', controls: 'controls' } as const;
+
 function MainMenu({ flow }: { flow: Flow }) {
   const [tab, setTab] = useMenuSection();
   const save = useSave(flow);
@@ -163,7 +167,7 @@ function MainMenu({ flow }: { flow: Flow }) {
         <nav className="menu-nav" aria-label="Main menu">
           {(Object.keys(MENU_SECTIONS) as MenuSection[]).map((section) => (
             <button key={section} aria-pressed={tab === section} onClick={() => setTab(tab === section ? null : section)}>
-              {MENU_SECTIONS[section].toUpperCase()}
+              <FieldIcon name={MENU_ICON[section]} /> {MENU_SECTIONS[section].toUpperCase()}
             </button>
           ))}
         </nav>
@@ -179,14 +183,14 @@ function MainMenu({ flow }: { flow: Flow }) {
       ) : (
         <section className="menu-sheet" aria-label={MENU_SECTIONS[tab]}>
           <div className="menu-sheet-head"><h2>{MENU_SECTIONS[tab]}</h2><button aria-label="Back to main menu" onClick={() => setTab(null)}>×</button></div>
-          {tab === 'briefing' && <ol className="m-0 py-0 pr-0 pl-[22px]">
+          {tab === 'briefing' && <><FieldArt name="hub-reactor" className="menu-brief-art" /><ol className="m-0 py-0 pr-0 pl-[22px]">
             {BRIEFING.map(([title, detail]) => (
               <li key={title} className="mt-[15px] pl-[6px] marker:font-mono marker:text-[12px] marker:text-orange">
                 <b className="text-[15px]">{title}</b>
                 <p className="m-0 mt-[5px] text-[14px] leading-[1.5] text-muted">{detail}</p>
               </li>
             ))}
-          </ol>}
+          </ol></>}
           {tab === 'co-op' && <CoopPanel flow={flow} compact />}
           {tab === 'account' && <AccountPanel />}
           {tab === 'settings' && <SettingsPanel flow={flow} />}
@@ -393,9 +397,9 @@ export function RunSummary({ result, extra }: { result: RunResult; extra?: { tur
       {!sv?.dev && (result.records?.length ?? 0) > 0 && <div className="record-badge"><strong>Tier {tier.roman} personal record{result.records!.length > 1 ? 's' : ''}</strong> {result.records!.join(' · ')}</div>}
       {!sv?.dev && !result.records && result.newRecord && <div className="record-badge">New personal record · Tier {tier.roman}</div>}
       <div className="result-headline">
-        <div><b>{result.wavesCleared}</b><span>Waves cleared</span></div>
-        <div><b>{result.kills.toLocaleString()}</b><span>Hostiles destroyed</span></div>
-        <div><b>{fmtTime(result.duration)}</b><span>Time deployed</span></div>
+        <div><b>{result.wavesCleared}</b><span><FieldIcon name="wave" /> Waves cleared</span></div>
+        <div><b>{result.kills.toLocaleString()}</b><span><FieldIcon name="enemy" /> Hostiles destroyed</span></div>
+        <div><b>{fmtTime(result.duration)}</b><span><FieldIcon name="clock" /> Time deployed</span></div>
       </div>
       <table className="result-ledger">
         <thead><tr><th scope="col">Cargo</th><th scope="col">Secured</th><th scope="col">Lost</th></tr></thead>
@@ -458,11 +462,12 @@ function DefeatScreen({ flow }: { flow: Flow }) {
   return (
     <div className="screen dim defeat">
       <div className="modal wide panel-frame red">
-        <div className="defeat-title">
-          Reactor lost
-        </div>
-        <div className="defeat-sub">
-          Containment failed on wave {result.finalWave}. Your banked cargo and starting equipment are safe.
+        <div className="operation-heading-art">
+          <FieldArt name="operation-defeat" className="operation-art" />
+          <div className="defeat-title">Reactor lost</div>
+          <div className="defeat-sub">
+            Containment failed on wave {result.finalWave}. Your banked cargo and starting equipment are safe.
+          </div>
         </div>
         {!result.survival?.dev && <XpGain gained={(result.xpSecured ?? 0) + (result.xpKept ?? 0)} totalAfter={save.progress.xp} label={`WARDEN XP · ${Math.round(XP.keepOnLoss * 100)}% OF UNSECURED XP KEPT`} />}
         <RunSummary result={result} extra={stats} />
@@ -485,10 +490,13 @@ function SummaryScreen({ flow }: { flow: Flow }) {
   return (
     <div className="screen dim summary-screen">
       <div className="modal wide panel-frame">
-        <div className="cp-kicker">{extracted ? 'OPERATION COMPLETE' : 'OPERATION ABANDONED'}</div>
-        <div className="cp-title">{extracted ? 'Drone recovered' : 'Run forfeited'}</div>
-        <div className="cp-sub">
-          {extracted ? 'Checkpoint extraction successful.' : 'Unsecured cargo was lost when you left the arena.'} HQ reserve: <b className="o">{save.resources.salvage} salvage</b> · <b className="c">{save.resources.credits} credit{save.resources.credits === 1 ? '' : 's'}</b> · <b className="v">{save.resources.components} component{save.resources.components === 1 ? '' : 's'}</b>. Merchants have restocked.
+        <div className="operation-heading-art">
+          <FieldArt name={extracted ? 'operation-recovery' : 'operation-defeat'} className="operation-art" />
+          <div className="cp-kicker">{extracted ? 'OPERATION COMPLETE' : 'OPERATION ABANDONED'}</div>
+          <div className="cp-title">{extracted ? 'Drone recovered' : 'Run forfeited'}</div>
+          <div className="cp-sub">
+            {extracted ? 'Checkpoint extraction successful.' : 'Unsecured cargo was lost when you left the arena.'} HQ reserve: <b className="o">{save.resources.salvage} salvage</b> · <b className="c">{save.resources.credits} credit{save.resources.credits === 1 ? '' : 's'}</b> · <b className="v">{save.resources.components} component{save.resources.components === 1 ? '' : 's'}</b>. Merchants have restocked.
+          </div>
         </div>
         {!result.survival?.dev && <XpGain gained={(result.xpSecured ?? 0) + (result.xpKept ?? 0)} totalAfter={save.progress.xp} />}
         <RunSummary result={result} />

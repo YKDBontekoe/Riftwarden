@@ -541,7 +541,7 @@ export class ServerGame extends Game {
     this.as(a, () => {
       this.director.bus.emit({ type: 'fire', chain: this.director.bus.newChain(), source: { kind: 'weapon', id: def.family }, value: 1 });
       const end = s.hits.length ? [s.hits[0][2], s.hits[0][3], s.hits[0][4]] : arr(o.add(new Vector3(s.d[0], s.d[1], s.d[2]).scale(Math.min(range, 60))));
-      if (def.family !== 'beam' || (this.clock * 15) % 3 < 1) this.rec.pushExcept(['shot', a.id, def.family, end], a.id);
+      if (def.family !== 'swarm' && (def.family !== 'beam' || (this.clock * 15) % 3 < 1)) this.rec.pushExcept(['shot', a.id, def.family, end], a.id);
       let n = 0;
       for (const h of s.hits) {
         if (n >= maxHits) break;
@@ -552,6 +552,7 @@ export class ServerGame extends Game {
           this.reject('hits', bad ?? 'hit-unknown');
           continue;
         }
+        if (def.family === 'swarm') this.rec.pushExcept(['shot', a.id, def.family, arr(point), e.id], a.id);
         let amount = dmg;
         if (def.family === 'beam' && def.mechanism !== 'pulse') {
           // Server-side ramp: sustained contact on one target.
@@ -571,6 +572,7 @@ export class ServerGame extends Game {
         dmg *= a.inventory.equipped(a.activeWeapon)?.signature === 'u_ninthgate' ? 1.2 : 0.85;
         n++;
       }
+      if (def.family === 'swarm' && !n) this.rec.pushExcept(['shot', a.id, def.family, end], a.id);
     });
   }
 

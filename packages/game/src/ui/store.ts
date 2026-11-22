@@ -129,6 +129,7 @@ export interface LootTargetInfo {
   rarity: string;
   level: number;
   category: string;
+  uniqueId?: string;
   expiresAfterWave: number;
   expiring: boolean;
   cargoFull: boolean;

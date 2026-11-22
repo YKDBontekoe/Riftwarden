@@ -1,6 +1,7 @@
 import type { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture';
 import type { Scene } from '@babylonjs/core/scene';
 import { canvas, fbm, heightToNormal, rng, toTexture, vnoise } from './textures';
+import { surfaceGrain } from './surfaceSources';
 
 /**
  * Headquarters surface sets (clean high-tech interior). Procedural like the arena sets,
@@ -104,6 +105,7 @@ export function hqDeckSet(scene: Scene, high: boolean): HqSet {
   const { px, finish } = buffers(size);
   const random = rng(731);
   const tint = Array.from({ length: 8 }, () => (random() - 0.5) * 0.05);
+  const steelGrain = surfaceGrain('steel', size, 4);
   for (let y = 0; y < size; y++) {
     const v = (y + 0.5) / size;
     for (let x = 0; x < size; x++) {
@@ -123,12 +125,12 @@ export function hqDeckSet(scene: Scene, high: boolean): HqSet {
         sub = Math.floor(pv * 2) * 2 + Math.floor(pu * 2);
       }
       const edge = Math.min(eu, ev);
-      const brushed = vnoise(u * 6, v * 420, 6, 17, 420) - 0.5;
+      const brushed = vnoise(u * 6, v * 420, 6, 17, 420) - 0.5 + steelGrain(x, y) * 1.6;
       const mottle = fbm(u, v, 6, 3, 23) - 0.5;
       const speck = vnoise(u * 300, v * 300, 300, 5);
       let base = 0.66 + tint[plate] + (plate === 1 ? tint[4 + sub] : 0) + brushed * 0.035 + mottle * 0.05 - Math.max(0, speck - 0.82) * 0.25;
-      let rough = 0.42 + mottle * 0.12 - brushed * 0.08;
-      let metal = 0.55;
+      let rough = 0.55 + mottle * 0.18 - brushed * 0.10;
+      let metal = 0.43;
       let ao = 1;
       let h = 0.6 + brushed * 0.01;
       let er = 0, eg = 0, eb = 0;
@@ -196,6 +198,7 @@ export function hqDeckSet(scene: Scene, high: boolean): HqSet {
 export function hqWallSet(scene: Scene, high: boolean): HqSet {
   const size = high ? 1024 : 512;
   const { px, finish } = buffers(size);
+  const paintGrain = surfaceGrain('paint', size, 2);
   for (let y = 0; y < size; y++) {
     const v = (y + 0.5) / size;
     for (let x = 0; x < size; x++) {
@@ -208,7 +211,7 @@ export function hqWallSet(scene: Scene, high: boolean): HqSet {
       const eu = Math.min(pu, 1 - pu);
       const ev = Math.min(pv, 1 - pv) * 0.5;
       const edge = Math.min(eu, ev);
-      const grain = vnoise(u * 220, v * 220, 220, 7) - 0.5;
+      const grain = vnoise(u * 220, v * 220, 220, 7) - 0.5 + paintGrain(x, y) * 1.6;
       const cloud = fbm(u, v, 4, 3, 41) - 0.5;
       let base = 0.86 + grain * 0.012 + cloud * 0.025 + [0.01, -0.02, 0, -0.01][panel];
       let rough = 0.55 + cloud * 0.06;
