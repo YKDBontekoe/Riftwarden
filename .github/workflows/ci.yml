@@ -1,8 +1,8 @@
 name: CI
 
 on:
+  # Validate stacked PRs as well as PRs that directly target main.
   pull_request:
-    branches: [main]
   push:
     branches: [main]
   workflow_dispatch:
@@ -57,7 +57,17 @@ jobs:
           # The production client talks to the gateway on its own host (Cloudflare Pages serves the client).
           VITE_API_URL: ${{ github.ref == 'refs/heads/main' && 'https://api.riftwarden.ykdbonte.dev' || '' }}
       - if: github.ref == 'refs/heads/main'
-        run: printf '%s\n' "$GITHUB_SHA" > dist/build.txt
+        name: Stamp the release version and commit
+        run: |
+          printf '%s\n' "$GITHUB_SHA" > dist/build.txt
+          node --input-type=module -e '
+            import { readFileSync, writeFileSync } from "node:fs";
+            const { version } = JSON.parse(readFileSync("package.json", "utf8"));
+            if (!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(version)) {
+              throw new Error("Use a major.minor.patch release version in package.json");
+            }
+            writeFileSync("dist/version.json", JSON.stringify({ version, commit: process.env.GITHUB_SHA }) + "\n");
+          '
       - if: github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -121,7 +131,11 @@ jobs:
           RIFT_TEST_REDIS_URL: redis://127.0.0.1:${{ job.services.redis.ports['6379'] }}
 
   e2e:
-    name: Browser suites
+    name: Browser suites (${{ matrix.suite }})
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [accounts-and-sync, run-map, construction-and-coop]
     # Playwright 1.55 supports Ubuntu 24.04, while ubuntu-latest now uses 26.04.
     runs-on: ubuntu-24.04
     timeout-minutes: 45
@@ -176,20 +190,35 @@ jobs:
           playwright install --with-deps chromium
           echo "NODE_PATH=$(npm root --global)" >> "$GITHUB_ENV"
       # WebGPU shaders compile with the browser's WGSL compiler (headless cannot present WebGPU frames).
-      - run: node --import tsx scripts/check-wgsl.mjs
-      # Accounts, offline sync, the run map / war, and real browser co-op (headless SwiftShader).
-      - run: node --import tsx scripts/with-stack.mjs node scripts/e2e-accounts.cjs
-      - run: node --import tsx scripts/with-stack.mjs node scripts/e2e-sync.cjs
-      - run: node --import tsx scripts/with-stack.mjs node scripts/e2e-runmap.cjs
+      - if: matrix.suite == 'accounts-and-sync'
+        run: node --import tsx scripts/check-wgsl.mjs
+      - if: matrix.suite == 'accounts-and-sync'
+        run: node --import tsx scripts/with-stack.mjs node scripts/e2e-accounts.cjs
+      - if: matrix.suite == 'accounts-and-sync'
+        run: node --import tsx scripts/with-stack.mjs node scripts/e2e-sync.cjs
+      - if: matrix.suite == 'run-map'
+        run: node --import tsx scripts/with-stack.mjs node scripts/e2e-runmap.cjs
       # Section X starts its own stack on :8090; it only needs the dev server.
-      - run: node --import tsx scripts/with-stack.mjs --vite-only node --import tsx scripts/e2e-construction-coop.cjs X
+      - if: matrix.suite == 'construction-and-coop'
+        run: node --import tsx scripts/with-stack.mjs --vite-only node --import tsx scripts/e2e-construction-coop.cjs X
       - if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: e2e-screenshots
+          name: browser-failure-${{ matrix.suite }}
           path: e2e-out/
           if-no-files-found: ignore
           retention-days: 7
+
+  browser-checks:
+    name: Browser checks
+    if: ${{ always() }}
+    needs: [e2e]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - env:
+          BROWSER_RESULT: ${{ needs.e2e.result }}
+        run: test "$BROWSER_RESULT" = success
 
   deploy:
     name: Deploy to production
@@ -198,7 +227,7 @@ jobs:
       github.ref == 'refs/heads/main' &&
       github.actor == 'YKDBontekoe' &&
       github.triggering_actor == 'YKDBontekoe'
-    needs: [build-and-test, rust, e2e]
+    needs: [build-and-test, rust, browser-checks]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment:
@@ -223,8 +252,11 @@ jobs:
           package-manager-cache: false
       - name: Build the images
         run: |
+          version=$(node -p "require('./dist/version.json').version")
+          test "$(node -p "require('./dist/version.json').commit")" = "$GITHUB_SHA"
           for image in gateway worker; do
             docker build --file "deploy/$image.Dockerfile" --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+              --label "org.opencontainers.image.version=$version" \
               --tag "$REGISTRY/riftwarden-$image:$GITHUB_SHA" .
           done
       - name: Smoke-test the stack

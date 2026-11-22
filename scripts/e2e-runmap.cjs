@@ -2,7 +2,7 @@
 // D hub stations (merchant / forge / rest / anomaly / vault), E extract + records + codex, F resume after reload,
 // G null field + act boss, V screenshots.
 //   node scripts/e2e-runmap.cjs [A,B,...]   (dev server on :5173)
-const { stats, check, sectionFilter, S, ev, waitFor, launch, shot } = require('./lib/harness.cjs');
+const { stats, check, sectionFilter, S, ev, waitFor, launch, shot, saveBrowserFailure } = require('./lib/harness.cjs');
 
 const want = sectionFilter();
 
@@ -63,7 +63,7 @@ async function forceNext(p, kind, anomaly) {
 }
 
 (async () => {
-  const { b, p, errs } = await launch({ query: '&map' });
+  const { b, ctx, p, errs } = await launch({ query: '&map', diagnostics: 'run-map' });
   const t0 = Date.now();
   try {
     await ev(p, () => window.__rift.flow.enterHq());
@@ -407,9 +407,11 @@ async function forceNext(p, kind, anomaly) {
     check('Z no runtime errors', bad.length === 0, bad.slice(0, 5).join(' | '));
   } catch (e) {
     console.log('FAIL  exception', e.stack || e);
+    errs.push(e.stack || String(e));
     stats.failures++;
   } finally {
     console.log(`\n${stats.passes} passed, ${stats.failures} failed (${Math.round((Date.now() - t0) / 1000)} s)`);
+    if (stats.failures) await saveBrowserFailure(ctx, p, errs, 'run-map');
     await b.close();
     process.exit(stats.failures ? 1 : 0);
   }

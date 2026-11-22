@@ -26,6 +26,11 @@ so running co-op operations finish on the old version (up to `DRAIN_TIMEOUT`, 30
 
 ## Operating
 
+The root `package.json` is the release version source. Bump `major.minor.patch` in the release PR and use the
+owner-only production workflow on `main`. Pages publishes `/version.json` with the release version and commit,
+and both images carry the same OCI version and revision labels. The deploy and health checks identify the exact
+build by commit. After production verification, create the GitHub release tag `v<version>` at that deployed commit.
+
 | Task | Command (in `~/stacks/riftwarden`) |
 | --- | --- |
 | Status of sim workers and rooms | `docker exec riftwarden-gateway riftwarden-gateway admin status` |
