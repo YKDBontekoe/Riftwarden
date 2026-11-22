@@ -211,14 +211,19 @@ jobs:
 
   browser-checks:
     name: Browser checks
-    if: ${{ always() }}
+    # A newer PR commit can cancel the run. Still report failures from completed suites.
+    if: ${{ !cancelled() }}
     needs: [e2e]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - env:
           BROWSER_RESULT: ${{ needs.e2e.result }}
-        run: test "$BROWSER_RESULT" = success
+        run: |
+          if [[ "$BROWSER_RESULT" != success ]]; then
+            echo "::error::Browser suites concluded with: $BROWSER_RESULT"
+            exit 1
+          fi
 
   deploy:
     name: Deploy to production
