@@ -39,7 +39,7 @@ const files = (dir, re, out = []) => {
 
 const TOKENS = { 'var(--cyan)': 'cyan', 'var(--cyan-2)': 'cyan-2', 'var(--cyan-dim)': 'cyan-dim', 'var(--orange)': 'orange', 'var(--amber)': 'amber', 'var(--red)': 'red', 'var(--violet)': 'violet', 'var(--white)': 'ink', 'var(--muted)': 'muted', 'var(--faint)': 'faint', 'var(--glass)': 'glass', 'var(--line)': 'line' };
 const FONTS = { 'var(--font)': 'font-sans', 'var(--display)': 'font-display', 'var(--mono)': 'font-mono' };
-const arb = (v) => v.trim().replace(/_/g, '\\_').replace(/\s*,\s*/g, ',').replace(/\s+/g, '_');
+const arb = (v) => v.trim().replace(/\s*,\s*/g, ',').replace(/_|\s+/g, (part) => part === '_' ? '\\_' : '_');
 const KEYWORD = {
   display: { block: 'block', 'inline-block': 'inline-block', inline: 'inline', flex: 'flex', 'inline-flex': 'inline-flex', grid: 'grid', 'inline-grid': 'inline-grid', none: 'hidden', contents: 'contents' },
   position: { absolute: 'absolute', relative: 'relative', fixed: 'fixed', sticky: 'sticky', static: 'static' },
@@ -149,7 +149,8 @@ function classSpans(text) {
   for (const m of text.matchAll(/\.className\s*=\s*([^;\n]+)/g)) spans.push([m.index + m[0].length - m[1].length, m.index + m[0].length]);
   return spans;
 }
-const tokenRe = (c) => new RegExp(`(?<![\\w-])${c.replace(/[-]/g, '\\-')}(?![\\w-])`, 'g');
+const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const tokenRe = (c) => new RegExp(`(?<![\\w-])${escapeRegex(c)}(?![\\w-])`, 'g');
 
 function plan(c) {
   if (only && !only.has(c)) return null;
@@ -159,6 +160,8 @@ function plan(c) {
   const rule = simple.get(c);
   if (!rule || mentions.get(c) !== 1) return null;
   if (rule.nodes.some((n) => n.type !== 'decl')) return null;
+  // CSS escapes need to survive both the Tailwind arbitrary-value parser and the source string literal.
+  if (rule.nodes.some((d) => d.value.includes('\\'))) return null;
   const re = tokenRe(c);
   let inClass = 0;
   for (const s of sources) {
@@ -185,7 +188,7 @@ function plan(c) {
     }
   }
   if (!inClass) return null;
-  const marker = new RegExp(`['"\`.\\s]${c.replace(/-/g, '\\-')}(?![\\w-])`).test(
+  const marker = new RegExp(`['"\`.\\s]${escapeRegex(c)}(?![\\w-])`).test(
     markerText.replace(/className=(?:"[^"]*"|\{[^}]*\})/g, ''),
   );
   const utils = rule.nodes.map((d) => utility(d.prop, d.value, d.important));

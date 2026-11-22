@@ -5,6 +5,8 @@
 const { stats, check, sectionFilter, S, ev, waitFor, launch, shot, saveBrowserFailure } = require('./lib/harness.cjs');
 
 const want = sectionFilter();
+// Run visual capture explicitly in CI. Failure diagnostics still run for every test failure.
+const captureScreens = want('V') && (!process.env.CI || Boolean(process.argv[2]));
 
 /** Finish the current combat node: start each wave, kill through the real pipeline, pick upgrades. */
 async function clearNode(p) {
@@ -36,14 +38,15 @@ async function clearNode(p) {
 }
 
 async function travelTo(p, pick) {
-  const id = await ev(p, (pick) => {
-    const v = window.__rift.flow.map.view(window.__rift.game);
-    const nodes = v.reachable.map((id) => window.__rift.flow.map.node(id));
+  const id = await ev(p, async (pick) => {
+    const { flow, game } = window.__rift;
+    const nodes = flow.map.reachable();
     const n = (pick && nodes.find((x) => x.kind === pick && !x.actBoss)) || (pick && nodes.find((x) => x.kind === pick)) || nodes[0];
-    window.__rift.flow.travel(n.id);
+    if (!n) throw new Error('No reachable sector for travel');
+    if (!(await flow.travel(n.id))) throw new Error(`Travel to ${n.id} was rejected (busy: ${flow.busy}, can leave: ${game.canReturnHome})`);
+    if (window.__rift.game?.node?.node.id !== n.id) throw new Error(`Travel did not enter ${n.id}`);
     return n.id;
   }, pick);
-  await waitFor(p, () => !window.__rift.flow.busy && window.__rift.game && window.__rift.game.node);
   await ev(p, () => window.__rift.advance(1 / 60));
   return id;
 }
@@ -105,8 +108,8 @@ async function forceNext(p, kind, anomaly) {
       const rt = await ev(p, () => document.querySelector('[data-testid=rm-route]')?.textContent ?? '');
       check('B8 route tab: links to the capital + stops nearby', /Links to the region capital/.test(rt) && /within 2 links/.test(rt), rt.slice(0, 120));
       await p.click('[data-testid=rm-tab-intel]');
-      if (want('V')) await shot(p, 'runmap-intel', { frames: 2 });
-      if (want('V')) await shot(p, 'runmap-screen', { frames: 2 });
+      if (captureScreens) await shot(p, 'runmap-intel', { frames: 2 });
+      if (captureScreens) await shot(p, 'runmap-screen', { frames: 2 });
       // Back to the arena and back to the map with H.
       await p.click('[data-testid=rm-stay]');
       await ev(p, () => { window.__rift.game.setScreen('playing'); window.__rift.advance(0.1); });
@@ -132,8 +135,8 @@ async function forceNext(p, kind, anomaly) {
     }
 
     if (want('C') || want('D') || want('E') || want('F') || want('G')) {
-      const kind = await ev(p, () => window.__rift.flow.map.reachable().find((n) => n.kind === 'combat' || n.kind === 'elite') ? 'combat' : null);
-      if (!kind) await forceNext(p, 'combat');
+      const hasCombat = await ev(p, () => window.__rift.flow.map.reachable().some((n) => n.kind === 'combat'));
+      if (!hasCombat) await forceNext(p, 'combat');
       // Corrupt the next combat sector in the (local) war: the arena must play the corrupted variant.
       // The node travelTo(p, 'combat') will pick (same rule), tracked by the war (the local war's seed is random per profile).
       await ev(p, () => {
@@ -196,7 +199,7 @@ async function forceNext(p, kind, anomaly) {
         });
         check(`D ${kind}: E opens the station panel`, opened === 'station', opened);
         await p.waitForSelector('[data-testid=station]', { timeout: 20000 }).catch(() => {});
-        if (want('V')) await shot(p, `station-${kind}`, { frames: 1 });
+        if (captureScreens) await shot(p, `station-${kind}`, { frames: 1 });
         const res = await ev(p, (kind) => {
           const g = window.__rift.game;
           const n = g.node;
@@ -308,7 +311,7 @@ async function forceNext(p, kind, anomaly) {
       await p.waitForSelector('[data-testid=war-map]', { timeout: 20000 }).catch(() => {});
       const d = await ev(p, () => ({ map: !!document.querySelector('[data-testid=war-map]'), globe: !!document.querySelector('[data-testid=war-globe]'), codex: !!document.querySelector('[data-testid=dm-codex]'), sectors: document.querySelectorAll('[data-testid^=wm-node-]').length, report: !!document.querySelector('[data-testid=war-report]') }));
       check('E3 HQ deploy terminal shows the Rift War (globe, region map, report) + codex', d.map && d.globe && d.codex && d.report && d.sectors >= 10, JSON.stringify(d));
-      if (want('V')) await shot(p, 'deploy-map-preview', { frames: 2 });
+      if (captureScreens) await shot(p, 'deploy-map-preview', { frames: 2 });
       await ev(p, () => window.__rift.home.setScreen('home'));
     }
 
@@ -400,7 +403,7 @@ async function forceNext(p, kind, anomaly) {
         return { screen: g.screen, ended: r.flow.run.ended, outcome: r.profile.save.history[0]?.outcome, mode: r.profile.save.history[0]?.mode };
       });
       check('S5 one life: losing the drone ends the run (defeat, survival history)', s5.screen === 'defeat' && s5.ended && s5.outcome === 'defeat' && s5.mode === 'survival', JSON.stringify(s5));
-      if (want('V')) await shot(p, 'survival-defeat', { frames: 1 });
+      if (captureScreens) await shot(p, 'survival-defeat', { frames: 1 });
     }
 
     const bad = errs.filter((e) => !/compil(e|ing) effect|Trying next fallback|BJS - \[[\d:]+\]: (Uniforms|Attributes|Defines|Error: (VERTEX|FRAGMENT))|GPU stall|favicon/.test(e));
