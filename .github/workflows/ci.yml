@@ -193,7 +193,11 @@ jobs:
 
   deploy:
     name: Deploy to production
-    if: github.ref == 'refs/heads/main'
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      github.actor == 'YKDBontekoe' &&
+      github.triggering_actor == 'YKDBontekoe'
     needs: [build-and-test, rust, e2e]
     runs-on: ubuntu-latest
     timeout-minutes: 30
