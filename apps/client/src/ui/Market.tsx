@@ -85,7 +85,7 @@ export function ModuleCompat({ save, module }: { save: SaveData; module: ItemIns
           {def ? SOCKET_LABEL[def.socket] : '?'} · {def ? (def.families.length === 3 ? 'ALL FAMILIES' : def.families.map((f) => FAMILIES[f].label.toUpperCase()).join(', ')) : '—'}
         </b>
       </div>
-      {fits.length === 0 && <div className="id-none">None of your weapons has a matching socket (sockets come with uncommon+ weapons).</div>}
+      {fits.length === 0 && <div className="text-faint text-[13px]">None of your weapons has a matching socket (sockets come with uncommon+ weapons).</div>}
       {fits.map((f) => (
         <div key={f.weapon.uid} className="id-row" style={{ ['--rc' as string]: rarity(f.weapon.rarity).color }}>
           <span className="rc">{itemTitle(f.weapon)}</span>
@@ -204,11 +204,11 @@ function BuyPane({ save, merchant, tx }: { save: SaveData; merchant: MerchantId;
             {item.category === 'module' ? <ModuleCompat save={save} module={item} /> : <ComparePanel item={item} against={slot ? equipped[slot] : null} equipped={Object.values(equipped)} />}
             <div className="buy-box">
               <div>
-                <span className="bb-label">PRICE</span>
+                <span className="font-mono text-[9.5px] tracking-[0.16em] text-faint">PRICE</span>
                 <CostLine cost={{ credits: price }} save={save} />
               </div>
               <div>
-                <span className="bb-label">STORAGE</span>
+                <span className="font-mono text-[9.5px] tracking-[0.16em] text-faint">STORAGE</span>
                 <b className={bays < 1 ? 'bad' : ''}>{bays < 1 ? 'FULL' : `${bays} BAYS FREE`}</b>
               </div>
               {entry.sold ? (
@@ -272,11 +272,11 @@ function SellPane({ save, modules, tx }: { save: SaveData; modules: boolean; tx:
             <ItemDetail item={item} status={entry.equippedIn ? 'equipped' : 'stored'} />
             <div className="buy-box">
               <div>
-                <span className="bb-label">SALE VALUE</span>
+                <span className="font-mono text-[9.5px] tracking-[0.16em] text-faint">SALE VALUE</span>
                 <b className="good">+◈ {sellPrice(item).toLocaleString()}</b>
               </div>
               <div>
-                <span className="bb-label">OR DISMANTLE</span>
+                <span className="font-mono text-[9.5px] tracking-[0.16em] text-faint">OR DISMANTLE</span>
                 <CostLine cost={{ salvage: dismantleYield(item).salvage, components: dismantleYield(item).components }} />
               </div>
               {why ? (
@@ -310,13 +310,13 @@ function SellPane({ save, modules, tx }: { save: SaveData; modules: boolean; tx:
 
 function ExchangePane({ save, tx }: { save: SaveData; tx: Tx }) {
   return (
-    <div className="exchange-grid">
+    <div className="grid grid-cols-[repeat(2,minmax(0,1fr))] gap-[16px]">
       {MARKET.exchange.map((o) => {
         const st = save.market.exchange.find((x) => x.id === o.id);
         const left = st?.left ?? 0;
         return (
           <div key={o.id} className={`ex-card ${left ? '' : 'out'}`}>
-            <div className="ex-title">{o.label.toUpperCase()}</div>
+            <div className="font-display text-[18px] tracking-[0.14em]">{o.label.toUpperCase()}</div>
             <div className="ex-give">
               <CostLine cost={o.give} />
             </div>
@@ -332,7 +332,7 @@ function ExchangePane({ save, tx }: { save: SaveData; tx: Tx }) {
           </div>
         );
       })}
-      <p className="faint small ex-note">Exchange stock is limited and restocks with the manifest. Materials cannot be sold back.</p>
+      <p className="faint small [grid-column:1_/_-1]">Exchange stock is limited and restocks with the manifest. Materials cannot be sold back.</p>
     </div>
   );
 }
@@ -485,7 +485,7 @@ export function FabricateTerminal({ flow, close }: { flow: Flow; close: () => vo
         <ResourceBar save={save} cost={unlock.ok ? cost : undefined} compact />
       </div>
       <div className="fab-grid">
-        <div className="fab-recipes">
+        <div className="max-h-[min(62vh,600px)] overflow-auto pr-[4px]">
           {GROUPS.map(([g, label]) => (
             <div key={g}>
               <div className="col-label">{label}</div>
@@ -497,7 +497,7 @@ export function FabricateTerminal({ flow, close }: { flow: Flow; close: () => vo
             </div>
           ))}
         </div>
-        <div className="fab-main">
+        <div className="grid gap-[12px] min-w-[0]">
           <div className="fab-title">
             <b>{recipe.name}</b>
             <span>{recipe.blurb}</span>
@@ -505,14 +505,14 @@ export function FabricateTerminal({ flow, close }: { flow: Flow; close: () => vo
           {isItem ? (
             <>
               <div className="fab-bases">
-                <span className="bb-label">POSSIBLE OUTPUT</span>
+                <span className="font-mono text-[9.5px] tracking-[0.16em] text-faint">POSSIBLE OUTPUT</span>
                 {recipeBases(recipe).map((b) => (
                   <em key={b.id}>{b.name}</em>
                 ))}
-                <span className="bb-label">ITEM LEVEL</span>
+                <span className="font-mono text-[9.5px] tracking-[0.16em] text-faint">ITEM LEVEL</span>
                 <em>{level}</em>
               </div>
-              <div className="quality-grid">
+              <div className="grid grid-cols-[repeat(2,minmax(0,1fr))] gap-[8px]">
                 {QUALITIES.map((qq) => (
                   <QualityCard key={qq.id} q={qq} on={qq.id === q.id} save={save} recipe={recipe} level={level} pick={() => (setQid(qq.id), tx.setMsg(null))} />
                 ))}
@@ -527,12 +527,12 @@ export function FabricateTerminal({ flow, close }: { flow: Flow; close: () => vo
           ) : null}
           <div className="buy-box">
             <div>
-              <span className="bb-label">COST</span>
+              <span className="font-mono text-[9.5px] tracking-[0.16em] text-faint">COST</span>
               <CostLine cost={cost} save={save} />
             </div>
             {isItem && (
               <div>
-                <span className="bb-label">STORAGE</span>
+                <span className="font-mono text-[9.5px] tracking-[0.16em] text-faint">STORAGE</span>
                 <b className={bays < 1 ? 'bad' : ''}>{bays < 1 ? 'FULL' : `${bays} BAYS FREE`}</b>
               </div>
             )}
@@ -545,7 +545,7 @@ export function FabricateTerminal({ flow, close }: { flow: Flow; close: () => vo
             )}
           </div>
         </div>
-        <div className="fab-result">
+        <div className="grid gap-[8px] max-h-[min(62vh,600px)] overflow-auto">
           <div className="col-label">LAST OUTPUT</div>
           {lastNow ? (
             <>
@@ -575,8 +575,8 @@ function QualityCard({ q, on, save, recipe, level, pick }: { q: QualityDef; on: 
   return (
     <button className={`q-card ${on ? 'on' : ''} ${u.ok ? '' : 'locked'}`} data-quality={q.id} onClick={pick}>
       <b>{q.label.toUpperCase()}</b>
-      <span className="q-blurb">{u.ok ? q.blurb : u.reason}</span>
-      <div className="q-odds">
+      <span className="text-[12.5px] text-muted">{u.ok ? q.blurb : u.reason}</span>
+      <div className="grid gap-[3px]">
         {odds.map((o) => (
           <div key={o.id} className="q-odd" style={{ ['--rc' as string]: rarity(o.id).color }}>
             <RarityTag id={o.id} />

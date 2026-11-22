@@ -109,7 +109,7 @@ export function SettingsPanel({ flow, compact }: { flow: Flow; compact?: boolean
       {tab === 'controls' && (
         <>
           <Slider label="Mouse sensitivity" min={0.2} max={3} step={0.05} value={s.sensitivity} fmt={(v) => v.toFixed(2)} onChange={(v) => update({ sensitivity: v })} />
-          <div className="keybinds">
+          <div className="grid grid-cols-[1fr_1fr] gap-[4px] m-[8px_0]">
             {ACTIONS.map((a) => (
               <button key={a.id} className={`kb ${binding === a.id ? 'listening' : ''}`} data-testid={`bind-${a.id}`} onClick={() => setBinding(a.id)}>
                 <span>{a.label}</span>
@@ -137,7 +137,7 @@ export function SettingsPanel({ flow, compact }: { flow: Flow; compact?: boolean
             ]}
             onChange={(v) => update({ colorblind: v })}
           />
-          <div className="set-note">Reduce motion removes FOV kicks, camera roll and shake, lens aberration and most weapon bob. Colour vision changes the rarity colours used everywhere.</div>
+          <div className="text-[12px] text-faint m-[8px_0] leading-[1.4]">Reduce motion removes FOV kicks, camera roll and shake, lens aberration and most weapon bob. Colour vision changes the rarity colours used everywhere.</div>
           <TutorialToggle flow={flow} />
         </>
       )}

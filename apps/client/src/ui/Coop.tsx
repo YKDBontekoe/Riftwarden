@@ -64,25 +64,25 @@ export function CoopPanel({ flow, compact }: { flow: Flow; compact?: boolean }) 
     const signedIn = account.status === 'signedIn';
     return (
       <div className={`coop ${compact ? 'compact' : ''}`} data-testid="coop-panel">
-        <div className="coop-lead">Defend the reactor with up to {MAX_PLAYERS - 1} friends. Each warden keeps their own equipment and loot; towers, cores and the reactor are shared.</div>
+        <div className="text-muted leading-[1.45]">Defend the reactor with up to {MAX_PLAYERS - 1} friends. Each warden keeps their own equipment and loot; towers, cores and the reactor are shared.</div>
         {signedIn ? (
-          <div className="coop-note">
+          <div className="text-amber text-[13px]">
             Playing as <b>{account.account!.name}</b>
           </div>
         ) : (
-          <div className="coop-note" data-testid="coop-signin">Co-op needs an account: open ACCOUNT in the main menu to sign in with a passkey.</div>
+          <div className="text-amber text-[13px]" data-testid="coop-signin">Co-op needs an account: open ACCOUNT in the main menu to sign in with a passkey.</div>
         )}
-        {code && <div className="coop-note">Invite code <b>{code}</b> will be joined after connecting.</div>}
+        {code && <div className="text-amber text-[13px]">Invite code <b>{code}</b> will be joined after connecting.</div>}
         <button className="primary" data-testid="coop-connect" disabled={!signedIn || status === 'connecting'} onClick={connect}>
           {status === 'connecting' ? 'CONNECTING…' : 'GO ONLINE'}
         </button>
         {net?.error && <div className="term-msg bad">{net.error}</div>}
-        <div className="coop-fine">Co-op results (loot, resources, records) are saved to your account, which syncs with this device.</div>
+        <div className="text-faint text-[12px] leading-[1.4]">Co-op results (loot, resources, records) are saved to your account, which syncs with this device.</div>
       </div>
     );
   }
 
-  if (status === 'reconnecting') return <div className="coop"><div className="coop-note">Connection lost · reconnecting…</div></div>;
+  if (status === 'reconnecting') return <div className="coop"><div className="text-amber text-[13px]">Connection lost · reconnecting…</div></div>;
   if (!net) return null;
 
   if (!lobby) {
@@ -200,7 +200,7 @@ export function CoopPanel({ flow, compact }: { flow: Flow; compact?: boolean }) 
         </button>
       </div>
       {net.error && <div className="term-msg bad">{net.error}</div>}
-      <div className="coop-fine">Prepare your loadout at HQ terminals while you wait: changes sync to your account before the operation starts.</div>
+      <div className="text-faint text-[12px] leading-[1.4]">Prepare your loadout at HQ terminals while you wait: changes sync to your account before the operation starts.</div>
     </div>
   );
 }

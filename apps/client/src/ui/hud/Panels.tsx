@@ -32,11 +32,11 @@ export function Overlays() {
   }, []);
   const low = hp < 0.35 && alive ? (0.35 - hp) / 0.35 : 0;
   return (
-    <div ref={ref} className="overlays" style={{ ['--low' as string]: low.toFixed(3) }}>
+    <div ref={ref} className="overlays fixed inset-[0] [--hurt:0] [--low:0]" style={{ ['--low' as string]: low.toFixed(3) }}>
       <div className={`tactical-tint ${tactical ? 'on' : ''}`}>
-        <div className="tac-frame" />
+        <div className="absolute inset-[18px] [border:1px_solid_rgba(167,123,255,0.35)] [clip-path:polygon(0_0,60px_0,60px_1px,1px_1px,1px_60px,0_60px,0_100%,60px_100%,60px_calc(100%_-_1px),1px_calc(100%_-_1px),1px_calc(100%_-_60px),0_calc(100%_-_60px),0_0,100%_0,100%_60px,calc(100%_-_1px)_60px,calc(100%_-_1px)_1px,calc(100%_-_60px)_1px,calc(100%_-_60px)_0,100%_0,100%_100%,calc(100%_-_60px)_100%,calc(100%_-_60px)_calc(100%_-_1px),calc(100%_-_1px)_calc(100%_-_1px),calc(100%_-_1px)_calc(100%_-_60px),100%_calc(100%_-_60px))]" />
       </div>
-      <div className="damage-vignette" />
+      <div className="fixed inset-[0] [opacity:var(--hurt)] [background:radial-gradient(ellipse_at_center,transparent_45%,rgba(255,30,10,0.25)_75%,rgba(255,20,10,0.6)_100%)]" />
       <div className={`lowhp ${low > 0 ? 'on' : ''}`} />
     </div>
   );
@@ -155,9 +155,9 @@ export function RunPanel() {
   const tier = getTier(run.tier);
   return (
     <div className="run-panel panel-frame">
-      <div className="rp-head">
-        <span className="rp-tier">TIER {tier.roman}</span>
-        <span className="rp-name">{tier.name}</span>
+      <div className="flex items-baseline gap-[8px] mb-[4px]">
+        <span className="font-display font-[700] text-[15px] tracking-[0.14em] text-amber">TIER {tier.roman}</span>
+        <span className="text-[10px] tracking-[0.2em] text-faint">{tier.name}</span>
       </div>
       <div className="rp-row">
         <span>Salvage at risk</span><b className="unsec">{run.salvageUnsecured}</b>
@@ -190,7 +190,7 @@ export function PlayerPanel() {
           <LiveText as="b" select={(s) => Math.ceil(s.playerHp)} />
           <span>/{max}</span>
         </div>
-        <div className="vitals-right">
+        <div className="flex-[1]">
           <div className="label">DRONE INTEGRITY</div>
           <LiveBar select={(s) => ({ value: s.playerHp / s.playerMax, tone: s.playerHp / s.playerMax < 0.35 ? 'red' : 'white' })} segments={10} className="big" />
         </div>
@@ -206,7 +206,7 @@ export function PlayerPanel() {
         <span className="label">
           DASH <BoundKey action="dash" />
         </span>
-        <div className="chevrons">
+        <div className="chevrons flex gap-[4px]">
           {Array.from({ length: dashMax }, (_, i) => (
             <span key={i} className={`chev ${i < charges ? 'full' : ''}`}>
               {i === charges && <i ref={recharge} />}
@@ -236,7 +236,7 @@ function MoveChip({ label, action, kind }: { label: string; action: string; kind
 function MoveRow() {
   const state = useHud((s) => s.moves.state);
   return (
-    <div className="move-row">
+    <div className="flex gap-[6px] items-center mt-[6px] text-[10px] tracking-[0.08em]">
       <MoveChip label="GRAPPLE" action="grapple" kind="grapple" />
       <MoveChip label="POUND" action="slide" kind="pound" />
       {state === 'slide' && <b className="mv-state">SLIDE</b>}

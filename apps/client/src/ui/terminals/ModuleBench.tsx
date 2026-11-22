@@ -80,7 +80,7 @@ export function ModuleBench({ flow, selW, setSelW }: { flow: Flow; selW: string 
                 </span>
               </div>
               <div className="sockets">
-                {weapon.sockets === 0 && <div className="id-none">This weapon has no module sockets. Uncommon and better weapons have 1–4.</div>}
+                {weapon.sockets === 0 && <div className="text-faint text-[13px]">This weapon has no module sockets. Uncommon and better weapons have 1–4.</div>}
                 {weapon.build?.sockets.map((k, i) => {
                   const m = weapon.socketed[i];
                   return (
@@ -138,7 +138,7 @@ export function ModuleBench({ flow, selW, setSelW }: { flow: Flow; selW: string 
               </button>
               {save.storage.uids.length >= save.storage.capacity && <div className="faint small">Storage full: free a bay or transfer instead.</div>}
               <div className="col-label">TRANSFER · {removal} SALVAGE</div>
-              {targets.length === 0 && <div className="id-none">No other weapon has a free compatible socket.</div>}
+              {targets.length === 0 && <div className="text-faint text-[13px]">No other weapon has a free compatible socket.</div>}
               {targets.map((t) => (
                 <button key={`${t.w.uid}.${t.i}`} className="mini wide" disabled={save.resources.salvage < removal} onClick={() => run('transferModule', [weapon.uid, socket, t.w.uid, t.i], `Transferred to ${t.w.name}`, 'install')}>
                   → {t.w.name} · {SOCKET_LABEL[t.w.build!.sockets[t.i]]} {t.i + 1}

@@ -129,7 +129,7 @@ function Controls() {
     <div className="controls">
       {CONTROLS.map(([k, v]) => (
         <div key={v}>
-          <span className="control-keys">{k}</span>
+          <span className="flex flex-wrap items-center gap-[3px] min-w-[70px]">{k}</span>
           <span>{v}</span>
         </div>
       ))}
@@ -224,7 +224,7 @@ function PauseMenu({ flow }: { flow: Flow }) {
           <span className="tick" />
           PAUSED
         </div>
-        <div className="pause-loc">{inArena ? `SECTOR 07 · THREAT TIER ${getTier(flow.run?.tier ?? 1).roman}` : 'HEADQUARTERS'}</div>
+        <div className="font-mono text-[11px] tracking-[0.2em] text-faint m-[-6px_0_14px]">{inArena ? `SECTOR 07 · THREAT TIER ${getTier(flow.run?.tier ?? 1).roman}` : 'HEADQUARTERS'}</div>
         <button className="primary" disabled={resuming} onClick={resume}>
           {resuming ? 'RESUMING…' : 'RESUME'}
         </button>
@@ -394,7 +394,7 @@ export function RunSummary({ result, extra }: { result: RunResult; extra?: { tur
           <td className={secured > 0 ? 'gained' : ''}>{secured.toLocaleString()}</td>
           <td className={lost > 0 ? 'lost' : ''}>{lost.toLocaleString()}</td></tr>)}</tbody>
       </table>
-      <details className="field-notes combat-report"><summary>Combat breakdown</summary>
+      <details className="field-notes mb-[9px]"><summary>Combat breakdown</summary>
         <dl className="tier-modifiers">{details.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
       </details>
       {sv && (sv.bosses.length > 0 || sv.events.length > 0 || sv.milestones.length > 0) && (

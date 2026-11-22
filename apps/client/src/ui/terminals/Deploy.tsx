@@ -30,7 +30,7 @@ export function DeployTerminal({ flow, close }: { flow: Flow; close: () => void 
   };
   return (
     <Shell code="DP-01" title="DEPLOYMENT" sub="Launch bay · survival operations" close={close} wide>
-      <div className="tabs deploy-mode">
+      <div className="tabs m-[0_0_14px]">
         <button className={mode === 'solo' ? 'on' : ''} data-testid="deploy-solo" onClick={() => setMode('solo')}>
           SOLO OPERATION
         </button>
@@ -64,7 +64,7 @@ export function DeployTerminal({ flow, close }: { flow: Flow; close: () => void 
         </div>
         <div className="tier-col">
           <div className="col-label">SELECT THREAT TIER</div>
-          <div className="tier-selector" role="group" aria-label="Threat tier">
+          <div className="flex gap-[5px]" role="group" aria-label="Threat tier">
             {THREAT_TIERS.map(t => {
               const locked = t.id > save.threat.unlocked;
               return <button key={t.id} className={`tier-card ${t.id === selected.id ? 'on' : ''}`} disabled={locked || busy}
@@ -93,8 +93,8 @@ function FacilityPlan() {
         {ARENA.ramps.map((r, i) => <rect key={i} className="plan-ramp" x={r.x0} y={r.z0} width={r.x1 - r.x0} height={r.z1 - r.z0} />)}
         {Object.values(ARENA.routes).map(route => <polyline key={route.gate} className={ARENA.initialGates.includes(route.gate) ? 'plan-lane' : 'plan-sealed'}
           points={route.points.map(p => `${p.x},${p.z}`).join(' ')} />)}
-        <circle className="plan-ring" cx={ARENA.reactor.x} cy={ARENA.reactor.z} r={ARENA.reactor.radius + 2} />
-        <circle className="plan-core" cx={ARENA.reactor.x} cy={ARENA.reactor.z} r={ARENA.reactor.radius} />
+        <circle className="[fill:none] [stroke:#bbe8cc] [stroke-width:.7]" cx={ARENA.reactor.x} cy={ARENA.reactor.z} r={ARENA.reactor.radius + 2} />
+        <circle className="[fill:#bbe8cc]" cx={ARENA.reactor.x} cy={ARENA.reactor.z} r={ARENA.reactor.radius} />
       </g>
       <text x="-77" y="-49">N ↑</text>
     </svg>

@@ -27,8 +27,8 @@ export function ItemDetail({ item, status }: { item: ItemInstance; status?: Entr
       <div className="id-head">
         <ItemGlyph item={item} size={54} />
         <div>
-          <div className="id-name">{itemTitle(item)}</div>
-          <div className="id-meta">
+          <div className="font-display text-[21px] font-[700] tracking-[0.05em] [color:var(--rc)]">{itemTitle(item)}</div>
+          <div className="flex flex-wrap gap-[8px] items-center mt-[3px] font-mono text-[10.5px] tracking-[0.12em] text-muted">
             <RarityTag id={item.rarity} /> <span>LV {fmtNum(item.level)}</span> <span>{catLabel(item.category)}</span>
             {enhanceLevel(item) > 0 && (
               <span className="enh-tag">
@@ -77,7 +77,7 @@ export function ItemDetail({ item, status }: { item: ItemInstance; status?: Entr
       )}
       <div className="id-block">
         <div className="id-label">{item.category === 'module' ? `MODULE AFFIXES · ${item.affixes.length}` : `AFFIXES · ${item.affixes.length}`}</div>
-        {item.affixes.length === 0 && <div className="id-none">No affixes</div>}
+        {item.affixes.length === 0 && <div className="text-faint text-[13px]">No affixes</div>}
         {item.affixes.map((a, i) => {
           const m = enhanceStatMult(item, a.stat, a.value, 'affix');
           return (
@@ -189,7 +189,7 @@ export function WeaponBlock({ item, compact }: { item: ItemInstance; compact?: b
       )}
       <div className="id-block">
         <div className="id-label">MODULE SOCKETS · {item.sockets}</div>
-        {item.sockets === 0 && <div className="id-none">No sockets (uncommon and better weapons have 1–4)</div>}
+        {item.sockets === 0 && <div className="text-faint text-[13px]">No sockets (uncommon and better weapons have 1–4)</div>}
         {item.build?.sockets.map((k, i) => {
           const m = item.socketed[i];
           return (

@@ -57,6 +57,9 @@ catalogs:
     pg:
       specifier: ^8.23.1
       version: 8.23.1
+    postcss:
+      specifier: ^8.5.33
+      version: 8.5.33
     react:
       specifier: ^19.2.0
       version: 19.3.1
@@ -134,6 +137,9 @@ importers:
       pg:
         specifier: 'catalog:'
         version: 8.23.1
+      postcss:
+        specifier: 'catalog:'
+        version: 8.5.33
       tsx:
         specifier: 'catalog:'
         version: 4.23.15

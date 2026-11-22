@@ -28,7 +28,7 @@ export function WeaponViewer({ item, caption }: { item: ItemInstance | null; cap
     <div className="wpn-viewer">
       <canvas ref={ref} />
       {!item && <div className="wv-empty">NO WEAPON SELECTED</div>}
-      <div className="wv-hint">{caption ?? 'DRAG TO ROTATE · SCROLL TO ZOOM'}</div>
+      <div className="absolute left-[12px] bottom-[8px] font-mono text-[10px] tracking-[0.14em] text-faint pointer-events-none">{caption ?? 'DRAG TO ROTATE · SCROLL TO ZOOM'}</div>
     </div>
   );
 }

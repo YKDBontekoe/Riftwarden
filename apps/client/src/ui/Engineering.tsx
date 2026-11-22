@@ -491,7 +491,7 @@ function ComponentBench({ save, item, tx, setPreview }: { save: SaveData; item: 
         </div>
       )}
       <div className="col-label">REPLACEMENTS · {opts.length}</div>
-      {opts.length === 0 && <div className="id-none">No alternative {slot} for this family and rarity.</div>}
+      {opts.length === 0 && <div className="text-faint text-[13px]">No alternative {slot} for this family and rarity.</div>}
       {opts.map((o) => (
         <button
           key={o.id}

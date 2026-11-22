@@ -46,7 +46,7 @@ function ImpactRow({ d }: { d: ScoreDelta }) {
   const max = Math.max(d.before, d.after, 1e-9);
   return (
     <div className={`impact-row ${d.pct > 0 ? 'up' : 'down'}`} title={SCORE_HELP[d.key]}>
-      <span className="ir-label">{SCORE_LABEL[d.key]}</span>
+      <span className="[font:600_9.5px_var(--mono)] tracking-[0.16em] text-muted">{SCORE_LABEL[d.key]}</span>
       <span className="ir-bar">
         <i className="ir-before" style={{ width: `${(d.before / max) * 100}%` }} />
         <i className="ir-after" style={{ width: `${(d.after / max) * 100}%` }} />
@@ -72,7 +72,7 @@ export function ImpactBanner({ impact, against, title = 'LOADOUT IMPACT' }: { im
           </span>
         )}
       </div>
-      {impact.deltas.length === 0 ? <div className="id-none">No change to firepower, survivability, mobility or tower support.</div> : impact.deltas.map((d) => <ImpactRow key={d.key} d={d} />)}
+      {impact.deltas.length === 0 ? <div className="text-faint text-[13px]">No change to firepower, survivability, mobility or tower support.</div> : impact.deltas.map((d) => <ImpactRow key={d.key} d={d} />)}
     </div>
   );
 }
@@ -80,7 +80,7 @@ export function ImpactBanner({ impact, against, title = 'LOADOUT IMPACT' }: { im
 /** The four headline numbers of the current loadout (drone configuration header). */
 export function ScoreCards({ score }: { score: LoadoutScore }) {
   return (
-    <div className="score-cards">
+    <div className="grid grid-cols-[repeat(4,1fr)] gap-[6px] mb-[6px]">
       {SCORE_KEYS.map((k) => (
         <div key={k} className={`score-card s-${k}`} title={SCORE_HELP[k]}>
           <span>{SCORE_LABEL[k]}</span>

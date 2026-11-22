@@ -174,7 +174,7 @@ export function Radar({ game }: { game: Game }) {
         <span>RADAR</span>
         <span className={phase === 'combat' ? 'hot' : ''}>{phase === 'combat' ? `${hostiles} CONTACTS` : 'CLEAR'}</span>
       </div>
-      <div className="radar-body">
+      <div className="relative leading-[0]">
         <canvas ref={ref} style={{ width: RADAR_PX, height: RADAR_PX }} />
         <span className="north">N</span>
         <div className="sweep" />

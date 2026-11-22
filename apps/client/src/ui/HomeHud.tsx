@@ -24,8 +24,8 @@ export function HomeHud({ flow }: { flow: Flow }) {
     <div className={`hud home-hud ${walking ? '' : 'muted'}`}>
       <TutorialCard />
       <div className="hq-loc panel-frame">
-        <div className="hq-kicker">HEADQUARTERS</div>
-        <div className="hq-area">{area || 'COMMAND DECK'}</div>
+        <div className="font-mono text-[10px] tracking-[0.11em] text-cyan">HEADQUARTERS</div>
+        <div className="font-display text-[23px] font-[650] tracking-[-0.025em] mt-[2px]">{area || 'COMMAND DECK'}</div>
       </div>
       <div className="hq-res panel-frame">
         <div>
@@ -48,7 +48,7 @@ export function HomeHud({ flow }: { flow: Flow }) {
           </b>
         </div>
       </div>
-      {walking && <div className="hq-dot" />}
+      {walking && <div className="fixed left-[50%] top-[50%] w-[4px] h-[4px] m-[-2px_0_0_-2px] [border-radius:50%] [background:rgba(255,255,255,0.85)] [box-shadow:0_0_6px_rgba(156,207,194,0.8)]" />}
       {walking && prompt && (
         <div className="hq-prompt" key={prompt.title}>
           <kbd>{prompt.key}</kbd>
@@ -60,7 +60,7 @@ export function HomeHud({ flow }: { flow: Flow }) {
         </div>
       )}
       {walking && (
-        <div className="hq-keys">
+        <div className="fixed bottom-[20px] left-[22px] text-[14px] text-faint tracking-[0.04em]">
           <BoundKey action="move" /> move <BoundKey action="use" /> use terminal <kbd>ESC</kbd> pause
         </div>
       )}

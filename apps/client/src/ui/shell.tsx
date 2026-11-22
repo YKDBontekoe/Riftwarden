@@ -25,7 +25,7 @@ export function Shell({ code, title, sub, close, children, accent = 'cyan', wide
       <div className={`terminal panel-frame ${accent} ${wide ? 'wide' : ''}`}>
         <div className="term-head">
           <div className="term-code">{code}</div>
-          <div className="term-titles">
+          <div className="flex-[1]">
             <div className="term-title">{title}</div>
             <div className="term-sub">{sub}</div>
           </div>

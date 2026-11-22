@@ -94,7 +94,7 @@ export function CommandTerminal({ flow, close }: { flow: Flow; close: () => void
               ))}
             </div>
           )}
-          <div className="save-status">
+          <div className="mt-[14px] font-mono text-[10.5px] tracking-[0.14em] text-faint">
             PROFILE SAVED LOCALLY · {savedAt ? new Date(savedAt).toLocaleTimeString() : '—'}
             {flow.profile.store.get().lastWriteOk ? '' : ' · WRITE FAILED (storage unavailable)'}
           </div>

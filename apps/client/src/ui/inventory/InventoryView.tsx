@@ -141,8 +141,8 @@ export function InventoryView({ entries, equipped, actions, extraFilter, header 
           const r = it ? rarity(it.rarity) : null;
           return (
             <button key={s.id} className={`inv-slot ${it ? 'filled' : ''} ${shown && it?.uid === shown.uid ? 'sel' : ''} ${against && it?.uid === against.uid && shown?.uid !== it.uid ? 'vs' : ''}`} style={r ? { ['--rc' as string]: r.color } : undefined} onClick={() => it && setSel(it.uid)}>
-              <span className="is-label">{s.label}</span>
-              {it ? <ItemGlyph item={it} size={28} /> : <span className="is-empty">—</span>}
+              <span className="font-mono text-[9px] tracking-[0.14em] text-faint">{s.label}</span>
+              {it ? <ItemGlyph item={it} size={28} /> : <span className="text-faint leading-[30px]">—</span>}
               <b>{it ? it.name : 'EMPTY'}</b>
               {it && <em>LV {fmtNum(it.level)}</em>}
             </button>

@@ -144,7 +144,7 @@ export function LootLabels({ game }: { game: Game }) {
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, [game]);
-  return <div className="loot-labels" ref={host} />;
+  return <div className="fixed inset-[0] pointer-events-none" ref={host} />;
 }
 
 function useInventoryVersion(): number {
@@ -183,7 +183,7 @@ export function ArenaInventory({ game }: { game: Game }) {
       <div className="terminal panel-frame wide inv-term">
         <div className="term-head">
           <div className="term-code">INV</div>
-          <div className="term-titles">
+          <div className="flex-[1]">
             <div className="term-title">DRONE CARGO</div>
             <div className="term-sub">
               Threat tier {getTier(game.cfg.tier.id).roman} · wave {game.waves.number} · {allowed ? 'preparation: equipment changes allowed' : `${phase === 'combat' ? 'combat' : 'wave resolving'}: inspection only`}

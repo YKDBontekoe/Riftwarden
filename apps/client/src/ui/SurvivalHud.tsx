@@ -51,7 +51,7 @@ function EventChips() {
   const boss = useHud((s) => !!s.m6?.boss);
   if (boss && !hvt) return null;
   return (
-    <div className="event-chips">
+    <div className="fixed top-[112px] left-[50%] [transform:translateX(-50%)] flex gap-[8px] pointer-events-none">
       {upcoming && (
         <div className="event-chip incoming" data-testid="incoming">
           <span>INCOMING</span>

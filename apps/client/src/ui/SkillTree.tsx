@@ -112,9 +112,9 @@ export function SkillTreeTerminal({ flow, close }: { flow: Flow; close: () => vo
               );
             })}
           </svg>
-          <div className="lattice-hint">Drag to pan · scroll to zoom · a new ring opens every {RING_EVERY} levels</div>
+          <div className="absolute left-[10px] bottom-[8px] [font:10px_var(--mono)] text-faint pointer-events-none">Drag to pan · scroll to zoom · a new ring opens every {RING_EVERY} levels</div>
         </div>
-        <div className="lattice-side">
+        <div className="grid [align-content:start] gap-[12px]">
           <div className="lattice-level">
             <b>LEVEL {info.level}</b>
             <div className="xp-bar">
@@ -126,7 +126,7 @@ export function SkillTreeTerminal({ flow, close }: { flow: Flow; close: () => vo
           </div>
           {node ? (
             <div className="lattice-node" data-testid="lattice-node">
-              <div className="ln-kind" style={{ color: BRANCH_INFO[node.branch].color }}>
+              <div className="[font:600_10px_var(--mono)] tracking-[0.16em] text-faint" style={{ color: BRANCH_INFO[node.branch].color }}>
                 {BRANCH_INFO[node.branch].name.toUpperCase()} · {node.kind.toUpperCase()} · RING {node.ring}
               </div>
               <h3>{node.name}</h3>
@@ -151,7 +151,7 @@ export function SkillTreeTerminal({ flow, close }: { flow: Flow; close: () => vo
           )}
           <TxMessage msg={msg} />
           <div className="lattice-totals">
-            <div className="ln-kind">TREE TOTAL ({st.allocated.length} nodes)</div>
+            <div className="[font:600_10px_var(--mono)] tracking-[0.16em] text-faint">TREE TOTAL ({st.allocated.length} nodes)</div>
             {totals.length === 0 && <small>Nothing allocated yet.</small>}
             <ul>
               {totals.map((m) => (

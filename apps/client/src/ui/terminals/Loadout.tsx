@@ -32,7 +32,7 @@ export function LoadoutTerminal({ flow, close }: { flow: Flow; close: () => void
             const r = it ? rarity(it.rarity) : null;
             return (
               <div key={slot.id} className={`slot ${it ? 'filled' : ''}`} style={r ? { ['--rc' as string]: r.color } : undefined}>
-                <span className="slot-label">{slot.label}</span>
+                <span className="[grid-row:span_2] [align-self:center] font-mono text-[10.5px] tracking-[0.16em] text-faint">{slot.label}</span>
                 <b>{it ? it.name : 'EMPTY'}</b>
                 <em>
                   {it ? `${r!.label.toUpperCase()} · LV ${fmtNum(it.level)} · ${it.affixes.length} affix${it.affixes.length === 1 ? '' : 'es'}` : 'Equip from the storage terminal'}
@@ -46,7 +46,7 @@ export function LoadoutTerminal({ flow, close }: { flow: Flow; close: () => void
             );
           })}
           <div className="col-label">SAVED CONFIGURATIONS</div>
-          <div className="presets">
+          <div className="presets grid gap-[6px]">
             {save.presets.map((p, i) => {
               const n = Object.values(p.slots).filter(Boolean).length;
               const missing = Object.values(p.slots).filter((u) => u && !save.items.some((it) => it.uid === u)).length;

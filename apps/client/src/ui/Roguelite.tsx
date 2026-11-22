@@ -108,7 +108,7 @@ export function BuildOverview({ game }: { game: Game }) {
       <div className="terminal panel-frame wide">
         <div className="term-head">
           <div className="term-code">RUN</div>
-          <div className="term-titles">
+          <div className="flex-[1]">
             <div className="term-title">RUN BUILD</div>
             <div className="term-sub">Temporary upgrades · {dir.build.total} taken · wave {game.waves.number} · seed {dir.build.seed}</div>
           </div>
@@ -119,7 +119,7 @@ export function BuildOverview({ game }: { game: Game }) {
         <div className="build-grid">
           <div>
             <div className="cp-label">UPGRADES</div>
-            {picks.length === 0 && <div className="muted-note">None yet: clear a wave to choose your first upgrade.</div>}
+            {picks.length === 0 && <div className="text-faint text-[14px] p-[4px_0]">None yet: clear a wave to choose your first upgrade.</div>}
             <div className="build-list">
               {picks.map(({ def, n }) => (
                 <div key={def.id} className="bl-row" style={{ ['--rc' as string]: RARITY_COLOR[def.rarity] }}>
@@ -134,9 +134,9 @@ export function BuildOverview({ game }: { game: Game }) {
           </div>
           <div>
             <div className="cp-label">BUILD DIRECTION</div>
-            {arch.length ? arch.map((a) => <div key={a.id} className="arch-tag">{a.name}</div>) : <div className="muted-note">No dominant theme yet.</div>}
+            {arch.length ? arch.map((a) => <div key={a.id} className="arch-tag">{a.name}</div>) : <div className="text-faint text-[14px] p-[4px_0]">No dominant theme yet.</div>}
             <div className="cp-label">ACTIVE BUFFS</div>
-            {dir.buffs.length ? dir.buffs.map((b) => <div key={b.id} className="buff-row">{b.name} ×{b.stacks} · {b.t.toFixed(1)} s</div>) : <div className="muted-note">None</div>}
+            {dir.buffs.length ? dir.buffs.map((b) => <div key={b.id} className="buff-row">{b.name} ×{b.stacks} · {b.t.toFixed(1)} s</div>) : <div className="text-faint text-[14px] p-[4px_0]">None</div>}
             <div className="cp-label">CALCULATED STATS</div>
             <div className="stat-list">
               {KEY_STATS.map((k) => (
@@ -225,11 +225,11 @@ export function TowerPanel({ game }: { game: Game }) {
       <div className="terminal panel-frame wide">
         <div className="term-head">
           <div className="term-code">TWR</div>
-          <div className="term-titles">
+          <div className="flex-[1]">
             <div className="term-title">TOWER ENGINEERING</div>
             <div className="term-sub">Preparation: refit freely for cores · in combat, use tactical mode <BoundKey action="tactical" /> and the aim hotkeys</div>
           </div>
-          <div className="tp-cores">◆ {cores}</div>
+          <div className="font-mono text-amber text-[16px] p-[0_16px] [align-self:center]">◆ {cores}</div>
           <button className="term-close" onClick={() => void game.closePanel()}>
             <kbd>T</kbd>/<kbd>ESC</kbd> CLOSE
           </button>
@@ -239,18 +239,18 @@ export function TowerPanel({ game }: { game: Game }) {
           <div className="tp-col">
             <div className="cp-label">BUILD TEMPLATE · next tower ◆{game.nextTowerCost}</div>
             {TOWER_SLOTS.map((slot) => (
-              <div key={slot} className="tp-slot">
+              <div key={slot} className="m-[10px_0_14px]">
                 <div className="tp-slot-h">{SLOT_LABEL[slot]}: <b>{partDef(slot, tpl[slot])?.name}</b></div>
-                <div className="tp-blurb">{partLines(slot, tpl[slot])}</div>
+                <div className="text-[13px] text-faint m-[2px_0_4px]">{partLines(slot, tpl[slot])}</div>
                 <SlotChips game={game} slot={slot} cfg={tpl} onPick={(id) => act(game.setBuildConfig(slot, id))} />
               </div>
             ))}
-            <div className="tp-blurb">Place towers with <BoundKey action="build" /> / <kbd>2</kbd>. Weapon changes reset dependants that no longer fit.</div>
+            <div className="text-[13px] text-faint m-[2px_0_4px]">Place towers with <BoundKey action="build" /> / <kbd>2</kbd>. Weapon changes reset dependants that no longer fit.</div>
           </div>
           <div className="tp-col">
             <div className="cp-label">DEPLOYED TOWERS ({towers.length})</div>
             <div className="tp-list">
-              {towers.length === 0 && <div className="muted-note">No towers built yet.</div>}
+              {towers.length === 0 && <div className="text-faint text-[14px] p-[4px_0]">No towers built yet.</div>}
               {towers.map((t) => (
                 <button key={t.id} data-testid={`tower-${t.id}`} className={`chip ${t.id === sel ? 'cur' : ''}`} onClick={() => setSel(t.id)}>
                   #{t.id} {t.name} L{t.level}
@@ -274,7 +274,7 @@ export function TowerPanel({ game }: { game: Game }) {
                   UPGRADE LEVEL {info.level < MAX_TOWER_LEVEL ? `→ ${info.level + 1} · ◆${info.levelCost}` : '(MAX)'}
                 </button>
                 {(['weapon', 'core', 'modifier'] as const).map((slot) => (
-                  <div key={slot} className="tp-slot">
+                  <div key={slot} className="m-[10px_0_14px]">
                     <div className="tp-slot-h">{SLOT_LABEL[slot]}: <b>{partDef(slot, tower.config[slot])?.name}</b></div>
                     <SlotChips game={game} slot={slot} cfg={tower.config} tower onPick={(id) => act(game.modifyTower(tower, slot, id))} />
                   </div>

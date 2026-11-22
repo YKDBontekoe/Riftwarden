@@ -23,7 +23,7 @@ export function ArchitectTerminal({ flow, close }: { flow: Flow; close: () => vo
   return (
     <Shell code="AR-10" title="ARCHITECT CONSOLE" sub="Headquarters construction · blueprints · facilities" close={close} wide>
       <ResourceBar save={save} />
-      <div className="arch-grid">
+      <div className="grid grid-cols-[1fr_1fr] gap-[22px]">
         <div>
           <div className="col-label">CONSTRUCTION</div>
           <p className="arch-lead">

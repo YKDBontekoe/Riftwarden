@@ -76,11 +76,11 @@ function SectorCard({ s }: { s: NonNullable<TransitInfo['sector']> }) {
   const st = arenaStats(s.layout);
   return (
     <div className="ls-card">
-      <div className="ls-card-head">
-        <span className="ls-code">{s.code}</span>
-        <span className="ls-tier">TIER {s.tier} · {s.tierName}</span>
+      <div className="flex justify-between gap-[10px] font-mono text-[11px] tracking-[0.16em] text-muted">
+        <span className="text-cyan">{s.code}</span>
+        <span className="text-orange">TIER {s.tier} · {s.tierName}</span>
       </div>
-      <div className="ls-name">{s.name}</div>
+      <div className="ls-name font-display font-[700] [font-size:clamp(18px,2vw,24px)] tracking-[0.08em] m-[6px_0_10px] uppercase">{s.name}</div>
       {s.node && <NodeCard b={s.node} />}
       {s.layout.biome && (
         <div className={`ls-biome b-${s.layout.biome}`} data-testid="ls-biome">
@@ -108,7 +108,7 @@ function SectorCard({ s }: { s: NonNullable<TransitInfo['sector']> }) {
           ))}
         </div>
       )}
-      {s.layout.mazing && <div className="ls-note">Mazing sector: towers block ground lanes and can be breached.</div>}
+      {s.layout.mazing && <div className="mt-[10px] text-[12px] text-amber">Mazing sector: towers block ground lanes and can be breached.</div>}
     </div>
   );
 }
@@ -146,9 +146,9 @@ function SectorMap({ layout: L }: { layout: ArenaLayout }) {
         {(L.hazards ?? []).map((h, i) => (
           <circle key={`h${i}`} className={`lm-haz ${h.kind}`} cx={h.x} cy={-h.z} r={h.r} />
         ))}
-        <circle className="lm-reactor-ring" cx={L.reactor.x} cy={-L.reactor.z} r={L.reactor.radius + 6} />
-        <circle className="lm-reactor" cx={L.reactor.x} cy={-L.reactor.z} r={L.reactor.radius} />
-        <path className="lm-spawn" d={`M ${L.playerSpawn.x} ${-L.playerSpawn.z - 3} l 2.4 5 l -4.8 0 z`} />
+        <circle className="[fill:none] [stroke:var(--cyan)] [stroke-width:0.5] [stroke-dasharray:2_1.5]" cx={L.reactor.x} cy={-L.reactor.z} r={L.reactor.radius + 6} />
+        <circle className="[fill:var(--cyan)] [filter:drop-shadow(0_0_3px_var(--cyan))]" cx={L.reactor.x} cy={-L.reactor.z} r={L.reactor.radius} />
+        <path className="[fill:var(--white)]" d={`M ${L.playerSpawn.x} ${-L.playerSpawn.z - 3} l 2.4 5 l -4.8 0 z`} />
       </>
     );
   }, [L]);
