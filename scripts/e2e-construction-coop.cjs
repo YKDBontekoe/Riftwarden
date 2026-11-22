@@ -297,7 +297,9 @@ const cell = (i, j) => [2 + 5 * i + 2.5, -2.5 + 5 * j + 2.5];
     await ev(A, () => { const i = window.__rift.flow.input; i.simulateMouse(0, true); window.__rift.advance(1 / 60); i.simulateMouse(0, false); window.__rift.advance(1 / 60); });
     for (let i = 0; i < 6; i++) await tick(0.3);
     const towers = await Promise.all([A, B].map((pg) => ev(pg, () => window.__rift.game.turrets.turrets.length)));
-    check('X3 a tower built by one player appears for every player', valid && towers[0] === 1 && towers[1] === 1, JSON.stringify({ valid, towers }));
+    const replicatedTower = valid && towers[0] === 1 && towers[1] === 1;
+    check('X3 a tower built by one player appears for every player', replicatedTower, JSON.stringify({ valid, towers }));
+    if (!replicatedTower) throw new Error(`The tower did not replicate.\n${stack.log()}`);
     // Combat: wait until an enemy is inside the arena with a clear line from B, then B aims and fires its real weapon.
     await ev(A, () => window.__rift.game.startWave());
     for (let i = 0; i < 60; i++) {
@@ -323,7 +325,9 @@ const cell = (i, j) => [2 + 5 * i + 2.5, -2.5 + 5 * j + 2.5];
     });
     for (let i = 0; i < 4; i++) await tick();
     const kills = await ev(A, () => window.__rift.game.cfg.run.kills);
-    check('X4 a client\'s real weapon fire is validated and kills authoritative enemies', fired.shots > 5 && kills > 0, JSON.stringify({ ...fired, teamKills: kills }));
+    const replicatedCombat = fired.shots > 5 && kills > 0;
+    check('X4 a client\'s real weapon fire is validated and kills authoritative enemies', replicatedCombat, JSON.stringify({ ...fired, teamKills: kills }));
+    if (!replicatedCombat) throw new Error(`The clients did not complete authoritative combat.\n${stack.log()}`);
     await shot(A, 'X-coop');
     // Reach the first checkpoint quickly (test server): pick team upgrades (bots or browser chooser), start, clear.
     const pickOffer = async () => {
@@ -342,6 +346,7 @@ const cell = (i, j) => [2 + 5 * i + 2.5, -2.5 + 5 * j + 2.5];
       if (guard % 4 === 0) console.log('  wave', JSON.stringify(snap.w), 'offer', !!snap.of, 'cp', JSON.stringify(snap.cp));
       await tick(0.3);
     }
+    if (!bots[0].snap.cp[2]) throw new Error(`The team did not reach the wave-5 checkpoint.\n${stack.log()}`);
     const banks = await Promise.all([A, B].map((pg) => ev(pg, () => window.__rift.game.cfg.run.secured.salvage)));
     check('X5 the wave-5 checkpoint banks for each client', banks.every((v) => v > 0), JSON.stringify(banks));
     const rejectedEvents = await Promise.all([A, B].map((pg) => ev(pg, () => ({ events: window.__rift.game.netStats.events, bad: window.__rift.game.netStats.badEvents }))));

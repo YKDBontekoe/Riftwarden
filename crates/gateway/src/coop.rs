@@ -372,25 +372,31 @@ async fn exchange(state: &State, idx: usize, link: &SimLink, rx: &mut mpsc::Unbo
         writer.write_u32(msg.len() as u32).await?;
         writer.write_all(&msg).await?;
     }
-    loop {
-        tokio::select! {
-            out = rx.recv() => {
-                let Some(msg) = out else { return Ok(()) };
-                writer.write_u32(msg.len() as u32).await?;
-                writer.write_all(&msg).await?;
+    // Keep both futures alive for the whole connection. Racing each prefix read against each
+    // outgoing frame can cancel a partially completed read_u32 and desynchronize the stream.
+    let receive = async {
+        loop {
+            let n = reader.read_u32().await? as usize;
+            if n > MAX_FRAME {
+                anyhow::bail!("sim frame too large");
             }
-            len = reader.read_u32() => {
-                let n = len? as usize;
-                if n > MAX_FRAME {
-                    anyhow::bail!("sim frame too large");
-                }
-                let mut buf = vec![0u8; n];
-                reader.read_exact(&mut buf).await?;
-                if let Ok(up) = SimUp::decode(buf.as_slice()) {
-                    state.coop.on_up(state, idx, up).await;
-                }
+            let mut buf = vec![0u8; n];
+            reader.read_exact(&mut buf).await?;
+            if let Ok(up) = SimUp::decode(buf.as_slice()) {
+                state.coop.on_up(state, idx, up).await;
             }
         }
+    };
+    let send = async {
+        while let Some(msg) = rx.recv().await {
+            writer.write_u32(msg.len() as u32).await?;
+            writer.write_all(&msg).await?;
+        }
+        Ok(())
+    };
+    tokio::select! {
+        result = receive => result,
+        result = send => result,
     }
 }
 
