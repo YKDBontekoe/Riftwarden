@@ -187,7 +187,7 @@ The owner accepts a wipe. Bump the save version with a migration that resets pro
 ### Seasons + permanent ladder
 - Owner: **both.** Like seasonal vs eternal realms:
   - **Permanent** profile: never resets; everything in this doc applies.
-  - **Seasonal** profile (opt-in at the HQ, a second profile slot per account): starts fresh each season (~3 months), own Rift Level ladder, own leaderboards (highest RL cleared, fastest act-boss clear per RL, deepest wave per RL; solo and co-op boards).
+  - **Seasonal** profile (opt-in at the HQ, a second profile slot per account): starts fresh each season (**1 month**), own Rift Level ladder, own leaderboards (highest RL cleared, fastest act-boss clear per RL, deepest wave per RL; solo and co-op boards).
   - At season end the seasonal profile's gear, resources and records **move into the permanent profile** (storage overflow goes to a claimable "season cargo" bay), Warden XP and mastery XP are added; seasonal leaderboards are archived.
   - Season rewards: cosmetic finishes, titles, a codex page per season; a **season journey** (10-20 goals such as "clear RL 10", "liberate a region", "find 5 uniques") with cosmetic rewards.
   - Each season can add one **season rule** (for example "elites drop keys twice as often") to keep it fresh; permanent never gets season rules.
@@ -201,9 +201,9 @@ The owner accepts a wipe. Bump the save version with a migration that resets pro
   - **Shared family bonus**: when two or more wardens use the same family, all of them get +2% damage with it (+3% for three, +4% for four), shown on the team HUD.
   - **Mastery aura**: each family perk tier you have reached (every 5 ranks) gives teammates using that family +0.2% damage, capped at +3% per family, so a veteran helps newer players.
 
-### Still open
-- Should locked families be visible in the codex as teasers before they unlock?
-- Season length and the first season rule.
-- Leaderboard anti-cheat: solo runs are client-simulated, so solo boards need run validation (`runCheck.ts` replays loot streams but not combat). Proposed: solo boards show only server-validated runs, and co-op boards are trusted.
+### Third round decisions (2026-11-23)
+- **Codex teasers: yes.** Locked families, abilities and systems show in the codex (and on the unlock track) as dark silhouettes with their unlock condition ("Railgun: Warden level 3").
+- **Season length: 1 month.** A month is short, so the season journey has ~12 goals sized for ~20-30 h of play, and the seasonal Rift Level ladder climbs faster than permanent (RL unlock needs an act boss **or** wave 10 instead of 15). Season rules rotate monthly from a small list; the first rule is still to be picked (proposed: "Elites drop pinnacle keys twice as often").
+- **Solo leaderboards list only server-validated runs.** Co-op runs (simulated by the server) are trusted. Solo runs get a "validated" flag only when `runCheck.ts` accepts them; until combat replay exists, solo boards additionally require the run's records to fall inside server-side plausibility ceilings (kills/s, damage per item level, wave time). Runs that fail stay on the profile but not on the boards.
 
 Build order addition: phase 4 (mastery) includes the co-op team bonus; infinite-tree work goes with phase 3 (unlock track); step-up nodes go into phase 1 (they need Rift Levels); seasons + leaderboards become **phase 7**, after the spikes.
