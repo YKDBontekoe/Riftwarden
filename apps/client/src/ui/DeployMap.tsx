@@ -10,6 +10,7 @@ import { isCombatKind, NODE_KINDS } from '@riftwarden/rules/runmap/defs';
 import { resumable } from '@riftwarden/rules/runmap/state';
 import type { RunMode } from '@riftwarden/rules/runmap/defs';
 import { KIND_COLOR, NodeCard } from './RunMap';
+import { NamedDrops } from './NamedDrops';
 
 /** Deployment terminal, map runs: the Rift War (globe, regions, sectors) to pick where to land, records, codex. */
 export function DeployMapPanel({ flow, save, entry, onEntry }: { flow: Flow; save: SaveData; entry: string | null; onEntry: (id: string) => void }) {
@@ -25,7 +26,7 @@ export function DeployMapPanel({ flow, save, entry, onEntry }: { flow: Flow; sav
     flow.runMode = m;
     setMode(m);
   };
-  const onRegion = useCallback((k: number) => setRegionPick(k), []);
+  const onRegion = useCallback((k: number) => { setHover(null); setRegionPick(k); }, []);
   const war = wv.war;
   const paths = save.history.filter((h) => h.path?.length).slice(0, 5);
   const rec = save.records[String(save.threat.selected)];
@@ -53,6 +54,7 @@ export function DeployMapPanel({ flow, save, entry, onEntry }: { flow: Flow; sav
         <div className="dm-node" data-testid="dm-node">
           <NodeCard b={nodeBrief(show, 0, mode)} />
           {isCombatKind(show.kind) && regionState(war, def.k) && <div className="rm-liberation"><span>SECTOR LIBERATION</span><i className="war-bar"><i style={{ width: `${nodeLiberation(war, show.id, def)}%` }} /></i><b>{Math.round(nodeLiberation(war, show.id, def))}%</b></div>}
+          <NamedDrops node={show} />
         </div>
       )}
       <p>Land on any sector of an unlocked region. Securing a combat sector (five waves) pushes its liberation for every warden; a region falls when all its sectors are free, and the next one opens. Corruption spreads from the rift source while nobody fights it.</p>

@@ -31,6 +31,7 @@ export interface ColossusRig {
 }
 
 export const COLOSSUS_HULL_Y = 5.0;
+export const COLOSSUS_HIP_Y = -0.6;
 /** Whole-rig scale (hitboxes live inside the rig, so they scale with it). */
 export const COLOSSUS_SCALE = 1.22;
 export const OVERSEER_SCALE = 1.45;
@@ -85,6 +86,10 @@ export function buildColossus(kit: Kit, P: Palette): ColossusRig {
   kit.part('box', M.bossArmor, head, { pos: [0, 0.65, -0.1], scale: [2.0, 0.25, 1.4], rot: [0.15, 0, 0] });
   kit.part('box', P.graphite, head, { pos: [0, 0, 0.66], scale: [2.0, 0.55, 0.1] });
   kit.part('box', P.orangeGlow, head, { pos: [0, 0.05, 0.72], scale: [1.7, 0.14, 0.04], shadow: false });
+  for (const s of [-1, 1]) {
+    kit.part('box', P.whiteGlow, head, { pos: [s * 0.53, 0.27, 0.71], scale: [0.24, 0.075, 0.045], rot: [0, 0, -s * 0.44], shadow: false });
+    kit.part('box', P.orangeDim, head, { pos: [s * 0.8, 0.34, 0.71], scale: [0.15, 0.075, 0.045], shadow: false });
+  }
   for (const x of [-0.6, 0, 0.6]) kit.part('cyl', P.metal, head, { pos: [x, -0.35, 0.68], rot: [Math.PI / 2, 0, 0], scale: [0.26, 0.12, 0.26] });
   kit.part('sphere', M.chargeRed, head, { pos: [0, -0.35, 0.76], scale: [0.18, 0.18, 0.08], shadow: false });
   // Rear core compartment with sliding doors
@@ -92,6 +97,9 @@ export function buildColossus(kit: Kit, P: Palette): ColossusRig {
   kit.part('box', P.graphite, comp, { scale: [2.7, 1.9, 0.6] });
   const core = kit.part('cyl', M.bossCore, comp, { pos: [0, 0, -0.25], rot: [Math.PI / 2, 0, 0], scale: [1.15, 0.5, 1.15], shadow: false });
   kit.part('torus', P.metal, comp, { pos: [0, 0, -0.34], rot: [Math.PI / 2, 0, 0], scale: [1.4, 1.4, 1.4] });
+  for (const x of [-1, 1]) for (const y of [-1, 1]) {
+    kit.part('box', P.whiteGlow, comp, { pos: [x * 0.55, y * 0.55, -0.49], scale: [0.23, 0.07, 0.04], rot: [0, 0, -x * y * 0.45], shadow: false });
+  }
   const doors: TransformNode[] = [];
   for (const side of [-1, 1]) {
     const d = kit.node('cDoor', comp, [side * 0.7, 0, -0.42]);
@@ -142,7 +150,7 @@ export function buildColossus(kit: Kit, P: Palette): ColossusRig {
   // Legs: hip (swing) -> splayed thigh -> knee -> vertical shin -> foot pad
   const legs: ColossusLeg[] = [];
   for (const side of [-1, 1]) for (const front of [-1, 1]) {
-    const hip = kit.node('cHip', hull, [side * 1.9, -0.6, front * 2.1]);
+    const hip = kit.node('cHip', hull, [side * 1.9, COLOSSUS_HIP_Y, front * 2.1]);
     kit.part('sphere', M.bossArmor, hip, { scale: [1.1, 1.1, 1.1] });
     const thigh = kit.node('cThigh', hip);
     thigh.rotation.z = side * 0.95;
@@ -206,6 +214,7 @@ export function buildOverseer(kit: Kit, P: Palette): OverseerRig {
   kit.part('cyl', M.bossArmor, body, { pos: [0, 0, 1.1], rot: [Math.PI / 2, 0, 0], scale: [1.2, 0.4, 1.2] });
   kit.part('torus', P.metal, body, { pos: [0, 0, 1.32], rot: [Math.PI / 2, 0, 0], scale: [1.15, 1.15, 1.15] });
   const eye = kit.part('sphere', M.bossCore, body, { pos: [0, 0, 1.32], scale: [0.7, 0.7, 0.25], shadow: false });
+  kit.part('torus', P.whiteGlow, body, { pos: [0, 0, 1.43], rot: [Math.PI / 2, 0, 0], scale: [0.64, 0.64, 0.64], shadow: false });
   for (let i = 0; i < 6; i++) {
     const angle = i * Math.PI / 3;
     kit.part('box', M.bossArmor, body, { pos: [Math.cos(angle) * 0.6, Math.sin(angle) * 0.6, 1.32], rot: [0, 0, angle], scale: [0.33, 0.12, 0.28] });

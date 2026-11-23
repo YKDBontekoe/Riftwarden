@@ -6,6 +6,7 @@ import { regionLayout } from '@riftwarden/rules/war/regions';
 import { HOUR, nodeLiberation, orderText, regionLiberation, regionState, type WarLogEntry, type WarState } from '@riftwarden/rules/war/state';
 import { findNode } from '@riftwarden/rules/war/world';
 import { KIND_COLOR } from './RunMap';
+import { FieldIcon, NODE_ICON } from './FieldIcon';
 
 const W = 1000;
 const H = 640;
@@ -70,7 +71,7 @@ export function RegionMap(p: RegionMapProps) {
   const drawn = new Set<string>();
   const events = p.war.events.filter((e) => e.region === p.k);
   return (
-    <svg className={`war-map${ahead.size ? ' has-ahead' : ''}`} viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${def.name} region map`} data-testid="war-map">
+    <svg className={`war-map${ahead.size ? ' has-ahead' : ''}`} viewBox={`0 0 ${W} ${H}`} role="group" aria-label={`${def.name} region map`} data-testid="war-map">
       <defs>
         <radialGradient id="wmLib"><stop offset="0" stopColor="#5ff2d0" stopOpacity="0.32" /><stop offset="1" stopColor="#5ff2d0" stopOpacity="0" /></radialGradient>
         <radialGradient id="wmEnemy"><stop offset="0" stopColor="#ff8a50" stopOpacity="0.22" /><stop offset="1" stopColor="#ff8a50" stopOpacity="0" /></radialGradient>
@@ -117,7 +118,20 @@ export function RegionMap(p: RegionMapProps) {
             key={n.id}
             className={`wm-node${can ? ' can' : ''}${visited.has(n.id) ? ' seen' : ''}${p.current === n.id ? ' cur' : ''}${p.selected === n.id ? ' sel' : ''}${st?.corrupt ? ' corrupt' : ''}${lib >= 100 ? ' free' : ''}${ahead.has(n.id) ? ' ahead' : ''}${fresh.has(n.id) ? ' fresh' : ''}`}
             transform={`translate(${px(n)} ${py(n)})`}
+            tabIndex={p.onHover || can ? 0 : undefined}
+            role={p.onHover || can ? 'button' : undefined}
+            aria-label={`${n.actBoss ? 'Capital' : `Sector ${n.col + 1}`} · ${NODE_KINDS[n.kind].name}`}
+            aria-disabled={!can}
+            aria-pressed={p.selected === n.id}
             onClick={() => can && p.onSelect?.(n.id)}
+            onKeyDown={(e) => {
+              if (e.key !== 'Enter' && e.key !== ' ') return;
+              e.preventDefault();
+              e.stopPropagation();
+              if (can) p.onSelect?.(n.id);
+            }}
+            // Keep the keyboard inspection available when focus moves to the intel tabs.
+            onFocus={() => p.onHover?.(n.id)}
             onMouseEnter={() => p.onHover?.(n.id)}
             onMouseLeave={() => p.onHover?.(null)}
             data-testid={`wm-node-${n.id}`}
@@ -129,13 +143,17 @@ export function RegionMap(p: RegionMapProps) {
             <circle className="wm-track" r={r + 5} />
             {st && <circle className="wm-lib" r={r + 5} strokeDasharray={`${(circ * lib) / 100} ${circ}`} transform="rotate(-90)" />}
             <circle className="wm-badge" r={r} />
-            <text className="wm-glyph" y={n.actBoss ? 10 : 7}>{st?.corrupt ? '☣' : NODE_KINDS[n.kind].glyph}</text>
+            <g className="wm-node-icon" transform={n.actBoss ? 'translate(-17 -17) scale(1.42)' : 'translate(-12 -12)'}>
+              <FieldIcon name={st?.corrupt ? 'corrupt' : NODE_ICON[n.kind]} />
+            </g>
             {p.current === n.id && <circle className="wm-cur" r={r + 11} />}
             {st && <text className="wm-pct" y={r + 24}>{Math.round(lib)}%</text>}
             {ev.map((e, i) => (
               <g key={e.id} className={`wm-ev ev-${e.kind}`} transform={`translate(${r + 6} ${-r - 4 + i * 18})`}>
                 <circle r={12} />
-                <text y={4}>{e.kind === 'distress' ? '!' : e.kind === 'defense' ? '⛨' : '◈'}</text>
+                <g className="wm-event-icon" transform="translate(-8 -8)">
+                  <FieldIcon name={e.kind === 'distress' ? 'corrupt' : e.kind === 'defense' ? 'survivability' : 'courier'} />
+                </g>
                 <text className="wm-evt" x={16} y={5}>{hrs(e.until - now)}</text>
               </g>
             ))}

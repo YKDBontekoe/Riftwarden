@@ -1,0 +1,63 @@
+/* Illustrated panel headers and compact icons share the existing station and rarity colors. */
+.term-head, .st-head, .operation-heading-art, .station-dir button { position: relative; isolation: isolate; }
+.terminal-art, .station-art, .operation-art, .directory-art {
+  position: absolute;
+  inset: 0 0 0 auto;
+  z-index: -1;
+  width: 58%;
+  height: 100%;
+  object-fit: cover;
+  mask-image: linear-gradient(90deg, transparent, #000 67%);
+  opacity: 0.72;
+  pointer-events: none;
+}
+.terminal-art, .station-art { filter: brightness(0.72); }
+.term-code { display: inline-flex; align-items: center; gap: 6px; }
+.term-code .field-icon { width: 17px; height: 17px; }
+.term-uses i, .directory-currencies i { display: inline-flex; align-items: center; gap: 4px; }
+.term-uses i .field-icon { color: var(--rcol, currentColor); }
+.station-dir button { min-height: 85px; }
+.station-dir button .directory-art { width: 52%; opacity: 0.55; filter: brightness(0.64); }
+.station-dir button:hover .directory-art, .station-dir button:focus-visible .directory-art { opacity: 0.85; }
+.station-dir button b .field-icon { color: var(--acc, var(--cyan)); vertical-align: -0.2em; }
+.station-dir button .directory-currencies { display: inline-flex; margin-left: 6px; gap: 3px; vertical-align: -0.18em; }
+.directory-currencies .field-icon { color: var(--rcol, currentColor); }
+
+.glyph-art { flex: none; display: block; object-fit: contain; background: #222323; border: 1px solid color-mix(in srgb, var(--rc), transparent 40%); }
+.loot-portrait { flex: none; width: 38px; height: 38px; object-fit: contain; background: #222323; border: 1px solid var(--rc); }
+.item-portrait { display: block; width: 100%; height: clamp(112px, 21vh, 195px); object-fit: contain; border: 1px solid var(--line); background: #222323; }
+.el-tag .field-icon { width: 1.05em; height: 1.05em; margin-right: 3px; vertical-align: -0.16em; }
+.res-chip i .field-icon, .res-line i .field-icon { display: block; }
+.cl .field-icon, .lf-tag .field-icon, .lp-rarity .field-icon, .event-chip .field-icon,
+.result-headline .field-icon, .rm-kinds .field-icon, .st-head .field-icon { vertical-align: -0.18em; }
+
+.wm-node-icon { color: var(--kc); pointer-events: none; }
+.wm-node-icon .field-icon { width: 24px; height: 24px; }
+.wm-node.corrupt .wm-node-icon { color: #ff5a64; }
+.wm-event-icon { pointer-events: none; }
+.wm-event-icon .field-icon { width: 16px; height: 16px; }
+.rm-card-glyph .field-icon, .nc-glyph .field-icon { display: block; width: 1em; height: 1em; }
+.intel-boss-art { display: block; width: 100%; height: 102px; object-fit: cover; object-position: center 44%; border: 1px solid var(--line); margin-bottom: 6px; }
+.st-head { padding-right: 12%; }
+.station-art { inset-block: -6px 0; height: calc(100% + 6px); }
+.boss-bar { width: min(620px, 90vw); }
+.boss-portrait { display: inline-block; width: 30px; height: 24px; object-fit: cover; border: 1px solid #ffb07781; margin: 0 8px 0 0; vertical-align: middle; }
+
+.menu-nav .field-icon { width: 1.3em; height: 1.3em; vertical-align: -0.25em; margin-right: 3px; }
+.menu-brief-art { display: block; width: 100%; height: clamp(90px, 17vh, 151px); object-fit: cover; object-position: center 42%; border: 1px solid var(--line); margin-bottom: 14px; }
+.operation-heading-art { padding: 12px; border: 1px solid var(--line); margin-bottom: 10px; }
+.operation-art { filter: brightness(0.58); }
+.operation-heading-art .cp-sub, .operation-heading-art .defeat-sub { margin-bottom: 0; }
+.ls-map { isolation: isolate; }
+.ls-map-art, .ls-map[data-biome]::before { position: absolute; inset: 0; z-index: -1; width: 100%; height: 100%; object-fit: cover; opacity: 0.3; mask-image: radial-gradient(#000 20%, transparent 76%); }
+.ls-map[data-biome]::before { content: ''; background: center / cover no-repeat; }
+.ls-map[data-biome='outpost']::before { background-image: url('../assets/scrapline-sector.webp'); }
+.ls-map[data-biome='cryo']::before { background-image: url('../assets/rime-sector.webp'); }
+.ls-map[data-biome='foundry']::before { background-image: url('../assets/crucible-sector.webp'); }
+.ls-map[data-biome] .ls-map-art { display: none; }
+.recovery-illustration { display: block; width: min(100%, 720px); max-height: 47vh; object-fit: cover; margin: 0 auto; border: 1px solid var(--line); }
+
+@media (max-width: 680px) {
+  .menu-nav .field-icon { display: none; }
+  .terminal-art, .station-art, .operation-art { width: 70%; opacity: 0.45; }
+}

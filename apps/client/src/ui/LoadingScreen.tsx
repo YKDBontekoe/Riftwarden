@@ -8,6 +8,7 @@ import type { ArenaLayout } from '@riftwarden/rules/world/layout';
 import { pickTip } from './loadingTips';
 import { type TransitInfo } from '@riftwarden/game/ui/store';
 import { useHud } from './useHud';
+import { FieldArt } from './FieldArt';
 
 const STAGES = {
   arena: ['Charting sector', 'Raising structures', 'Calibrating optics', 'Drop clearance'],
@@ -53,8 +54,8 @@ export function LoadingScreen() {
             <span key={tipN}>{pickTip(kind === 'arena' ? 'arena' : 'hq', tipN)}</span>
           </div>
         </div>
-        <div className="ls-map">
-          {t?.sector ? <SectorMap layout={t.sector.layout} /> : <RecoveryArt />}
+        <div className="ls-map" data-biome={t?.sector?.layout.biome}>
+          {t?.sector ? <>{!t.sector.layout.biome && <FieldArt className="ls-map-art" name="hub-reactor" />}<SectorMap layout={t.sector.layout} /></> : <FieldArt className="recovery-illustration" name="operation-recovery" />}
         </div>
       </div>
     </div>
@@ -164,22 +165,6 @@ function SectorMap({ layout: L }: { layout: ArenaLayout }) {
         <span className="k-core">REACTOR</span>
         <span className="k-spawn">DROP POINT</span>
       </div>
-    </div>
-  );
-}
-
-/** HQ transitions: a docking drone silhouette over concentric rings. */
-function RecoveryArt() {
-  return (
-    <div className="ls-recovery" aria-hidden="true">
-      <i />
-      <i />
-      <i />
-      <svg viewBox="-50 -50 100 100">
-        <path d="M -18 4 L -6 -6 L 6 -6 L 18 4 L 6 8 L -6 8 Z" />
-        <circle cx="0" cy="0" r="3" />
-        <path className="rot" d="M -30 0 A 30 30 0 0 1 30 0" />
-      </svg>
     </div>
   );
 }

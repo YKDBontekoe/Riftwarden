@@ -198,4 +198,5 @@ message RemoteShot {
   string id = 1;
   string family = 2;
   Vec3 dir = 3;
+  optional uint32 target_id = 4; // Validated swarm seeker target.
 }

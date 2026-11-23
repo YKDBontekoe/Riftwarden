@@ -179,7 +179,7 @@ export class Weapon {
     this.spread = Math.max(def.spreadMin, Math.min(def.spreadMax, this.spread));
     const build: WeaponBuild = item?.build ?? defaultBuild(def.id, def.family);
     const installed = item?.socketed ?? [];
-    const key = JSON.stringify([build, installed.map((m) => m?.uid ?? null), item?.rarity, def.element]);
+    const key = JSON.stringify([build, installed.map((m) => m?.uid ?? null), item?.rarity, def.element, item?.uniqueId]);
     if (key === this.buildKey) return;
     this.buildKey = key;
     // Up to two models stay built (primary + secondary), so swapping weapons never rebuilds geometry.
@@ -188,7 +188,7 @@ export class Weapon {
     if (cached) this.models.delete(key);
     else {
       const ri = rarity(item?.rarity ?? 'common').index;
-      const rig = buildWeaponModel(this.scene, build, installed, { renderingGroupId: 1, name: 'vm', element: def.element }, Math.max(0, ri));
+      const rig = buildWeaponModel(this.scene, build, installed, { renderingGroupId: 1, name: 'vm', element: def.element, uniqueId: item?.uniqueId }, Math.max(0, ri));
       rig.root.parent = this.vm;
       cached = { rig, anim: new WeaponAnimator(rig) };
     }

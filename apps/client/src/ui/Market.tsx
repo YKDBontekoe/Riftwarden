@@ -9,7 +9,7 @@ import { rarity, RARITIES } from '@riftwarden/rules/loot/rarity';
 import { CATEGORY_LABEL, type Category, type ItemInstance } from '@riftwarden/rules/loot/types';
 import { defaultSlot, SLOTS, slotsFor } from '@riftwarden/rules/progression/items';
 import { swapImpact } from '@riftwarden/rules/loot/loadoutScore';
-import { useScore } from './compare';
+import { ComparisonPriorityPicker, useComparisonPriority, useScore } from './compare';
 import { type SaveData } from '@riftwarden/rules/progression/save';
 import { FAMILIES, SOCKET_LABEL } from '@riftwarden/rules/weapons/build';
 import { canInstall, moduleTypeDef } from '@riftwarden/rules/weapons/modules';
@@ -124,6 +124,7 @@ export function MerchantTerminal({ flow, close, merchant }: { flow: Flow; close:
         />
         <ResourceBar save={save} compact />
       </div>
+      {!isModules && <ComparisonPriorityPicker />}
       {tab === 'buy' && <BuyPane save={save} merchant={merchant} tx={tx} />}
       {tab === 'sell' && <SellPane save={save} modules={isModules} tx={tx} />}
       {tab === 'exchange' && <ExchangePane save={save} tx={tx} />}
@@ -138,10 +139,11 @@ function BuyPane({ save, merchant, tx }: { save: SaveData; merchant: MerchantId;
   const equipped = useEquipped(save);
   const eqList = useMemo(() => SLOTS.map((s) => equipped[s.id]), [equipped]);
   const base = useScore(eqList);
+  const priority = useComparisonPriority();
   const impactOf = (it: ItemInstance) => {
     if (it.category === 'module') return null;
     const s = defaultSlot(it.category, equipped);
-    return s ? swapImpact(eqList, it, equipped[s], base) : null;
+    return s ? swapImpact(eqList, it, equipped[s], base, priority, SLOTS.findIndex((slot) => slot.id === s)) : null;
   };
   const entries = merchant === 'equipment' ? save.market.equipment : save.market.modules;
   const [sel, setSel] = useState<string | null>(null);
@@ -201,7 +203,7 @@ function BuyPane({ save, merchant, tx }: { save: SaveData; merchant: MerchantId;
         ) : (
           <>
             <ItemDetail item={item} />
-            {item.category === 'module' ? <ModuleCompat save={save} module={item} /> : <ComparePanel item={item} against={slot ? equipped[slot] : null} equipped={Object.values(equipped)} />}
+            {item.category === 'module' ? <ModuleCompat save={save} module={item} /> : <ComparePanel item={item} against={slot ? equipped[slot] : null} equipped={eqList} slot={slot} />}
             <div className="buy-box">
               <div>
                 <span className="font-mono text-[9.5px] tracking-[0.16em] text-faint">PRICE</span>
@@ -296,7 +298,7 @@ function SellPane({ save, modules, tx }: { save: SaveData; modules: boolean; tx:
                 </button>
               ) : null}
             </div>
-            {!modules && <ComparePanel item={item} against={equipped[slotsFor(item.category)[0] ?? 'weapon'] ?? null} equipped={Object.values(equipped)} />}
+            {!modules && <ComparePanel item={item} against={equipped[slotsFor(item.category)[0] ?? 'weapon'] ?? null} equipped={SLOTS.map((s) => equipped[s.id])} slot={slotsFor(item.category)[0] ?? null} />}
           </>
         ) : (
           <div className="empty-state">

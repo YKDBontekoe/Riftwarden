@@ -4,6 +4,9 @@ import { HQ_STATIONS } from '@riftwarden/rules/home/layout';
 import { STATION_INFO } from '@riftwarden/rules/home/stationInfo';
 import { levelInfo, pointsAt, POINTS_PER_LEVEL, ringsAt } from '@riftwarden/rules/progression/level';
 import { useSave } from './App';
+import { stationArtwork } from '@riftwarden/game/visuals/fieldArtwork';
+import { FieldArt } from './FieldArt';
+import { CURRENCY_ICON, FieldIcon, STATION_ICON } from './FieldIcon';
 
 /** Command Console: Warden level, XP and skill points at a glance. */
 export function WardenProgress({ flow }: { flow: Flow }) {
@@ -48,11 +51,12 @@ export function StationDirectory({ flow, close }: { flow: Flow; close: () => voi
                 flow.home?.pingStation(st.id);
               }}
             >
-              <b>{info.name.toUpperCase()}</b>
+              <FieldArt name={stationArtwork(st.id)} className="directory-art" />
+              <b><FieldIcon name={STATION_ICON[st.id]} /> {info.name.toUpperCase()}</b>
               <span>{info.purpose}</span>
               <small>
                 {st.area}
-                {info.uses.length > 0 && ` · ${info.uses.map((k) => CURRENCIES[k].icon).join(' ')}`}
+                {info.uses.length > 0 && <span className="directory-currencies">{info.uses.map((k) => <i key={k} className={CURRENCIES[k].cls} title={CURRENCIES[k].name}><FieldIcon name={CURRENCY_ICON[k]} /></i>)}</span>}
               </small>
             </button>
           );

@@ -12,6 +12,7 @@ import { shotOutcome } from '../arena/PlayerCombat';
 import { type AbstractEngine as Engine } from '@babylonjs/core/Engines/abstractEngine';
 import { Color3 } from '@babylonjs/core/Maths/math.color';
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { trackSeeker } from '../fx/WeaponFx';
 import { sfx } from '../audio/Sfx';
 import type { SfxName } from '../audio/Sfx';
 import { type ArenaConfig, Game } from '../core/Game';
@@ -1137,7 +1138,10 @@ export class ClientGame extends Game {
     const from = r.rig.muzzle.getAbsolutePosition().clone();
     const a = this.panFor(from);
     if (family === 'plasma') this.wfx.bolt(from, to, 140, 0.3, null);
-    else if (family === 'swarm') this.wfx.seeker(from, to, 38, null);
+    else if (family === 'swarm') {
+      const target = ev[4] === undefined ? undefined : this.byNet.get(ev[4]);
+      this.wfx.seeker(from, to, 38, null, trackSeeker(target, to));
+    }
     else if (family === 'rail') this.wfx.rail(from, to, 1);
     else this.fx.tracer(from, to, 1, 0.06, 0.06);
     sfx.play(family === 'rail' ? 'railFire' : family === 'swarm' ? 'swarmLaunch' : 'shoot', { volume: a.volume * 0.5, pan: a.pan, pitch: family === 'beam' ? 0.7 : 1 });

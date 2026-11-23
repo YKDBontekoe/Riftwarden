@@ -15,6 +15,10 @@ import { AffinityRow } from './LoadingScreen';
 import { ItemDetail, RarityTag } from './items';
 import { useHud } from './useHud';
 import { BIOMES } from '@riftwarden/rules/world/biomes';
+import { NamedDrops } from './NamedDrops';
+import { bossArtwork } from '@riftwarden/game/visuals/fieldArtwork';
+import { FieldArt } from './FieldArt';
+import { FieldIcon, NODE_ICON } from './FieldIcon';
 
 /** Node colours per kind (map badges, chips). */
 export const KIND_COLOR: Record<NodeKind, string> = {
@@ -37,7 +41,7 @@ export function NodeCard({ b }: { b: NodeBrief }) {
   return (
     <div className="rm-card" data-testid="rm-card" style={{ ['--kc' as string]: KIND_COLOR[b.kind] }}>
       <div className="rm-card-head">
-        <span className="rm-card-glyph">{b.glyph}</span>
+        <span className="rm-card-glyph"><FieldIcon name={NODE_ICON[b.kind]} /></span>
         <div>
           <div className="rm-card-kicker">{b.region.toUpperCase()} · {b.actBoss ? 'CAPITAL' : `SECTOR ${b.col + 1}`}</div>
           <div className="rm-card-name">{b.name}</div>
@@ -94,14 +98,19 @@ export function RunMapScreen({ flow, game }: { flow: Flow; game: Game }) {
   }, [flow]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      const target = e.target instanceof Element ? e.target : null;
+      if (e.defaultPrevented || target?.closest('input, select, textarea')) return;
       const n = Number(e.key);
-      if (n >= 1 && n <= reach.length) setSel(reach[n - 1]);
-      if (e.key === 'Enter' && selected) go(selected);
+      if (n >= 1 && n <= reach.length) {
+        setHover(null);
+        setSel(reach[n - 1]);
+      }
+      if (e.key === 'Enter' && selected && !target?.closest('button, [role="button"], a, summary')) go(selected);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   });
-  const onRegion = useCallback((r: number) => setRegionPick(r), []);
+  const onRegion = useCallback((r: number) => { setHover(null); setRegionPick(r); }, []);
   if (!view || !war) return null;
   const votes: Record<string, string[]> = {};
   for (const v of view.votes ?? []) if (v.vote) (votes[v.vote] ??= []).push(v.name);
@@ -152,19 +161,21 @@ export function RunMapScreen({ flow, game }: { flow: Flow; game: Game }) {
           <RegionTabs war={war} k={k} onPick={onRegion} />
           <RegionStrip war={war} k={k} />
           <RegionMap war={war} k={k} current={view.current} path={view.path} reachable={reach} selected={selected} onSelect={setSel} onHover={setHover} votes={votes} ahead={look?.reach} seenAt={wv.seenAt} />
-          <div className="rm-hint">Hover any sector for intel · click a lit sector or press <kbd>1</kbd>–<kbd>{Math.max(1, reach.length)}</kbd> · <kbd>ENTER</kbd> travels · links at the edge lead to other regions</div>
+          <div className="rm-hint">Hover or focus a sector for intel · select a lit sector or press <kbd>1</kbd>–<kbd>{Math.max(1, reach.length)}</kbd> · links at the edge lead to other regions</div>
         </div>
         <div className="rm-detail">
-          {node && <NodeCard b={nodeBrief(node, view.lastWave, view.mode)} />}
-          {node && def && regionState(war, def.k) && isCombatKind(node.kind) && (
-            <div className="rm-liberation" data-testid="rm-liberation">
-              <span>SECTOR LIBERATION</span>
-              <i className="war-bar"><i style={{ width: `${nodeLib}%` }} /></i>
-              <b>{Math.round(nodeLib)}%</b>
-            </div>
-          )}
-          {node && <NodeTabs node={node} view={view} look={look} />}
-          {node && inspect !== selected && <div className="rm-note">Inspecting · travel goes to the selected lit sector</div>}
+          <div className="rm-detail-body">
+            {node && <NodeCard b={nodeBrief(node, view.lastWave, view.mode)} />}
+            {node && def && regionState(war, def.k) && isCombatKind(node.kind) && (
+              <div className="rm-liberation" data-testid="rm-liberation">
+                <span>SECTOR LIBERATION</span>
+                <i className="war-bar"><i style={{ width: `${nodeLib}%` }} /></i>
+                <b>{Math.round(nodeLib)}%</b>
+              </div>
+            )}
+            {node && <NodeTabs node={node} view={view} look={look} />}
+            {node && inspect !== selected && <div className="rm-note">Inspecting · travel goes to the selected lit sector</div>}
+          </div>
           <button className="primary" data-testid="rm-travel" disabled={!selected || busy} onClick={() => selected && go(selected)}>
             {coop ? 'VOTE: TRAVEL HERE' : 'TRAVEL'}
           </button>
@@ -195,7 +206,7 @@ function NodeTabs({ node, view, look }: { node: MapNode; view: RunMapView; look:
         ))}
       </div>
       {tab === 'intel' && <IntelPanel node={node} intel={intel} />}
-      {tab === 'rewards' && <div className="rm-lines" data-testid="rm-rewards">{intel.rewards.map((r) => <div key={r.label} className={r.bonus ? 'bonus' : ''}><span>{r.label}</span><b>{r.value}</b></div>)}</div>}
+      {tab === 'rewards' && <div data-testid="rm-rewards"><div className="rm-lines">{intel.rewards.map((r) => <div key={r.label} className={r.bonus ? 'bonus' : ''}><span>{r.label}</span><b>{r.value}</b></div>)}</div><NamedDrops node={node} drops={intel.namedDrops} /></div>}
       {tab === 'route' && look && <RoutePanel look={look} />}
     </div>
   );
@@ -216,6 +227,7 @@ function IntelPanel({ node, intel }: { node: MapNode; intel: NodeIntel }) {
     );
   return (
     <div className="rm-intel" data-testid="rm-intel">
+      {intel.boss && <FieldArt name={bossArtwork(intel.boss)} className="intel-boss-art" />}
       <div className="rm-threat">
         <span>THREAT</span>
         <span className="rm-risk">{[1, 2, 3, 4, 5].map((i) => <i key={i} className={i <= intel.threat ? 'on' : ''} />)}</span>
@@ -253,7 +265,7 @@ function RoutePanel({ look }: { look: Lookahead }) {
         <div className={look.canRest ? 'bonus' : ''}><span>Safe harbour within 2 links</span><b>{look.canRest ? 'Yes' : 'No'}</b></div>
       </div>
       <div className="rm-kinds">
-        {kinds.map((k) => <span key={k} style={{ color: KIND_COLOR[k] }} title={NODE_KINDS[k].name}>{NODE_KINDS[k].glyph} {look.kinds[k]}</span>)}
+        {kinds.map((k) => <span key={k} style={{ color: KIND_COLOR[k] }} title={NODE_KINDS[k].name}><FieldIcon name={NODE_ICON[k]} /> {look.kinds[k]}</span>)}
       </div>
       <div className="rm-none">Highlighted on the map: every sector within two links.</div>
     </div>
@@ -279,7 +291,8 @@ export function StationScreen({ game }: { game: Game }) {
     <div className="screen dim station" data-testid="station">
       <div className={`st-wrap panel-frame st-${p.station}`}>
         <div className="st-head">
-          <div className="cp-kicker">Map node station · {p.cores} cores</div>
+          <FieldArt name={`hub-${p.station}`} className="station-art" />
+          <div className="cp-kicker"><FieldIcon name={NODE_ICON[p.station]} /> Map node station · {p.cores} cores</div>
           <h2 className="cp-title">{p.title}</h2>
           <div className="cp-sub">{p.lore}</div>
         </div>
@@ -320,7 +333,7 @@ export function NodeChip() {
   return (
     <>
       <div className="node-chip" data-testid="node-chip" style={{ ['--kc' as string]: KIND_COLOR[n.kind] }}>
-        <span className="nc-glyph">{n.glyph}</span>
+        <span className="nc-glyph"><FieldIcon name={NODE_ICON[n.kind]} /></span>
         <div>
           <b>ACT {n.act} · {n.name.toUpperCase()}</b>
           <span>{n.waves ? `Waves ${n.waves[0]}–${n.waves[1]}` : 'Hub visit'}{n.complete ? ' · secured' : ''}{n.guardians !== null ? ` · ${n.guardians} guardians` : ''}</span>

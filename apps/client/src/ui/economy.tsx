@@ -6,9 +6,8 @@ import { newUid } from '@riftwarden/rules/progression/items';
 import { CURRENCIES, amountText, currencyTooltip } from '@riftwarden/rules/economy/currencies';
 import type { SaveData } from '@riftwarden/rules/progression/save';
 import { uiEvents } from '@riftwarden/game/ui/store';
+import { CURRENCY_ICON, FieldIcon } from './FieldIcon';
 
-/** Resource glyphs (consistent everywhere: HUD, terminals, costs). */
-export const RES_ICON: Record<ResourceKey, string> = { credits: CURRENCIES.credits.icon, salvage: CURRENCIES.salvage.icon, components: CURRENCIES.components.icon, shards: CURRENCIES.shards.icon };
 export const RES_CLASS: Record<ResourceKey, string> = { credits: CURRENCIES.credits.cls, salvage: CURRENCIES.salvage.cls, components: CURRENCIES.components.cls, shards: CURRENCIES.shards.cls };
 
 /** Balances strip; with `cost`, each balance shows what it would be after paying. */
@@ -20,7 +19,7 @@ export function ResourceBar({ save, cost, compact }: { save: SaveData; cost?: Co
         const need = cost?.[k] ?? 0;
         return (
           <div key={k} className={`res-chip ${RES_CLASS[k]} ${need > have ? 'short' : ''}`} title={currencyTooltip(k)} tabIndex={0} data-testid={`res-${k}`}>
-            <i>{RES_ICON[k]}</i>
+            <i><FieldIcon name={CURRENCY_ICON[k]} /></i>
             <b>{have.toLocaleString()}</b>
             <span>{RESOURCE_LABEL[k].toUpperCase()}</span>
             {need > 0 && <em>−{need.toLocaleString()}</em>}
@@ -43,7 +42,7 @@ export function CostLine({ cost, save, label }: { cost: Cost; save?: SaveData; l
         const short = !!save && save.resources[k] < need;
         return (
           <span key={k} className={`cl ${RES_CLASS[k]} ${short ? 'short' : ''}`} title={short ? `${CURRENCIES[k].name}: have ${save!.resources[k].toLocaleString()}, need ${need.toLocaleString()}` : CURRENCIES[k].name}>
-            <i>{RES_ICON[k]}</i>
+            <i><FieldIcon name={CURRENCY_ICON[k]} /></i>
             {short ? `${save!.resources[k].toLocaleString()}/${need.toLocaleString()}` : need.toLocaleString()}
           </span>
         );

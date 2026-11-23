@@ -32,9 +32,16 @@ export const SCORE_HELP: Record<ScoreKey, string> = {
   mobility: 'Movement index (100 = stock drone): 70% movement speed, 30% dash recharge rate.',
   towers: 'Tower support index (100 = stock): tower damage × tower fire rate ÷ construction cost.',
 };
-/** How much each headline counts towards the overall verdict. */
-const WEIGHT: Record<ScoreKey, number> = { dps: 0.45, ehp: 0.35, mobility: 0.1, towers: 0.1 };
 export const SCORE_KEYS: ScoreKey[] = ['dps', 'ehp', 'mobility', 'towers'];
+
+export const COMPARISON_PRIORITIES = ['balanced', 'firepower', 'survivability', 'towers'] as const;
+export type ComparisonPriority = typeof COMPARISON_PRIORITIES[number];
+const WEIGHTS: Record<ComparisonPriority, Record<ScoreKey, number>> = {
+  balanced: { dps: 0.45, ehp: 0.35, mobility: 0.1, towers: 0.1 },
+  firepower: { dps: 0.7, ehp: 0.15, mobility: 0.1, towers: 0.05 },
+  survivability: { dps: 0.15, ehp: 0.7, mobility: 0.1, towers: 0.05 },
+  towers: { dps: 0.1, ehp: 0.1, mobility: 0.1, towers: 0.7 },
+};
 
 const live = (items: readonly (ItemInstance | null | undefined)[]) => items.filter((i): i is ItemInstance => !!i && i.category !== 'module');
 
@@ -78,29 +85,25 @@ export interface SwapImpact {
 const rel = (a: number, b: number) => (b > 1e-9 ? (a - b) / b : a > 1e-9 ? 1 : 0);
 
 /** The loadout with `candidate` in place of `replaced` (or added to an empty slot). */
-export function swapped(equipped: readonly (ItemInstance | null)[], candidate: ItemInstance | null, replaced: ItemInstance | null): ItemInstance[] {
-  // Keep slot order: the candidate takes the replaced item's place (primary stays first among weapons).
-  const out = live(equipped).filter((i) => i.uid !== candidate?.uid);
-  const at = replaced ? out.findIndex((i) => i.uid === replaced.uid) : -1;
-  if (at >= 0) {
-    if (candidate) out[at] = candidate;
-    else out.splice(at, 1);
-    return out;
-  }
-  return candidate ? [...out, candidate] : out;
+export function swapped(equipped: readonly (ItemInstance | null)[], candidate: ItemInstance | null, replaced: ItemInstance | null, targetIndex?: number): ItemInstance[] {
+  // Resolve the target before removing duplicate UIDs, including when engineering an owned item in place.
+  const at = targetIndex ?? (replaced ? equipped.findIndex((i) => i?.uid === replaced.uid) : -1);
+  const out = equipped.map((item, i) => (i === at ? candidate : item?.uid === candidate?.uid ? null : item));
+  if (at === -1) out.push(candidate);
+  return live(out);
 }
 
 /** What equipping `candidate` instead of `replaced` does to the headline numbers. */
-export function swapImpact(equipped: readonly (ItemInstance | null)[], candidate: ItemInstance | null, replaced: ItemInstance | null, base?: LoadoutScore): SwapImpact {
+export function swapImpact(equipped: readonly (ItemInstance | null)[], candidate: ItemInstance | null, replaced: ItemInstance | null, base?: LoadoutScore, priority: ComparisonPriority = 'balanced', targetIndex?: number): SwapImpact {
   const b = base ?? loadoutScore(equipped);
-  const a = loadoutScore(swapped(equipped, candidate, replaced));
-  return impactBetween(b, a);
+  const a = loadoutScore(swapped(equipped, candidate, replaced, targetIndex));
+  return impactBetween(b, a, priority);
 }
 
 /** Compare two scored loadouts (also used for engineering before/after previews). */
-export function impactBetween(b: LoadoutScore, a: LoadoutScore): SwapImpact {
+export function impactBetween(b: LoadoutScore, a: LoadoutScore, priority: ComparisonPriority = 'balanced'): SwapImpact {
   const deltas = SCORE_KEYS.map((key) => ({ key, before: b[key], after: a[key], pct: rel(a[key], b[key]) })).filter((d) => Math.abs(d.pct) >= 0.001);
-  const score = deltas.reduce((s, d) => s + WEIGHT[d.key] * Math.max(-1, Math.min(1, d.pct)), 0);
+  const score = deltas.reduce((s, d) => s + WEIGHTS[priority][d.key] * Math.max(-1, Math.min(1, d.pct)), 0);
   const gains = deltas.some((d) => d.pct > 0);
   const losses = deltas.some((d) => d.pct < 0);
   let verdict: Verdict = 'same';

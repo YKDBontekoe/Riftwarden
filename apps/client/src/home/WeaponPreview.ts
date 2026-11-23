@@ -131,7 +131,7 @@ export class WeaponPreview {
 
   /** Show a weapon (null clears). Rebuilds only when the look changed. */
   show(item: ItemInstance | null): void {
-    const key = item ? JSON.stringify([item.uid, item.build, item.socketed.map((m) => m?.uid ?? null), item.rarity]) : '';
+    const key = item ? JSON.stringify([item.uid, item.build, item.socketed.map((m) => m?.uid ?? null), item.rarity, item.weapon?.element, item.uniqueId]) : '';
     if (key === this.key) return;
     const sameWeapon = !!item && this.key.startsWith(JSON.stringify([item.uid]).slice(0, -1));
     this.key = key;
@@ -139,7 +139,7 @@ export class WeaponPreview {
     this.rig = null;
     this.anim = null;
     if (!item?.build) return;
-    this.rig = buildWeaponModel(this.scene, item.build, item.socketed, { name: 'pv', mount: false, element: item.weapon?.element }, rarity(item.rarity).index);
+    this.rig = buildWeaponModel(this.scene, item.build, item.socketed, { name: 'pv', mount: false, element: item.weapon?.element, uniqueId: item.uniqueId }, rarity(item.rarity).index);
     this.anim = new WeaponAnimator(this.rig);
     this.builds++;
     const mid = (this.rig.front + this.rig.rear) / 2;

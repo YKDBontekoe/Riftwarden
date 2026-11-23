@@ -10,6 +10,8 @@ import { getTier } from '@riftwarden/rules/progression/tiers';
 import { type InvEntry, InventoryView, RarityLegend } from './items';
 import { hudStore, type LootEvent, uiEvents } from '@riftwarden/game/ui/store';
 import { useHud } from './useHud';
+import { FieldIcon, itemIcon } from './FieldIcon';
+import { FieldArt } from './FieldArt';
 
 const cat = (c: string) => (CATEGORY_LABEL as Record<string, string>)[c]?.toUpperCase() ?? c.toUpperCase();
 
@@ -22,8 +24,9 @@ export function LootPrompt() {
   return (
     <div key={t.uid} className={`loot-prompt r-${r.id}`} style={{ ['--rc' as string]: r.color }}>
       <BoundKey action="use" />
+      {t.uniqueId && <FieldArt name={`unique-${t.uniqueId}`} className="loot-portrait" />}
       <div>
-        <div className="lp-rarity">
+        <div className="lp-rarity"><FieldIcon name={itemIcon(t.category)} />{' '}
           {r.label.toUpperCase()} · {cat(t.category)} · LV {fmtNum(t.level)}
         </div>
         <b>{t.name}</b>
@@ -75,7 +78,7 @@ export function LootFeed() {
         const tag = e.kind === 'pickup' ? 'COLLECTED · UNSECURED' : e.kind === 'drop' ? `${r.label.toUpperCase()} DROP` : e.kind === 'full' ? 'CARGO FULL' : 'EXPIRED';
         return (
           <div key={e.id} className={`lf-item ${e.kind} r-${r.id}`} style={{ ['--rc' as string]: r.color }}>
-            <span className="lf-tag">{tag}</span>
+            <span className="lf-tag"><FieldIcon name={e.kind === 'pickup' ? 'pickup' : itemIcon(e.category)} /> {tag}</span>
             <b>{e.name}</b>
             {e.level > 0 && (
               <em>

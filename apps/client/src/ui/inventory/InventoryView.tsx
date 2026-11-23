@@ -3,7 +3,7 @@ import { STAT_DEFS } from '@riftwarden/rules/combat/stats';
 import { affixDef } from '@riftwarden/rules/loot/affixes';
 import { baseDef } from '@riftwarden/rules/loot/bases';
 import { swapImpact, type SwapImpact } from '@riftwarden/rules/loot/loadoutScore';
-import { useScore, VerdictTag } from '../compare';
+import { ComparisonPriorityPicker, useComparisonPriority, useScore, VerdictTag } from '../compare';
 import { rarity } from '@riftwarden/rules/loot/rarity';
 import { type Category, type ItemInstance } from '@riftwarden/rules/loot/types';
 import { getSlot, type SlotId, SLOTS, slotsFor, defaultSlot } from '@riftwarden/rules/progression/items';
@@ -74,6 +74,7 @@ export function InventoryView({ entries, equipped, actions, extraFilter, header 
   const [confirm, setConfirm] = useState<string | null>(null);
   const [targetSlot, setTargetSlot] = useState<SlotId | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const priority = useComparisonPriority();
 
   const equippedList = useMemo(() => SLOTS.map((s) => equipped[s.id]), [equipped]);
   const base = useScore(equippedList);
@@ -82,24 +83,27 @@ export function InventoryView({ entries, equipped, actions, extraFilter, header 
     for (const e of entries) {
       if (e.equippedIn || e.item.category === 'module' || !baseDef(e.item.defId)) continue;
       const s = defaultSlot(e.item.category, equipped);
-      if (s) m.set(e.item.uid, swapImpact(equippedList, e.item, equipped[s], base));
+      if (s) m.set(e.item.uid, swapImpact(equippedList, e.item, equipped[s], base, priority, SLOTS.findIndex((slot) => slot.id === s)));
     }
     return m;
-  }, [entries, equipped, equippedList, base]);
+  }, [entries, equipped, equippedList, base, priority]);
 
   const list = useMemo(() => {
     const f = entries.filter((e) => (filter === 'all' ? true : filter === 'unsecured' ? e.status === 'unsecured' : e.item.category === filter) && matchesQuery(e.item, query) && (!upOnly || impacts.get(e.item.uid)?.verdict === 'upgrade'));
     if (sort !== 'impact') return sortEntries(f, sort);
     return [...f].sort((a, b) => (impacts.get(b.item.uid)?.score ?? -9) - (impacts.get(a.item.uid)?.score ?? -9));
   }, [entries, filter, sort, query, upOnly, impacts]);
-  const selected = entries.find((e) => e.item.uid === sel) ?? list[0] ?? null;
-  const hovered = hover ? entries.find((e) => e.item.uid === hover) ?? null : null;
+  const selected = (upOnly ? list : entries).find((e) => e.item.uid === sel) ?? list[0] ?? null;
+  const hovered = hover ? list.find((e) => e.item.uid === hover) ?? null : null;
   const shownEntry = hovered ?? selected;
   const item = selected?.item ?? null;
   const shown = shownEntry?.item ?? null;
   const slots = shown ? slotsFor(shown.category) : [];
   const slot = targetSlot && slots.includes(targetSlot) ? targetSlot : shown ? defaultSlot(shown.category, equipped) : null;
   const against = slot ? equipped[slot] : null;
+  const selectedImpact = item && shown === item && slot && selected && !selected.equippedIn && impacts.has(item.uid)
+    ? swapImpact(equippedList, item, against, base, priority, SLOTS.findIndex((s) => s.id === slot))
+    : null;
   const counts = useMemo(() => {
     const m: Record<string, number> = { all: entries.length, unsecured: entries.filter((e) => e.status === 'unsecured').length };
     for (const e of entries) m[e.item.category] = (m[e.item.category] ?? 0) + 1;
@@ -150,11 +154,12 @@ export function InventoryView({ entries, equipped, actions, extraFilter, header 
         })}
       </div>
       {header}
+      <ComparisonPriorityPicker />
       <div className="inv-main">
         <div className="inv-list-col">
           <div className="inv-search">
             <input type="search" placeholder="Search name, rarity, stat…" value={query} onChange={(e) => setQuery(e.target.value)} data-testid="inv-search" />
-            <button className={`upg ${upOnly ? 'on' : ''}`} onClick={() => setUpOnly((v) => !v)} title="Show only items that improve the current loadout">
+            <button className={`upg ${upOnly ? 'on' : ''}`} onClick={() => setUpOnly((v) => !v)} title="Show upgrades for the selected comparison priority" aria-pressed={upOnly}>
               ▲ UPGRADES <i>{upgrades}</i>
             </button>
           </div>
@@ -222,7 +227,7 @@ export function InventoryView({ entries, equipped, actions, extraFilter, header 
                         ))}
                       </div>
                     )}
-                    <ComparePanel item={shown} against={against} equipped={equippedList} />
+                    <ComparePanel item={shown} against={against} equipped={equippedList} slot={slot} />
                   </div>
                 )}
               </div>
@@ -231,7 +236,7 @@ export function InventoryView({ entries, equipped, actions, extraFilter, header 
                   {item.category !== 'module' && !selected.equippedIn && baseDef(item.defId) && (
                     <button className="primary small" disabled={!actions.canChange} onClick={() => actions.equip(item.uid, slot ?? undefined)}>
                       EQUIP{slot ? ` · ${getSlot(slot).label}` : ''}
-                      {impacts.get(item.uid) && <VerdictTag impact={impacts.get(item.uid)} />}
+                      {selectedImpact && <VerdictTag impact={selectedImpact} />}
                     </button>
                   )}
                   {selected.equippedIn && (

@@ -53,6 +53,14 @@ describe('replicated events', () => {
     expect(parseEvent(['def', 'anything'])).not.toBeNull();
   });
 
+  it('accepts both legacy swarm shots and shots with a validated seeker target', () => {
+    const legacy = ['shot', 'p1', 'swarm', V];
+    const tracked = [...legacy, 12];
+    expect(parseEvent(legacy)).toEqual(legacy);
+    expect(parseEvent(tracked)).toEqual(tracked);
+    expect(parseEvent([...legacy, '12'])).toBeNull();
+  });
+
   it('never throws on arbitrary garbage (fuzz)', () => {
     const rnd = mulberry32(1234);
     const atoms: unknown[] = [0, 1, -1, 1e9, NaN, Infinity, '', 'x', 'f', 'es', 'T+', null, undefined, true, [], {}, [1, 2, 3], { v: [1, 2, 3] }];

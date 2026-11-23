@@ -36,7 +36,7 @@ export function hintFor(s: HintState, keys: Settings['keys'] = DEFAULT_SETTINGS.
 }
 
 export interface LootTargetInput {
-  item: { uid: string; name: string; rarity: string; level: number; category: string };
+  item: { uid: string; name: string; rarity: string; level: number; category: string; uniqueId?: string };
   droppedWave: number;
   expiring: boolean;
   cargoFull: boolean;
@@ -53,6 +53,7 @@ export function lootTargetInfo(i: LootTargetInput): LootTargetInfo {
     rarity: i.item.rarity,
     level: i.item.level,
     category: i.item.category,
+    uniqueId: i.item.uniqueId,
     expiresAfterWave: expiresAfterWave(i.droppedWave),
     expiring: i.expiring,
     cargoFull: i.cargoFull,

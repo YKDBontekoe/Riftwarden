@@ -12,6 +12,7 @@ import { ARENA } from '@riftwarden/rules/world/layout';
 import { Hunt, HUNT } from '@riftwarden/rules/arena/Hunt';
 import { beginRun, createDefaultSave, recordRun, sanitizeSave } from '@riftwarden/rules/progression/save';
 import { RunLedger } from '@riftwarden/rules/progression/run';
+import { sectorNamedDrops } from '@riftwarden/rules/runmap/namedDrops';
 
 const seed = 4242;
 const region0 = regionLayout(seed, 0);
@@ -60,6 +61,34 @@ describe('node intel', () => {
     const cap = region0.nodes.find((n) => n.id === region0.capital)!;
     expect(lookahead(seed, cap).hopsToCapital).toBe(0);
     expect(SEGMENT).toBe(5);
+  });
+
+  it('previews only fixed sources before deployment, with conditional cache actions and faction restrictions', () => {
+    expect(sectorNamedDrops(entry)).toEqual([]);
+    const capital = { ...entry, kind: 'boss', actBoss: true, boss: 'colossus', biome: 'cryo' } as const;
+    const drops = sectorNamedDrops(capital);
+    const byId = new Map(drops.map((drop) => [drop.item.id, drop.sources.map((source) => source.id)]));
+    expect(byId.get('heartbreaker')).toEqual(['colossus']);
+    expect(byId.get('rime_breath')).toEqual(['eliteCache']);
+    expect(byId.has('jury_rig')).toBe(false);
+    expect(byId.has('prism_gaze')).toBe(false);
+    const vault = sectorNamedDrops({ ...entry, kind: 'vault', biome: 'foundry' });
+    expect(vault.find((drop) => drop.item.id === 'crucible_choir')?.sources[0].label).toMatch(/open the vault/i);
+    const anomaly = { ...entry, kind: 'event' } as const;
+    expect(sectorNamedDrops({ ...anomaly, anomaly: 'cache' }).some((drop) => drop.item.id === 'hive_mother')).toBe(true);
+    expect(sectorNamedDrops({ ...anomaly, anomaly: 'pact' })).toEqual([]);
+  });
+
+  it('adds actual roster and event sources and groups repeated sources under one named item', () => {
+    const node = { ...entry, kind: 'elite', mods: ['convoy'] } as const;
+    const convoy = { ...node, mods: [...node.mods] };
+    const before = sectorNamedDrops(convoy);
+    const during = nodeIntel(convoy, ctx({ lastWave: 25 })).namedDrops;
+    expect(before.find((drop) => drop.item.id === 'ninth_gate')?.sources).toEqual([{ id: 'hvt', label: 'Destroy the Vault Courier' }]);
+    expect(during.find((drop) => drop.item.id === 'ninth_gate')?.sources).toEqual(before.find((drop) => drop.item.id === 'ninth_gate')?.sources);
+    expect(during.find((drop) => drop.item.id === 'bulwark_mantle')?.sources.map((source) => source.id)).toEqual(['bulwark']);
+    expect(new Set(during.map((drop) => drop.item.id)).size).toBe(during.length);
+    expect(during.find((drop) => drop.item.id === 'hive_mother')?.sources.map((source) => source.id)).toContain('eliteCache');
   });
 });
 

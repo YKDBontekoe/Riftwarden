@@ -47,7 +47,7 @@ export type ReplicatedEvent =
   | readonly ['k', V3, number]
   | readonly ['mv', V3]
   | readonly ['left', string, string]
-  | readonly ['shot', string, string, V3];
+  | readonly ['shot', string, string, V3, number?]; // optional validated target for a swarm seeker
 
 export type EventTag = ReplicatedEvent[0];
 
@@ -90,7 +90,7 @@ const SHAPES: { [K in EventTag]: { fields: Check[]; optional?: number } } = {
   k: { fields: [v3, num] },
   mv: { fields: [v3] },
   left: { fields: [str, str] },
-  shot: { fields: [str, str, v3] },
+  shot: { fields: [str, str, v3, num], optional: 1 },
 };
 
 export const EVENT_TAGS = Object.keys(SHAPES) as EventTag[];

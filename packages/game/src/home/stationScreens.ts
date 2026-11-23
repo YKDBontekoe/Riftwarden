@@ -7,6 +7,24 @@ import { fabricationLevel } from '@riftwarden/rules/economy/transactions';
 import { levelInfo, ringsAt } from '@riftwarden/rules/progression/level';
 import { freePoints } from '@riftwarden/rules/progression/skilltree';
 import { drawScreenFrame, screenLine, type ScreenTex } from './props';
+import { fieldArtwork, stationArtwork } from '../visuals/fieldArtwork';
+
+const illustrations = new Map<string, HTMLImageElement>();
+
+export async function loadStationIllustrations(ids: readonly string[]): Promise<void> {
+  if (typeof Image === 'undefined') return;
+  const urls = new Set(ids.map((id) => fieldArtwork(stationArtwork(id))));
+  await Promise.all([...urls].flatMap((url) => {
+    if (!url) return [];
+    let image = illustrations.get(url);
+    if (!image) {
+      image = new Image();
+      image.src = url;
+      illustrations.set(url, image);
+    }
+    return image.decode().catch(() => undefined);
+  }));
+}
 
 export function drawStationScreen(id: string, s: ScreenTex, save: Readonly<SaveData>): void {
   const tier = getTier(save.threat.selected);
@@ -81,5 +99,11 @@ export function drawStationScreen(id: string, s: ScreenTex, save: Readonly<SaveD
       screenLine(s, 200, 'DISMANTLED', String(save.economy.stats.itemsDismantled), '#cdd9df');
       screenLine(s, 250, 'PRESS', 'ARMED');
       break;
+  }
+  const art = illustrations.get(fieldArtwork(stationArtwork(id)) ?? '');
+  if (art?.complete && art.naturalWidth) {
+    // The frame reserves the right-hand end of the header for a station mark.
+    const edge = Math.min(art.naturalWidth, art.naturalHeight);
+    s.ctx.drawImage(art, (art.naturalWidth - edge) / 2, (art.naturalHeight - edge) / 2, edge, edge, s.w - 57, 0, 57, 57);
   }
 }

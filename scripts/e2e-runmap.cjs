@@ -69,7 +69,12 @@ async function forceNext(p, kind, anomaly) {
   const { b, ctx, p, errs } = await launch({ query: '&map', diagnostics: 'run-map' });
   const t0 = Date.now();
   try {
-    await ev(p, () => window.__rift.flow.enterHq());
+    await ev(p, () => {
+      const flow = window.__rift.flow;
+      // This map always has a combat neighbour for the travel and corruption checks.
+      flow.war.localSeed = 1;
+      return flow.enterHq();
+    });
     await ev(p, () => window.__rift.flow.deploy(1));
     await waitFor(p, () => window.__rift.state().location === 'arena' && !window.__rift.flow.busy);
     await ev(p, () => window.__rift.advance(1 / 60));
@@ -101,10 +106,15 @@ async function forceNext(p, kind, anomaly) {
       // Combat nodes list the expected roster; hubs say so (the first reachable node is random).
       check('B5 node intel lists the threat, hostiles and total HP (or the hub)', (/THREAT/.test(intel.intel) && /Hostiles/.test(intel.intel) && /hit points/.test(intel.intel)) || /^Hub visit/.test(intel.intel), intel.intel.slice(0, 160));
       check('B6 route lookahead highlights the sectors within two links', intel.ahead >= 2, String(intel.ahead));
-      await p.click('[data-testid=rm-tab-rewards]');
+      await p.locator('[data-testid=rm-tab-rewards]').press('Enter');
       const rw = await ev(p, () => document.querySelector('[data-testid=rm-rewards]')?.textContent ?? '');
       check('B7 rewards tab breaks down credits / cache', /Checkpoint cache|Stock|Vault cache|Choose one|Temper|Gambler|Rift|Echo|Derelict|Void|Abandoned/.test(rw), rw.slice(0, 120));
-      await p.click('[data-testid=rm-tab-route]');
+      await p.locator('.wm-node[data-kind=boss]').first().focus();
+      const named = p.locator('[data-testid=rm-rewards] [data-testid=named-drops]');
+      await named.locator('[data-unique=heartbreaker], [data-unique=prism_gaze]').first().waitFor();
+      check('B9 keyboard sector inspection reveals named boss drops without travelling', (await S(p)).screen === 'runmap' && /Possible drops/.test(await named.textContent()));
+      await p.locator('[data-testid=rm-tab-route]').press('Enter');
+      await p.getByTestId('rm-route').waitFor();
       const rt = await ev(p, () => document.querySelector('[data-testid=rm-route]')?.textContent ?? '');
       check('B8 route tab: links to the capital + stops nearby', /Links to the region capital/.test(rt) && /within 2 links/.test(rt), rt.slice(0, 120));
       await p.click('[data-testid=rm-tab-intel]');
@@ -307,10 +317,14 @@ async function forceNext(p, kind, anomaly) {
       check('E2 map records', e.rec.deepestAct >= 1 && e.rec.bestNodes === e.nodes);
       await ev(p, () => window.__rift.flow.enterHq());
       await ev(p, () => window.__rift.home.openTerminal('deploy'));
-      await p.waitForSelector('[data-testid=rm-preview]', { timeout: 20000 }).catch(() => {});
-      await p.waitForSelector('[data-testid=war-map]', { timeout: 20000 }).catch(() => {});
+      await p.getByTestId('war-map').waitFor();
       const d = await ev(p, () => ({ map: !!document.querySelector('[data-testid=war-map]'), globe: !!document.querySelector('[data-testid=war-globe]'), codex: !!document.querySelector('[data-testid=dm-codex]'), sectors: document.querySelectorAll('[data-testid^=wm-node-]').length, report: !!document.querySelector('[data-testid=war-report]') }));
       check('E3 HQ deploy terminal shows the Rift War (globe, region map, report) + codex', d.map && d.globe && d.codex && d.report && d.sectors >= 10, JSON.stringify(d));
+      const capital = p.locator('.wm-node[data-kind=boss]').first();
+      await capital.press('Enter');
+      const named = p.locator('[data-testid=dm-node] [data-testid=named-drops]');
+      await named.locator('[data-unique=heartbreaker], [data-unique=prism_gaze]').first().waitFor();
+      check('E4 deployment preview shows named boss drops for a keyboard-selected sector', (await capital.getAttribute('aria-pressed')) === 'true');
       if (captureScreens) await shot(p, 'deploy-map-preview', { frames: 2 });
       await ev(p, () => window.__rift.home.setScreen('home'));
     }

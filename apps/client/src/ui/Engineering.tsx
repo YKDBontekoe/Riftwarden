@@ -19,8 +19,8 @@ import { type InvEntry, ItemCard, ItemDetail, itemTitle, sortEntries, TierPips }
 import { Shell } from './shell';
 import { TowerTech } from './TowerTech';
 import { ModuleBench, saveEntries, useEquipped } from './Terminals';
-import { impactBetween, loadoutScore, swapped } from '@riftwarden/rules/loot/loadoutScore';
-import { ImpactBanner } from './compare';
+import { swapImpact } from '@riftwarden/rules/loot/loadoutScore';
+import { ComparisonPriorityPicker, ImpactBanner, useComparisonPriority } from './compare';
 import { SLOTS } from '@riftwarden/rules/progression/items';
 import { WeaponViewer } from './WeaponViewer';
 
@@ -144,11 +144,12 @@ function Bench({ flow, save, tab, selW, setSelW }: { flow: Flow; save: SaveData;
 function EquippedImpact({ save, before, after }: { save: SaveData; before: ItemInstance; after: ItemInstance }) {
   const equipped = useEquipped(save);
   const list = useMemo(() => SLOTS.map((s) => equipped[s.id]), [equipped]);
+  const priority = useComparisonPriority();
   const impact = useMemo(() => {
     if (before === after || !list.some((i) => i?.uid === before.uid)) return null;
-    return impactBetween(loadoutScore(list), loadoutScore(swapped(list, after, before)));
-  }, [list, before, after]);
-  return impact ? <ImpactBanner impact={impact} title="IF APPLIED · LOADOUT IMPACT" /> : null;
+    return swapImpact(list, after, before, undefined, priority);
+  }, [list, before, after, priority]);
+  return impact ? <><ComparisonPriorityPicker /><ImpactBanner impact={impact} title="IF APPLIED · LOADOUT IMPACT" /></> : null;
 }
 
 /** Before/after effective statistics (weapons: full weapon readout incl. modules; others: item stats). */

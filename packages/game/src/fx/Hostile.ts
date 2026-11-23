@@ -4,7 +4,9 @@ import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { type Mesh } from '@babylonjs/core/Meshes/mesh';
 import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
 import { type Scene } from '@babylonjs/core/scene';
+import type { ShaderMaterial } from '@babylonjs/core/Materials/shaderMaterial';
 import { unlit } from '../visuals/materials';
+import { telegraphBoundary } from './telegraphBoundary';
 
 export type TeleColor = 'red' | 'orange' | 'blue' | 'violet' | 'green' | 'white';
 
@@ -43,7 +45,7 @@ interface Line {
 export class Telegraphs {
   private markers: Marker[] = [];
   private lines: Line[] = [];
-  private ringMats = new Map<TeleColor, PBRMaterial>();
+  private ringMats = new Map<TeleColor, ShaderMaterial>();
   private fillMats = new Map<TeleColor, PBRMaterial>();
   private lineMats = new Map<TeleColor, PBRMaterial>();
   private ringT: Mesh;
@@ -53,10 +55,12 @@ export class Telegraphs {
   static readonly MAX = 64;
 
   constructor(scene: Scene) {
-    this.ringT = MeshBuilder.CreateTorus('teleRing', { diameter: 2, thickness: 0.07, tessellation: 48 }, scene);
+    this.ringT = MeshBuilder.CreateGround('teleRing', { width: 2.14, height: 2.14 }, scene);
+    this.ringT.alphaIndex = 2;
     this.fillT = MeshBuilder.CreateDisc('teleFill', { radius: 1, tessellation: 40 }, scene);
     this.fillT.rotation.x = Math.PI / 2;
     this.fillT.bakeCurrentTransformIntoVertices();
+    this.fillT.alphaIndex = 1;
     this.lineT = MeshBuilder.CreateBox('teleLine', { width: 1, height: 1, depth: 1 }, scene);
     for (const t of [this.ringT, this.fillT, this.lineT]) {
       t.isPickable = false;
@@ -64,8 +68,8 @@ export class Telegraphs {
     }
     for (const c of Object.keys(COLORS) as TeleColor[]) {
       const [r, g, b] = COLORS[c];
-      this.ringMats.set(c, unlit(scene, `teleRing:${c}`, [r, g, b], { additive: true }));
-      this.fillMats.set(c, unlit(scene, `teleFill:${c}`, [r * 0.16, g * 0.16, b * 0.16], { additive: true, zOffset: -3 }));
+      this.ringMats.set(c, telegraphBoundary(scene, c, [r, g, b]));
+      this.fillMats.set(c, unlit(scene, `teleFill:${c}`, [r * 0.09, g * 0.09, b * 0.09], { additive: true, zOffset: -3 }));
       this.lineMats.set(c, unlit(scene, `teleLine:${c}`, [r * 0.8, g * 0.8, b * 0.8], { additive: true }));
     }
   }
@@ -157,8 +161,16 @@ export class Telegraphs {
   }
 
   cancel(id: number): void {
-    for (const m of this.markers) if (m.id === id) m.t = m.dur;
-    for (const l of this.lines) if (l.id === id) l.t = l.dur;
+    for (const m of this.markers) if (m.id === id) {
+      m.t = m.dur;
+      m.follow = null;
+      m.ring.setEnabled(false);
+      m.fill.setEnabled(false);
+    }
+    for (const l of this.lines) if (l.id === id) {
+      l.t = l.dur;
+      l.mesh.setEnabled(false);
+    }
   }
 
   private place(mesh: Mesh, a: Vector3, b: Vector3, w: number): void {

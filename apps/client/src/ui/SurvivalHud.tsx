@@ -2,6 +2,11 @@ import { useEffect, useState } from 'react';
 import { ROMAN } from '@riftwarden/rules/survival/records';
 import { uiEvents } from '@riftwarden/game/ui/store';
 import { useHud } from './useHud';
+import { bossArtwork } from '@riftwarden/game/visuals/fieldArtwork';
+import { FieldArt } from './FieldArt';
+import { FieldIcon, type FieldIconName } from './FieldIcon';
+
+const EVENT_ICON: Partial<Record<string, FieldIconName>> = { swarm: 'enemy', eliteAssault: 'elite', instability: 'tactical', hvt: 'courier' };
 
 /**
  * M6 HUD: boss health bar (phase ticks, state, telegraphed attack), concise alert feed (max 3, de-duplicated),
@@ -25,6 +30,7 @@ function BossBar() {
     <div className={`boss-bar phase${b.phase} ${b.immune ? 'immune' : ''}`} data-testid="boss-bar">
       <div className="boss-head">
         <span className="boss-name">
+          <FieldArt name={bossArtwork(b.name)} className="boss-portrait" />
           {b.name}
           {b.encounter > 1 && <em> {ROMAN[Math.min(9, b.encounter - 1)]}</em>}
         </span>
@@ -54,19 +60,19 @@ function EventChips() {
     <div className="fixed top-[112px] left-[50%] [transform:translateX(-50%)] flex gap-[8px] pointer-events-none">
       {upcoming && (
         <div className="event-chip incoming" data-testid="incoming">
-          <span>INCOMING</span>
+          <span><FieldIcon name="corrupt" /> INCOMING</span>
           <b>{upcoming}</b>
         </div>
       )}
       {ev && (
         <div className={`event-chip ev-${ev.id}`} data-testid="event-chip" title={ev.blurb}>
-          <span>EVENT</span>
+          <span><FieldIcon name={EVENT_ICON[ev.id] ?? 'anomaly'} /> EVENT</span>
           <b>{ev.name.toUpperCase()}</b>
         </div>
       )}
       {hvt && (
         <div className="event-chip hvt" data-testid="hvt-chip">
-          <span>VAULT COURIER</span>
+          <span><FieldIcon name="courier" /> VAULT COURIER</span>
           <b>{Math.ceil(hvt.escapeIn)}s</b>
           <i>
             <u style={{ transform: `scaleX(${hvt.hp})` }} />
