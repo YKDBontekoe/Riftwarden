@@ -197,6 +197,7 @@ export class CoopSim {
       },
     );
     g.testMode = process.env.RIFT_TEST === '1';
+    g.manualWaves = g.testMode && process.env.RIFT_TEST_MANUAL_WAVES === '1';
     g.within(() => g.start());
     // Remember what late joiners must reproduce.
     this.evolutions = [];

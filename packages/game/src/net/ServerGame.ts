@@ -628,6 +628,8 @@ export class ServerGame extends Game {
 
   /** Test servers only (RIFT_TEST=1). */
   testMode = false;
+  /** Browser acceptance: preparation waits for startWave; combat keeps its real clock. */
+  manualWaves = false;
 
   private actInner(a: Avatar, m: ActMsg): string | null {
     if (this.defeated) return 'The operation is over';
@@ -984,7 +986,8 @@ export class ServerGame extends Game {
       if (!this.voteOpen) this.openMapVote();
     }
     const hold = this.waves.phase === 'prep' && (!!this.offer || this.voteOpen || !!this.banking);
-    if (!hold) this.waves.update(dt, hdt);
+    const manualPrep = this.testMode && this.manualWaves && this.waves.phase === 'prep' && this.waves.timer > 0;
+    if (!hold && !manualPrep) this.waves.update(dt, hdt);
     this.hostileT += hdt;
     this.enemies.update(hdt, this.enemyCtx, dt);
     this.recordTrails(dt);

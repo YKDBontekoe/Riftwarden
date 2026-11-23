@@ -7,10 +7,11 @@ const { chromium, OUT, check } = H;
 const FILTER = process.argv[2] || '';
 const want = H.sectionFilter(FILTER);
 const QUALITY = process.env.Q || 'low';
+let failureDetails = () => '';
 
-async function open(b, { fresh = true, keep = null } = {}) {
+async function open(b, { fresh = true, keep = null, renderScale } = {}) {
   const ctx = keep ?? (await b.newContext({ viewport: { width: 1280, height: 720 } }));
-  if (fresh) await ctx.addInitScript((q) => { if (!localStorage.getItem('riftwarden.settings')) localStorage.setItem('riftwarden.settings', JSON.stringify({ v: 1, data: { sensitivity: 1, fov: 90, quality: q, volume: 0 } })); }, QUALITY);
+  if (fresh) await ctx.addInitScript(([quality, renderScale]) => { if (!localStorage.getItem('riftwarden.settings')) localStorage.setItem('riftwarden.settings', JSON.stringify({ v: 2, data: { sensitivity: 1, fov: 90, quality, renderScale, volume: 0 } })); }, [QUALITY, renderScale]);
   const p = await ctx.newPage();
   p.errs = [];
   p.on('pageerror', (e) => p.errs.push('PAGEERR ' + e.message));
@@ -238,16 +239,27 @@ const cell = (i, j) => [2 + 5 * i + 2.5, -2.5 + 5 * j + 2.5];
 
   // ------------------------------------------------------------------ X: co-op with real clients (own gateway stack)
   if (want('X')) {
+    // This section uses two fresh signed-in clients. Release the unused solo HQ's GPU
+    // resources before loading them; software GL otherwise queues three worlds' work.
+    await ctx.close();
     const { Bot, sleep } = await import('./bot.mjs');
     const { startStack } = await import('./lib/stack.mjs');
-    const stack = await startStack({ port: 8090 });
+    // Shader compilation can exceed the initial countdown on software GL. Start waves
+    // explicitly after the replicas load; the authoritative combat clock stays real-time.
+    const stack = await startStack({ port: 8090, simEnv: { RIFT_TEST_MANUAL_WAVES: '1' } });
+    const clients = [];
+    failureDetails = () => [stack.log(80), ...clients.map((pg, i) => `Client ${i + 1}:\n${pg.errs.join('\n')}`)].join('\n');
     // Each page signs in with the test login (through the Vite proxy) and boots again with the account.
     const signedIn = async (name) => {
-      const { p: pg } = await open(b);
+      // Keep the normal UI viewport and full simulation, but shade a quarter as many pixels.
+      // The live server must not defeat the idle team while SwiftShader loads both clients.
+      const { p: pg } = await open(b, { renderScale: 0.5 });
+      clients.push(pg);
       const r = await ev(pg, (n) => fetch('/auth/test-login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: n }) }).then((x) => x.status), name);
       if (r !== 200) throw new Error(`test login ${r}`);
       await pg.goto((process.env.RIFT_URL || 'http://localhost:5173/') + '?test&account');
       await waitFor(pg, () => window.__rift && window.__rift.state().screen === 'menu' && window.__session?.()?.status.get().state === 'idle' && window.__session().status.get().rev > 0);
+      await ev(pg, () => window.__rift.stopLoop());
       return pg;
     };
     const A = await signedIn('Alpha');
@@ -290,6 +302,7 @@ const cell = (i, j) => [2 + 5 * i + 2.5, -2.5 + 5 * j + 2.5];
     for (let i = 0; i < 6; i++) await tick();
     const seen = await ev(A, () => ({ remotes: window.__rift.game.team.length, names: window.__rift.game.team.map((t) => t.name) }));
     check('X2 four wardens in one operation; each client sees the teammates', seen.remotes === 4, JSON.stringify(seen.names));
+    check('X2a loading the replicas leaves wave one in preparation until explicitly started', bots[0].snap.w[0] === 1 && bots[0].snap.w[1] === 'prep' && bots[0].snap.w[2] > 0, JSON.stringify(bots[0].snap.w));
     // Tower placement through the replica's real build mode.
     await ev(A, () => { const R = window.__rift; R.teleport(-4, -18, 1); R.look(0, 0.75); R.advance(0.2); R.game.setBuildMode(true); });
     for (let i = 0; i < 3; i++) await tick(0.2);
@@ -393,4 +406,4 @@ const cell = (i, j) => [2 + 5 * i + 2.5, -2.5 + 5 * j + 2.5];
   await b.close();
   console.log(`\n${H.stats.failures === 0 ? 'ALL PASSED' : 'FAILURES'}  ${H.stats.passes} passed, ${H.stats.failures} failed`);
   process.exit(H.stats.failures ? 1 : 0);
-})().catch((e) => { console.error(e); process.exit(1); });
+})().catch((e) => { console.error(e); console.error(failureDetails()); process.exit(1); });
