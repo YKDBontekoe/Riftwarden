@@ -225,8 +225,16 @@ const visible = (p, testId) => p.locator(`[data-testid="${testId}"]`).count();
       await t.up(7);
       await H.waitFor(p, () => window.__rift.game.screen === 'playing', null, 10000);
       check('D6 RESUME with a tap returns to play without pointer lock', (await visible(p, 'touch-layer')) === 1);
+      // Left thumb still on the stick while the right thumb taps CARGO: the overlay unmounts mid-press.
+      await t.down(12, 150, 300);
+      await t.move(12, 150, 240);
+      await ev(p, () => window.__rift.advance(1 / 30));
+      const pushing = await ev(p, () => window.__rift.flow.input.stickZ);
       await tap(p, t, 'tc-inv');
       check('D7 CARGO opens the drone cargo', (await S(p)).screen === 'inventory');
+      await p.waitForTimeout(100); // React commits the unmount
+      check('D8 a panel opening under a held stick centres it (no walking behind the panel)', pushing > 0.5 && (await ev(p, () => window.__rift.flow.input.stickZ)) === 0, `before ${pushing.toFixed(2)}`);
+      await t.up(12);
       await ev(p, () => window.__rift.game.closeInventory?.());
     }
 

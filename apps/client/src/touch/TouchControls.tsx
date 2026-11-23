@@ -1,7 +1,7 @@
 // Touch overlay: floating move stick (left), drag-to-look (right), a thumb cluster of actions, a top row of
 // menus and context buttons. Every control feeds the shared Input (virtual keys / mouse buttons / look / stick),
 // so the game logic is the same for keyboard, mouse and touch.
-import { useRef, useSyncExternalStore, type CSSProperties, type PointerEvent as RPointerEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useSyncExternalStore, type CSSProperties, type PointerEvent as RPointerEvent, type ReactNode } from 'react';
 import { knobOffset, lookDelta, stickVector, TOUCH } from '@riftwarden/game/core/touch';
 import type { Input } from '@riftwarden/game/core/Input';
 import type { Flow } from '../core/Flow';
@@ -34,6 +34,16 @@ interface BtnProps {
 
 function Btn({ id, label, input, bind, onPress, look, className = '', sub, disabled, style }: BtnProps) {
   const last = useRef<{ id: number; x: number; y: number } | null>(null);
+  // Unmounted while held (a panel opened mid-press): release the key / button so it does not stay down.
+  const held = useRef({ input, bind });
+  held.current = { input, bind };
+  useEffect(
+    () => () => {
+      if (last.current && held.current.bind) press(held.current.input, held.current.bind, false);
+      last.current = null;
+    },
+    [],
+  );
   const release = (e: RPointerEvent<HTMLButtonElement>) => {
     if (last.current?.id !== e.pointerId) return;
     last.current = null;
@@ -134,7 +144,7 @@ function useSurface(flow: Flow) {
       }
     },
   };
-  return { handlers: { ...handlers, onPointerCancel: handlers.onPointerUp }, base, knob };
+  return { reset() { ptrs.current.clear(); flow.input.setStick(0, 0, false); hideStick(); }, handlers: { ...handlers, onPointerCancel: handlers.onPointerUp }, base, knob };
 }
 
 const PARTS = [['KeyC', 'WPN'], ['KeyV', 'CORE'], ['KeyN', 'MOD'], ['KeyM', 'BASE']] as const;
@@ -232,7 +242,12 @@ export function TouchControls({ flow }: { flow: Flow }) {
   const surface = useSurface(flow);
   const arena = location === 'arena' && screen === 'playing' && !!flow.arena;
   const home = location === 'home' && screen === 'home' && !!flow.home;
-  if (!on || (!arena && !home)) return null;
+  const shown = on && (arena || home);
+  // Hidden with a thumb on the stick (a panel opened, the screen changed): centre the stick and forget the fingers.
+  useEffect(() => {
+    if (!shown) surface.reset();
+  }, [shown]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!shown) return null;
   const look = () => flow.settings.touchLook * flow.settings.sensitivity;
   return (
     <div className="touch-layer" data-testid="touch-layer" style={{ '--tc-alpha': flow.settings.touchOpacity } as CSSProperties} {...surface.handlers}>
