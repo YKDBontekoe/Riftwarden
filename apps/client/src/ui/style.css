@@ -228,6 +228,7 @@ b.v { color: var(--violet); }
 .kill-pulse { position: fixed; inset: 0; pointer-events: none; z-index: 3; background: radial-gradient(ellipse at center, transparent 55%, rgba(255, 196, 140, 0.16) 100%); animation: killpulse 0.22s ease-out forwards; }
 @keyframes killpulse { from { opacity: 1; } to { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .kill-pulse { display: none; } }
+[data-motion='reduced'] .kill-pulse { display: none; }
 .kill-ring { position: absolute; left: -16px; top: -16px; width: 32px; height: 32px; border: 2px solid var(--red); border-radius: 50%; animation: killring 0.32s ease-out forwards; }
 @keyframes hm { from { transform: scale(1.5); } to { transform: scale(1); } }
 @keyframes hmk { from { transform: scale(1.9) rotate(12deg); } to { transform: scale(1); } }

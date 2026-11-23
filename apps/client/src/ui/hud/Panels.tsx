@@ -235,8 +235,11 @@ function MoveChip({ label, action, kind }: { label: string; action: string; kind
 
 function MoveRow() {
   const state = useHud((s) => s.moves.state);
+  const contextual = useHud((s) => s.phase === 'combat' && !s.buildMode);
+  const ready = useHud((s) => s.moves.grapple <= 0 && s.moves.pound <= 0);
+  if (contextual && ready && !state) return null;
   return (
-    <div className="flex gap-[6px] items-center mt-[6px] text-[10px] tracking-[0.08em]">
+    <div className="movement-row flex gap-[6px] items-center mt-[6px] text-[10px] tracking-[0.08em]">
       <MoveChip label="GRAPPLE" action="grapple" kind="grapple" />
       <MoveChip label="POUND" action="slide" kind="pound" />
       {state === 'slide' && <b className="mv-state">SLIDE</b>}

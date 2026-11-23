@@ -576,10 +576,17 @@ export class Player implements KitBody {
     const dip = kitSlide ? KIT.slideDip : this.move.slideDip;
     this.slide += ((sliding ? dip : 0) - this.slide) * (1 - Math.exp(-dt * (sliding ? 30 : 9)));
     const deadDrop = this.alive ? 0 : -0.9;
-    this.camera.position.set(p.x, p.y + EYE_OFFSET + hover - this.landDip - this.slide + deadDrop, p.z);
+    const eyeMotion = this.reduceMotion ? 0 : hover - this.landDip - this.slide;
+    this.camera.position.set(p.x, p.y + EYE_OFFSET + eyeMotion + deadDrop, p.z);
     const targetRoll = -this.move.strafeRoll * Math.max(-1, Math.min(1, strafe / this.move.runSpeed)) + this.kit.roll() * (kitSlide ? 0 : 1);
     this.roll += (targetRoll - this.roll) * (1 - Math.exp(-dt * 12));
     this.trauma = Math.max(0, this.trauma - dt * 1.4);
+    // Apply the setting before writing the camera, including trauma already in flight.
+    if (this.reduceMotion) {
+      this.trauma = 0;
+      this.roll = 0;
+      this.fovKick = 0;
+    }
     const sh = this.trauma * this.trauma;
     const t = performance.now() * 0.001;
     const sp = sh * 0.035 * (Math.sin(t * 37.1) + Math.sin(t * 23.7 + 1.3) * 0.6);
@@ -587,11 +594,7 @@ export class Player implements KitBody {
     const sr = sh * 0.05 * Math.sin(t * 27.7 + 0.7);
     this.camera.rotation.set(this.pitch - this.recoil + sp, this.yaw + this.recoilYaw + sy, (this.alive ? this.roll : 0.25) + sr + (this.reduceMotion ? 0 : this.punchRoll));
     this.fovKick *= Math.exp(-dt * 8);
-    if (this.reduceMotion) {
-      this.fovKick = 0;
-      this.roll = 0;
-    }
-    const sprintFov = this.sprinting ? this.move.sprintFov : kitSlide || this.kit.state === 'grapple' ? KIT.slideFov : 0;
+    const sprintFov = this.reduceMotion ? 0 : this.sprinting ? this.move.sprintFov : kitSlide || this.kit.state === 'grapple' ? KIT.slideFov : 0;
     // Sense of speed: carried overspeed widens the view a little more.
     const over = (speed - this.move.sprintSpeed) / Math.max(1, this.move.dashCarrySpeed - this.move.sprintSpeed);
     const speedFov = this.reduceMotion ? 0 : this.move.speedFov * Math.max(0, Math.min(1, over));
@@ -599,7 +602,7 @@ export class Player implements KitBody {
     const smoothed = this.camera.fov + this.appliedPunch;
     const next = smoothed + (this.baseFov + this.fovKick + sprintFov + speedFov - smoothed) * (1 - Math.exp(-dt * 14));
     this.appliedPunch = this.reduceMotion ? 0 : this.punchFov;
-    this.camera.fov = next - this.appliedPunch;
+    this.camera.fov = this.reduceMotion ? this.baseFov : next - this.appliedPunch;
   }
 
   /** Vertical velocity (m/s), for viewmodel jump/landing response. */

@@ -1,0 +1,53 @@
+/* Compact combat instruments; cooldowns and warnings retain their space when needed. */
+.combat-hud kbd { white-space: nowrap; flex-shrink: 0; }
+.combat-hud .panel-frame { background: rgba(12, 22, 24, .72); border-color: rgba(207, 228, 226, .19); }
+.combat-hud .bottom-left { width: 236px; padding: 8px 10px; bottom: 14px; left: 14px; }
+.combat-hud .bottom-right { width: 246px; bottom: 14px; right: 14px; }
+.combat-hud .weapon-card { padding: 8px 10px; }
+.combat-hud .weapon { font-size: 13px; }
+.combat-hud .hp-num { min-width: 60px; }
+.combat-hud .hp-num b { font-size: 29px; }
+.combat-hud .hp-num span { font-size: 9px; }
+.combat-hud .vitals { gap: 9px; }
+.combat-hud .label { font-size: 9px; letter-spacing: .04em; }
+.combat-hud .dash { padding-top: 5px; margin-top: 5px; }
+.combat-hud .chev { width: 26px; }
+.combat-hud .mv-chip { padding: 3px 5px; font-size: 9px; gap: 3px; white-space: nowrap; }
+.combat-hud .movement-row { flex-wrap: wrap; }
+.combat-hud .bottom-center { width: 260px; bottom: 14px; }
+.combat-hud .tactical { padding: 4px 7px; }
+.combat-hud .tac-label { font-size: 9px; }
+.combat-hud .top-center { width: min(284px, 35vw); padding: 6px 10px; }
+.combat-hud .wave-tag b { font-size: 20px; }
+.combat-hud .hint { bottom: 128px; padding: 5px 9px; font-size: 11px; max-width: 58vw; white-space: normal; text-align: center; }
+.combat-hud .slots { margin-top: 4px; gap: 4px; }
+.combat-hud .slots span { padding: 2px 5px 2px 2px; }
+.combat-hud[data-phase='combat'][data-build='false'] .mv-chip.ready,
+.combat-hud[data-phase='combat'][data-build='false'] .slots { display: none; }
+.combat-hud .build-panel, .combat-hud .inspect-panel { padding: 8px 10px; }
+.combat-hud .hud-rail { top: 14px; gap: 5px; }
+.combat-hud .hud-port { left: 14px; }
+.combat-hud .hud-starboard { right: 14px; }
+.combat-hud .run-panel { width: 190px; padding: 7px 10px; font-size: 11px; }
+.combat-hud .rp-row { margin-top: 3px; }
+.combat-hud .cores { padding: 6px 10px; }
+@media (max-width: 1100px), (max-height: 640px) {
+  .combat-hud .bottom-left { width: 205px; }
+  .combat-hud .bottom-right { width: 220px; }
+  .combat-hud .bottom-center { width: 224px; }
+  .combat-hud .weapon { font-size: 12px; }
+  .combat-hud .hud-rail .radar canvas { width: 96px !important; height: 96px !important; }
+  .combat-hud .hud-rail .run-panel { width: 172px; font-size: 10px; }
+  .combat-hud .mv-chip { font-size: 8px; }
+  .combat-hud .mv-chip kbd { font-size: 8px; padding: 1px 3px; }
+  .combat-hud .hint { bottom: 111px; max-width: 55vw; }
+}
+@media (max-width: 760px) {
+  .combat-hud .bottom-left { width: 27vw; padding: 6px; left: 8px; }
+  .combat-hud .bottom-right { width: 29vw; right: 8px; }
+  .combat-hud .bottom-center { width: 30vw; }
+  .combat-hud .top-center { width: 36vw; }
+  .combat-hud .hud-rail .run-panel { width: 24vw; }
+  .combat-hud .hp-num { min-width: 45px; }
+  .combat-hud .hp-num b { font-size: 24px; }
+}

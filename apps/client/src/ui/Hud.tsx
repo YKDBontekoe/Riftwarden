@@ -8,11 +8,14 @@ import { Banner, CenterPanel, Cores, Hint, Overlays, Perf, PlayerPanel, Respawn,
 import { Crosshair, DamageDirection, DamageNumbers, HealthBars, Hitmarker, KillChain, KillPulse } from './hud/Feedback';
 import { Radar } from './hud/Radar';
 import { NodeChip } from './RunMap';
+import { useHud } from './useHud';
 export { Banner, Perf } from './hud/Panels';
 
 export function Hud({ game }: { game: Game }) {
+  const phase = useHud(s => s.phase);
+  const build = useHud(s => s.buildMode);
   return (
-    <div className="hud">
+    <div className="hud combat-hud" data-phase={phase} data-build={build}>
       <Overlays />
       <HealthBars game={game} />
       <DamageNumbers game={game} />

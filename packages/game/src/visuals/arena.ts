@@ -701,7 +701,7 @@ export class ArenaBuilder {
       this.meshes.push(merged);
       merged.isPickable = g.surface !== null;
       merged.metadata = g.surface ? { surface: g.surface, impact: masonry || g.mat === this.pal.white || g.mat === this.pal.panel ? 'ceramic' : 'alloy' } : null;
-      merged.receiveShadows = g.surface !== null;
+      merged.receiveShadows = g.surface !== null || g.mat.name.startsWith('biomeDeposit:');
       merged.freezeWorldMatrix();
       merged.doNotSyncBoundingInfo = true;
       if (g.surface === 'wall' || g.surface === 'platform') this.shadowCasters.push(merged);

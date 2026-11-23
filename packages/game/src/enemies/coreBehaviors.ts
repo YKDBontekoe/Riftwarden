@@ -94,6 +94,7 @@ export function updateCore(e: Enemy, hdt: number, ctx: EnemyContext, m: EnemyMan
 }
 
 export function animateCore(e: Enemy, hdt: number, ppos: Vector3, fx: Effects): void {
+  const turnRate = clampAngle(e.yaw - e.root.rotation.y, Math.PI) / Math.max(1 / 240, hdt);
   e.root.position.copyFrom(e.pos);
   e.root.rotation.y = e.yaw;
   e.phase += hdt;
@@ -107,6 +108,7 @@ export function animateCore(e: Enemy, hdt: number, ppos: Vector3, fx: Effects): 
     const aimPitch = e.state === 'attack' ? 0.10 : Math.max(-0.15, Math.min(0.22, (e.pos.y + 1.9 - ppos.y) / Math.max(2, Math.hypot(dx, dz))));
     e.motion!.crawl = hasLost(e.limbsLost, 'leg');
     const planted = e.motion!.pose(e.pos, e.yaw, hdt * (e.boostT > 0 ? 1.6 : 1), e.state === 'move', charge, e.flinch, aimPitch);
+    if (e.kind === 'bulwark') w.torso.rotation.x += charge * 0.065;
     const d2 = dx * dx + dz * dz;
     if (planted && d2 < 18 * 18) fx.burst('puff', planted, e.kind === 'bulwark' ? 3 : 1, undefined, 0.6);
     // M7: heavy mechanical footfalls (nearby only; the sound bank rate-limits and caps voices).
@@ -120,7 +122,9 @@ export function animateCore(e: Enemy, hdt: number, ppos: Vector3, fx: Effects): 
     const d = e.drone;
     d.body.position.y = 1.3 + Math.sin(e.phase * 7) * 0.12;
     d.body.position.x = Math.sin(e.phase * 3.1) * 0.35;
-    d.body.rotation.z = Math.cos(e.phase * 3.1) * -0.35 + e.flinch * 0.6;
+    const bank = Math.max(-0.38, Math.min(0.38, turnRate * .11));
+    const roll = Math.cos(e.phase * 3.1) * -0.20 + bank + e.flinch * .6;
+    d.body.rotation.z += (roll - d.body.rotation.z) * (1 - Math.exp(-hdt * 12));
     d.body.rotation.x = 0.18 + e.flinch * -0.5 + (e.boostT > 0 ? 0.3 : 0);
     d.ring.rotation.y = e.phase * 12;
   }

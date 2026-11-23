@@ -112,6 +112,11 @@ async function deploy(p) {
     if (want('B')) {
       // Shoot-off parts with the real weapon: hold a walker in front of the drone and aim at its cannon arm.
       await deploy(p);
+      // Fixed-step combat can take longer than the 620 ms marker lifetime in software GL.
+      // Hold browser timers while simulating, then paint a frame before inspecting the label.
+      const markerTime = new Date('2026-11-23T12:00:00Z');
+      await p.clock.install({ time: markerTime });
+      await p.clock.pauseAt(new Date(markerTime.getTime() + 1000));
       const b1 = await ev(p, () => {
         const R = window.__rift;
         const g = R.game;
@@ -151,7 +156,9 @@ async function deploy(p) {
         R.advance(1 / 60);
         return { lost: e.limbsLost, alive: e.alive, cannonShown: e.walker.cannon.isEnabled(), frames, hp: Math.round(e.hp), max: e.maxHp };
       });
+      await p.clock.runFor(32);
       const label = await p.$('.limb-label').then((h) => (h ? h.textContent() : null)).catch(() => null);
+      await p.clock.resume();
       check('B1 firing at a walker cannon knocks it off while the walker lives', (b1.lost & 1) === 1 && b1.alive && !b1.cannonShown, JSON.stringify(b1));
       check('B2 the HUD calls out the severed part', !!label && /CANNON/.test(label), String(label));
       const b3 = await ev(p, () => {

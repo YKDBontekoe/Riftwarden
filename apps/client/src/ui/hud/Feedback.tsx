@@ -241,7 +241,7 @@ export function HealthBars({ game }: { game: Game }) {
       const seen = new Set<number>();
       const pp = game.player.position;
       for (const e of game.enemies.active) {
-        if (!e.alive || e.def.role === 'boss') continue;
+        if (!e.alive || e.hidden || e.def.role === 'boss') continue;
         const dx = e.pos.x - pp.x;
         const dz = e.pos.z - pp.z;
         const d2 = dx * dx + dz * dz;

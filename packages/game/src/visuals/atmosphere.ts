@@ -308,9 +308,9 @@ export class Atmosphere {
     const fill = new HemisphericLight('stormFill', new Vector3(-0.3, 1, 0.35), scene);
     // Cool storm fill, low: the warm sun and the practical lights carry the contrast.
     fill.diffuse.set(0.58, 0.68, 0.82);
-    fill.groundColor.set(0.2, 0.19, 0.2);
+    fill.groundColor.set(0.15, 0.17, 0.20);
     fill.specular.set(0, 0, 0);
-    fill.intensity = 0.26;
+    fill.intensity = 0.28;
 
     this.beamMat = new ShaderMaterial('lampBeam', scene, 'rwBeam', {
       shaderLanguage: shaderLanguageFor(scene),
@@ -520,6 +520,12 @@ export class Atmosphere {
     ps.gravity = new Vector3(0, -0.02, 0);
     // Biome air: ash (outpost), snow (cryo, falls), embers (foundry, rise).
     const air = biomeOf(this.layout).air;
+    if (this.layout.biome === 'cryo') {
+      ps.minEmitBox.set(-13, -1, -13);
+      ps.maxEmitBox.set(13, 7, 13);
+      ps.direction1.set(-.55, -.15, .10);
+      ps.direction2.set(-.16, -.35, .3);
+    }
     ps.minSize = air.size[0];
     ps.maxSize = air.size[1];
     ps.gravity = new Vector3(0, air.gravity, 0);
@@ -643,7 +649,8 @@ export class Atmosphere {
   private applyRates(): void {
     const high = this.qualityHigh;
     const m = this.density;
-    this.dust.emitRate = (high ? 45 : 18) * m * biomeOf(this.layout).air.rate;
+    const cryo = this.layout.biome === 'cryo';
+    this.dust.emitRate = this.reduceMotion && cryo ? 0 : (high ? (cryo ? 28 : 45) : 14) * m * biomeOf(this.layout).air.rate;
     this.embers.emitRate = (high ? 8 : 3) * m;
     this.rain.emitRate = this.reduceMotion || !biomeOf(this.layout).air.rain ? 0 : (high ? 280 : 85) * m;
     for (const particles of this.gateEmbers) particles.emitRate = (high ? 30 : 14) * m;

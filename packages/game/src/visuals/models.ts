@@ -13,6 +13,7 @@ import { canvas, fbm, flareSprite, toTexture, vnoise } from './textures';
 import { createBeveledBox } from './bevel';
 import { segmentedRing } from './rings';
 import { createReactorField } from './reactorField';
+import { enemyRolePalette } from './enemyRolePalette';
 import { loftData, type LoftAxis, type Section, smoothLatheData } from './sculpt';
 
 export interface WalkerRig {
@@ -81,6 +82,7 @@ function walkerShapes(kit: Kit) {
 
 /** Strider walker (and the heavier Bulwark variant). Root sits on the ground, faces +Z. */
 export function buildWalker(kit: Kit, P: Palette, heavy: boolean): WalkerRig {
+  if (heavy) P = enemyRolePalette(P, 'bulwark');
   const S = walkerShapes(kit);
   const root = kit.node('walker', null);
   const scaleRoot = kit.node('wScale', root);
@@ -149,6 +151,9 @@ export function buildWalker(kit: Kit, P: Palette, heavy: boolean): WalkerRig {
   if (heavy) {
     for (const side of [-1, 1]) {
       kit.part(S.heavyPlate, P.enemyArmor, torso, { pos: [side * 0.8, 0.42, 0], rot: [0, 0, side * -0.35] });
+      // Raised collar and stepped pauldrons give the shield carrier a square silhouette.
+      kit.part(S.pauldron, P.enemyArmor, torso, { pos: [side * 0.84, 0.64, -0.12], rot: [0.12, 0, side * -0.35], scale: [1.25, 1.65, 1.5] });
+      kit.part(S.heavyPlate, P.enemyDark, torso, { pos: [side * 0.49, 0.65, -0.51], rot: [-0.18, 0, side * 0.18], scale: [0.62, 2.1, 0.62] });
       kit.part('box', P.orangeGlow, torso, { pos: [side * 0.88, 0.5, 0.4], scale: [0.36, 0.04, 0.03], rot: [0, 0, side * -0.35], shadow: false });
     }
   }
@@ -196,6 +201,7 @@ export interface DroneRig {
 
 /** Rush drone: fast hovering kamikaze machine. Body center at local y=0. */
 export function buildRusher(kit: Kit, P: Palette): DroneRig {
+  P = enemyRolePalette(P, 'rusher');
   const L = (name: string, secs: Section[], axis: LoftAxis = 'z', segs = 28) => kit.sculpt(name, () => loftData(secs, axis, segs));
   const hull = L('rHull', [
     { t: -0.62, w: 0.26, h: 0.2, n: 3 },
@@ -223,7 +229,8 @@ export function buildRusher(kit: Kit, P: Palette): DroneRig {
     kit.part(mandible, P.enemyArmor, body, { pos: [side * 0.42, -0.065, 0.08], rot: [0, -side * 0.42, -side * 0.21] });
     kit.part(intakes, P.enemyArmor, body, { pos: [side * 0.49, 0.16, -0.12], rot: [0, -side * 0.26, -side * 0.16] });
     kit.part('box', P.orangeDim, body, { pos: [side * 0.30, -0.036, 0.47], scale: [0.024, 0.031, 0.28], rot: [0, -side * 0.42, 0], shadow: false });
-    kit.part(fin, P.enemyDark, body, { pos: [side * 0.42, 0.04, -0.2], rot: [0, 0, side * 0.3], scale: [side, 1, 1] });
+    kit.part(fin, P.enemyDark, body, { pos: [side * 0.42, 0.04, -0.2], rot: [0, -side * 0.22, side * 0.3], scale: [side * 1.45, 1.5, 1.2] });
+    kit.part(fin, P.enemyArmor, body, { pos: [side * 0.56, 0.10, -0.26], rot: [0, -side * 0.22, side * 0.3], scale: [side * 0.85, 0.7, 0.8] });
     kit.part(nozzle, P.graphite, body, { pos: [side * 0.34, -0.1, -0.56], rot: [-Math.PI / 2, 0, 0] });
     kit.part('torusThin', P.metal, body, { pos: [side * 0.34, -0.1, -0.754], rot: [Math.PI / 2, 0, 0], scale: [0.29, 0.49, 0.29] });
     kit.part('cyl8', P.orangeGlow, body, { pos: [side * 0.34, -0.1, -0.77], rot: [Math.PI / 2, 0, 0], scale: [0.2, 0.02, 0.2], shadow: false });

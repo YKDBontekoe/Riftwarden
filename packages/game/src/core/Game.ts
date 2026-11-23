@@ -37,6 +37,7 @@ import { rollLoot } from '@riftwarden/rules/loot/roll';
 import { gearUniques } from '@riftwarden/rules/loot/uniques';
 import { loadoutScore } from '@riftwarden/rules/loot/loadoutScore';
 import { contactShadow } from '../visuals/grounding';
+import { enemyContacts } from '../visuals/EnemyContacts';
 import { createSunShadows } from '../arena/shadows';
 import { CORE_BEHAVIORS } from '../enemies/coreBehaviors';
 import { DROP_SOURCES, type DropSourceId } from '@riftwarden/rules/loot/drops';
@@ -96,7 +97,7 @@ import { type TutorialHost, TutorialDirector } from './TutorialDirector';
 
 const TMP = new Vector3();
 /** Sun intensity (directional, range-free). */
-const SUN = 1.85;
+const SUN = 2.15;
 const TMP2 = new Vector3();
 
 /** Callbacks into the session flow (persistence and scene transitions live there). */
@@ -333,8 +334,8 @@ export class Game {
     this.reactorLight = new PointLight('reactorLight', new Vector3(0, 5, 0), scene);
     this.reactorLight.diffuse = new Color3(0.3, 0.9, 1);
     this.reactorLight.specular = new Color3(0.12, 0.4, 0.52);
-    this.reactorLight.intensity = 3;
-    this.reactorLight.range = 30;
+    this.reactorLight.intensity = 2.5;
+    this.reactorLight.range = 24;
 
     // Arena
     const arena = new ArenaBuilder(scene, this.pal, this.layout);
@@ -352,7 +353,7 @@ export class Game {
     this.weapon = new Weapon(scene, weaponDef, this.player, cfg.loadout.weapon);
     scene.setRenderingAutoClearDepthStencil(1, true, true, true);
     this.post = new PostFx(scene, engine, this.player.camera, high, true);
-    Object.assign(this.post, { baseContrast: 1.22, baseExposure: 1.08 }); // arena grade: punchier than the HQ
+    Object.assign(this.post, { baseContrast: 1.13, baseExposure: 1.06 }); // retain shadow detail under the directional key
     this.mood = new MoodDirector(scene, this.moon, this.post);
 
     this.fx = new Effects(scene, this.kit, this.pal, this.layout, high);
@@ -370,6 +371,7 @@ export class Game {
     const sg = createSunShadows(moon, settings.shadows ?? (high ? 'high' : 'low'), high, [...arena.shadowCasters, ...reactorCasters]);
     if (sg) this.kit.shadowSink = (m) => sg.addShadowCaster(m);
     this.enemies = new EnemyManager(scene, this.kit, this.pal);
+    if (!sg) enemyContacts(scene, this.enemies, this.player.camera.position);
     if (cfg.mode === 'survival') this.hunt = new Hunt(this.layout);
     this.wear = this.setupMazing();
     for (const [kind, b] of Object.entries({ ...CORE_BEHAVIORS, ...M6_BEHAVIORS, ...JAMMER_CRAWLER_BEHAVIORS, ...FACTION_BEHAVIORS, ...BOSS_BEHAVIORS })) if (b) this.enemies.register(kind as EnemyKind, b as Behavior);
@@ -1768,6 +1770,11 @@ export class Game {
     // One of every rig (and all elite hardware) so every (shape, material) template exists, then compile them all.
     this.enemies.prebuild(['walker', 'rusher', 'bulwark', 'enforcer', 'artillery', 'engineer', 'courier', 'colossus', 'overseer', 'pylon', 'jammer', 'sapper', 'skimmer', 'marksman', 'burrower', 'crawler']);
     const jobs: Promise<unknown>[] = [this.tele.warm(), this.ordnance.warm(), this.kit.warmAll()];
+    // The camera-mounted weapon has its own lighting/material variants. Warm those too,
+    // so the first revealed arena frame does not show an empty hand.
+    for (const mesh of this.weapon.rig.meshes) {
+      if (mesh.material) jobs.push(mesh.material.forceCompilationAsync(mesh).catch(() => {}));
+    }
     for (const m of this.scene.meshes) {
       if (m.isEnabled() || !m.material || !/^(dynPart|ventPlume|ventWarn|volatileCharge)/.test(m.name)) continue;
       jobs.push(m.material.forceCompilationAsync(m).catch(() => {}));

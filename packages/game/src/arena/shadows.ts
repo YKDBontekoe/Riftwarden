@@ -25,8 +25,8 @@ export function createSunShadows(sun: DirectionalLight, quality: ShadowQuality, 
   }
   sg.usePercentageCloserFiltering = true;
   sg.filteringQuality = highGraphics ? ShadowGenerator.QUALITY_HIGH : ShadowGenerator.QUALITY_LOW;
-  sg.bias = 0.004;
-  sg.normalBias = 0.025;
+  sg.bias = 0.0007;
+  sg.normalBias = 0.035;
   sg.darkness = 0;
   for (const m of casters) sg.addShadowCaster(m);
   return sg;
