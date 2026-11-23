@@ -44,10 +44,12 @@ const SENSE = () => {
   let bd = 1e9;
   for (const e of g.enemies.active) {
     if (e.hidden) continue;
-    const c = e.center();
+    const v = e.center();
+    const c = { x: v.x, y: v.y, z: v.z }; // center() may return a shared vector
     const d = Math.hypot(c.x - eye.x, c.y - eye.y, c.z - eye.z);
-    const score = d + (g.los(eye, c) ? 0 : 80);
-    if (score < bd) { bd = score; best = { c, d, los: g.los(eye, c) }; }
+    const los = g.los(eye, v);
+    const score = d + (los ? 0 : 80);
+    if (score < bd) { bd = score; best = { c, d, los }; }
   }
   let dyaw = 0;
   let dpitch = 0;
@@ -63,7 +65,7 @@ const SENSE = () => {
     target: best ? { d: best.d, los: best.los } : null, dyaw, dpitch, alive: pl.alive, hp: pl.hp, cores: g.wallet.cores,
     build: g.construction.active, valid: !!g.construction.valid, towers: g.turrets.turrets.length,
     shots: g.weapon.shotsFired, dealt: g.director.dealt?.player ?? 0, reactor: g.reactorHp,
-    kills: g.cfg.run.kills, heat: g.weapon.heat, over: g.weapon.overheated, pos: { x: pl.position.x, z: pl.position.z }, sprint: pl.sprinting,
+    kills: g.cfg.run.kills, heat: g.weapon.heat, over: g.weapon.overheated, pitch: pl.pitch, yaw: pl.yaw, eyeY: eye.y, ty: best ? best.c.y : 0, pos: { x: pl.position.x, z: pl.position.z }, sprint: pl.sprinting,
   };
 };
 
@@ -193,7 +195,7 @@ const SENSE = () => {
       if (!T.has(2)) await T.down(2, STICK[0], STICK[1]);
       await T.move(2, STICK[0] + strafe * 40, STICK[1] + fwd);
 
-      if (process.env.DEBUG_AIM && cur && t - cur.t0 < 4) console.log('aim', t.toFixed(2), s.target && s.target.d.toFixed(1), s.target && s.target.los, s.dyaw.toFixed(3), s.dpitch.toFixed(3), s.enemies);
+      if (process.env.DEBUG_AIM && cur && t - cur.t0 < 4) console.log('aim', t.toFixed(2), s.target && s.target.d.toFixed(1), s.target && s.target.los, 'dyaw', s.dyaw.toFixed(3), 'dpitch', s.dpitch.toFixed(3), 'pitch', s.pitch.toFixed(3), 'eyeY', s.eyeY.toFixed(2), 'tY', s.ty.toFixed(2), venting ? 'VENT' : '', fireAt ? 'FIRE' : '');
       const big = Math.abs(s.dyaw) > 0.55;
       // Let the weapon cool like a player would: release at 90% heat, hold again below 35%.
       if (s.heat > 90 || s.over) venting = true;
