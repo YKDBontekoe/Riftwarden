@@ -187,7 +187,7 @@ const SENSE = () => {
             const g = await ev(p, () => ({ valid: window.__rift.game.construction.valid, reason: window.__rift.game.construction.reason }));
             reasons[g.reason] = (reasons[g.reason] || 0) + 1;
             if (g.valid) {
-              const before = s.towers + builtThisPrep;
+              const before = await ev(p, () => window.__rift.game.turrets.turrets.length);
               await tap('tc-fire');
               await ev(p, () => window.__rift.advance(0.3));
               placed = (await ev(p, () => window.__rift.game.turrets.turrets.length)) > before;
