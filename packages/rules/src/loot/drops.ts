@@ -98,6 +98,8 @@ export interface LootContext {
   tierLuck: number;
   /** Ordinary drops since the last legendary or better (bad-luck protection; 0 when absent). */
   pity?: number;
+  /** Categories the warden has not unlocked (staged unlocks): never picked. */
+  lockedCategories?: readonly Category[];
 }
 
 export interface DropSpec {
@@ -126,8 +128,10 @@ export function luckFor(source: DropSource, ctx: LootContext): number {
 /** Rarity index from which a drop resets the bad-luck counter (legendary). */
 export const PITY_RESET = 4;
 
-function pickCategory(weights: Partial<Record<Category, number>>, rand: () => number): Category {
-  const entries = Object.entries(weights) as [Category, number][];
+function pickCategory(weights: Partial<Record<Category, number>>, rand: () => number, locked: readonly Category[] = []): Category {
+  const all = Object.entries(weights) as [Category, number][];
+  const open = locked.length ? all.filter(([c]) => !locked.includes(c)) : all;
+  const entries = open.length ? open : all;
   const total = entries.reduce((s, [, w]) => s + w, 0);
   let x = rand() * total;
   for (const [c, w] of entries) {
@@ -143,7 +147,7 @@ export function rollDrops(source: DropSource, ctx: LootContext, rand: () => numb
   const guaranteed = source.guaranteedThroughWave !== undefined && ctx.wave <= source.guaranteedThroughWave;
   for (let i = 0; i < source.rolls; i++) {
     if (!guaranteed && rand() >= source.chance) continue;
-    const category = pickCategory(source.categories, rand);
+    const category = pickCategory(source.categories, rand, ctx.lockedCategories);
     const ex = source.exclusive?.find((e) => e.category === category);
     const baseId = ex && rand() < ex.chance ? ex.baseId : undefined;
     const level = itemLevelFor(ctx, source.levelBonus, rand);

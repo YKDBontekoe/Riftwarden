@@ -2,6 +2,7 @@
 // one of these plain-data entries, applied by the same code on the device (immediately, offline-first) and by
 // the server's rules worker when the device syncs (after runCheck validated it). See profile ops (ops.ts) for
 // the HQ side.
+import { lootLocks } from './unlocks';
 import type { DropSource } from '../loot/drops';
 import type { RunMapState } from '../runmap/state';
 import type { SlotId } from './items';
@@ -22,6 +23,8 @@ export interface LootRecord {
   faction: string | null;
   /** Bad-luck counter before this roll (absent = 0). */
   pity?: number;
+  /** Staged-unlock loot locks of the run (absent = none; must match the run's locks). */
+  locks?: string[];
 }
 
 export type RunEntry =
@@ -40,7 +43,8 @@ export function applyRunEntry(d: SaveData, e: RunEntry): boolean {
   switch (e.kind) {
     case 'start':
       if (e.select) selectTier(d, e.tier);
-      beginRun(d, e.runId, e.tier, e.at, { mapSeed: e.mapSeed, mode: e.mode });
+      // Loot locks are derived from the profile here (device and server alike), never taken from the entry.
+      beginRun(d, e.runId, e.tier, e.at, { mapSeed: e.mapSeed, mode: e.mode, locks: lootLocks(d) });
       return true;
     case 'bank':
       return bankRewards(d, e.runId, e.wave, e.rewards, { bosses: e.bosses });

@@ -105,18 +105,21 @@ export interface GenSpec {
   now?: number;
   /** Force every roll to this position (0..1) and no affixes: starter/legacy kit. */
   fixedRoll?: number;
+  /** Weapon families the warden has not unlocked (staged unlocks): their chassis are never picked. */
+  excludeFamilies?: readonly string[];
 }
 
-export function pickBase(category: Category, rand: () => number, allowExclusive: readonly string[] = []): BaseDef {
-  const pool = basesFor(category, allowExclusive);
-  return pickWeighted(pool, (b) => b.weight, rand) ?? BASES[0];
+export function pickBase(category: Category, rand: () => number, allowExclusive: readonly string[] = [], excludeFamilies: readonly string[] = []): BaseDef {
+  const all = basesFor(category, allowExclusive);
+  const pool = excludeFamilies.length ? all.filter((b) => !b.weapon || !excludeFamilies.includes(b.weapon.family)) : all;
+  return pickWeighted(pool.length ? pool : all, (b) => b.weight, rand) ?? BASES[0];
 }
 
 export function generateItem(spec: GenSpec): ItemInstance {
   const rand = mulberry32(spec.seed >>> 0);
   const level = clampLevel(spec.level);
   const r = rarity(spec.rarity);
-  const base = baseDef(spec.baseId) ?? pickBase(spec.category ?? 'weapon', rand, spec.allowExclusive);
+  const base = baseDef(spec.baseId) ?? pickBase(spec.category ?? 'weapon', rand, spec.allowExclusive, spec.excludeFamilies);
   const fixed = spec.fixedRoll;
   const roll = () => (fixed !== undefined ? fixed : qualityRoll(rand, r));
 

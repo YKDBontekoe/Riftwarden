@@ -1,3 +1,4 @@
+import { lockReason, unlockDef } from '@riftwarden/rules/progression/unlocks';
 import { useMemo, useState } from 'react';
 import { fmtNum, formatModifier, STAT_DEFS } from '@riftwarden/rules/combat/stats';
 import type { Flow } from '../core/Flow';
@@ -38,10 +39,15 @@ function engEntries(save: SaveData): EngEntry[] {
   return out;
 }
 
+/** Feature each workshop tab needs (staged unlocks). */
+const TAB_FEATURE: Record<Tab, string> = { modules: 'station:modules', affixes: 'workshop:affixes', enhance: 'workshop:enhance', components: 'workshop:components', towers: 'workshop:towers' };
+
 export function EngineeringTerminal({ flow, close }: { flow: Flow; close: () => void }) {
   const save = useSave(flow);
-  const [tab, setTab] = useState<Tab>('modules');
+  // Open on the first tab the warden can use (modules unlock at RL 3; enhancement at RL 2).
+  const [tab, setTab] = useState<Tab>(() => (['modules', 'enhance', 'affixes', 'components', 'towers'] as Tab[]).find((t) => !lockReason(save, TAB_FEATURE[t])) ?? 'modules');
   const [selW, setSelW] = useState<string | null>(() => save.loadout.weapon);
+  const locked = lockReason(save, TAB_FEATURE[tab]);
   return (
     <Shell code="WS-04" title="ENGINEERING WORKSHOP" sub="Modules · affix recalibration · enhancement · component engineering" close={close} accent="amber" wide>
       <div className="market-head">
@@ -55,16 +61,26 @@ export function EngineeringTerminal({ flow, close }: { flow: Flow; close: () => 
               ['towers', 'TOWER TECH'],
             ] as [Tab, string][]
           ).map(([id, label]) => (
-            <button key={id} className={tab === id ? 'on' : ''} data-tab={id} onClick={() => setTab(id)}>
-              {label}
+            <button key={id} className={`${tab === id ? 'on' : ''}${lockReason(save, TAB_FEATURE[id]) ? ' opacity-55' : ''}`} data-tab={id} onClick={() => setTab(id)} title={lockReason(save, TAB_FEATURE[id]) ?? undefined}>
+              {lockReason(save, TAB_FEATURE[id]) ? '⨯ ' : ''}{label}
             </button>
           ))}
         </div>
         <ResourceBar save={save} compact />
       </div>
-      {tab === 'modules' && <ModuleBench flow={flow} selW={selW} setSelW={setSelW} />}
-      {tab === 'towers' && <TowerTech flow={flow} save={save} />}
-      {tab !== 'modules' && tab !== 'towers' && <Bench key={tab} flow={flow} save={save} tab={tab} selW={selW} setSelW={setSelW} />}
+      {locked ? (
+        <div className="empty-state" data-testid="ws-locked">
+          <b>Locked</b>
+          <p>{locked}</p>
+          <p className="text-muted">{unlockDef(TAB_FEATURE[tab])?.blurb}</p>
+        </div>
+      ) : (
+        <>
+          {tab === 'modules' && <ModuleBench flow={flow} selW={selW} setSelW={setSelW} />}
+          {tab === 'towers' && <TowerTech flow={flow} save={save} />}
+          {tab !== 'modules' && tab !== 'towers' && <Bench key={tab} flow={flow} save={save} tab={tab} selW={selW} setSelW={setSelW} />}
+        </>
+      )}
     </Shell>
   );
 }
@@ -412,7 +428,7 @@ function EnhanceBench({ save, item, tx, setPreview }: { save: SaveData; item: It
 
 /** Ascension: Exotic -> Ascended for rift shards (the preview is the exact result: the roll is deterministic). */
 function AscendBench({ save, item, tx, setPreview }: { save: SaveData; item: ItemInstance; tx: Tx; setPreview: (i: ItemInstance | null) => void }) {
-  const why = ascendBlock(item);
+  const why = lockReason(save, 'workshop:ascension')?.replace(/\.$/, '') ?? ascendBlock(item);
   const next = useMemo(() => (why ? null : ascendItem(item, engineeringRand(item, 'ascend'))), [item, why]);
   const cost = ascendCost(item);
   return (

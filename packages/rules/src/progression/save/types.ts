@@ -89,6 +89,8 @@ export interface RunHistoryEntry {
   dev: boolean;
   /** Survival mode run (absent = defense). */
   mode?: 'survival';
+  /** Staged-unlock loot locks at the start of the run (absent = none locked). */
+  locks?: string[];
   /** Run map: act reached, nodes completed and the compact path (e.g. "1C", "1E", "1B*"). */
   act?: number;
   nodes?: number;
@@ -111,6 +113,8 @@ export interface ActiveRun {
   nodeBank?: number;
   /** Survival mode run (absent = defense). */
   mode?: 'survival';
+  /** Staged-unlock loot locks at the start of the run (absent = none locked). */
+  locks?: string[];
 }
 
 export interface LoadoutPreset {

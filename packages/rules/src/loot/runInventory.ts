@@ -98,9 +98,12 @@ export class RunInventory {
     return SLOT_IDS.find((s) => this.loadout[s] === uid) ?? null;
   }
 
+  /** Slots the warden has not unlocked yet (staged unlocks): never targeted, equips refused. */
+  lockedSlots: readonly SlotId[] = [];
+
   /** Default target slot (`defaultSlot`: weapons -> primary, others -> first empty compatible slot). */
   targetSlot(item: ItemInstance): SlotId | null {
-    return defaultSlot(item.category, this.loadout);
+    return defaultSlot(item.category, this.loadout, this.lockedSlots);
   }
 
   /** Equip from the run inventory. `allowed` = equipment changes are permitted right now. */
@@ -110,7 +113,7 @@ export class RunInventory {
     if (!item) return 'missing';
     if (item.category === 'module') return 'module';
     const target = slot ?? this.targetSlot(item);
-    if (!target || !fitsSlot(item, target)) return 'incompatible';
+    if (!target || !fitsSlot(item, target) || this.lockedSlots.includes(target)) return 'incompatible';
     const prevSlot = this.slotOf(uid);
     if (prevSlot === target) return 'ok';
     if (prevSlot) this.loadout[prevSlot] = this.loadout[target]; // swap between accessory slots

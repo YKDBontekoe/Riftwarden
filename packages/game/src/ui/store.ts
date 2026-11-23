@@ -20,6 +20,8 @@ export interface PromptInfo {
   action: string;
   /** What the station is for (station info table). */
   purpose?: string;
+  /** Staged unlocks: why the station cannot be used yet. */
+  locked?: string;
 }
 
 export interface RunHud {
@@ -166,6 +168,8 @@ export interface HudState {
   run: RunHud | null;
   /** Result of the run that just ended (summary / defeat screens). */
   lastRun: RunResult | null;
+  /** Staged unlocks that opened recently (HQ toast; newest last). */
+  unlocks?: { id: string; label: string; blurb: string; at: number }[];
   wave: number;
   phase: WavePhase;
   phaseTimer: number;

@@ -200,6 +200,7 @@ export function ArenaInventory({ game }: { game: Game }) {
           <InventoryView
             entries={entries}
             equipped={equipped}
+            lockedSlots={inv.lockedSlots}
             extraFilter
             actions={{
               canChange: allowed,

@@ -1,3 +1,4 @@
+import { UnlockTrackPanel } from '../UnlockTrack';
 import type { Flow } from '../../core/Flow';
 import { getTier, type ThreatTier } from '@riftwarden/rules/progression/tiers';
 import { MILESTONES } from '@riftwarden/rules/survival/records';
@@ -26,6 +27,7 @@ export function CommandTerminal({ flow, close }: { flow: Flow; close: () => void
             <Stat k="HIGHEST RIFT LEVEL UNLOCKED" v={`RL ${save.threat.unlocked}`} />
           </div>
           <WardenProgress flow={flow} />
+          <UnlockTrackPanel save={save} />
           <div className="col-label">MILESTONES · {save.milestones.length}/{MILESTONES.length}</div>
           <div className="milestones" data-testid="milestones">
             {MILESTONES.map((m) => (

@@ -17,6 +17,8 @@ const COMPONENT_SLOTS = ['barrel', 'core', 'cooling', 'mechanism', 'attachment']
 import { BUILD_OPS } from '../home/build/ops';
 import { TUTORIAL_OPS } from './tutorial';
 import { allocateNode, respecTree } from './treeOps';
+import { lockReason, opFeature, recipeFeature } from './unlocks';
+import { recipeDef } from '../economy/recipes';
 
 /**
  * Named, serialisable profile operations (M7).
@@ -117,10 +119,25 @@ export function opError(name: unknown, args: unknown): string | null {
   return null;
 }
 
+/** Staged unlocks (progression/unlocks): a locked station, system or recipe refuses its operations. */
+function lockError(d: SaveData, name: string, args: unknown[]): string | null {
+  const feature = name in BUILD_OPS ? 'station:architect' : opFeature(name, args);
+  const reason = feature ? lockReason(d, feature) : null;
+  if (reason) return reason;
+  if (name === 'craft') {
+    const r = recipeDef(args[0] as string);
+    const f = r ? recipeFeature(r.output) : null;
+    return f ? lockReason(d, f) : null;
+  }
+  return null;
+}
+
 /** Run a named operation against a save (mutates on success; the caller persists). */
 export function runOp(d: SaveData, name: string, args: unknown[], txId?: string): OpResult {
   const err = opError(name, args);
   if (err) return { ok: false, reason: err };
+  const locked = lockError(d, name, args);
+  if (locked) return { ok: false, reason: locked };
   if (txId !== undefined && (typeof txId !== 'string' || txId.length > 80)) return { ok: false, reason: 'Invalid transaction id' };
   return DEFS[name].run(d, args, txId);
 }

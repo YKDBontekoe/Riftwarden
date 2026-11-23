@@ -52,6 +52,10 @@ export interface ServerPlayerInit {
   restore?: Record<string, string | null>;
   /** Run map: ultimate charge carried from the previous node. */
   ult?: number;
+  /** Staged-unlock loot locks of this player's profile at deployment. */
+  locks?: readonly string[];
+  /** Slots this player has not unlocked. */
+  lockedSlots?: readonly SlotId[];
 }
 
 interface ServerPickup {
@@ -77,6 +81,8 @@ export class Avatar {
   abilities!: Abilities;
   rand: () => number;
   lootCounter = 0;
+  /** Staged-unlock loot locks (this player's profile). */
+  locks: readonly string[] = [];
   connected = true;
   left = false;
   lastSeq = -1;
@@ -255,6 +261,8 @@ export class ServerGame extends Game {
   addAvatar(p: ServerPlayerInit): Avatar {
     const a = new Avatar(p.id, p.name, p.slot, this, p.loadout, p.ledger);
     if (p.restore) a.inventory.adoptLoadout(p.restore);
+    a.locks = p.locks ?? [];
+    a.inventory.lockedSlots = p.lockedSlots ?? [];
     if (p.tree) {
       a.treeMods = treeModifiers(p.tree.seed, p.tree.allocated);
       p.ledger.xpMult = treeRules(p.tree.seed, p.tree.allocated).xpMult;
@@ -433,7 +441,7 @@ export class ServerGame extends Game {
   }
 
   private rollFor(a: Avatar, src: DropSource, wave: number): ItemInstance[] {
-    const items = rollLoot({ source: src, wave, tier: this.cfg.tier, rand: a.rand, nextUid: () => `${this.team.id}.${a.slot}.${++a.lootCounter}`, originId: this.team.id, chanceMult: this.dropChanceMult, faction: this.director.faction, pity: a.run.pity });
+    const items = rollLoot({ source: src, wave, tier: this.cfg.tier, rand: a.rand, nextUid: () => `${this.team.id}.${a.slot}.${++a.lootCounter}`, originId: this.team.id, chanceMult: this.dropChanceMult, faction: this.director.faction, pity: a.run.pity, locks: a.locks });
     a.run.pity = nextPity(a.run.pity, items);
     return items;
   }

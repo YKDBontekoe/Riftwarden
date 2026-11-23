@@ -1,3 +1,4 @@
+import { lockedSlots } from '@riftwarden/rules/progression/unlocks';
 import { useMemo } from 'react';
 import { sfx } from '@riftwarden/game/audio/Sfx';
 import type { Flow } from '../../core/Flow';
@@ -38,6 +39,7 @@ export function StorageTerminal({ flow, close }: { flow: Flow; close: () => void
       <InventoryView
         entries={entries}
         equipped={equipped}
+        lockedSlots={lockedSlots(save)}
         actions={{
           canChange: true,
           lockedReason: '',

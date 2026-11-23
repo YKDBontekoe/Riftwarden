@@ -1,6 +1,6 @@
 // Rift Levels browser suite (docs/progression-design.md phase 1): A deploy terminal picker + loot gates + unlock bar,
 // B picking a high level and deploying (item levels, rarity ceiling, HUD), C Rift Surge on the run map,
-// D v11 restart notice for a migrated profile, V screenshots.
+// D v11 restart notice for a migrated profile, E staged unlocks (&locks), F weapon-family mastery, V screenshots.
 //   node scripts/e2e-riftlevels.cjs [A,B,...]   (dev server on :5173)
 const { stats, check, sectionFilter, S, ev, waitFor, launch, shot, saveBrowserFailure } = require('./lib/harness.cjs');
 
@@ -199,6 +199,153 @@ async function openDeploy(p) {
   }
 
   // Known SwiftShader shader-variant fallbacks (same filter as e2e-runmap).
+  if (want('E')) {
+    // Staged unlocks with the real track (&locks): a fresh warden, then levels and Rift Levels open features.
+    const { b: b3, p: p3, errs: errs3 } = await launch({ query: '&locks' });
+    try {
+      await ev(p3, () => window.__rift.flow.enterHq());
+      await waitFor(p3, () => window.__rift.state().location === 'home' && !window.__rift.flow.busy);
+      const e1 = await ev(p3, () => {
+        const r = window.__rift;
+        const h = r.home;
+        h.openTerminal('fabricate');
+        const fab = r.state().screen;
+        return { fab, lock: h.stationLock('fabricate'), deployLock: h.stationLock('deploy'), op: r.profile.op('craft', ['w_plasma', 'standard']).reason ?? '', modules: r.profile.save.market.modules.length };
+      });
+      check('E1 a fresh warden cannot open the fabricator (locked prompt, op refused, no module stock)', e1.fab !== 'terminal' && /Warden level 10/.test(e1.lock) && !e1.deployLock && /Warden level 10/.test(e1.op) && e1.modules === 0, JSON.stringify(e1));
+      const strip = await ev(p3, () => document.querySelector('[data-testid=next-unlocks]')?.textContent ?? '');
+      check('E2 the HQ shows the next unlocks with progress', /NEXT UNLOCKS/.test(strip) && /Warden 1\/2/.test(strip), strip);
+      if (captureScreens) await shot(p3, 'rl-hq-next-unlocks', { frames: 2 });
+      await ev(p3, () => window.__rift.home.openTerminal('loadout'));
+      await p3.waitForSelector('[data-testid=slot-locked-weapon2]', { timeout: 20000 });
+      const e3 = await ev(p3, () => document.querySelector('[data-testid=slot-locked-weapon2]')?.textContent ?? '');
+      check('E3 drone configuration shows locked slots with their requirement', /LOCKED/.test(e3) && /Warden level 4/.test(e3), e3);
+      await ev(p3, () => window.__rift.home.closeTerminal());
+      await ev(p3, () => window.__rift.home.openTerminal('command'));
+      await p3.waitForSelector('[data-testid=unlock-track]', { timeout: 20000 });
+      const e4 = await ev(p3, () => document.querySelector('[data-testid=unlock-track]')?.textContent ?? '');
+      check('E4 command console lists the unlock track (teasers with requirements)', /UNLOCK TRACK · 0\//.test(e4) && /Second ability slot/.test(e4), e4.slice(0, 120));
+      if (captureScreens) await shot(p3, 'rl-unlock-track', { frames: 2 });
+      await ev(p3, () => window.__rift.home.closeTerminal());
+      // Drops never include locked families or categories.
+      await ev(p3, () => window.__rift.flow.deploy(1));
+      await waitFor(p3, () => window.__rift.state().location === 'arena' && !window.__rift.flow.busy);
+      const e5 = await ev(p3, () => {
+        const g = window.__rift.game;
+        const items = [];
+        for (let i = 0; i < 300; i++) items.push(...g.rollItems('wave', 3), ...g.rollItems('elite', 3));
+        const fams = new Set(items.filter((it) => it.weapon).map((it) => it.build?.family ?? it.defId.split('_')[0]));
+        return { n: items.length, cats: [...new Set(items.map((it) => it.category))], fams: [...fams], locks: g.cfg.locks, journal: g.cfg.run.lootJournal.slice(-1)[0]?.locks };
+      });
+      check('E5 a fresh warden only finds plasma weapons, no modules or ultimates; rolls journal the locks', e5.n > 50 && !e5.cats.includes('module') && !e5.cats.includes('ultimate') && e5.fams.every((f) => f === 'plasma') && e5.locks?.includes('family:rail') && e5.journal?.includes('cat:module'), JSON.stringify(e5));
+      await ev(p3, () => window.__rift.flow.abandonRun());
+      await waitFor(p3, () => window.__rift.state().location === 'home' && !window.__rift.flow.busy);
+      // Gaining levels opens features with a banner and an HQ toast (shown once the warden walks the HQ again).
+      await ev(p3, () => window.__rift.home.setScreen('home'));
+      await ev(p3, () => window.__rift.profile.mutate((d) => { d.progress.xp = 9000; return true; }));
+      await p3.waitForSelector('[data-testid=unlock-toast]', { timeout: 20000 });
+      const e6 = await ev(p3, () => ({ toast: document.querySelector('[data-testid=unlock-toast]')?.textContent ?? '', lock: window.__rift.home.stationLock('salvage') }));
+      check('E6 level-ups announce what opened (toast) and the station opens', /UNLOCKED/.test(e6.toast) && /Railgun family/.test(e6.toast) && /MORE UNLOCKED/.test(e6.toast) && !e6.lock, JSON.stringify(e6).slice(0, 200));
+      if (captureScreens) await shot(p3, 'rl-unlock-toast', { frames: 2 });
+      // Deep lattice: frontier view, search highlights.
+      await ev(p3, () => window.__rift.profile.mutate((d) => { d.progress.xp = 9e8; return true; }));
+      const lv = await ev(p3, async () => {
+        const r = window.__rift;
+        const { generateTree, allocateBlocker } = await import('/@id/@riftwarden/rules/progression/skilltree');
+        const { levelForXp } = await import('/@id/@riftwarden/rules/progression/level');
+        const lvl = levelForXp(r.profile.save.progress.xp);
+        // Walk a branch outward ring by ring through real ops.
+        for (let i = 0; i < 40; i++) {
+          const tree = generateTree(r.profile.save.progress.tree.seed, 60);
+          const n = tree.nodes.find((x) => x.branch === 'weapon' && allocateBlocker(tree, r.profile.save.progress.tree.allocated, x.id, lvl) === null && x.ring === i + 1);
+          if (!n || !r.profile.op('treeAllocate', [n.id]).ok) break;
+        }
+        return { lvl, n: r.profile.save.progress.tree.allocated.length };
+      });
+      await ev(p3, () => window.__rift.home.openTerminal('lattice'));
+      await p3.waitForSelector('[data-testid=lattice-frontier]', { timeout: 20000 });
+      const drawn = await ev(p3, () => document.querySelectorAll('[data-testid=skill-tree] [data-node]').length);
+      await p3.fill('[data-testid=lattice-search]', 'damage');
+      const found = await ev(p3, () => [...document.querySelectorAll('[data-testid=skill-tree] [data-node]')].filter((g) => g.getAttribute('opacity') === null).length);
+      check('E7 deep lattice opens on the frontier, culls far nodes, search highlights', lv.n >= 30 && drawn > 0 && drawn < 400 && found > 0 && found < drawn, JSON.stringify({ ...lv, drawn, found }));
+      if (captureScreens) await shot(p3, 'rl-lattice-deep', { frames: 2 });
+      const bad3 = errs3.filter((e) => !/compil(e|ing) effect|Trying next fallback|BJS - \[[\d:]+\]: (Uniforms|Attributes|Defines|Error: (VERTEX|FRAGMENT))|GPU stall|favicon/.test(e));
+      check('E8 no runtime errors with the real unlock track', bad3.length === 0, bad3.slice(0, 3).join(' | '));
+    } catch (e) {
+      check('E no exception', false, e.stack || String(e));
+    } finally {
+      await b3.close();
+    }
+  }
+
+  if (want('F')) {
+    // Weapon-family mastery: kills earn XP, banking secures it, ranks change stats, perks/finishes via the workshop.
+    const { b: b4, p: p4, errs: errs4 } = await launch({ query: '&locks' });
+    try {
+      await ev(p4, () => window.__rift.flow.enterHq());
+      await waitFor(p4, () => window.__rift.state().location === 'home' && !window.__rift.flow.busy);
+      await ev(p4, () => window.__rift.flow.deploy(1));
+      await waitFor(p4, () => window.__rift.state().location === 'arena' && !window.__rift.flow.busy);
+      const f1 = await ev(p4, async () => {
+        const r = window.__rift;
+        const g = r.game;
+        const tick = () => new Promise((res) => setTimeout(res, 0));
+        let seen = 0;
+        const { uiEvents } = await import('/@id/@riftwarden/game/ui/store');
+        const off = uiEvents.on('mastery', (e) => { seen += e.xp; });
+        // Kill walkers with the real weapon pipeline (direct weapon damage) until wave 5 banks.
+        for (let guard = 0; guard < 3000 && g.cfg.run.lastBankedWave < 5; guard++) {
+          if (g.screen === 'upgrade' && g.offer) { g.chooseUpgrade(g.offer[0].id); await tick(); }
+          if (g.screen !== 'playing' && !(g.screen === 'upgrade' && g.offer)) g.setScreen('playing');
+          if (g.waves.phase === 'prep') g.startWave();
+          r.advance(0.5);
+          for (const e of [...g.enemies.active]) g.damageEnemy('player', e, 1e6, e.center(), false);
+        }
+        off();
+        return { seen, unsecured: g.cfg.run.unsecured.mastery?.plasma ?? 0, saved: r.profile.save.progress.mastery?.plasma?.xp ?? 0, banked: g.cfg.run.lastBankedWave };
+      });
+      check('F1 weapon kills earn plasma mastery (HUD event) and the checkpoint banks it into the profile', f1.seen > 0 && f1.saved > 0 && f1.banked === 5, JSON.stringify(f1));
+      await ev(p4, () => window.__rift.flow.abandonRun());
+      await waitFor(p4, () => window.__rift.state().location === 'home' && !window.__rift.flow.busy);
+      // Rank 12 on plasma: rank damage + a perk in the arena's stat pipeline; the scatter mechanism (rank 5) unlocks.
+      const f2 = await ev(p4, async () => {
+        const r = window.__rift;
+        const { xpForRank } = await import('/@id/@riftwarden/rules/progression/mastery');
+        r.profile.mutate((d) => { d.progress.mastery = { plasma: { xp: xpForRank(12), perks: [] } }; d.progress.xp = 5e6; d.threat.unlocked = 6; return true; });
+        const perk = r.profile.op('masteryPerk', ['plasma', 2, 1]).ok;
+        const tooDeep = r.profile.op('masteryPerk', ['plasma', 3, 0]).ok;
+        const fin = r.profile.op('masteryFinish', ['plasma', 'gunmetal']).ok;
+        const prestige = r.profile.op('masteryFinish', ['plasma', 'ascended']).ok;
+        const { lootLocks } = await import('/@id/@riftwarden/rules/progression/unlocks');
+        return { perk, tooDeep, fin, prestige, locks: lootLocks(r.profile.save) };
+      });
+      check('F2 perks need their rank, finishes need theirs; mastered components leave the loot locks', f2.perk && !f2.tooDeep && f2.fin && !f2.prestige && !f2.locks.includes('comp:plasma:mc_scatter') && f2.locks.includes('comp:plasma:co_prism'), JSON.stringify(f2));
+      await ev(p4, () => window.__rift.home.openTerminal('workshop'));
+      await p4.click('[data-tab=mastery]');
+      await p4.waitForSelector('[data-testid=mastery-bench]', { timeout: 20000 });
+      const f3 = await ev(p4, () => ({ rank: document.querySelector('[data-testid=mastery-rank]')?.textContent, perks: document.querySelectorAll('[data-testid=mastery-perks] button:not([disabled])').length, on: document.querySelector('[data-perk="2-1"]')?.className ?? '' }));
+      check('F3 workshop MASTERY tab shows rank, open perk tiers and the chosen option', f3.rank === 'R12' && f3.perks >= 4 && /\bon\b/.test(f3.on), JSON.stringify(f3));
+      if (captureScreens) await shot(p4, 'rl-mastery', { frames: 2 });
+      await ev(p4, () => window.__rift.home.closeTerminal());
+      await ev(p4, () => window.__rift.flow.deploy(1));
+      await waitFor(p4, () => window.__rift.state().location === 'arena' && !window.__rift.flow.busy);
+      const f4 = await ev(p4, () => {
+        const g = window.__rift.game;
+        const mods = g.cfg.mastery;
+        return { dmg: g.stats.weaponDamageMult, finish: g.weapon.rig ? g.weapon.finishFor('plasma') : null, mastery: !!mods?.plasma };
+      });
+      check('F4 the arena applies rank damage and the chosen finish to plasma weapons', f4.dmg > 1.04 && f4.finish === 'gunmetal' && f4.mastery, JSON.stringify(f4));
+      if (captureScreens) await shot(p4, 'rl-mastery-arena', { frames: 2 });
+      await ev(p4, () => window.__rift.flow.abandonRun());
+      const bad4 = errs4.filter((e) => !/compil(e|ing) effect|Trying next fallback|BJS - \[[\d:]+\]: (Uniforms|Attributes|Defines|Error: (VERTEX|FRAGMENT))|GPU stall|favicon/.test(e));
+      check('F5 no runtime errors in the mastery flow', bad4.length === 0, bad4.slice(0, 3).join(' | '));
+    } catch (e) {
+      check('F no exception', false, e.stack || String(e));
+    } finally {
+      await b4.close();
+    }
+  }
+
   const bad = errs.filter((e) => !/compil(e|ing) effect|Trying next fallback|BJS - \[[\d:]+\]: (Uniforms|Attributes|Defines|Error: (VERTEX|FRAGMENT))|GPU stall|favicon/.test(e));
   check('Z no runtime errors', bad.length === 0, bad.slice(0, 3).join(' | '));
   console.log(`\n${stats.passes} passed, ${stats.failures} failed (${Math.round((Date.now() - t0) / 1000)} s)`);

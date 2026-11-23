@@ -132,6 +132,10 @@ export interface ArenaConfig {
   tutorial?: TutorialHost;
   /** Warden skill tree (seed + allocated nodes), snapshotted at deployment. */
   tree?: { seed: number; allocated: readonly string[] };
+  /** Staged-unlock loot locks at deployment (`progression/unlocks` `lootLocks`; recorded with every loot roll). */
+  locks?: readonly string[];
+  /** Slots the warden has not unlocked (run equips refuse them). */
+  lockedSlots?: readonly SlotId[];
   /** Arena layout for this run (procedural from the run seed); defaults to the classic hand-built arena. */
   layout?: ArenaLayout;
   /** Run map node this arena plays (absent = classic endless run with checkpoint choices). */
@@ -409,6 +413,7 @@ export class Game {
     this.loot = new LootField(scene, this.kit, this.pal);
     this.loot.onLand = (p) => this.pickups.landed(p);
     this.inventory = new RunInventory(cfg.loadout, cfg.run);
+    this.inventory.lockedSlots = cfg.lockedSlots ?? [];
     if (cfg.node?.carry) this.inventory.adoptLoadout(cfg.node.carry.loadout);
     // Every map node rolls its own loot stream (a new arena must not replay the previous node's drops).
     const nodeSalt = cfg.node?.node.seed ?? 0;
@@ -868,8 +873,9 @@ export class Game {
     const run = this.cfg.run;
     const t = this.cfg.tier;
     const pity = run.pity;
-    if (this.dropChanceMult === 1) run.lootJournal.push({ node: this.cfg.node?.node.id ?? null, draw: this.lootDraws, counter: this.lootCounter, source: src, wave, tier: { lootLevelBonus: t.lootLevelBonus, lootLuck: t.lootLuck, id: t.id }, faction: this.director.faction, pity });
-    const items = rollLoot({ source: src, wave, tier: this.cfg.tier, rand: this.lootRand, nextUid: () => `${run.id}.${++this.lootCounter}`, originId: run.id, chanceMult: this.dropChanceMult, faction: this.director.faction, pity });
+    const locks = this.cfg.locks?.length ? [...this.cfg.locks] : undefined;
+    if (this.dropChanceMult === 1) run.lootJournal.push({ node: this.cfg.node?.node.id ?? null, draw: this.lootDraws, counter: this.lootCounter, source: src, wave, tier: { lootLevelBonus: t.lootLevelBonus, lootLuck: t.lootLuck, id: t.id }, faction: this.director.faction, pity, locks });
+    const items = rollLoot({ source: src, wave, tier: this.cfg.tier, rand: this.lootRand, nextUid: () => `${run.id}.${++this.lootCounter}`, originId: run.id, chanceMult: this.dropChanceMult, faction: this.director.faction, pity, locks });
     run.pity = nextPity(pity, items);
     return items;
   }

@@ -1,3 +1,4 @@
+import { unlockAllForTests } from './core/unlockWatch';
 import '@riftwarden/game/babylonSideEffects';
 import HavokPhysics from '@babylonjs/havok';
 import { startAccountSync } from './account/sync';
@@ -49,6 +50,8 @@ export async function boot(): Promise<void> {
     flow.mapMode = params.has('map');
     // ...and a local Rift War (no network) unless ?war asks for the shared one.
     if (!params.has('war')) flow.war.base = null;
+    // ...and every staged unlock open (fresh test profiles exercise late systems); ?locks keeps the real track.
+    if (!params.has('locks')) unlockAllForTests(flow.profile);
     (window as unknown as { __rift: unknown }).__rift = flow.debugApi();
     (window as unknown as { __touch: unknown }).__touch = { immersiveStats, simulatePwa };
   }

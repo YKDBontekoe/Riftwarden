@@ -64,7 +64,7 @@ export interface InventoryActions {
  * changing the selection; arrow keys move the selection, Enter equips it.
  * Stateless with respect to game data: callers pass entries and the equipped map.
  */
-export function InventoryView({ entries, equipped, actions, extraFilter, header }: { entries: InvEntry[]; equipped: Record<SlotId, ItemInstance | null>; actions: InventoryActions; extraFilter?: boolean; header?: ReactNode }) {
+export function InventoryView({ entries, equipped, actions, extraFilter, header, lockedSlots = [] }: { entries: InvEntry[]; equipped: Record<SlotId, ItemInstance | null>; actions: InventoryActions; extraFilter?: boolean; header?: ReactNode; lockedSlots?: readonly SlotId[] }) {
   const [filter, setFilter] = useState<Filter>('all');
   const [sort, setSort] = useState<ViewSort>('rarity');
   const [query, setQuery] = useState('');
@@ -82,11 +82,11 @@ export function InventoryView({ entries, equipped, actions, extraFilter, header 
     const m = new Map<string, SwapImpact>();
     for (const e of entries) {
       if (e.equippedIn || e.item.category === 'module' || !baseDef(e.item.defId)) continue;
-      const s = defaultSlot(e.item.category, equipped);
+      const s = defaultSlot(e.item.category, equipped, lockedSlots);
       if (s) m.set(e.item.uid, swapImpact(equippedList, e.item, equipped[s], base, priority, SLOTS.findIndex((slot) => slot.id === s)));
     }
     return m;
-  }, [entries, equipped, equippedList, base, priority]);
+  }, [entries, equipped, equippedList, base, priority, lockedSlots]);
 
   const list = useMemo(() => {
     const f = entries.filter((e) => (filter === 'all' ? true : filter === 'unsecured' ? e.status === 'unsecured' : e.item.category === filter) && matchesQuery(e.item, query) && (!upOnly || impacts.get(e.item.uid)?.verdict === 'upgrade'));
@@ -98,8 +98,9 @@ export function InventoryView({ entries, equipped, actions, extraFilter, header 
   const shownEntry = hovered ?? selected;
   const item = selected?.item ?? null;
   const shown = shownEntry?.item ?? null;
-  const slots = shown ? slotsFor(shown.category) : [];
-  const slot = targetSlot && slots.includes(targetSlot) ? targetSlot : shown ? defaultSlot(shown.category, equipped) : null;
+  // Slots the warden has not unlocked are never offered (staged unlocks).
+  const slots = shown ? slotsFor(shown.category).filter((s) => !lockedSlots.includes(s)) : [];
+  const slot = targetSlot && slots.includes(targetSlot) ? targetSlot : shown ? defaultSlot(shown.category, equipped, lockedSlots) : null;
   const against = slot ? equipped[slot] : null;
   const selectedImpact = item && shown === item && slot && selected && !selected.equippedIn && impacts.has(item.uid)
     ? swapImpact(equippedList, item, against, base, priority, SLOTS.findIndex((s) => s.id === slot))

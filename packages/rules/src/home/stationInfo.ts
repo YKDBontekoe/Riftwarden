@@ -14,7 +14,7 @@ export interface StationInfo {
 export const STATION_INFO: Record<string, StationInfo> = {
   deploy: { name: 'Deployment', purpose: 'Pick a Rift Level and launch an operation. Higher levels raise item levels, open rarer drops and give more XP.', uses: [] },
   command: { name: 'Command Console', purpose: 'Your service record, survival records, milestones and a directory of every station.', uses: ['xp'] },
-  loadout: { name: 'Drone Configuration', purpose: 'Equip gear into your 7 slots, compare stats and save presets.', uses: [] },
+  loadout: { name: 'Drone Configuration', purpose: 'Equip gear into your loadout slots, compare stats and save presets. More slots open with Warden levels.', uses: [] },
   storage: { name: 'Storage', purpose: 'Everything you own that is not equipped. Buy extra bays here.', uses: ['salvage'] },
   workshop: { name: 'Workshop', purpose: 'Improve a weapon you own: install modules, reroll affixes, enhance, swap components, research towers, ascend exotics.', uses: ['salvage', 'components', 'credits', 'shards'] },
   fabricate: { name: 'Fabricator', purpose: 'Craft the slot and family you want. Higher grades open with Rift Levels; masterwork and apex cost rift shards.', uses: ['salvage', 'components', 'credits', 'shards'] },

@@ -92,7 +92,12 @@ describe('M4 economy foundation', () => {
     expect(d.version).toBe(SAVE_VERSION);
     expect(d.resources).toEqual({ salvage: 0, credits: STARTING_CREDITS, components: 0, shards: 0 });
     expect(d.market.equipment.length).toBe(8);
-    expect(d.market.modules.length).toBe(6);
+    // Modules are a staged unlock (RL 3): a fresh warden's broker has no module stock, and no locked families sell.
+    expect(d.market.modules.length).toBe(0);
+    expect(d.market.equipment.every((e) => e.item.category !== 'ultimate' && (!e.item.weapon || baseDef(e.item.defId)!.weapon!.family === 'plasma'))).toBe(true);
+    const open = generateMarket(d.profile.id, 1, { level: 1, tier: 3 });
+    expect(open.modules.length).toBe(6);
+    expect(open.modules.every((e) => e.item.category === 'module')).toBe(true);
     for (const e of [...d.market.equipment, ...d.market.modules]) {
       expect(isValidItem(e.item)).toBe(true);
       expect(rarity(e.item.rarity).index).toBeLessThanOrEqual(3); // never above epic
@@ -334,6 +339,7 @@ describe('C/D: merchants', () => {
 
   it('refuses purchases without credits or storage space (I)', () => {
     const d = setup([], { credits: 0 });
+    d.market = generateMarket(d.profile.id, 1, { level: 1, tier: 3 });
     const before = snap(d);
     expect(buyItem(d, 'modules', d.market.modules[0].id).ok).toBe(false);
     expect(snap(d)).toBe(before);
@@ -768,8 +774,8 @@ describe('phase 2: crafting and merchants by Rift Level', () => {
     expect(craftCostFor(d, r, sup, fabricationLevel(d))).toEqual(first);
     // The counter survives a save round trip.
     craft(d, 'd_shield', 'superior');
-    const back = parseSave(serializeSave(d)).data!;
-    expect(back.economy.heavy).toEqual(d.economy.heavy);
+    const back = parseSave(serializeSave(d));
+    expect(back.ok && back.data.economy.heavy).toEqual(d.economy.heavy);
   });
 
   it('merchants never stock above the Rift Level\'s own drop ceiling', () => {

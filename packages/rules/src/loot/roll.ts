@@ -2,6 +2,7 @@
 // One implementation for single-player runs (Game), team drops and per-player rolls (ServerGame).
 import { type DropSource, type LootContext, PITY_RESET, rollDrops } from './drops';
 import { rarity } from './rarity';
+import { lockedCategoriesOf, lockedFamiliesOf } from '../progression/unlocks';
 import { generateItem } from './generate';
 import { generateUnique, uniqueForDrop } from './uniques';
 import type { ItemInstance } from './types';
@@ -23,6 +24,8 @@ export interface RollParams {
   faction?: string | null;
   /** Bad-luck protection counter (ordinary drops since the last legendary or better; see `nextPity`). */
   pity?: number;
+  /** Staged-unlock loot locks (`progression/unlocks` `lootLocks`): locked categories and weapon families never drop. */
+  locks?: readonly string[];
 }
 
 /** A source with its chance scaled (clamped to 1). Returns the same object when the multiplier is 1. */
@@ -30,8 +33,8 @@ export function scaleChance(src: DropSource, mult: number): DropSource {
   return mult === 1 ? src : { ...src, chance: Math.min(1, src.chance * mult) };
 }
 
-export function lootContext(wave: number, tier: RollParams['tier'], pity = 0): LootContext {
-  return { wave, tier: tier.id, tierLevelBonus: tier.lootLevelBonus, tierLuck: tier.lootLuck, pity };
+export function lootContext(wave: number, tier: RollParams['tier'], pity = 0, locks: readonly string[] = []): LootContext {
+  return { wave, tier: tier.id, tierLevelBonus: tier.lootLevelBonus, tierLuck: tier.lootLuck, pity, lockedCategories: lockedCategoriesOf(locks) };
 }
 
 /** Highest meaningful pity value (the boost caps at PITY.max / PITY.step drops). */
@@ -48,9 +51,11 @@ export function nextPity(pity: number, items: readonly Pick<ItemInstance, 'rarit
 export function rollLoot(p: RollParams): ItemInstance[] {
   const table = scaleChance(p.source, p.chanceMult ?? 1);
   let unique = false;
-  return rollDrops(table, lootContext(p.wave, p.tier, p.pity ?? 0), p.rand).map((d) => {
+  const families = lockedFamiliesOf(p.locks);
+  const categories = lockedCategoriesOf(p.locks);
+  return rollDrops(table, lootContext(p.wave, p.tier, p.pity ?? 0, p.locks), p.rand).map((d) => {
     // Target farming: at most one drop per trigger becomes a unique listed for this source (seed-decided).
-    const u = unique ? null : uniqueForDrop(d.source, d.seed, p.faction);
+    const u = unique ? null : uniqueForDrop(d.source, d.seed, p.faction, p.tier.id ?? 999, { families, categories });
     if (u) {
       unique = true;
       return generateUnique(u, { uid: p.nextUid(), seed: d.seed, level: d.level, source: p.originId });
@@ -63,6 +68,7 @@ export function rollLoot(p: RollParams): ItemInstance[] {
       category: d.category,
       baseId: d.baseId,
       allowExclusive: d.baseId ? [d.baseId] : [],
+      excludeFamilies: families,
       source: p.originId,
     });
   });

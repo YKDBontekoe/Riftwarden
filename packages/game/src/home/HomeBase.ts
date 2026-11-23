@@ -1,3 +1,4 @@
+import { lockReason, STATION_FEATURE } from '@riftwarden/rules/progression/unlocks';
 import '../babylonSideEffects';
 import { stationInfo } from '@riftwarden/rules/home/stationInfo';
 import { drawStationScreen, loadStationIllustrations } from './stationScreens';
@@ -352,7 +353,7 @@ export class HomeBase {
     this.applySettings(settings);
     if (hooks.tutorial)
       this.tut = new TutorialDirector('hq', hooks.tutorial, {
-        available: (id) => this.screen === 'home' && (id === 'hq_level' ? freePoints(levelForXp(this.profile.save.progress.xp), this.profile.save.progress.tree.allocated) > 0 : id !== 'hq_return' || this.profile.save.history.length > 0),
+        available: (id) => this.screen === 'home' && (id === 'hq_level' ? !this.stationLock('lattice') && freePoints(levelForXp(this.profile.save.progress.xp), this.profile.save.progress.tree.allocated) > 0 : id !== 'hq_return' || this.profile.save.history.length > 0),
         complete: (id, t) => (id === 'hq_look' ? this.tutDist > 4 || t > 9 : id === 'hq_deploy' ? this.openedTerminals.has('deploy') : id === 'hq_level' ? this.openedTerminals.has('lattice') || t > 20 : this.openedTerminals.has('storage') || t > 12),
       });
   }
@@ -584,8 +585,18 @@ export class HomeBase {
     this.canvas.focus();
   }
 
+  /** Why a station cannot be used yet (staged unlocks), or null. */
+  stationLock(id: string): string | null {
+    const f = STATION_FEATURE[id];
+    return f ? lockReason(this.profile.save, f) : null;
+  }
+
   openTerminal(id: TerminalId): void {
     if (this.screen !== 'home') return;
+    if (this.stationLock(id)) {
+      sfx.play('buildDeny');
+      return;
+    }
     sfx.play('ui');
     this.screen = 'terminal';
     const rig = this.rigs.find((r) => r.station.id === id);
@@ -728,7 +739,7 @@ export class HomeBase {
     hudStore.set({
       location: 'home',
       area: areaAt(p.x, p.z),
-      prompt: t && this.screen === 'home' ? { key: keyLabel(this.settings.keys.use), title: t.title, action: t.action, purpose: stationInfo(t.id)?.purpose } : null,
+      prompt: t && this.screen === 'home' ? { key: keyLabel(this.settings.keys.use), title: t.title, action: t.action, purpose: stationInfo(t.id)?.purpose, locked: this.stationLock(t.id) ?? undefined } : null,
       perf: this.perfOn
         ? { fps: Math.round(this.fpsSmooth), enemies: 0, draws: Math.round(this.instrumentation?.drawCallsCounter.current ?? 0), particles: 0 }
         : null,

@@ -11,8 +11,11 @@ import { createDefaultSave, type SaveData } from '@riftwarden/rules/progression/
 import { genesisProblem, type LogEntry, openDoc, replay } from '@riftwarden/rules/progression/sync';
 import { getTier } from '@riftwarden/rules/progression/tiers';
 import { regionLayout } from '@riftwarden/rules/war/regions';
+import { lootLocks } from '@riftwarden/rules/progression/unlocks';
 
 const NOW = 1_800_000_000_000;
+/** A fresh profile's loot locks (staged unlocks): the run start records them, every roll replays with them. */
+const LOCKS = lootLocks(createDefaultSave(NOW));
 
 /** Mirrors Game: a counting loot stream per node and a record per roll. */
 function runLoot(runId: string, node: string | null, salt: number) {
@@ -31,8 +34,8 @@ function runLoot(runId: string, node: string | null, salt: number) {
     items,
     rand,
     roll(source: DropSource, wave: number) {
-      records.push({ node, draw: draws, counter, source, wave, tier: { lootLevelBonus: tier.lootLevelBonus, lootLuck: tier.lootLuck, id: tier.id }, faction: null });
-      items.push(...rollLoot({ source, wave, tier: { lootLevelBonus: tier.lootLevelBonus, lootLuck: tier.lootLuck, id: tier.id }, rand, nextUid: () => `${runId}.${++counter}`, originId: runId, faction: null }));
+      records.push({ node, draw: draws, counter, source, wave, tier: { lootLevelBonus: tier.lootLevelBonus, lootLuck: tier.lootLuck, id: tier.id }, faction: null, locks: [...LOCKS] });
+      items.push(...rollLoot({ source, wave, tier: { lootLevelBonus: tier.lootLevelBonus, lootLuck: tier.lootLuck, id: tier.id }, rand, nextUid: () => `${runId}.${++counter}`, originId: runId, faction: null, locks: LOCKS }));
     },
   };
 }
@@ -110,7 +113,10 @@ describe('run validation', () => {
 
   it('replayLoot reproduces every item exactly', () => {
     const loot = bankedRun('run_sync_2');
-    const produced = replayLoot('run_sync_2', 1, 0, loot.records);
+    // Dropping the locks from the journal (to widen or narrow the pool) is refused.
+    expect(replayLoot('run_sync_2', 1, 0, loot.records.map((r) => ({ ...r, locks: [] })), 0, LOCKS)).toBe('loot locks altered');
+    expect(replayLoot('run_sync_2', 1, 0, loot.records.map((r) => ({ ...r, locks: ['cat:module'] })), 0, LOCKS)).toBe('loot locks altered');
+    const produced = replayLoot('run_sync_2', 1, 0, loot.records, 0, LOCKS);
     expect(typeof produced).not.toBe('string');
     for (const it of loot.items) expect(sameItem((produced as Map<string, ItemInstance>).get(it.uid), it)).toBe(true);
   });
@@ -161,12 +167,12 @@ describe('run validation', () => {
     loot.roll(DROP_SOURCES.wave, 1);
     loot.roll(DROP_SOURCES.checkpoint, 5);
     expect(loot.items.length).toBeGreaterThan(0);
-    const produced = replayLoot('run_sync_6', 1, mapSeed, loot.records) as Map<string, ItemInstance>;
+    const produced = replayLoot('run_sync_6', 1, mapSeed, loot.records, 0, LOCKS) as Map<string, ItemInstance>;
     expect(loot.items.every((i) => sameItem(produced.get(i.uid), i))).toBe(true);
     const wrongNode = loot.records.map((r) => ({ ...r, node: 'r0n2' }));
-    const other = replayLoot('run_sync_6', 1, mapSeed, wrongNode) as Map<string, ItemInstance>;
+    const other = replayLoot('run_sync_6', 1, mapSeed, wrongNode, 0, LOCKS) as Map<string, ItemInstance>;
     expect(loot.items.every((i) => sameItem(other.get(i.uid), i))).toBe(false);
-    expect(replayLoot('run_sync_6', 1, mapSeed, loot.records.map((r) => ({ ...r, node: 'nowhere' })))).toMatch(/unknown map node/);
+    expect(replayLoot('run_sync_6', 1, mapSeed, loot.records.map((r) => ({ ...r, node: 'nowhere' })), 0, LOCKS)).toMatch(/unknown map node/);
   });
 
   it('run starts need an unlocked tier and a fresh id; impossible results are refused', () => {

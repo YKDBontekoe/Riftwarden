@@ -3,6 +3,7 @@ import { rarity } from '../../loot/rarity';
 import { fitsSlot, getSlot, type ItemInstance, SLOT_IDS, type SlotId, defaultSlot } from '../items';
 import type { Rewards, RunResult } from '../run';
 import { CHECKPOINT_INTERVAL, unlocksNextTier } from '../tiers';
+import { lockedSlots } from '../unlocks';
 
 /** The Rift Level an active run plays at: deploy level + Rift Surges taken on its map. */
 export const runLevel = (a: { tier: number; map?: { surge?: number } | null }): number => a.tier + (a.map?.surge ?? 0);
@@ -76,9 +77,10 @@ export function resolveInterruptedRun(data: SaveData, now = Date.now(), opts: { 
   return entry;
 }
 
-export function beginRun(data: SaveData, runId: string, tier: number, now = Date.now(), opts: { mapSeed?: number; mode?: 'defense' | 'survival' } = {}): void {
+export function beginRun(data: SaveData, runId: string, tier: number, now = Date.now(), opts: { mapSeed?: number; mode?: 'defense' | 'survival'; locks?: string[] } = {}): void {
   resolveInterruptedRun(data, now);
   data.activeRun = { id: runId, tier, startedAt: now, bankedThroughWave: 0, salvageSecured: 0, itemsSecured: 0, creditsSecured: 0, componentsSecured: 0 };
+  if (opts.locks?.length) data.activeRun.locks = [...opts.locks];
   if (opts.mapSeed) {
     data.activeRun.map = newMapState(opts.mapSeed);
     data.activeRun.nodeBank = 0;
@@ -307,8 +309,9 @@ export function equipFromStorage(data: SaveData, uid: string, slot?: SlotId): bo
   const idx = data.storage.uids.indexOf(uid);
   const item = itemByUid(data, uid);
   if (idx < 0 || !item) return false;
-  const target = slot ?? defaultSlot(item.category, data.loadout);
-  if (!target || !fitsSlot(item, target)) return false;
+  const locked = lockedSlots(data);
+  const target = slot ?? defaultSlot(item.category, data.loadout, locked);
+  if (!target || !fitsSlot(item, target) || locked.includes(target)) return false;
   data.storage.uids.splice(idx, 1);
   const prev = data.loadout[target];
   if (prev) data.storage.uids.push(prev);
@@ -334,8 +337,10 @@ export function applyLoadout(data: SaveData, slots: Partial<Record<SlotId, strin
   if (data.activeRun && !opts.ignoreActiveRun) return false;
   let changed = false;
   const owned = new Set(data.items.map((i) => i.uid));
+  // Run results may return gear to any slot it left from; presets cannot fill slots the warden has not unlocked.
+  const locked = opts.ignoreActiveRun ? [] : lockedSlots(data);
   for (const slot of SLOT_IDS) {
-    if (!(slot in slots)) continue;
+    if (!(slot in slots) || (locked.includes(slot) && slots[slot])) continue;
     const want = slots[slot] ?? null;
     if (data.loadout[slot] === want) continue;
     if (want === null) {

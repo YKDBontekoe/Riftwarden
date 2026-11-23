@@ -1,3 +1,5 @@
+import { lockedSlots } from '@riftwarden/rules/progression/unlocks';
+import { watchUnlocks } from './unlockWatch';
 import { type AbstractEngine as Engine } from '@babylonjs/core/Engines/abstractEngine';
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { type Scene } from '@babylonjs/core/scene';
@@ -167,6 +169,7 @@ export class Flow {
     this.profile = new Profile();
     this.war.reporter = this.profile.save.profile.id;
     this.war.localSeed = hashSeed(`war:${this.profile.save.profile.id}`) || 1;
+    watchUnlocks(this.profile);
     // Ctrl slides: Ctrl+W (close tab) cannot be intercepted outside fullscreen keyboard lock, so a run asks first.
     window.addEventListener('beforeunload', (e) => {
       if (!this.arena || this.input.forceCapture) return;
@@ -339,6 +342,8 @@ export class Flow {
         towerTech: [...save.towers.unlocked],
         milestones: [...save.milestones],
         tree: { seed: save.progress.tree.seed, allocated: [...save.progress.tree.allocated] },
+        locks: save.activeRun?.id === run.id ? save.activeRun.locks : undefined,
+        lockedSlots: lockedSlots(save),
         layout,
         tutorial: this.tutorialHost(),
         hooks: {

@@ -88,13 +88,16 @@ function nodeSalt(mapSeed: number, node: string | null): number | null {
 }
 
 /** Re-roll every recorded drop; returns the items the run genuinely produced (by uid) or a reason. */
-export function replayLoot(runId: string, runTier: number, mapSeed: number, records: LootRecord[], surge = 0): Map<string, ItemInstance> | string {
+export function replayLoot(runId: string, runTier: number, mapSeed: number, records: LootRecord[], surge = 0, locks: readonly string[] = []): Map<string, ItemInstance> | string {
+  const want = [...locks].sort().join(',');
   const out = new Map<string, ItemInstance>();
   if (records.length > 5000) return 'loot journal too long';
   for (const r of records) {
     if (!Number.isInteger(r.draw) || r.draw < 0 || r.draw > 2_000_000 || !Number.isInteger(r.counter) || r.counter < 0) return 'bad loot record';
     if (!Number.isInteger(r.wave) || r.wave < 1 || r.wave > 100_000) return 'bad loot wave';
     if (r.pity !== undefined && !(Number.isInteger(r.pity) && r.pity >= 0 && r.pity <= MAX_PITY)) return 'bad loot record';
+    // Locks narrow the loot pool, so they must be exactly the run's own (a client could otherwise target-farm).
+    if ((Array.isArray(r.locks) ? [...r.locks].sort().join(',') : '') !== want) return 'loot locks altered';
     const bad = validSource(r.source) ?? validTier(r.tier, runTier, surge);
     if (bad) return bad;
     const salt = nodeSalt(mapSeed, r.node);
@@ -102,7 +105,7 @@ export function replayLoot(runId: string, runTier: number, mapSeed: number, reco
     const stream = mulberry32((hashSeed(runId) ^ salt) >>> 0);
     for (let i = 0; i < r.draw; i++) stream();
     let counter = r.counter;
-    const items = rollLoot({ source: r.source, wave: r.wave, tier: r.tier, rand: stream, nextUid: () => `${runId}.${++counter}`, originId: runId, faction: r.faction, pity: r.pity ?? 0 });
+    const items = rollLoot({ source: r.source, wave: r.wave, tier: r.tier, rand: stream, nextUid: () => `${runId}.${++counter}`, originId: runId, faction: r.faction, pity: r.pity ?? 0, locks: r.locks });
     for (const it of items) out.set(it.uid, it);
   }
   return out;
@@ -122,6 +125,7 @@ function within(name: string, v: number | undefined, max: number): string | null
 }
 
 function checkRewards(d: SaveData, runId: string, tier: number, mapSeed: number, rewards: Rewards, loot: LootRecord[], waves: { from: number; to: number }, surge = 0): string | null {
+  const locks = d.activeRun?.id === runId ? (d.activeRun.locks ?? []) : [];
   const span = Math.max(1, waves.to - waves.from);
   const f = tierFactor(tier + surge) * span;
   const top = Math.max(1, waves.to);
@@ -135,7 +139,7 @@ function checkRewards(d: SaveData, runId: string, tier: number, mapSeed: number,
   const items = rewards.items ?? [];
   if (items.length > CEILINGS.itemsPerWave * span) return 'more items than the waves drop';
   if (!items.length) return null;
-  const produced = replayLoot(runId, tier, mapSeed, loot, surge);
+  const produced = replayLoot(runId, tier, mapSeed, loot, surge, locks);
   if (typeof produced === 'string') return produced;
   const owned = new Set(d.items.map((i) => i.uid));
   const seen = new Set<string>();

@@ -1,4 +1,6 @@
-# Riftwarden progression design (draft for owner review)
+# Riftwarden progression design
+
+> Implementation status and the numbers that changed while building are in **§12 Implementation notes** at the end (they win over the earlier proposal numbers).
 
 Goal: progression that **never runs out** and **never sprints**: a steady stream of small wins plus rare, celebrated spikes, with **loot as the main source of power**. Written from the owner Q&A of 2026-11-23. Nothing here is built yet; numbers are first proposals to tune with a simulation test (see "Validation").
 
@@ -207,3 +209,40 @@ The owner accepts a wipe. Bump the save version with a migration that resets pro
 - **Solo leaderboards list only server-validated runs.** Co-op runs (simulated by the server) are trusted. Solo runs get a "validated" flag only when `runCheck.ts` accepts them; until combat replay exists, solo boards additionally require the run's records to fall inside server-side plausibility ceilings (kills/s, damage per item level, wave time). Runs that fail stay on the profile but not on the boards.
 
 Build order addition: phase 4 (mastery) includes the co-op team bonus; infinite-tree work goes with phase 3 (unlock track); step-up nodes go into phase 1 (they need Rift Levels); seasons + leaderboards become **phase 7**, after the spikes.
+
+## 12. Implementation notes (what was built; these numbers win)
+
+The pacing simulation (`tests/progression-sim.test.ts`: real wave composer + drop tables, ~700 drops per hour, a modelled
+player who climbs once their gear matches the next level) drove these changes from the first proposal:
+
+- **Difficulty curve** (`tiers.ts`): every level, the named five included, follows the item power curve of its own drops:
+  hull = `itemScale(levelBase(RL)) x 1.05^(RL-1)`, damage = `itemScale(levelBase(RL)) x 1.03^(RL-1)`. With the proposal's
+  fixed +17% per level, gear (10 item levels per RL, quadratic flat stats) outran enemies until ~RL 30.
+- **Unlocking**: RL n+1 needs `min(8, 1 + floor(n / 2))` checkpoints secured *on RL n* (a progress bar in the deploy
+  terminal), counted on the level the run plays at (Rift Surges count on the surged level).
+- **Item level**: `10 x (RL - 1) + 1` at wave 1, up to +9 by wave (`lootLevel`), so the deepest band of one level meets
+  the first wave of the next.
+- **Rarity gates** (`loot/rarity.ts` `RARITY_UNLOCK`, `GATED`): epic RL 3 (0.6% rising to 6%), legendary RL 7 (0.04%
+  rising to 2%), exotic RL 12 (0.001% rising to 0.6%), Ascended promotion of exotics from RL 14 (1 in 10, 1 in 5 from
+  RL 19). Luck is `luck^(0.5 x rarity index)`, capped at x3. Bosses and caches open epics one level early (never
+  legendary/exotic). Boss floors are rare (not epic). Bad-luck protection: +1% of the legendary/exotic weight per dry
+  drop (cap x3), journaled per roll and replayed by the server.
+- **Measured pacing** (median of 5 simulated players): first epic ~0.4 h, first legendary ~1.5 h, first exotic ~11 h,
+  first Ascended ~70 h; RL 9 at ~2 h, RL 12 at ~5.5 h, RL 15 at ~23 h, RL 18 at ~55 h, RL 21 at ~85 h (no plateau).
+- **Uniques** respect the gates (legendary uniques from RL 7, exotic ones from RL 12) and the family locks.
+- **Rift Surge**: after 2 cleared map nodes, then every 3; travel to a combat/elite sector at +1 RL for the rest of the
+  run; map entries are validated (one node and at most one surge per entry) so loot of forged levels is refused.
+- **Crafting**: superior RL 3, masterwork RL 7 (+6 shards), apex RL 10 (legendary, +40 shards); shards +1 per 20 item
+  levels; +25% per heavy craft in a market rotation (cap x4). HQ merchants never exceed the level's own drop ceiling
+  (featured legendary from RL 9); map merchants no epics before RL 3.
+- **Unlock track** (`progression/unlocks.ts`): Warden 2 ability II + Exchange, 3 Railgun + Reclamation, 4 secondary
+  weapon, 5 accessory II, 6 Beam, 7 ultimate slot, 8 Neural Lattice, 10 Fabricator, 12 Drone Swarm, 14 HQ
+  construction; RL 2 enhancement, RL 3 modules + tower research, RL 4 affixes, RL 5 component refits, RL 7 legendary,
+  RL 12 exotic, RL 14 ascension. Locked families/categories never drop (loot locks are recorded at run start and
+  replayed by the server), locked ops/stations/slots refuse with the reason. Single-item scrap in storage is always open.
+- **Infinite tree**: node values +15%/ring to ring 10 then +5%/ring; per-stat soft cap x(1 + 3% per ring of the
+  deepest allocation); keystone every 2 rings from ring 20, half notables from ring 40; 2001 rings (level cap);
+  keystone rules clamped (XP x3, 600 start cores). The lattice view culls, zooms deeper, searches and jumps to the frontier.
+- **Fresh start**: save v11 (`MIGRATIONS[10]`) rebuilds a default profile deterministically from the old document's id
+  and times (identity, callsign, tutorial kept); the deploy terminal explains it once.
+- **Automation**: `?test` keeps every unlock open (`setUnlockAll`); `?test&locks` uses the real track.

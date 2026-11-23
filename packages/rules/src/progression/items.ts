@@ -52,8 +52,8 @@ export function slotsFor(category: Category): SlotId[] {
  * Slot an item goes to when none is named: weapons replace the primary (the secondary is always chosen
  * explicitly), other categories fill the first empty compatible slot, else the first one.
  */
-export function defaultSlot(category: Category, loadout: Partial<Record<SlotId, unknown>>): SlotId | null {
-  const slots = slotsFor(category);
+export function defaultSlot(category: Category, loadout: Partial<Record<SlotId, unknown>>, locked: readonly SlotId[] = []): SlotId | null {
+  const slots = slotsFor(category).filter((s) => !locked.includes(s));
   if (category === 'weapon') return 'weapon';
   return slots.find((s) => !loadout[s]) ?? slots[0] ?? null;
 }

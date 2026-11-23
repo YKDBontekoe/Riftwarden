@@ -1,3 +1,4 @@
+import { slotLockReason } from '@riftwarden/rules/progression/unlocks';
 import { useMemo, useState } from 'react';
 import { sfx } from '@riftwarden/game/audio/Sfx';
 import { fmtNum } from '@riftwarden/rules/combat/stats';
@@ -30,6 +31,15 @@ export function LoadoutTerminal({ flow, close }: { flow: Flow; close: () => void
           {SLOTS.map((slot) => {
             const it = equipped[slot.id];
             const r = it ? rarity(it.rarity) : null;
+            const locked = !it ? slotLockReason(save, slot.id) : null;
+            if (locked)
+              return (
+                <div key={slot.id} className="slot opacity-60" data-testid={`slot-locked-${slot.id}`}>
+                  <span className="[grid-row:span_2] [align-self:center] font-mono text-[10.5px] tracking-[0.16em] text-faint">{slot.label}</span>
+                  <b className="text-muted">⨯ LOCKED</b>
+                  <em>{locked}</em>
+                </div>
+              );
             return (
               <div key={slot.id} className={`slot ${it ? 'filled' : ''}`} style={r ? { ['--rc' as string]: r.color } : undefined}>
                 <span className="[grid-row:span_2] [align-self:center] font-mono text-[10.5px] tracking-[0.16em] text-faint">{slot.label}</span>

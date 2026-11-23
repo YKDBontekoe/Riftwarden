@@ -1,3 +1,4 @@
+import { ALL_LOOT_LOCKS } from '../unlocks';
 import { sanitizeMapState } from '../../runmap/state';
 import { isDamageElement } from '../../combat/elements';
 import { SURVEY_DESK } from '../../home/layout';
@@ -499,6 +500,8 @@ export function sanitizeSave(raw: unknown, now = Date.now()): { data: SaveData; 
       data.activeRun.nodeBank = int(ar.nodeBank, 0);
     }
     if (ar.mode === 'survival') data.activeRun.mode = 'survival';
+    const locks = arr(ar.locks).filter((x): x is string => typeof x === 'string' && ALL_LOOT_LOCKS.includes(x));
+    if (locks.length) data.activeRun.locks = [...new Set(locks)].sort();
   }
 
   const base = obj(r.base);

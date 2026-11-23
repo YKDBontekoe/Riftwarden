@@ -12,6 +12,7 @@ import { CURRENCY_ICON, FieldIcon } from './FieldIcon';
 import { useSave } from './App';
 import { Banner, Perf } from './Hud';
 import { useHud } from './useHud';
+import { NextUnlocksStrip, UnlockToast } from './UnlockTrack';
 
 /** Calm HQ overlay: location, reserve, selected Rift Level, interaction prompt. */
 export function HomeHud({ flow }: { flow: Flow }) {
@@ -24,6 +25,8 @@ export function HomeHud({ flow }: { flow: Flow }) {
   return (
     <div className={`hud home-hud ${walking ? '' : 'muted'}`}>
       <TutorialCard />
+      <NextUnlocksStrip save={save} />
+      <UnlockToast />
       <div className="hq-loc panel-frame">
         <div className="font-mono text-[10px] tracking-[0.11em] text-cyan">HEADQUARTERS</div>
         <div className="font-display text-[23px] font-[650] tracking-[-0.025em] mt-[2px]">{area || 'COMMAND DECK'}</div>
@@ -51,11 +54,11 @@ export function HomeHud({ flow }: { flow: Flow }) {
       </div>
       {walking && <div className="fixed left-[50%] top-[50%] w-[4px] h-[4px] m-[-2px_0_0_-2px] [border-radius:50%] [background:rgba(255,255,255,0.85)] [box-shadow:0_0_6px_rgba(156,207,194,0.8)]" />}
       {walking && prompt && (
-        <div className="hq-prompt" key={prompt.title}>
-          <kbd>{prompt.key}</kbd>
+        <div className={`hq-prompt${prompt.locked ? ' [border-left-color:var(--orange)]' : ''}`} key={prompt.title} data-testid="hq-prompt">
+          {prompt.locked ? <kbd className="[background:#3a2a22] [color:var(--orange)] [border-color:var(--orange)] [box-shadow:none]" aria-label="Locked">⨯</kbd> : <kbd>{prompt.key}</kbd>}
           <div>
             <b>{prompt.title}</b>
-            <span>{prompt.action}</span>
+            {prompt.locked ? <span className="text-orange" data-testid="hq-prompt-locked">LOCKED · {prompt.locked}</span> : <span>{prompt.action}</span>}
             {prompt.purpose && <em className="hq-purpose">{prompt.purpose}</em>}
           </div>
         </div>
