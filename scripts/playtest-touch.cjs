@@ -15,9 +15,8 @@ const PX_PER_RAD = 1 / (0.0022 * 1.6);
 const FINGER_SPEED = 38; // px per step (~1100 px/s)
 const FIRE_BUDGET = 110; // px a thumb can slide on FIRE before it has to lift and re-grip
 
-/** Touch driver. `id` is the bot's finger slot. A press must not reuse the id that was just lifted (Chromium then
- * treats the new press as the old finger sliding back), and CDP touch emulation crashes the browser after ~20
- * distinct ids, so presses take ids from a small rotating pool, skipping held ones. */
+/** Touch driver. `id` is the bot's finger slot; presses take CDP ids from a small rotating pool (CDP touch
+ * emulation crashes the browser after ~20 distinct ids). */
 function touches(cdp) {
   const pts = new Map();
   let cursor = 0;
@@ -36,7 +35,13 @@ function touches(cdp) {
     get: (id) => pts.get(id),
     async down(id, x, y) { pts.set(id, { id: fresh(), x, y, radiusX: 7, radiusY: 7, force: 1 }); await send('touchStart'); },
     async move(id, x, y) { if (!pts.has(id)) return; pts.set(id, { ...pts.get(id), x, y }); await send('touchMove'); },
-    async up(id) { if (!pts.delete(id)) return; await send(pts.size ? 'touchMove' : 'touchEnd'); },
+    // Lifting one finger: touchEnd listing only that point (a touchMove that omits it never releases it in CDP).
+    async up(id) {
+      const q = pts.get(id);
+      if (!q) return;
+      pts.delete(id);
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [q] });
+    },
     async upAll() { for (const id of [...pts.keys()]) await this.up(id); },
   };
 }

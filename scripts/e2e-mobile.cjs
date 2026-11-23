@@ -21,9 +21,11 @@ function touchDriver(cdp) {
       await send('touchMove');
     },
     async up(id) {
+      const q = pts.get(id);
+      if (!q) return;
       pts.delete(id);
-      // Remaining fingers: a move without the lifted one releases it; none left: touchEnd.
-      await send(pts.size ? 'touchMove' : 'touchEnd');
+      // touchEnd listing only the lifted finger (a touchMove that omits it never releases it in CDP).
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [q] });
     },
     /** Drag in n steps (a frame of simulation per step keeps look deltas per frame realistic). */
     async drag(id, x0, y0, x1, y1, n = 8, page = null) {
@@ -160,12 +162,15 @@ const visible = (p, testId) => p.locator(`[data-testid="${testId}"]`).count();
       }
       const g1 = await ev(p, () => ({ shots: window.__rift.game.weapon.shotsFired, yaw: window.__rift.game.player.yaw, trig: window.__rift.flow.input.mouse(0), stick: window.__rift.flow.input.stickZ }));
       await t.up(5);
+      await ev(p, () => window.__rift.advance(1 / 60));
+      const lift = await ev(p, () => ({ trig: window.__rift.flow.input.mouse(0), stick: window.__rift.flow.input.stickZ, held: !!document.querySelector('.tc-fire.held') }));
       await t.up(4);
       await ev(p, () => window.__rift.advance(1 / 60));
       check('C2 holding FIRE fires the weapon', g1.shots > g0.shots, `shots ${g0.shots} -> ${g1.shots}`);
       check('C3 dragging FIRE aims while firing', g0.yaw - g1.yaw > 0.05, `dyaw=${(g1.yaw - g0.yaw).toFixed(3)}`);
       check('C4 multi-touch: the stick stays active while firing', g1.stick > 0.5 && g1.trig, JSON.stringify(g1));
-      check('C5 lifting the fingers releases trigger and stick', !(await ev(p, () => window.__rift.flow.input.mouse(0))) && (await ev(p, () => window.__rift.flow.input.stickZ)) === 0);
+      check('C5 lifting FIRE alone releases the trigger while the stick finger stays down', !lift.trig && !lift.held && lift.stick > 0.5, JSON.stringify(lift));
+      check('C5b lifting the stick finger releases the stick', !(await ev(p, () => window.__rift.flow.input.mouse(0))) && (await ev(p, () => window.__rift.flow.input.stickZ)) === 0);
       await ev(p, () => window.__rift.advance(0.4));
       await tap(p, t, 'tc-jump');
       const air = await ev(p, () => { const pl = window.__rift.game.player; window.__rift.advance(0.1); return { grounded: pl.grounded, vy: pl.vy }; });
@@ -198,6 +203,7 @@ const visible = (p, testId) => p.locator(`[data-testid="${testId}"]`).count();
     if (want('D')) {
       await ev(p, () => window.__rift.advance(0.2));
       await tap(p, t, 'tc-build');
+      await ev(p, () => window.__rift.advance(0.1)); // the HUD publishes at 20 Hz
       const bm = await ev(p, () => window.__rift.game.construction.active);
       const place = await p.locator('[data-testid=tc-fire] .tc-label').textContent();
       check('D1 BUILD enters build mode and FIRE becomes PLACE', bm && place === 'PLACE', `${bm} ${place}`);
