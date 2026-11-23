@@ -6,7 +6,9 @@ import havokWasmUrl from '@babylonjs/havok/lib/esm/HavokPhysics.wasm?url';
 import { createEngine } from './core/engine';
 import { createRoot } from 'react-dom/client';
 import { Flow } from './core/Flow';
-import { loadSettings } from '@riftwarden/game/core/settings';
+import { loadSettings, mobileDefaults } from '@riftwarden/game/core/settings';
+import { immersiveStats, initTouch, isTouchDevice } from './touch/touchMode';
+import { simulatePwa } from './pwa';
 import { createAppRouter, Root } from './ui/router';
 import { loadSurfaceSources } from '@riftwarden/game/visuals/surfaceSources';
 
@@ -17,7 +19,8 @@ export async function boot(): Promise<void> {
   root.render(<Root router={createAppRouter(() => flow)} />);
 
   const canvas = document.getElementById('game') as HTMLCanvasElement;
-  const settings = loadSettings();
+  // First start on a phone or tablet: the performance preset (stored settings always win).
+  const settings = loadSettings(isTouchDevice() ? mobileDefaults() : undefined);
   const { engine, backend } = await createEngine(canvas, settings.renderer);
   const [havok] = await Promise.all([
     HavokPhysics({ locateFile: () => havokWasmUrl }),
@@ -29,6 +32,8 @@ export async function boot(): Promise<void> {
   flow.backend = backend;
 
   const params = new URLSearchParams(location.search);
+  // Touch controls (auto on touch screens; ?touch forces them, automation never enters real fullscreen).
+  initTouch(flow, { force: params.has('touch'), simulate: params.has('test') });
   flow.devTools = params.has('dev') || params.has('test');
   // Accounts: sync the profile while signed in; restore the session at boot (automation opts in with &account).
   startAccountSync(flow);
@@ -45,6 +50,7 @@ export async function boot(): Promise<void> {
     // ...and a local Rift War (no network) unless ?war asks for the shared one.
     if (!params.has('war')) flow.war.base = null;
     (window as unknown as { __rift: unknown }).__rift = flow.debugApi();
+    (window as unknown as { __touch: unknown }).__touch = { immersiveStats, simulatePwa };
   }
 
   flow.boot();

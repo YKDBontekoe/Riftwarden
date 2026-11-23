@@ -1,0 +1,19 @@
+{
+  "id": "./",
+  "name": "Riftwarden",
+  "short_name": "Riftwarden",
+  "description": "Pilot a defense drone: an FPS tower-defense roguelite. Hold the reactor, bring the salvage home.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
+  "orientation": "landscape",
+  "background_color": "#03070b",
+  "theme_color": "#0b1210",
+  "categories": ["games"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

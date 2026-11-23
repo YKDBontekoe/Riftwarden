@@ -19,6 +19,17 @@ export class Input {
   /** M7: accept keys without pointer lock (construction mode uses a free cursor). */
   freeKeys = false;
   onLockChange: (locked: boolean) => void = () => {};
+  /** Touch controls are on: input counts as captured without pointer lock (the overlay feeds keys, buttons, look). */
+  touch = false;
+  /** Virtual stick (touch): strafe / forward -1..1; zero when idle. */
+  stickX = 0;
+  stickZ = 0;
+  /** Stick pushed past its ring (sprint). */
+  stickSprint = false;
+  /** Called when a gesture asks for control in touch mode (fullscreen + orientation lock live there). */
+  onEngage: () => void = () => {};
+  /** Taps also fire compatibility mouse events: ignore those right after a touch. */
+  private touchAt = -1e9;
   private lockAttempt: Promise<void> | null = null;
   /** When the browser's default Escape unlock happened (programmatic exits don't have a cooldown). */
   private unlockedAt = 0;
@@ -47,13 +58,14 @@ export class Input {
       if (this.down.delete(code)) this.releasedSet.add(code);
     });
     document.addEventListener('mousemove', (e) => {
-      if (!this.captured) return;
+      if (!this.captured || performance.now() - this.touchAt < 900) return;
       if (this.skipMouse > 0) return;
       this.mouseDx += e.movementX;
       this.mouseDy += e.movementY;
     });
+    window.addEventListener('touchstart', () => (this.touchAt = performance.now()), { passive: true, capture: true });
     document.addEventListener('mousedown', (e) => {
-      if (!this.captured || e.button > 2) return;
+      if (!this.captured || e.button > 2 || performance.now() - this.touchAt < 900) return;
       this.buttons[e.button] = true;
       this.buttonsPressed[e.button] = true;
     });
@@ -89,10 +101,14 @@ export class Input {
   }
 
   get captured(): boolean {
-    return this.locked || this.forceCapture;
+    return this.locked || this.forceCapture || this.touch;
   }
 
   async requestLock(): Promise<void> {
+    if (this.touch) {
+      this.onEngage();
+      return;
+    }
     if (this.forceCapture) return;
     // A second click while a retry sequence is running must join it, not start
     // a competing request (which would just extend the blocked window).
@@ -171,6 +187,19 @@ export class Input {
     return this.buttonsPressed[button];
   }
 
+  /** Touch look: mouse-equivalent pixels, consumed by the next frame. */
+  look(dx: number, dy: number): void {
+    if (Number.isFinite(dx)) this.mouseDx += dx;
+    if (Number.isFinite(dy)) this.mouseDy += dy;
+  }
+
+  /** Touch stick (see core/touch.ts stickVector). */
+  setStick(x: number, z: number, sprint: boolean): void {
+    this.stickX = Number.isFinite(x) ? Math.max(-1, Math.min(1, x)) : 0;
+    this.stickZ = Number.isFinite(z) ? Math.max(-1, Math.min(1, z)) : 0;
+    this.stickSprint = sprint;
+  }
+
   /** Test/automation helpers. */
   simulateKey(code: string, isDown: boolean): void {
     if (isDown) {
@@ -198,6 +227,7 @@ export class Input {
 
   clear(): void {
     this.down.clear();
+    this.setStick(0, 0, false);
     this.buttons[0] = this.buttons[1] = this.buttons[2] = false;
     this.endFrame();
   }

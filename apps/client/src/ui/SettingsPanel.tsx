@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Flow } from '../core/Flow';
+import { InstallApp } from '../touch/MobileUi';
 import { keyLabel, ACTIONS, DEFAULT_SETTINGS, PRESETS, type Quality, type Settings } from '@riftwarden/game/core/settings';
 
 type Tab = 'display' | 'audio' | 'controls' | 'access';
@@ -113,6 +114,10 @@ export function SettingsPanel({ flow, compact }: { flow: Flow; compact?: boolean
       {tab === 'controls' && (
         <>
           <Slider label="Mouse sensitivity" min={0.2} max={3} step={0.05} value={s.sensitivity} fmt={(v) => v.toFixed(2)} onChange={(v) => update({ sensitivity: v })} />
+          <Seg label="Touch controls" value={s.touchControls} options={[['auto', 'AUTO'], ['on', 'ON'], ['off', 'OFF']]} onChange={(v) => update({ touchControls: v })} />
+          <Slider label="Touch look speed" testId="touch-look" min={0.3} max={3} step={0.05} value={s.touchLook} fmt={(v) => v.toFixed(2)} onChange={(v) => update({ touchLook: v })} />
+          <Slider label="Touch button opacity" min={0.2} max={1} step={0.05} value={s.touchOpacity} fmt={pct} onChange={(v) => update({ touchOpacity: v })} />
+          <InstallApp />
           <div className="grid grid-cols-[1fr_1fr] gap-[4px] m-[8px_0]">
             {ACTIONS.map((a) => (
               <button key={a.id} className="m-0 flex items-center justify-between px-[8px] py-[5px] text-[13px] aria-pressed:[border-color:var(--amber)]" aria-pressed={binding === a.id} data-testid={`bind-${a.id}`} onClick={() => setBinding(a.id)}>
