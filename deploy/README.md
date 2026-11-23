@@ -5,6 +5,9 @@ The backend runs on one server with Docker Compose; the static client is on Clou
 
 ## One-time setup on the server
 
+`bash deploy/setup-server.sh` (from a checkout, as the user that runs the stack) does steps 1-4 and the first deploy;
+it asks before stopping a previous stack in `~/stacks/riftwarden` and for the GHCR token / Cloudflare login. By hand:
+
 1. Copy this directory to `~/stacks/riftwarden` and create `.env` from `.env.example` (long random passwords).
 2. Log Docker in to GHCR for the deploy script: `DOCKER_CONFIG=~/stacks/riftwarden/.docker docker login ghcr.io`.
 3. Install the systemd user units from `systemd/` (`riftwarden-deploy.timer`, `riftwarden-deploy.service`,
