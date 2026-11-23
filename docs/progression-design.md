@@ -165,10 +165,45 @@ The owner accepts a wipe. Bump the save version with a migration that resets pro
 - A pure **progression simulation** (`tests/progression-sim.test.ts`): a modelled player who clears N waves per run at the recommended RL, collects drops with the real `rollDrops`, banks with the real ledger, crafts with the real costs and climbs RL when its loadout score allows. It asserts the targets above (first legendary 4-6 h, first exotic 15-25 h, RL reached after 10/50/100 h) so later tuning cannot silently speed things up again.
 - Odds tables tested per RL (sum to 1, monotone in RL, gates respected).
 
-## Open questions for the next round
+## 11. Second round decisions (2026-11-23)
 
-- Paragon was not chosen as a drip: should Warden levels past the tree's last useful ring give anything, or just keep revealing rings?
-- Should a run's RL be locked at deploy, or can the map offer "step up" nodes mid-run (higher RL for the rest of the run)?
-- Seasons for the endless ladder (yearly leaderboards per RL), or no resets ever?
-- Mastery in co-op: personal per player (proposed), or a team bonus too?
+### Infinite skill tree
+- Owner: **the skill tree is infinite.** Rings are already generated per profile without limit (one per 5 levels); this makes sure every one stays worth taking:
+  - Every Warden level keeps giving 1 point forever; rings keep revealing forever (no last ring).
+  - The per-stat soft cap (`cap x (1 - e^(-sum/cap))`) stays, but its cap **grows slowly with the ring** (+2% of the ring-1 cap per ring), so deep nodes never become worthless while one stat still cannot run away.
+  - Deep rings lean on **notables and keystones** (choices) more than minors: from ring 20 one keystone every 2 rings, from ring 40 notables take half the slots.
+  - Level curve unchanged (`400 + 220(L-1) + 6(L-1)^2`), so points arrive more slowly the deeper you go: the tree is the endless drip next to mastery.
+  - UI: the Neural Lattice must handle hundreds of nodes (ring culling outside the view, search by stat, "jump to frontier", allocated-path highlight).
+  - Tests: ring 500 generation stays finite and fast; the growing cap stays bounded per ring.
+
+### Step-up nodes on the run map
+- Owner: **yes.** The run starts at the picked RL; the map can offer **Rift Surge** nodes that raise the RL by +1 for **the rest of the run** (towers, enemies, item level and rarity gates follow the new RL from the next node on).
+  - Appear from act 2, at most one per act, never on the act-boss row; the node card shows the new RL and its loot gates ("Legendary unlocks at RL 4").
+  - Clearing a step-up node counts as progress toward unlocking that RL (clearing an act boss at a raised RL unlocks it, as if deployed there).
+  - Rewards: the node itself gives +1 shard and an extra cache; afterwards the run simply has better loot and harder fights.
+  - Co-op: part of the map vote like any node; the lobby's RL is the starting point.
+  - Records: the run's best RL is recorded separately from the deploy RL.
+
+### Seasons + permanent ladder
+- Owner: **both.** Like seasonal vs eternal realms:
+  - **Permanent** profile: never resets; everything in this doc applies.
+  - **Seasonal** profile (opt-in at the HQ, a second profile slot per account): starts fresh each season (~3 months), own Rift Level ladder, own leaderboards (highest RL cleared, fastest act-boss clear per RL, deepest wave per RL; solo and co-op boards).
+  - At season end the seasonal profile's gear, resources and records **move into the permanent profile** (storage overflow goes to a claimable "season cargo" bay), Warden XP and mastery XP are added; seasonal leaderboards are archived.
+  - Season rewards: cosmetic finishes, titles, a codex page per season; a **season journey** (10-20 goals such as "clear RL 10", "liberate a region", "find 5 uniques") with cosmetic rewards.
+  - Each season can add one **season rule** (for example "elites drop keys twice as often") to keep it fresh; permanent never gets season rules.
+  - The Rift War stays shared by both (it is not per profile); seasonal and permanent players fight the same war.
+  - Needs: profile namespace per season in sync (`SyncJournal` already keys by namespace), PostgreSQL `season` column + leaderboard tables, gateway endpoints for boards.
+
+### Mastery team bonus in co-op
+- Owner: **personal mastery plus a team bonus.**
+  - Each player keeps their own mastery XP and ranks.
+  - **Squad mastery XP**: +10% mastery XP per other warden in the operation (max +30%).
+  - **Shared family bonus**: when two or more wardens use the same family, all of them get +2% damage with it (+3% for three, +4% for four), shown on the team HUD.
+  - **Mastery aura**: each family perk tier you have reached (every 5 ranks) gives teammates using that family +0.2% damage, capped at +3% per family, so a veteran helps newer players.
+
+### Still open
 - Should locked families be visible in the codex as teasers before they unlock?
+- Season length and the first season rule.
+- Leaderboard anti-cheat: solo runs are client-simulated, so solo boards need run validation (`runCheck.ts` replays loot streams but not combat). Proposed: solo boards show only server-validated runs, and co-op boards are trusted.
+
+Build order addition: phase 4 (mastery) includes the co-op team bonus; infinite-tree work goes with phase 3 (unlock track); step-up nodes go into phase 1 (they need Rift Levels); seasons + leaderboards become **phase 7**, after the spikes.
