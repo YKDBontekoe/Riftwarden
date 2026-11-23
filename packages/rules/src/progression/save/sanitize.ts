@@ -527,6 +527,8 @@ export function sanitizeSave(raw: unknown, now = Date.now()): { data: SaveData; 
   data.market = sanitizeMarket(r.market, data, new Set(allOwnedUids(data)), repairs, now);
   data.economy = sanitizeEconomy(r.economy);
   data.progress = sanitizeProgress(r.progress, data.profile.id);
+  const w = obj(r.wiped);
+  if (typeof w.from === 'number' && typeof w.at === 'number') data.wiped = { from: int(w.from, 0, 0, 1000), at: num(w.at, 0, 0) };
 
   return { data, repairs };
 }

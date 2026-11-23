@@ -26,7 +26,6 @@ import { keyLabel, type Settings } from '../core/settings';
 import { HQ_MOVE, Player } from '../player/Player';
 import type { Profile } from '../progression/Profile';
 import { type SaveData } from '@riftwarden/rules/progression/save';
-import { THREAT_TIERS } from '@riftwarden/rules/progression/tiers';
 import { hudStore, type Screen, type TerminalId, uiEvents } from '../ui/store';
 import { calibrationRing, type EconCtx, equipmentExchange, fabricator, moduleBroker, reclamation } from './economyProps';
 import { captureEnvironment } from '../visuals/envCapture';
@@ -517,15 +516,17 @@ export class HomeBase {
       record.fillStyle = '#617267';
       record.fillRect(30, 244, 704, 2);
       record.font = `500 21px ${SCREEN_FONT}`;
-      record.fillText('Best wave by tier', 30, 273);
-      THREAT_TIERS.forEach((t, i) => {
-        const value = save.records[String(t.id)]?.bestWave || '—';
+      record.fillText('Best wave by Rift Level', 30, 273);
+      // The five highest levels played or unlocked (Rift Levels are endless).
+      const shown = Array.from({ length: Math.min(5, save.threat.unlocked) }, (_, i) => save.threat.unlocked - Math.min(5, save.threat.unlocked) + 1 + i);
+      shown.forEach((id, i) => {
+        const value = save.records[String(id)]?.bestWave || '—';
         const x = 30 + i * 143;
-        record.fillStyle = t.id <= save.threat.unlocked ? '#e9b692' : '#a2afa5';
+        record.fillStyle = '#e9b692';
         record.font = `700 26px ${SCREEN_FONT}`;
-        record.fillText(t.roman, x, 319);
+        record.fillText(`RL ${id}`, x, 319);
         record.font = `500 23px ${SCREEN_FONT}`;
-        record.fillText(t.id <= save.threat.unlocked ? String(value) : 'Locked', x, 370);
+        record.fillText(String(value), x, 370);
       });
       left.tex.update(false);
       drawScreenFrame(right, 'Salvage reserve', '#ecaa82');

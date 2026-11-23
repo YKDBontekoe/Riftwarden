@@ -1,6 +1,6 @@
 import { CODE_ALPHABET, type LobbyState, MAX_PLAYERS, RECONNECT_WINDOW, type ServerMsg } from '@riftwarden/protocol/protocol';
 import { equippedItem, deployBlocker } from '@riftwarden/rules/progression/save';
-import { THREAT_TIERS } from '@riftwarden/rules/progression/tiers';
+import { MAX_RIFT_LEVEL } from '@riftwarden/rules/progression/tiers';
 import type { OnlineProfile, SimStore } from './store';
 import type { CoopSim } from './coopSim';
 
@@ -70,7 +70,7 @@ export class Room {
 
   /** Highest tier every member has unlocked (the team plays a tier all of them may play). */
   get maxTier(): number {
-    let m = THREAT_TIERS.length;
+    let m = MAX_RIFT_LEVEL;
     for (const mem of this.members.values()) {
       const p = this.deps.store.get(mem.id);
       if (p) m = Math.min(m, p.data.threat.unlocked);
@@ -162,7 +162,7 @@ export class Room {
   }
 
   setTier(id: string, tier: number): string | null {
-    if (id !== this.hostId) return 'Only the host selects the threat tier';
+    if (id !== this.hostId) return 'Only the host selects the Rift Level';
     if (this.state !== 'lobby') return 'Operation already started';
     const t = this.clampTier(tier);
     if (t !== tier) return 'Every player must have unlocked that tier';

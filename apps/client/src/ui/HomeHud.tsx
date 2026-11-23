@@ -13,7 +13,7 @@ import { useSave } from './App';
 import { Banner, Perf } from './Hud';
 import { useHud } from './useHud';
 
-/** Calm HQ overlay: location, reserve, current threat tier, interaction prompt. */
+/** Calm HQ overlay: location, reserve, selected Rift Level, interaction prompt. */
 export function HomeHud({ flow }: { flow: Flow }) {
   const screen = useHud((s) => s.screen);
   const area = useHud((s) => s.area);
@@ -43,9 +43,9 @@ export function HomeHud({ flow }: { flow: Flow }) {
         </div>
         <WardenLevel xp={save.progress.xp} allocated={save.progress.tree.allocated.length} />
         <div>
-          <span>THREAT TIER</span>
+          <span>RIFT LEVEL</span>
           <b>
-            {tier.roman} · {tier.name}
+            RL {tier.id} · {tier.name}
           </b>
         </div>
       </div>

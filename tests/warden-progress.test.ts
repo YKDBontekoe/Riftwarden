@@ -99,7 +99,7 @@ describe('save v8', () => {
     delete v7.progress;
     (v7.totals as Record<string, number>).kills = 1000;
     v7.milestones = ['w10'];
-    const m = migrate(v7, 7);
+    const m = migrate(v7, 7, 10);
     expect(m.ok).toBe(true);
     const { data } = sanitizeSave(m.data);
     expect(data.version).toBe(SAVE_VERSION);

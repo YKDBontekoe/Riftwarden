@@ -33,7 +33,7 @@ import { type LootHost, LootPickups } from '../arena/LootPickups';
 import { type TowerEdit, type TowerHost, TowerControl } from '../arena/TowerControl';
 import { planBlast } from '@riftwarden/rules/combat/blast';
 import { hintFor, lootTargetInfo, runHud } from '../ui/hudModel';
-import { rollLoot } from '@riftwarden/rules/loot/roll';
+import { nextPity, rollLoot } from '@riftwarden/rules/loot/roll';
 import { gearUniques } from '@riftwarden/rules/loot/uniques';
 import { loadoutScore } from '@riftwarden/rules/loot/loadoutScore';
 import { contactShadow } from '../visuals/grounding';
@@ -57,7 +57,7 @@ import { Effects } from '../fx/Effects';
 import { MOVE, Player } from '../player/Player';
 import { type HitKind, hudStore, type LootTargetInfo, type Screen, uiEvents } from '../ui/store';
 import type { Rewards, RunLedger } from '@riftwarden/rules/progression/run';
-import { isCheckpointWave, type ThreatTier } from '@riftwarden/rules/progression/tiers';
+import { isCheckpointWave, lootLevel, type ThreatTier } from '@riftwarden/rules/progression/tiers';
 import { ArenaBuilder } from '../visuals/arena';
 import { Atmosphere } from '../visuals/atmosphere';
 import { PostFx } from '../visuals/postfx';
@@ -577,7 +577,7 @@ export class Game {
       get planner() { return g.planner; }, // prettier-ignore
       get run() { return g.cfg.run; }, // prettier-ignore
       get build() { return g.director.build; }, // prettier-ignore
-      get lootLevelBonus() { return g.cfg.tier.lootLevelBonus; }, // prettier-ignore
+      lootLevelAt: (wave: number) => lootLevel(g.cfg.tier, wave),
       get cores() { return g.wallet.cores; }, // prettier-ignore
       set cores(v: number) { g.wallet.cores = Math.max(0, Math.floor(v)); }, // prettier-ignore
       get reactorHp() { return g.reactorHp; }, // prettier-ignore
@@ -776,7 +776,7 @@ export class Game {
 
   /** Enemy level scale for armor (same growth as flat item stats at this wave/tier). */
   get attackerScale(): number {
-    return flatScale(this.waves.number + this.cfg.tier.lootLevelBonus);
+    return flatScale(lootLevel(this.cfg.tier, this.waves.number));
   }
 
   /**
@@ -866,8 +866,11 @@ export class Game {
   private rollFrom(src: DropSource, wave: number): ItemInstance[] {
     const run = this.cfg.run;
     const t = this.cfg.tier;
-    if (this.dropChanceMult === 1) run.lootJournal.push({ node: this.cfg.node?.node.id ?? null, draw: this.lootDraws, counter: this.lootCounter, source: src, wave, tier: { lootLevelBonus: t.lootLevelBonus, lootLuck: t.lootLuck, id: t.id }, faction: this.director.faction });
-    return rollLoot({ source: src, wave, tier: this.cfg.tier, rand: this.lootRand, nextUid: () => `${run.id}.${++this.lootCounter}`, originId: run.id, chanceMult: this.dropChanceMult, faction: this.director.faction });
+    const pity = run.pity;
+    if (this.dropChanceMult === 1) run.lootJournal.push({ node: this.cfg.node?.node.id ?? null, draw: this.lootDraws, counter: this.lootCounter, source: src, wave, tier: { lootLevelBonus: t.lootLevelBonus, lootLuck: t.lootLuck, id: t.id }, faction: this.director.faction, pity });
+    const items = rollLoot({ source: src, wave, tier: this.cfg.tier, rand: this.lootRand, nextUid: () => `${run.id}.${++this.lootCounter}`, originId: run.id, chanceMult: this.dropChanceMult, faction: this.director.faction, pity });
+    run.pity = nextPity(pity, items);
+    return items;
   }
 
   /** Roll drops for a source and place them physically around `at`. */

@@ -79,7 +79,7 @@ function SectorCard({ s }: { s: NonNullable<TransitInfo['sector']> }) {
     <div className="ls-card">
       <div className="flex justify-between gap-[10px] font-mono text-[11px] tracking-[0.16em] text-muted">
         <span className="text-cyan">{s.code}</span>
-        <span className="text-orange">TIER {s.tier} · {s.tierName}</span>
+        <span className="text-orange">{/^RL /.test(s.tier) ? s.tier : `TIER ${s.tier}`} · {s.tierName}</span>
       </div>
       <div className="ls-name font-display font-[700] [font-size:clamp(18px,2vw,24px)] tracking-[0.08em] m-[6px_0_10px] uppercase">{s.name}</div>
       {s.node && <NodeCard b={s.node} />}

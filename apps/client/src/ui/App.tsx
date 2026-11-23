@@ -133,7 +133,7 @@ const CONTROLS = [
 ] as const;
 
 const BRIEFING = [
-  ['Deploy from headquarters', <>Use the deployment terminal with <BoundKey action="use" /> to select a threat tier.</>],
+  ['Deploy from headquarters', <>Use the deployment terminal with <BoundKey action="use" /> to pick a Rift Level.</>],
   ['Hold the reactor', <>Build turrets between waves. Collect equipment and salvage from fallen machines with <BoundKey action="use" />.</>],
   ['Bank your salvage', 'Every five waves, a checkpoint secures your haul. Return home or stay for another wave. Losing the reactor costs your unsecured cargo.'],
 ] as const;
@@ -228,7 +228,7 @@ function MainMenu({ flow }: { flow: Flow }) {
         </section>
       )}
       <footer className="menu-ledger">
-        <div><span>Threat tier</span><strong>{tier.roman} <i>/</i> {tier.name}</strong></div>
+        <div><span>Rift Level</span><strong>RL {tier.id} <i>/</i> {tier.name}</strong></div>
         <div><span>Operations</span><strong>{save.totals.runs.toLocaleString()}</strong></div>
         <div><span>Salvage</span><strong>{save.resources.salvage.toLocaleString()}</strong></div>
         <div><span>Credits</span><strong>{save.resources.credits.toLocaleString()}</strong></div>
@@ -267,7 +267,7 @@ function PauseMenu({ flow }: { flow: Flow }) {
           <span className="tick" />
           PAUSED
         </div>
-        <div className="font-mono text-[11px] tracking-[0.2em] text-faint m-[-6px_0_14px]">{inArena ? `SECTOR 07 · THREAT TIER ${getTier(flow.run?.tier ?? 1).roman}` : 'HEADQUARTERS'}</div>
+        <div className="font-mono text-[11px] tracking-[0.2em] text-faint m-[-6px_0_14px]">{inArena ? `SECTOR 07 · RIFT LEVEL ${flow.arena?.cfg.tier.id ?? flow.run?.tier ?? 1}` : 'HEADQUARTERS'}</div>
         <button className="primary" disabled={resuming} onClick={resume}>
           {resuming ? 'RESUMING…' : 'RESUME'}
         </button>
@@ -327,7 +327,7 @@ function CheckpointPanel({ flow, game }: { flow: Flow; game: Game }) {
   return (
     <div className="screen dim checkpoint">
       <div className="modal wide panel-frame">
-        <div className="cache-heading"><span aria-hidden="true" className="uc-art art-cache" /><div><div className="cp-kicker">Checkpoint · Tier {tier.roman}</div>
+        <div className="cache-heading"><span aria-hidden="true" className="uc-art art-cache" /><div><div className="cp-kicker">Checkpoint · RL {tier.id}</div>
         <h2 className="cp-title">Wave {wave} secured</h2></div></div>
         <div className="cp-sub">{game.lastBankSaved ? 'All collected salvage and equipment has been banked to headquarters.' : 'Warning: the save could not be written. Rewards are held in memory and will be written with the next successful save.'}</div>
         <div className="stat-cards cyan">
@@ -416,7 +416,7 @@ export function RunSummary({ result, extra }: { result: RunResult; extra?: { tur
     ['Warden XP', (result.xpSecured ?? 0) + (result.xpKept ?? 0), result.xpLost ?? 0],
     ['Equipment', result.itemsSecured, result.itemsLost],
   ] as const;
-  const details: [string, string | number][] = [['Final wave', result.finalWave], ['Threat tier', `${tier.roman} · ${tier.name}`]];
+  const details: [string, string | number][] = [['Final wave', result.finalWave], ['Rift Level', `RL ${tier.id} · ${tier.name}`]];
   if (extra) details.push(['Turrets deployed', extra.turretsBuilt], ['Cores earned', extra.coresEarned]);
   if (sv) details.push(['Bosses destroyed', sv.bossesKilled], ['Elites destroyed', sv.elitesKilled], ['Drone losses', sv.deaths],
     ['Reactor damage taken', fmtNum(sv.reactorDamage)], ['Drone damage dealt', fmtNum(sv.playerDamage)],
@@ -424,8 +424,8 @@ export function RunSummary({ result, extra }: { result: RunResult; extra?: { tur
   return (
     <div className="summary">
       {sv?.dev && <div className="record-badge dev">DEVELOPMENT SESSION · NOT RECORD ELIGIBLE · NOTHING BANKED</div>}
-      {!sv?.dev && (result.records?.length ?? 0) > 0 && <div className="record-badge"><strong>Tier {tier.roman} personal record{result.records!.length > 1 ? 's' : ''}</strong> {result.records!.join(' · ')}</div>}
-      {!sv?.dev && !result.records && result.newRecord && <div className="record-badge">New personal record · Tier {tier.roman}</div>}
+      {!sv?.dev && (result.records?.length ?? 0) > 0 && <div className="record-badge"><strong>RL {tier.id} personal record{result.records!.length > 1 ? 's' : ''}</strong> {result.records!.join(' · ')}</div>}
+      {!sv?.dev && !result.records && result.newRecord && <div className="record-badge">New personal record · RL {tier.id}</div>}
       <div className="result-headline">
         <div><b>{result.wavesCleared}</b><span><FieldIcon name="wave" /> Waves cleared</span></div>
         <div><b>{result.kills.toLocaleString()}</b><span><FieldIcon name="enemy" /> Hostiles destroyed</span></div>
@@ -505,7 +505,7 @@ function DefeatScreen({ flow }: { flow: Flow }) {
           <button className="primary" onClick={() => void flow.leaveArena()}>
             RETURN TO HQ
           </button>
-          <button onClick={() => void flow.redeploy()}>REDEPLOY · TIER {getTier(result.tier).roman}</button>
+          <button onClick={() => void flow.redeploy()}>REDEPLOY · RL {getTier(result.tier).id}</button>
         </div>
       </div>
     </div>

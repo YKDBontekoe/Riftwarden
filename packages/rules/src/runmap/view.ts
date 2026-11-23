@@ -41,7 +41,13 @@ export interface RunMapView {
   lastWave: number;
   /** Node intel inputs: the arena planner's seed, the base threat tier, the game mode, current weapon DPS. */
   plannerSeed: number;
+  /** The run's current Rift Level (deploy level + surges). */
   tier: number;
+  /** Rift Level the run deployed at (optional: co-op views omit it). */
+  deployTier?: number;
+  /** Rift Surges taken / available on the next travel (solo map runs). */
+  surge?: number;
+  surgeReady?: boolean;
   mode: 'defense' | 'survival';
   dps: number;
   /** Co-op: votes per player (node id or 'home'), seconds left. */

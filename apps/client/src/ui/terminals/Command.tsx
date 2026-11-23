@@ -1,5 +1,5 @@
 import type { Flow } from '../../core/Flow';
-import { THREAT_TIERS } from '@riftwarden/rules/progression/tiers';
+import { getTier, type ThreatTier } from '@riftwarden/rules/progression/tiers';
 import { MILESTONES } from '@riftwarden/rules/survival/records';
 import { fmtTime, useSave } from '../App';
 import { Shell } from '../shell';
@@ -23,7 +23,7 @@ export function CommandTerminal({ flow, close }: { flow: Flow; close: () => void
             <Stat k="HOSTILES DESTROYED" v={String(t.kills)} />
             <Stat k="SALVAGE SECURED (TOTAL)" v={String(t.salvageSecured)} />
             <Stat k="BOSSES · ELITES DESTROYED" v={`${t.bossesDefeated} · ${t.elitesDefeated}`} />
-            <Stat k="HIGHEST THREAT TIER UNLOCKED" v={THREAT_TIERS[save.threat.unlocked - 1]?.roman ?? 'I'} />
+            <Stat k="HIGHEST RIFT LEVEL UNLOCKED" v={`RL ${save.threat.unlocked}`} />
           </div>
           <WardenProgress flow={flow} />
           <div className="col-label">MILESTONES · {save.milestones.length}/{MILESTONES.length}</div>
@@ -38,7 +38,7 @@ export function CommandTerminal({ flow, close }: { flow: Flow; close: () => void
           <table className="rec-table">
             <thead>
               <tr>
-                <th>TIER</th>
+                <th>RIFT LEVEL</th>
                 <th>BEST WAVE</th>
                 <th>REACHED</th>
                 <th>BOSSES</th>
@@ -48,13 +48,13 @@ export function CommandTerminal({ flow, close }: { flow: Flow; close: () => void
               </tr>
             </thead>
             <tbody>
-              {THREAT_TIERS.map((tier) => {
+              {recordLevels(save).map((tier) => {
                 const r = save.records[String(tier.id)];
                 const locked = tier.id > save.threat.unlocked;
                 return (
                   <tr key={tier.id} className={locked ? 'locked' : ''}>
                     <td>
-                      {tier.roman} · {tier.name}
+                      RL {tier.id} · {tier.name}
                     </td>
                     <td className="hi">{locked ? 'LOCKED' : (r?.bestWave ?? 0)}</td>
                     <td>{r?.highestWave ?? 0}</td>
@@ -81,7 +81,7 @@ export function CommandTerminal({ flow, close }: { flow: Flow; close: () => void
               {save.history.map((h) => (
                 <div key={h.id} className={`hist ${h.outcome}`}>
                   <span className="h-out">{h.outcome === 'returned' ? 'EXTRACTED' : h.outcome === 'defeat' ? 'REACTOR LOST' : h.outcome.toUpperCase()}</span>
-                  <span>T{THREAT_TIERS[h.tier - 1]?.roman}</span>
+                  <span>RL{h.tier}</span>
                   <span>W{h.finalWave}</span>
                   <span>{h.kills} kills</span>
                   {h.bosses.length > 0 && <span className="boss">{h.bosses.length} boss{h.bosses.length > 1 ? 'es' : ''}</span>}
@@ -102,4 +102,12 @@ export function CommandTerminal({ flow, close }: { flow: Flow; close: () => void
       </div>
     </Shell>
   );
+}
+
+/** Levels shown in the records table: every level played or unlocked, newest first, plus the next locked one. */
+function recordLevels(save: { records: Record<string, unknown>; threat: { unlocked: number } }): ThreatTier[] {
+  const ids = new Set<number>([save.threat.unlocked + 1]);
+  for (let i = 1; i <= save.threat.unlocked; i++) ids.add(i);
+  for (const k of Object.keys(save.records)) if (Number(k) >= 1) ids.add(Number(k));
+  return [...ids].sort((a, b) => b - a).slice(0, 40).map(getTier);
 }

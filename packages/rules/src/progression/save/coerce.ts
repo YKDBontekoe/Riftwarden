@@ -1,4 +1,4 @@
-import { THREAT_TIERS } from '../tiers';
+import { MAX_RIFT_LEVEL } from '../tiers';
 
 export type Obj = Record<string, unknown>;
 export const obj = (v: unknown): Obj => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Obj) : {});
@@ -7,5 +7,6 @@ export const num = (v: unknown, fallback: number, lo = -Infinity, hi = Infinity)
   typeof v === 'number' && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : fallback;
 export const int = (v: unknown, fallback: number, lo = 0, hi = Number.MAX_SAFE_INTEGER): number => Math.floor(num(v, fallback, lo, hi));
 export const str = (v: unknown, fallback: string, max = 64): string => (typeof v === 'string' && v.length > 0 ? v.slice(0, max) : fallback);
-export const MAX_TIER = THREAT_TIERS.length;
+/** Highest storable Rift Level (levels are endless; this only bounds stored numbers). */
+export const MAX_TIER = MAX_RIFT_LEVEL;
 

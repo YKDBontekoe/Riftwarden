@@ -12,7 +12,7 @@ export interface StationInfo {
 }
 
 export const STATION_INFO: Record<string, StationInfo> = {
-  deploy: { name: 'Deployment', purpose: 'Pick a threat tier and launch an operation. Higher tiers give better loot and more XP.', uses: [] },
+  deploy: { name: 'Deployment', purpose: 'Pick a Rift Level and launch an operation. Higher levels raise item levels, open rarer drops and give more XP.', uses: [] },
   command: { name: 'Command Console', purpose: 'Your service record, survival records, milestones and a directory of every station.', uses: ['xp'] },
   loadout: { name: 'Drone Configuration', purpose: 'Equip gear into your 7 slots, compare stats and save presets.', uses: [] },
   storage: { name: 'Storage', purpose: 'Everything you own that is not equipped. Buy extra bays here.', uses: ['salvage'] },

@@ -3,7 +3,7 @@ import { basesFor } from '../loot/bases';
 import { clampLevel, generateItem, hashSeed, pickWeighted } from '../loot/generate';
 import { rarity, type RarityId, rollRarity } from '../loot/rarity';
 import type { Category, ItemInstance } from '../loot/types';
-import { getTier, THREAT_TIERS } from '../progression/tiers';
+import { getTier, lootLevel, MAX_RIFT_LEVEL } from '../progression/tiers';
 import { MARKET } from './config';
 
 /**
@@ -51,15 +51,15 @@ export interface MarketProgress {
 }
 
 /**
- * Level of loot the player currently earns: best cleared wave on any tier plus that
- * tier's loot level bonus (at least the unlocked tier's base). Merchants and fabrication
- * work at this level, so they keep pace with progression without outpacing drops.
+ * Level of loot the player currently earns: the best item level any Rift Level record reached (`lootLevel` of its
+ * best cleared wave), at least the unlocked level's base. Merchants and fabrication work at this level, so they
+ * keep pace with progression without outpacing drops.
  */
 export function progressLevel(records: Record<string, { bestWave: number }>, unlocked: number): number {
-  let lvl = 1 + getTier(Math.max(1, unlocked)).lootLevelBonus;
-  for (const t of THREAT_TIERS) {
-    const r = records[String(t.id)];
-    if (r) lvl = Math.max(lvl, r.bestWave + t.lootLevelBonus);
+  let lvl = getTier(Math.max(1, unlocked)).lootLevelBonus;
+  for (const [id, r] of Object.entries(records)) {
+    const t = Number(id);
+    if (Number.isInteger(t) && t >= 1 && r) lvl = Math.max(lvl, lootLevel(getTier(t), r.bestWave));
   }
   return clampLevel(lvl);
 }
@@ -82,7 +82,7 @@ export function marketSeed(profileId: string, rotation: number): number {
 /** Generate a full rotation of stock. Same (profile, rotation, progress) -> same stock. */
 export function generateMarket(profileId: string, rotation: number, progress: MarketProgress, now = Date.now()): MarketState {
   const rand = mulberry32(marketSeed(profileId, rotation));
-  const tier = getTier(Math.max(1, Math.min(THREAT_TIERS.length, progress.tier)));
+  const tier = getTier(Math.max(1, Math.min(MAX_RIFT_LEVEL, progress.tier)));
   const luckT = tier.lootLuck;
   const level = () => clampLevel(progress.level - 1 + Math.floor(rand() * 3));
   const make = (kind: MerchantId, i: number, category: Category, rar: RarityId): MarketEntry => {

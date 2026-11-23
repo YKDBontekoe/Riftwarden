@@ -420,7 +420,7 @@ function AscendBench({ save, item, tx, setPreview }: { save: SaveData; item: Ite
       <div className="col-label">ASCENSION</div>
       <p className="faint small">
         An Ascended item keeps everything it has, gains stronger rarity multipliers and one extra affix at the top tier with a perfect roll. Rift shards drop from elites, bosses, elite caches,
-        high-value targets and tier III+ checkpoints.
+        high-value targets and checkpoints from RL 3.
       </p>
       {why ? (
         <div className="prot-note">{why}.</div>

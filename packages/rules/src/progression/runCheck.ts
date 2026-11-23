@@ -13,7 +13,8 @@ import { generateItem, hashSeed } from '../loot/generate';
 import { RARITIES, type RarityId } from '../loot/rarity';
 import { rollLoot } from '../loot/roll';
 import type { ItemInstance } from '../loot/types';
-import { getTier, THREAT_TIERS } from './tiers';
+import { getTier, lootLevel, MAX_RIFT_LEVEL } from './tiers';
+import { MAX_PITY } from '../loot/roll';
 import type { Rewards, RunResult } from './run';
 import type { LootRecord, RunEntry } from './runRules';
 import { deployBlocker, type SaveData } from './save';
@@ -35,7 +36,8 @@ export const CEILINGS = {
   maxOverrideRarity: 'epic' as RarityId,
 } as const;
 
-const tierFactor = (tier: number) => 1 + 0.75 * Math.max(0, tier - 1);
+/** Reward ceilings grow with the level (salvage x1.12 per level above Apex, so this stays generous). */
+const tierFactor = (tier: number) => (1 + 0.75 * Math.max(0, tier - 1)) * Math.max(1, getTier(Math.min(MAX_RIFT_LEVEL, tier)).salvageMult / 5);
 const rank = (r: RarityId | undefined) => (r ? RARITIES.findIndex((x) => x.id === r) : -1);
 
 function stable(v: unknown): string {
@@ -68,9 +70,11 @@ export function validSource(src: DropSource): string | null {
   return null;
 }
 
-function validTier(t: LootRecord['tier'], runTier: number): string | null {
-  const tier = getTier(runTier);
-  if (t.id !== undefined && t.id !== runTier) return 'tier mismatch';
+function validTier(t: LootRecord['tier'], runTier: number, surge: number): string | null {
+  const id = t.id ?? runTier;
+  // A map run's Rift Surges raise the level for the rest of the run (at most `surge` levels above the deploy level).
+  if (!Number.isInteger(id) || id < runTier || id > runTier + surge) return 'tier mismatch';
+  const tier = getTier(id);
   if (t.lootLevelBonus !== tier.lootLevelBonus) return 'loot level altered';
   if (!(t.lootLuck > 0 && t.lootLuck <= tier.lootLuck * CEILINGS.luckFactor)) return 'loot luck out of range';
   return null;
@@ -84,20 +88,21 @@ function nodeSalt(mapSeed: number, node: string | null): number | null {
 }
 
 /** Re-roll every recorded drop; returns the items the run genuinely produced (by uid) or a reason. */
-export function replayLoot(runId: string, runTier: number, mapSeed: number, records: LootRecord[]): Map<string, ItemInstance> | string {
+export function replayLoot(runId: string, runTier: number, mapSeed: number, records: LootRecord[], surge = 0): Map<string, ItemInstance> | string {
   const out = new Map<string, ItemInstance>();
   if (records.length > 5000) return 'loot journal too long';
   for (const r of records) {
     if (!Number.isInteger(r.draw) || r.draw < 0 || r.draw > 2_000_000 || !Number.isInteger(r.counter) || r.counter < 0) return 'bad loot record';
     if (!Number.isInteger(r.wave) || r.wave < 1 || r.wave > 100_000) return 'bad loot wave';
-    const bad = validSource(r.source) ?? validTier(r.tier, runTier);
+    if (r.pity !== undefined && !(Number.isInteger(r.pity) && r.pity >= 0 && r.pity <= MAX_PITY)) return 'bad loot record';
+    const bad = validSource(r.source) ?? validTier(r.tier, runTier, surge);
     if (bad) return bad;
     const salt = nodeSalt(mapSeed, r.node);
     if (salt === null) return `unknown map node ${r.node}`;
     const stream = mulberry32((hashSeed(runId) ^ salt) >>> 0);
     for (let i = 0; i < r.draw; i++) stream();
     let counter = r.counter;
-    const items = rollLoot({ source: r.source, wave: r.wave, tier: r.tier, rand: stream, nextUid: () => `${runId}.${++counter}`, originId: runId, faction: r.faction });
+    const items = rollLoot({ source: r.source, wave: r.wave, tier: r.tier, rand: stream, nextUid: () => `${runId}.${++counter}`, originId: runId, faction: r.faction, pity: r.pity ?? 0 });
     for (const it of items) out.set(it.uid, it);
   }
   return out;
@@ -116,9 +121,9 @@ function within(name: string, v: number | undefined, max: number): string | null
   return x > max ? `${name} above what ${name === 'xp' ? 'the run earned' : 'the waves pay'}` : null;
 }
 
-function checkRewards(d: SaveData, runId: string, tier: number, mapSeed: number, rewards: Rewards, loot: LootRecord[], waves: { from: number; to: number }): string | null {
+function checkRewards(d: SaveData, runId: string, tier: number, mapSeed: number, rewards: Rewards, loot: LootRecord[], waves: { from: number; to: number }, surge = 0): string | null {
   const span = Math.max(1, waves.to - waves.from);
-  const f = tierFactor(tier) * span;
+  const f = tierFactor(tier + surge) * span;
   const top = Math.max(1, waves.to);
   const bad =
     within('credits', rewards.credits, CEILINGS.creditsPerWave(top) * f) ??
@@ -130,11 +135,11 @@ function checkRewards(d: SaveData, runId: string, tier: number, mapSeed: number,
   const items = rewards.items ?? [];
   if (items.length > CEILINGS.itemsPerWave * span) return 'more items than the waves drop';
   if (!items.length) return null;
-  const produced = replayLoot(runId, tier, mapSeed, loot);
+  const produced = replayLoot(runId, tier, mapSeed, loot, surge);
   if (typeof produced === 'string') return produced;
   const owned = new Set(d.items.map((i) => i.uid));
   const seen = new Set<string>();
-  const maxLevel = top + getTier(tier).lootLevelBonus + 12;
+  const maxLevel = lootLevel(getTier(tier + surge), top) + 12;
   for (const item of items) {
     if (!item || typeof item.uid !== 'string' || seen.has(item.uid) || owned.has(item.uid)) return 'duplicate item';
     seen.add(item.uid);
@@ -161,7 +166,7 @@ export function checkRunEntry(d: SaveData, e: RunEntry, now: number): string | n
   switch (e.kind) {
     case 'start':
       if (typeof e.runId !== 'string' || !/^[\w.-]{1,64}$/.test(e.runId)) return 'bad run id';
-      if (!Number.isInteger(e.tier) || e.tier < 1 || e.tier > THREAT_TIERS.length || e.tier > d.threat.unlocked) return 'tier locked';
+      if (!Number.isInteger(e.tier) || e.tier < 1 || e.tier > MAX_RIFT_LEVEL || e.tier > d.threat.unlocked) return 'tier locked';
       if (d.history.some((h) => h.id === e.runId) || a?.id === e.runId) return 'run already started';
       if (e.mode !== 'defense' && e.mode !== 'survival') return 'bad mode';
       if (!Number.isInteger(e.mapSeed)) return 'bad map seed';
@@ -171,11 +176,11 @@ export function checkRunEntry(d: SaveData, e: RunEntry, now: number): string | n
       if (!a || a.id !== e.runId) return 'no such run';
       if (!Number.isInteger(e.wave) || e.wave <= a.bankedThroughWave) return 'already banked';
       if (!Number.isInteger(e.bosses) || e.bosses < 0 || e.bosses > e.wave) return 'bad boss count';
-      return checkRewards(d, a.id, a.tier, a.map?.seed ?? 0, e.rewards, e.loot ?? [], { from: a.bankedThroughWave, to: e.wave });
+      return checkRewards(d, a.id, a.tier, a.map?.seed ?? 0, e.rewards, e.loot ?? [], { from: a.bankedThroughWave, to: e.wave }, a.map?.surge ?? 0);
     case 'nodeBank': {
       if (!a || a.id !== e.runId || !a.map) return 'no such map run';
       const wave = a.map.carry?.wave ?? a.bankedThroughWave;
-      return checkRewards(d, a.id, a.tier, a.map.seed, e.rewards, e.loot ?? [], { from: Math.max(0, wave - 5), to: Math.max(1, wave) });
+      return checkRewards(d, a.id, a.tier, a.map.seed, e.rewards, e.loot ?? [], { from: Math.max(0, wave - 5), to: Math.max(1, wave) }, a.map.surge ?? 0);
     }
     case 'map':
       return a && a.id === e.runId && a.map ? null : 'no such map run';

@@ -54,7 +54,7 @@ function m1SaveText(): string {
 
 describe('save v2 (scenario H)', () => {
   it('migrates an M1 save without losing progress or items', () => {
-    const r = parseSave(m1SaveText());
+    const r = parseSave(m1SaveText(), Date.now(), { upTo: 10 });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.migratedFrom).toBe(1);
@@ -73,7 +73,7 @@ describe('save v2 (scenario H)', () => {
     expect('module' in d.loadout).toBe(false);
     expect(d.presets.length).toBe(3);
     // Upgrade is deterministic: loading twice yields identical items.
-    const again = parseSave(m1SaveText());
+    const again = parseSave(m1SaveText(), Date.now(), { upTo: 10 });
     expect(again.ok && again.data.items).toEqual(d.items);
   });
 

@@ -58,7 +58,8 @@ export interface NodeHost {
   readonly planner: SurvivalPlanner;
   readonly run: RunLedger;
   readonly build: RunBuild;
-  readonly lootLevelBonus: number;
+  /** Item level of drops at a wave of this node's Rift Level (tiers `lootLevel`). */
+  lootLevelAt(wave: number): number;
   cores: number;
   reactorHp: number;
   readonly reactorMax: number;
@@ -276,7 +277,7 @@ export class RunNode {
   private stockMerchant(): void {
     const s = merchantStock(this.node.seed, this.from);
     // Item level from the segment start (not the live wave), so the server and every replica show the same items.
-    this.stock = s.items.map((offer) => ({ offer, item: this.h.makeItem(offer, this.from + this.h.lootLevelBonus + 2), sold: false }));
+    this.stock = s.items.map((offer) => ({ offer, item: this.h.makeItem(offer, this.h.lootLevelAt(this.from) + 2), sold: false }));
   }
 
   private servicePrices(): Record<ServiceId, number> {

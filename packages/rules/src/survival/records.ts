@@ -18,8 +18,8 @@ export const MILESTONES: readonly MilestoneDef[] = [
   { id: 'bossPair', label: 'Both command machines destroyed in one run', test: (s) => s.survival.bosses.some((b) => b.startsWith('Siege')) && s.survival.bosses.some((b) => b.startsWith('Overseer')) },
   { id: 'elite25', label: '25 elites destroyed in one run', test: (s) => s.survival.elitesKilled >= 25 },
   { id: 'hvt', label: 'Vault Courier intercepted', test: (s) => s.survival.hvtKilled >= 1 },
-  { id: 'tier4w10', label: 'Wave 10 on Threat Tier IV', test: (s) => s.tier >= 4 && s.wavesCleared >= 10 },
-  { id: 'tier5w10', label: 'Wave 10 on Threat Tier V', test: (s) => s.tier >= 5 && s.wavesCleared >= 10 },
+  { id: 'tier4w10', label: 'Wave 10 on Rift Level 4', test: (s) => s.tier >= 4 && s.wavesCleared >= 10 },
+  { id: 'tier5w10', label: 'Wave 10 on Rift Level 5', test: (s) => s.tier >= 5 && s.wavesCleared >= 10 },
 ];
 
 export function milestoneLabel(id: string): string {

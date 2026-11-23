@@ -132,7 +132,7 @@ describe('M4 economy foundation', () => {
     data.items.push(w);
     data.storage.uids.push(w.uid);
     const body = JSON.stringify(data);
-    const r = parseSave(`{"v":3,"sum":"${checksum(body)}","data":${body}}`);
+    const r = parseSave(`{"v":3,"sum":"${checksum(body)}","data":${body}}`, Date.now(), { upTo: 10 });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.migratedFrom).toBe(3);
@@ -659,7 +659,7 @@ describe('H: fabrication', () => {
     d.threat.unlocked = 2;
     const r2 = craft(d, 'd_armor', 'standard');
     expect(r1.ok && r1.item!.level).toBe(1);
-    expect(r2.ok && r2.item!.level).toBe(20); // 12 + tier II loot bonus 8
+    expect(r2.ok && r2.item!.level).toBe(16); // RL 2 base 11 + floor((12 - 1) / 2)
   });
 });
 

@@ -133,6 +133,8 @@ export class RunLedger {
   survivalMode = false;
   /** Every roll on this run's loot streams, sent with banked rewards so the server can re-roll them (runCheck). */
   lootJournal: import('./runRules').LootRecord[] = [];
+  /** Bad-luck protection: drops since the last legendary or better on this run (loot/roll `nextPity`). */
+  pity = 0;
   /** Items secured before a resume (the items themselves are in the save). */
   private securedBefore = 0;
 
@@ -273,7 +275,7 @@ export class RunLedger {
     return {
       duration: this.duration, kills: this.kills, wave: this.wave, wavesCleared: this.wavesCleared, checkpoints: this.checkpoints,
       lastBankedWave: this.lastBankedWave, secured, securedItems: this.secured.items.length + this.securedBefore,
-      survival: structuredClone(this.survival), itemsCollected: this.itemsCollected, itemsDiscarded: this.itemsDiscarded, xpAccounted: this.xpAccounted,
+      survival: structuredClone(this.survival), itemsCollected: this.itemsCollected, itemsDiscarded: this.itemsDiscarded, xpAccounted: this.xpAccounted, pity: this.pity,
     };
   }
 
@@ -301,6 +303,7 @@ export class RunLedger {
     this.itemsCollected = Math.floor(n(raw.itemsCollected));
     this.itemsDiscarded = Math.floor(n(raw.itemsDiscarded));
     this.xpAccounted = Math.floor(n(raw.xpAccounted));
+    this.pity = Math.floor(n(raw.pity, 1000));
   }
 
   /** Can the player extract to HQ right now (a checkpoint was just banked)? */

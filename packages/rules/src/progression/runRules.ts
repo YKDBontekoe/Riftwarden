@@ -20,6 +20,8 @@ export interface LootRecord {
   wave: number;
   tier: { lootLevelBonus: number; lootLuck: number; id?: number };
   faction: string | null;
+  /** Bad-luck counter before this roll (absent = 0). */
+  pity?: number;
 }
 
 export type RunEntry =

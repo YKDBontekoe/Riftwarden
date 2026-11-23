@@ -7,7 +7,7 @@ import { actEffects, type RunCarry, towerRefund } from '@riftwarden/rules/runmap
 import { type MapNode, nodeEffect, segmentTier } from '@riftwarden/rules/runmap/map';
 import { defaultEntry, findNode, liveNode, nodePlayable, pathCode, reachable } from '@riftwarden/rules/war/world';
 import { buffEffect, type WarState } from '@riftwarden/rules/war/state';
-import type { RunMapState } from '@riftwarden/rules/runmap/state';
+import { canSurge, type RunMapState } from '@riftwarden/rules/runmap/state';
 import type { RunMapView } from '@riftwarden/rules/runmap/view';
 import type { NodeSetup } from '../arena/RunNode';
 import type { SlotId } from '@riftwarden/rules/progression/items';
@@ -96,11 +96,15 @@ export class MapSession {
    * Leave the current node (travel to `next`, or extract when null): bank what is still unsecured, count the node,
    * store the resume point. Returns the carry for the next node.
    */
-  leave(arena: MapArena, next: string | null): RunCarry | null {
+  leave(arena: MapArena, next: string | null, surge = false): RunCarry | null {
     const carry = arena.node?.exportCarry() ?? null;
     this.bankLeftovers();
     const s = this.state;
     s.cleared++;
+    if (surge && next && this.surgeOk(next)) {
+      s.surge = (s.surge ?? 0) + 1;
+      s.surgeAt = s.cleared;
+    }
     s.carry = next ? carry : null;
     s.next = next;
     arena.syncStats();
@@ -108,6 +112,21 @@ export class MapSession {
     this.sync();
     this.persist();
     return carry;
+  }
+
+  /** The run's current Rift Level: the deploy level plus every Rift Surge taken. */
+  get level(): number {
+    return this.run.tier + (this.state.surge ?? 0);
+  }
+
+  /**
+   * Can travelling to `next` raise the level (Rift Surge)? Counts the node on screen as cleared (surges are taken
+   * when leaving it); combat sectors only, never into a boss sector.
+   */
+  surgeOk(next: string | null, onScreen = 0): boolean {
+    const n = next ? this.node(next) : null;
+    if (!n || (n.kind !== 'combat' && n.kind !== 'elite')) return false;
+    return canSurge({ ...this.state, cleared: this.state.cleared + onScreen });
   }
 
   /** Bank whatever the node added after its checkpoint (hub rewards, late pickups). */
@@ -151,7 +170,10 @@ export class MapSession {
       blessings: [...(carry?.blessings ?? [])],
       lastWave: this.run.wavesCleared,
       plannerSeed: arena?.planner.seed ?? 0,
-      tier: this.run.tier,
+      tier: this.level,
+      deployTier: this.run.tier,
+      surge: this.state.surge ?? 0,
+      surgeReady: canSurge({ ...s, cleared: s.cleared + (arena?.node?.complete ? 1 : 0) }),
       mode: this.mode,
       dps: arena?.firepower() ?? 0,
     };

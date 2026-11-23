@@ -8,6 +8,7 @@ import { ascendCost, ascendOwned, dismantleItems, rerollAffix } from '@riftwarde
 import { recipeBases, recipeDef } from '@riftwarden/rules/economy/recipes';
 import { uniqueHitMult } from '@riftwarden/game/arena/PlayerCombat';
 import { ASCEND, ascendBlock, ascendDrop, ascendItem } from '@riftwarden/rules/loot/ascend';
+import { getTier } from '@riftwarden/rules/progression/tiers';
 import { DROP_SOURCES, rollDrops } from '@riftwarden/rules/loot/drops';
 import { weaponDefFor, weaponSummary } from '@riftwarden/rules/loot/equipment';
 import { generateItem, isValidItem, maxTierFor } from '@riftwarden/rules/loot/generate';
@@ -108,19 +109,23 @@ describe('Ascended tier', () => {
     for (let i = 0; i < 20000; i++) expect(rollRarity(rand, 99, 'legendary')).not.toBe('ascended');
   });
 
-  it('promotes about one exotic drop in ten, only on deep waves or tier III+', () => {
-    let hits = 0;
-    for (let s = 0; s < 5000; s++) {
-      expect(ascendDrop(s, 10, 2)).toBe(false);
-      if (ascendDrop(s, 15, 1)) hits++;
-      expect(ascendDrop(s, 1, 3)).toBe(ascendDrop(s, 40, 1));
-    }
-    expect(hits / 5000).toBeGreaterThan(0.07);
-    expect(hits / 5000).toBeLessThan(0.13);
-    // A boss at wave 40 eventually yields one through the real drop roll.
+  it('promotes exotic drops from RL 14: 1 in 10, rising to 1 in 5', () => {
+    const rate = (rl: number) => {
+      let hits = 0;
+      for (let s = 0; s < 8000; s++) if (ascendDrop(s, 10, rl)) hits++;
+      return hits / 8000;
+    };
+    for (let s = 0; s < 2000; s++) expect(ascendDrop(s, 999, 13)).toBe(false);
+    expect(rate(14)).toBeGreaterThan(0.07);
+    expect(rate(14)).toBeLessThan(0.13);
+    expect(rate(19)).toBeGreaterThan(0.16);
+    expect(rate(400)).toBeLessThan(0.24);
+    // The wave never matters (deep waves on a low level cannot farm Ascended).
+    for (let s = 0; s < 500; s++) expect(ascendDrop(s, 1, 20)).toBe(ascendDrop(s, 400, 20));
+    // A boss on a deep Rift Level eventually yields one through the real drop roll.
     const rand = mulberry32(9);
     let found = false;
-    for (let i = 0; i < 400 && !found; i++) found = rollDrops(DROP_SOURCES.boss, { wave: 40, tier: 5, tierLevelBonus: 18, tierLuck: 2 }, rand).some((d) => d.rarity === 'ascended');
+    for (let i = 0; i < 4000 && !found; i++) found = rollDrops(DROP_SOURCES.boss, { wave: 40, tier: 30, tierLevelBonus: getTier(30).lootLevelBonus, tierLuck: 1 }, rand).some((d) => d.rarity === 'ascended');
     expect(found).toBe(true);
   });
 

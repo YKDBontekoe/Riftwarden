@@ -483,7 +483,7 @@ export function FabricateTerminal({ flow, close }: { flow: Flow; close: () => vo
   return (
     <Shell code="FB-08" title="FABRICATOR" sub={`Manufacture equipment from materials · output level ${level}`} close={close} wide accent="amber">
       <div className="market-head">
-        <div className="faint small">Output level follows your best cleared wave and threat tier. Crafted items use the same generator as enemy loot.</div>
+        <div className="faint small">Output level follows the deepest wave you cleared on your highest Rift Level. Crafted items use the same generator as enemy loot.</div>
         <ResourceBar save={save} cost={unlock.ok ? cost : undefined} compact />
       </div>
       <div className="fab-grid">

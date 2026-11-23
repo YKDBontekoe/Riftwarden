@@ -126,3 +126,75 @@ export function rarityOdds(luck = 1, min: RarityId = 'common'): Record<RarityId,
   const total = w.reduce((a, b) => a + b, 0);
   return Object.fromEntries(RARITIES.map((r, i) => [r.id, w[i] / total])) as Record<RarityId, number>;
 }
+
+// ------------------------------------------------------------------ Rift Level gates (progression design §3)
+
+/**
+ * Rift Level at which a rarity starts to drop from ordinary sources (common/uncommon/rare from RL 1). Bosses and
+ * caches open a rarity earlier (`gate` steps). Ascended is never rolled: exotics are promoted (`ascendDrop`).
+ */
+export const RARITY_UNLOCK: Readonly<Record<RarityId, number>> = { common: 1, uncommon: 1, rare: 1, epic: 3, legendary: 7, exotic: 12, ascended: 14 };
+
+/** Weight of each rarity at `d` levels past its unlock (ordinary drop, luck 1). Odds ≈ weight / ~1000. */
+const GATED: readonly ((d: number) => number)[] = [
+  () => 620,
+  () => 260,
+  (d) => Math.min(150, 80 + 5 * d),
+  (d) => Math.min(60, 6 + 0.25 * d),
+  (d) => Math.min(20, 0.4 + 0.12 * d),
+  (d) => Math.min(6, 0.01 + 0.006 * d),
+  () => 0,
+];
+
+/** Luck is compressed (rarity i gains luck^(0.6 i)) and capped, so a lucky source is exciting without being a fountain. */
+export const GATED_LUCK = { min: 0.25, max: 3, exponent: 0.5 } as const;
+
+/** Highest rarity index a source's `gate` opens early (epic): legendary and exotic always wait for their level. */
+export const GATE_TOP = 3;
+
+/** Bad-luck protection: each ordinary drop without a legendary or better adds this share of its weight (cap). */
+export const PITY = { step: 0.01, max: 2 } as const;
+
+/** Highest rarity a source can roll at a Rift Level (`gate` = levels its own unlocks come early). */
+export function rarityCeiling(rl: number, gate = 0): RarityId {
+  let top: RarityId = 'common';
+  for (const r of RARITIES) if (r.weight > 0 && Math.max(1, rl) + (r.index <= GATE_TOP ? gate : 0) >= RARITY_UNLOCK[r.id]) top = r.id;
+  return top;
+}
+
+/** Gated weights for a Rift Level (see `GATED`). `pity` = ordinary drops since the last legendary or better. */
+export function gatedWeights(rl: number, luck = 1, min: RarityId = 'common', gate = 0, pity = 0): number[] {
+  const l = Math.min(GATED_LUCK.max, Math.max(GATED_LUCK.min, Number.isFinite(luck) ? luck : 1));
+  const lo = rarity(min).index;
+  const lvl = Math.max(1, Math.floor(Number.isFinite(rl) ? rl : 1));
+  const early = Math.max(0, gate);
+  const boost = 1 + Math.min(PITY.max, PITY.step * Math.max(0, Math.floor(pity)));
+  return RARITIES.map((r) => {
+    if (r.index < lo || r.weight <= 0) return 0;
+    const d = lvl + (r.index <= GATE_TOP ? early : 0) - RARITY_UNLOCK[r.id];
+    // A floor above the level's ceiling still rolls (a boss's epic floor on RL 1): at the floor's first weight.
+    if (d < 0 && r.index !== lo) return 0;
+    const w = GATED[r.index](Math.max(0, d)) * Math.pow(l, GATED_LUCK.exponent * r.index);
+    return r.index >= 4 ? w * boost : w;
+  });
+}
+
+/** Gated rarity roll for drops (one rand draw, like `rollRarity`). */
+export function rollGated(rand: () => number, rl: number, luck = 1, min: RarityId = 'common', gate = 0, pity = 0): RarityId {
+  const w = gatedWeights(rl, luck, min, gate, pity);
+  const total = w.reduce((a, b) => a + b, 0);
+  let x = rand() * total;
+  for (let i = 0; i < w.length; i++) {
+    x -= w[i];
+    if (x < 0) return RARITIES[i].id;
+  }
+  for (let i = w.length - 1; i >= 0; i--) if (w[i] > 0) return RARITIES[i].id;
+  return RARITIES[0].id;
+}
+
+/** Exact gated odds (tests, the deploy terminal's loot readout and the codex). */
+export function gatedOdds(rl: number, luck = 1, min: RarityId = 'common', gate = 0, pity = 0): Record<RarityId, number> {
+  const w = gatedWeights(rl, luck, min, gate, pity);
+  const total = w.reduce((a, b) => a + b, 0) || 1;
+  return Object.fromEntries(RARITIES.map((r, i) => [r.id, w[i] / total])) as Record<RarityId, number>;
+}

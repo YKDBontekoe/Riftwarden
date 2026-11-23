@@ -12,10 +12,9 @@ import type { ItemInstance, RolledAffix } from './types';
  * economy/transactions.ts). Ascended items will be trade-locked once trading exists.
  */
 export const ASCEND = {
-  /** Promotion of an exotic drop: one in `oneIn` (by the drop seed), only from `minWave` or threat tier `minTier`. */
-  oneIn: 10,
-  minWave: 15,
-  minTier: 3,
+  /** Promotion of an exotic drop from Rift Level `minTier`: one in `oneIn(rl)` (by the drop seed): 1/10 at RL 14, 1/5 from RL 19. */
+  oneIn: (rl: number) => Math.max(5, 10 - Math.max(0, Math.floor(rl) - 14)),
+  minTier: 14,
   /** HQ ascension cost: shards + credits + components (level scaled). */
   shards: (level: number) => 12 + Math.floor(Math.max(1, level) / 10),
   credits: (level: number) => Math.round(600 * (1 + 0.1 * (Math.max(1, level) - 1))),
@@ -25,9 +24,9 @@ export const ASCEND = {
 export const isAscended = (it: Pick<ItemInstance, 'rarity'>): boolean => it.rarity === 'ascended';
 
 /** Deterministic promotion of a rolled exotic drop (seed-based, so no random stream shifts). */
-export function ascendDrop(seed: number, wave: number, tier: number): boolean {
-  if (wave < ASCEND.minWave && tier < ASCEND.minTier) return false;
-  return (Math.imul(seed >>> 0, 0x9e3779b1) >>> 0) % ASCEND.oneIn === 0;
+export function ascendDrop(seed: number, _wave: number, tier: number): boolean {
+  if (!(tier >= ASCEND.minTier)) return false;
+  return (Math.imul(seed >>> 0, 0x9e3779b1) >>> 0) % ASCEND.oneIn(tier) === 0;
 }
 
 /** The perfect affix an ascension adds: any compatible affix whose group the item does not use yet. */

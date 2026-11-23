@@ -3,12 +3,15 @@ import { rarity } from '../../loot/rarity';
 import { fitsSlot, getSlot, type ItemInstance, SLOT_IDS, type SlotId, defaultSlot } from '../items';
 import type { Rewards, RunResult } from '../run';
 import { CHECKPOINT_INTERVAL, unlocksNextTier } from '../tiers';
+
+/** The Rift Level an active run plays at: deploy level + Rift Surges taken on its map. */
+export const runLevel = (a: { tier: number; map?: { surge?: number } | null }): number => a.tier + (a.map?.surge ?? 0);
 import { dismantleYield, MAX_BALANCE } from '../../economy/config';
 import { HISTORY_LIMIT, MAX_XP, RunHistoryEntry, STORAGE_CAPACITY, SaveData, TierRecord } from './types';
 import { emptyRecord, rotateMarket } from './defaults';
 import { sanitizeItem } from './sanitize';
 import { allOwnedUids, equippedItem, itemByUid, slotOf } from './ownership';
-import { newMapState, resumable, type RunMapState } from '../../runmap/state';
+import { maxSurges, newMapState, resumable, type RunMapState, sanitizeMapState } from '../../runmap/state';
 import { pathCode } from '../../war/world';
 
 // ------------------------------------------------------------------ mutations (game rules)
@@ -87,7 +90,21 @@ export function beginRun(data: SaveData, runId: string, tier: number, now = Date
 export function saveMapProgress(data: SaveData, runId: string, map: RunMapState): boolean {
   const a = data.activeRun;
   if (!a || a.id !== runId || !a.map) return false;
-  a.map = JSON.parse(JSON.stringify(map)) as RunMapState;
+  const next = sanitizeMapState(JSON.parse(JSON.stringify(map)));
+  if (!next || next.seed !== a.map.seed) return false;
+  // Untrusted input (synced entries): a node is cleared and a Rift Surge taken at most once per update, so a client
+  // cannot claim levels (and their loot) it never played.
+  const prev = a.map;
+  next.cleared = Math.min(next.cleared, prev.cleared + 1);
+  const surge = Math.min(next.surge ?? 0, (prev.surge ?? 0) + 1, maxSurges(next.cleared));
+  if (surge > 0) {
+    next.surge = surge;
+    next.surgeAt = surge > (prev.surge ?? 0) ? next.cleared : Math.min(next.surgeAt ?? 0, next.cleared);
+  } else {
+    delete next.surge;
+    delete next.surgeAt;
+  }
+  a.map = next;
   return true;
 }
 
@@ -124,9 +141,12 @@ export function bankRewards(data: SaveData, runId: string, wave: number, rewards
   a.bankedThroughWave = wave;
   // Validated in one step (application-level atomicity): applyBanked sanitizes every item first.
   applyBanked(data, a, rewards);
-  const rec = record(data, a.tier);
+  // Checkpoints count on the level the run plays at (deploy level + Rift Surges taken on the map).
+  const rl = runLevel(a);
+  const rec = record(data, rl);
   rec.checkpoints++;
-  if (unlocksNextTier(a.tier, wave, opts.bosses ?? 0) && data.threat.unlocked < a.tier + 1) data.threat.unlocked = a.tier + 1;
+  if (unlocksNextTier(rl, rec.checkpoints) && data.threat.unlocked < rl + 1) data.threat.unlocked = rl + 1;
+  void opts;
   return true;
 }
 

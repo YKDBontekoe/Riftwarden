@@ -27,7 +27,7 @@ import { MODE_EFFECT, NODE_KINDS, type RunMode } from '@riftwarden/rules/runmap/
 import { newMapState, resumable } from '@riftwarden/rules/runmap/state';
 import { type RunCarry, sanitizeCarry } from '@riftwarden/rules/runmap/carry';
 import { nodeBrief } from '@riftwarden/rules/runmap/brief';
-import { getTier, THREAT_TIERS, type ThreatTier } from '@riftwarden/rules/progression/tiers';
+import { getTier, lootLevel, MAX_RIFT_LEVEL, type ThreatTier } from '@riftwarden/rules/progression/tiers';
 import { hudStore, type Location, uiEvents } from '@riftwarden/game/ui/store';
 import type { DevTools } from '@riftwarden/game/arena/DevTools';
 import { type ArenaConfig, Game } from '@riftwarden/game/core/Game';
@@ -261,7 +261,7 @@ export class Flow {
     if (this.busy || (this.run && !this.run.ended)) return false;
     if (this.coopRun) return false;
     const save = this.profile.save;
-    if (tierId < 1 || (tierId > save.threat.unlocked && !this.devNext) || tierId > THREAT_TIERS.length) return false;
+    if (tierId < 1 || (tierId > save.threat.unlocked && !this.devNext) || tierId > MAX_RIFT_LEVEL) return false;
     if (deployBlocker(save)) return false;
     // The arena gets its own copies: run-side changes can never touch profile objects.
     const loadout = Object.fromEntries(SLOT_IDS.map((slot) => [slot, structuredClone(equippedItem(save, slot))]));
@@ -289,7 +289,7 @@ export class Flow {
     this.map = null;
     const layout = Flow.layoutFor(this.arenaSeedFor(runId));
     const sTier = mode === 'survival' ? segmentTier(tier, combineEffects(MODE_EFFECT.survival)) : tier;
-    await this.launchArena(`DEPLOYING · ${mode === 'survival' ? 'SURVIVAL' : 'THREAT'} TIER ${tier.roman}`, `${layout.name ?? 'Sector 07 reactor'} · ${tier.name}`, layout, sTier, { loadout, mode });
+    await this.launchArena(`DEPLOYING · ${mode === 'survival' ? 'SURVIVAL · ' : ''}RIFT LEVEL ${tier.id}`, `${layout.name ?? 'Sector 07 reactor'} · ${tier.name}`, layout, sTier, { loadout, mode });
     return true;
   }
 
@@ -360,36 +360,38 @@ export class Flow {
       this.arena.skipUpgrades = this.skipUpgrades || !!(globalThis as { __skipUpgrades?: boolean }).__skipUpgrades;
       this.location = 'arena';
       return this.arena.scene;
-    }, { kind: 'arena', sector: { name: layout.name ?? 'Sector 07 Reactor', code: layout.code ?? 'CLASSIC', layout, tier: tier.roman, tierName: tier.name, players, node: extra.node ? nodeBrief(extra.node.node, run.wavesCleared, extra.mode) : undefined } });
+    }, { kind: 'arena', sector: { name: layout.name ?? 'Sector 07 Reactor', code: layout.code ?? 'CLASSIC', layout, tier: `RL ${tier.id}`, tierName: tier.name, players, node: extra.node ? nodeBrief(extra.node.node, run.wavesCleared, extra.mode) : undefined } });
     this.arena!.start();
   }
 
   /** Enter a map node: a fresh arena for its sector with the carried run state. */
   private async playNode(node: MapNode, carry: RunCarry | null): Promise<void> {
     const map = this.map!;
-    const run = this.run!;
-    const base = getTier(run.tier);
+    const base = getTier(map.level);
     const { tier, setup } = map.configFor(node, carry, base);
     map.entered(node);
     const layout = Flow.layoutFor(this.arenaMode === 'classic' ? 0 : node.seed);
     const kind = NODE_KINDS[node.kind];
     const save = this.profile.save;
     const tech = [...new Set([...save.towers.unlocked, ...(carry?.runTech ?? [])])];
-    const title = `ACT ${node.act} · ${node.actBoss ? 'ACT BOSS' : kind.name.toUpperCase()} · TIER ${base.roman}`;
-    await this.launchArena(map.mode === 'survival' ? title.replace('· TIER', '· SURVIVAL · TIER') : title, `${layout.name ?? 'Sector 07 reactor'} · ${kind.blurb}`, layout, tier, { loadout: map.carried, node: setup, towerTech: tech, mode: map.mode });
+    const title = `ACT ${node.act} · ${node.actBoss ? 'ACT BOSS' : kind.name.toUpperCase()} · RL ${base.id}`;
+    await this.launchArena(map.mode === 'survival' ? title.replace('· RL', '· SURVIVAL · RL') : title, `${layout.name ?? 'Sector 07 reactor'} · ${kind.blurb}`, layout, tier, { loadout: map.carried, node: setup, towerTech: tech, mode: map.mode });
   }
 
   /** Map screen: travel to a reachable node (banks what the current node still holds, then swaps arenas). */
-  async travel(nodeId: string): Promise<boolean> {
+  async travel(nodeId: string, surge = false): Promise<boolean> {
     const a = this.arena;
     const map = this.map;
     if (this.busy || !a || !map || !a.canReturnHome || this.coopRun) return false;
     const next = map.reachable().find((n) => n.id === nodeId);
     if (!next) return false;
+    if (surge && !map.surgeOk(next.id, 1)) return false;
     sfx.play('ui');
     void this.input.requestLock();
-    const carry = map.leave(a, next.id);
+    const before = map.level;
+    const carry = map.leave(a, next.id, surge);
     await this.playNode(next, carry);
+    if (map.level > before) uiEvents.emit('banner', { title: `RIFT SURGE · RL ${map.level}`, sub: `Machines harden. Drops start at item level ${getTier(map.level).lootLevelBonus}.`, tone: 'red' });
     return true;
   }
 
@@ -458,7 +460,7 @@ export class Flow {
 
   /** Development: deploy on any tier, marked as a development session (no records, no banking, unlocks untouched). */
   devDeploy(tierId: number): Promise<boolean> {
-    if (tierId < 1 || tierId > THREAT_TIERS.length) return Promise.resolve(false);
+    if (tierId < 1 || tierId > MAX_RIFT_LEVEL) return Promise.resolve(false);
     this.devNext = true;
     return this.deploy(tierId).finally(() => (this.devNext = false));
   }
@@ -640,7 +642,7 @@ export class Flow {
     if (session) session.war = () => this.war.state;
     const nodeCfg = session && mapNode ? session.configFor(mapNode, carry, tier, run.mode ?? 'defense') : null;
     if (nodeCfg) this.coopMap = { seed: run.node!.map, path: [...run.node!.path], cleared: run.node!.cleared, acts: run.node!.acts };
-    await this.transition(`CO-OP DEPLOYMENT · THREAT TIER ${tier.roman}`, `${run.players.length} wardens · ${layout.name ?? 'Sector 07 reactor'}`, () => {
+    await this.transition(`CO-OP DEPLOYMENT · RIFT LEVEL ${tier.id}`, `${run.players.length} wardens · ${layout.name ?? 'Sector 07 reactor'}`, () => {
       const ledger = new RunLedger(run.runId, run.tier, Date.now());
       this.run = ledger;
       this.renderQuality = this.settings.quality;
@@ -676,7 +678,7 @@ export class Flow {
       this.arena = g;
       this.location = 'arena';
       return g.scene;
-    }, { kind: 'arena', sector: { name: layout.name ?? 'Sector 07 Reactor', code: layout.code ?? 'CLASSIC', layout, tier: tier.roman, tierName: tier.name, players: run.players.length, node: mapNode ? nodeBrief(mapNode, carry?.wave ?? 0) : undefined } });
+    }, { kind: 'arena', sector: { name: layout.name ?? 'Sector 07 Reactor', code: layout.code ?? 'CLASSIC', layout, tier: `RL ${tier.id}`, tierName: tier.name, players: run.players.length, node: mapNode ? nodeBrief(mapNode, carry?.wave ?? 0) : undefined } });
     const g = this.arena as ClientGame;
     g.start();
     g.onEvents(this.netQueue.events);
@@ -841,7 +843,7 @@ export class Flow {
         const item = generateItem({
           uid: `${a.cfg.run.id}.dbg${randomU32()}`,
           seed: o.seed ?? randomU32(),
-          level: o.level ?? a.waves.number + a.cfg.tier.lootLevelBonus,
+          level: o.level ?? lootLevel(a.cfg.tier, a.waves.number),
           rarity: o.rarity ?? 'rare',
           category: o.category ?? 'weapon',
           baseId: o.baseId,

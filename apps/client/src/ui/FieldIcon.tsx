@@ -74,6 +74,10 @@ export function itemIcon(category: string): FieldIconName {
   return Object.hasOwn(ITEM_ICON, category) ? ITEM_ICON[category as Category] : 'cache';
 }
 
-export function FieldIcon({ name }: { name: FieldIconName }) {
-  return <svg className="field-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d={PATHS[name]} /></svg>;
+/**
+ * Line icon. Inside another `<svg>` pass `size`: a nested svg is sized by its width/height attributes (CSS sizing of
+ * nested svg elements is not applied everywhere, and an unsized one fills the whole parent viewport).
+ */
+export function FieldIcon({ name, size }: { name: FieldIconName; size?: number }) {
+  return <svg className="field-icon" viewBox="0 0 24 24" width={size} height={size} aria-hidden="true" focusable="false"><path d={PATHS[name]} /></svg>;
 }

@@ -5,7 +5,7 @@ import type { RunOutcome } from '../run';
 import { type MarketState } from '../../economy/market';
 import type { RunMapState } from '../../runmap/state';
 
-export const SAVE_VERSION = 10;
+export const SAVE_VERSION = 11;
 export const SAVE_KEY = 'riftwarden.save';
 export const BACKUP_KEY = 'riftwarden.save.bak';
 export const CORRUPT_KEY = 'riftwarden.save.corrupt';
@@ -185,6 +185,8 @@ export interface SaveData {
   towers: { unlocked: string[] };
   /** Warden levels and the procedural skill tree (level and points are derived from xp). */
   progress: ProgressState;
+  /** Set when a migration restarted progression (v11 Rift Levels): the HQ shows a one-time notice. */
+  wiped?: { from: number; at: number };
 }
 
 export interface ProgressState {

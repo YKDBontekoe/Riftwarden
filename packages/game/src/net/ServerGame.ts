@@ -13,7 +13,7 @@ import type { Settings } from '../core/settings';
 import type { WeaponDef, WeaponFamily } from '@riftwarden/rules/data/defs';
 import { type Enemy, type EnemyHitboxMeta } from '../enemies/EnemyManager';
 import { DROP_SOURCES, type DropSource, type DropSourceId } from '@riftwarden/rules/loot/drops';
-import { rollLoot } from '@riftwarden/rules/loot/roll';
+import { nextPity, rollLoot } from '@riftwarden/rules/loot/roll';
 import { gearUniques } from '@riftwarden/rules/loot/uniques';
 import { equipmentModifiers, weaponDefFor } from '@riftwarden/rules/loot/equipment';
 import { otherSlot, type WeaponSlot } from '../arena/WeaponSlots';
@@ -433,7 +433,9 @@ export class ServerGame extends Game {
   }
 
   private rollFor(a: Avatar, src: DropSource, wave: number): ItemInstance[] {
-    return rollLoot({ source: src, wave, tier: this.cfg.tier, rand: a.rand, nextUid: () => `${this.team.id}.${a.slot}.${++a.lootCounter}`, originId: this.team.id, chanceMult: this.dropChanceMult, faction: this.director.faction });
+    const items = rollLoot({ source: src, wave, tier: this.cfg.tier, rand: a.rand, nextUid: () => `${this.team.id}.${a.slot}.${++a.lootCounter}`, originId: this.team.id, chanceMult: this.dropChanceMult, faction: this.director.faction, pity: a.run.pity });
+    a.run.pity = nextPity(a.run.pity, items);
+    return items;
   }
 
   override dropLoot(source: DropSourceId, at: Vector3, wave = this.waves.number): Pickup[] {

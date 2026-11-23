@@ -9,6 +9,8 @@ import { nodeLiberation, regionState } from '@riftwarden/rules/war/state';
 import { Globe, OrderBanner, RegionMap, RegionStrip, RegionTabs, regionOfNode, WarHeader, WarReport } from './WarMap';
 import { type Lookahead, lookahead, type NodeIntel, nodeIntel } from '@riftwarden/rules/runmap/intel';
 import { getTier } from '@riftwarden/rules/progression/tiers';
+import { levelLoot } from '@riftwarden/rules/progression/riftLevel';
+import { RarityName } from './RiftLevel';
 import { type NodeBrief, nodeBrief } from '@riftwarden/rules/runmap/brief';
 import type { RunMapView, StationPanel } from '@riftwarden/rules/runmap/view';
 import { AffinityRow } from './LoadingScreen';
@@ -114,12 +116,14 @@ export function RunMapScreen({ flow, game }: { flow: Flow; game: Game }) {
   if (!view || !war) return null;
   const votes: Record<string, string[]> = {};
   for (const v of view.votes ?? []) if (v.vote) (votes[v.vote] ??= []).push(v.name);
-  const go = (id: string) => {
+  const go = (id: string, surge = false) => {
     if (busy) return;
     if (coop) return void flow.mapVote(id);
     setBusy(true);
-    void flow.travel(id).finally(() => setBusy(false));
+    void flow.travel(id, surge).finally(() => setBusy(false));
   };
+  const selNode = selected ? findNode(seed, selected) : null;
+  const canSurgeHere = !coop && !!view?.surgeReady && !!selNode && (selNode.kind === 'combat' || selNode.kind === 'elite');
   const extract = () => {
     if (busy) return;
     if (coop) return void flow.mapVote('home');
@@ -141,6 +145,7 @@ export function RunMapScreen({ flow, game }: { flow: Flow; game: Game }) {
             <div><b>{view.actsCleared}</b><span>CAPITALS</span></div>
             <div><b>{view.cores}</b><span>CORES</span></div>
           </div>
+          <div className="rm-note" data-testid="rm-level">Rift Level <b className="plain">RL {view.tier}</b>{(view.surge ?? 0) > 0 ? ` · deployed at RL ${view.deployTier}, ${view.surge} surge${view.surge === 1 ? '' : 's'}` : ''}</div>
           {view.dps > 0 && <div className="rm-note">Your firepower: <b className="plain">{Math.round(view.dps)} DPS</b> (gear, before run upgrades)</div>}
           {survival && <div className="rm-note warn">Survival: no towers, every machine hunts you, one life.</div>}
           {!survival && view.refund > 0 && <div className="rm-note">Towers stay behind: <b>+{view.refund} cores</b> refunded on travel.</div>}
@@ -176,8 +181,9 @@ export function RunMapScreen({ flow, game }: { flow: Flow; game: Game }) {
             {node && <NodeTabs node={node} view={view} look={look} />}
             {node && inspect !== selected && <div className="rm-note">Inspecting · travel goes to the selected lit sector</div>}
           </div>
+          {canSurgeHere && <SurgeOffer level={view.tier} busy={busy} onSurge={() => selected && go(selected, true)} />}
           <button className="primary" data-testid="rm-travel" disabled={!selected || busy} onClick={() => selected && go(selected)}>
-            {coop ? 'VOTE: TRAVEL HERE' : 'TRAVEL'}
+            {coop ? 'VOTE: TRAVEL HERE' : canSurgeHere ? `TRAVEL · STAY ON RL ${view.tier}` : 'TRAVEL'}
           </button>
           <button className="home-btn" data-testid="rm-extract" disabled={busy} onClick={extract}>
             {coop ? 'VOTE: EXTRACT' : 'EXTRACT TO HQ'}
@@ -185,6 +191,23 @@ export function RunMapScreen({ flow, game }: { flow: Flow; game: Game }) {
           <button className="mini" data-testid="rm-stay" onClick={() => void game.continueRun()}>BACK TO THE ARENA (MAP: H)</button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Rift Surge offer: travel to the selected sector one Rift Level higher, for the rest of the run. */
+function SurgeOffer({ level, busy, onSurge }: { level: number; busy: boolean; onSurge: () => void }) {
+  const next = getTier(level + 1);
+  const loot = levelLoot(level + 1);
+  return (
+    <div className="grid gap-[6px] border border-[rgb(255_110_90/0.45)] bg-[rgb(255_80_60/0.08)] p-[10px]" data-testid="rm-surge">
+      <div className="font-mono text-[11px] tracking-[0.16em] text-bad">RIFT SURGE AVAILABLE</div>
+      <p className="m-0 text-[13px] leading-[1.45]">
+        Push the rest of this run to <b>RL {next.id}</b>: machine hull ×{(next.hpMult / getTier(level).hpMult).toFixed(2)}, drops from item level <b>{loot.levels[0]}</b>, best drop <RarityName id={loot.ceiling} />. Checkpoints then count toward unlocking RL {next.id + 1}.
+      </p>
+      <button className="primary [background:#c8503c] [border-color:#c8503c]" disabled={busy} data-testid="rm-surge-go" onClick={onSurge}>
+        TRAVEL + SURGE TO RL {next.id}
+      </button>
     </div>
   );
 }

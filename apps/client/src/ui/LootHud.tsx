@@ -189,7 +189,7 @@ export function ArenaInventory({ game }: { game: Game }) {
           <div className="flex-[1]">
             <div className="term-title">DRONE CARGO</div>
             <div className="term-sub">
-              Threat tier {getTier(game.cfg.tier.id).roman} · wave {game.waves.number} · {allowed ? 'preparation: equipment changes allowed' : `${phase === 'combat' ? 'combat' : 'wave resolving'}: inspection only`}
+              Rift Level {getTier(game.cfg.tier.id).id} · wave {game.waves.number} · {allowed ? 'preparation: equipment changes allowed' : `${phase === 'combat' ? 'combat' : 'wave resolving'}: inspection only`}
             </div>
           </div>
           <button className="term-close" onClick={() => void game.closeInventory()}>
