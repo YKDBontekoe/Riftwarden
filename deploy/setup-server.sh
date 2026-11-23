@@ -88,11 +88,10 @@ fi
 creds="$HOME/.cloudflared/$tunnel_id.json"
 [[ -f "$creds" ]] || die "tunnel credentials $creds are missing (the tunnel was created on another machine: 'cloudflared tunnel token' or recreate it)"
 ok "tunnel $tunnel_id"
+# Only this tunnel's own config file is touched; other tunnels (their config files, credentials, services) are not.
 config="$HOME/.cloudflared/riftwarden.yml"
-if [[ -f "$config" ]] && ! grep -q "$API_HOST" "$config"; then
-    cp "$config" "$config.pre-v2" && warn "old tunnel config saved as $config.pre-v2"
-fi
-cat >"$config" <<EOF
+if [[ ! -f "$config" ]]; then
+    cat >"$config" <<EOF
 # Written by deploy/setup-server.sh. The client is on Cloudflare Pages; the tunnel only publishes the API.
 tunnel: $tunnel_id
 credentials-file: $creds
@@ -101,16 +100,33 @@ ingress:
     service: http://127.0.0.1:18084
   - service: http_status:404
 EOF
-"$CLOUDFLARED" tunnel ingress validate --config "$config" >/dev/null
-"$CLOUDFLARED" tunnel route dns --overwrite-dns "$TUNNEL" "$API_HOST" && ok "DNS $API_HOST -> tunnel"
+    ok "wrote $config"
+elif grep -q "hostname: *$API_HOST" "$config"; then
+    ok "$config already routes $API_HOST (left as is)"
+else
+    # Existing file: keep every rule and add the API rule just before the catch-all (the last rule without hostname).
+    grep -Eq "^tunnel: *($tunnel_id|$TUNNEL) *$" "$config" ||
+        die "$config belongs to another tunnel; set RIFT_TUNNEL to that tunnel's name or move the file"
+    catchall=$(grep -n '^[[:space:]]*- service:' "$config" | tail -n1 | cut -d: -f1)
+    [[ -n "$catchall" ]] || die "no catch-all rule in $config: add '- hostname: $API_HOST' / 'service: http://127.0.0.1:18084' by hand"
+    indent=$(sed -n "${catchall}p" "$config" | sed 's/- service:.*//')
+    cp "$config" "$config.bak-$(date +%Y%m%d%H%M%S)"
+    sed -i "${catchall}i\\${indent}- hostname: $API_HOST\n${indent}  service: http://127.0.0.1:18084" "$config"
+    ok "added $API_HOST to $config (other rules kept, backup next to it)"
+fi
+"$CLOUDFLARED" tunnel ingress validate --config "$config" >/dev/null || die "$config does not validate"
+"$CLOUDFLARED" tunnel route dns --overwrite-dns "$TUNNEL" "$API_HOST" && ok "DNS $API_HOST -> tunnel '$TUNNEL'"
 
 step "systemd user units"
-others=$(pgrep -a cloudflared | grep -v "riftwarden.yml" || true)
-if [[ -n "$others" ]]; then
-    warn "other cloudflared processes are running (an old tunnel connector with a different config would"
-    warn "answer some requests with the old routes):"
-    printf '      %s\n' "$others"
-    ask "Continue anyway (stop the old one afterwards)?" || die "stop the old cloudflared service first"
+# Another connector for THIS tunnel (e.g. an old service with another config) would answer some requests with its
+# own routes. Connectors of other tunnels are fine and are never stopped.
+systemctl --user stop riftwarden-tunnel.service 2>/dev/null || true
+sleep 3
+conns=$("$CLOUDFLARED" tunnel info --output json "$TUNNEL" 2>/dev/null | grep -o '"colo_name"' | wc -l || true)
+if [[ "${conns:-0}" -gt 0 ]]; then
+    warn "tunnel '$TUNNEL' still has $conns connection(s) from another cloudflared process (not this script's service)."
+    warn "If that process uses a config without $API_HOST, the API answers only part of the time."
+    ask "Continue anyway (and stop that other '$TUNNEL' connector afterwards)?" || die "stop the other '$TUNNEL' connector first"
 fi
 mkdir -p "$UNITS"
 cp "$SRC/systemd/riftwarden-deploy.service" "$SRC/systemd/riftwarden-deploy.timer" "$UNITS/"
