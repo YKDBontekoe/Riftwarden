@@ -122,7 +122,11 @@ const SENSE = () => {
       // ---- screens: upgrade picks, checkpoint, defeat (all by touch)
       if (s.screen === 'upgrade') { await T.upAll(); fireAt = null; await tap('upgrade-card-0'); await ev(p, () => window.__rift.advance(0.2)); continue; }
       if (s.screen === 'checkpoint') { await T.upAll(); fireAt = null; await tap('cp-continue'); await H.waitFor(p, () => window.__rift.game.screen === 'playing', null, 10000).catch(() => {}); continue; }
-      if (s.screen === 'defeat') { log.push(`DEFEAT on wave ${s.wave}`); break; }
+      if (s.screen === 'defeat') {
+        log.push(`DEFEAT on wave ${s.wave}`);
+        if (cur) waves.push({ ...cur, wave: `${cur.wave}✗`, secs: t - cur.t0, shots: s.shots - cur.shots0, dealt: Math.round(s.dealt - cur.dealt0), kills: s.kills - cur.kills0, reactorLost: Math.round(cur.reactor0 - s.reactor), regrips: ergo.regrips - cur.regrips0, swipes: ergo.lookSwipes - cur.swipes0, onTarget: (ergo.onTargetFrames - cur.on0) / Math.max(1, ergo.fireFrames - cur.fire0) });
+        break;
+      }
       if (s.screen !== 'playing') { log.push(`unexpected screen ${s.screen} at ${t.toFixed(1)}s`); await T.upAll(); fireAt = null; await ev(p, () => window.__rift.game.resume()); continue; }
       if (lastAlive && !s.alive) deaths++;
       lastAlive = s.alive;
