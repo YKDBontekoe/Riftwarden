@@ -63,7 +63,7 @@ const SENSE = () => {
     target: best ? { d: best.d, los: best.los } : null, dyaw, dpitch, alive: pl.alive, hp: pl.hp, cores: g.wallet.cores,
     build: g.construction.active, valid: !!g.construction.valid, towers: g.turrets.turrets.length,
     shots: g.weapon.shotsFired, dealt: g.director.dealt?.player ?? 0, reactor: g.reactorHp,
-    kills: g.cfg.run.kills, pos: { x: pl.position.x, z: pl.position.z }, sprint: pl.sprinting,
+    kills: g.cfg.run.kills, heat: g.weapon.heat, over: g.weapon.overheated, pos: { x: pl.position.x, z: pl.position.z }, sprint: pl.sprinting,
   };
 };
 
@@ -104,6 +104,7 @@ const SENSE = () => {
     let fireAt = null; // finger position on FIRE
     let fireTravel = 0;
     let strafe = 1;
+    let venting = false;
     let strafeT = 0;
     let jumpT = 2;
     let dashT = 3;
@@ -192,14 +193,19 @@ const SENSE = () => {
       if (!T.has(2)) await T.down(2, STICK[0], STICK[1]);
       await T.move(2, STICK[0] + strafe * 40, STICK[1] + fwd);
 
+      if (process.env.DEBUG_AIM && cur && t - cur.t0 < 4) console.log('aim', t.toFixed(2), s.target && s.target.d.toFixed(1), s.target && s.target.los, s.dyaw.toFixed(3), s.dpitch.toFixed(3), s.enemies);
       const big = Math.abs(s.dyaw) > 0.55;
-      if (s.target && big) {
+      // Let the weapon cool like a player would: release at 90% heat, hold again below 35%.
+      if (s.heat > 90 || s.over) venting = true;
+      else if (s.heat < 35) venting = false;
+      if (s.target && (big || !s.target.los || venting)) {
         // Large turn: a swipe on the look zone (not firing meanwhile).
         if (fireAt) { await T.up(5); fireAt = null; }
         const need = s.dyaw * PX_PER_RAD;
         const dx = Math.max(-FINGER_SPEED * 3, Math.min(FINGER_SPEED * 3, need));
+        const dy = Math.max(-FINGER_SPEED * 2, Math.min(FINGER_SPEED * 2, s.dpitch * PX_PER_RAD));
         await T.down(4, LOOK[0], LOOK[1]);
-        for (let i = 1; i <= 3; i++) { await T.move(4, LOOK[0] + (dx * i) / 3, LOOK[1] + (s.dpitch * PX_PER_RAD * i) / 9); await ev(p, (d) => window.__rift.advance(d), STEP / 3); }
+        for (let i = 1; i <= 3; i++) { await T.move(4, LOOK[0] + (dx * i) / 3, LOOK[1] + (dy * i) / 3); await ev(p, (d) => window.__rift.advance(d), STEP / 3); }
         await T.up(4);
         ergo.lookSwipes++;
       } else if (s.target && s.target.los) {
