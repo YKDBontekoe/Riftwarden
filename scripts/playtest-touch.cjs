@@ -75,7 +75,7 @@ const SENSE = () => {
   const cdp = await ctx.newCDPSession(p);
   const T = touches(cdp);
   const log = [];
-  const ergo = { regrips: 0, lookSwipes: 0, fireFrames: 0, aimedFrames: 0, onTargetFrames: 0, taps: 0, misses: [] };
+  const ergo = { builds: [], regrips: 0, lookSwipes: 0, fireFrames: 0, aimedFrames: 0, onTargetFrames: 0, taps: 0, misses: [] };
   const tap = async (testId) => {
     const c = await centre(p, testId);
     if (!c) { ergo.misses.push(testId); return false; }
@@ -141,20 +141,37 @@ const SENSE = () => {
         if (s.wave !== lastWave) { builtThisPrep = 0; lastWave = s.wave; }
         if (builtThisPrep < 2 && s.cores >= 100 && s.towers < 6) {
           if (!s.build) { await tap('tc-build'); await ev(p, () => window.__rift.advance(0.1)); }
-          // Look down-left a bit with a swipe on the look zone, so the ghost lands on open floor.
-          await T.down(3, LOOK[0], LOOK[1]);
-          for (let i = 1; i <= 4; i++) { await T.move(3, LOOK[0] - i * 14 * (builtThisPrep ? -1 : 1), LOOK[1] + i * 10); await ev(p, () => window.__rift.advance(1 / 30)); }
-          await T.up(3);
-          ergo.lookSwipes++;
-          const v = await ev(p, () => window.__rift.game.construction.valid);
-          if (v) { await tap('tc-fire'); builtThisPrep++; await ev(p, () => window.__rift.advance(0.3)); }
-          else builtThisPrep += 0.5; // try once more from another angle
-          await tap('tc-ab1'); // CANCEL leaves build mode (or ability I when not building)
+          // Hunt for a valid spot like a player: swipe the view around (ghost ~0.45 rad below the horizon) and walk a
+          // little every few tries; PLACE as soon as the ghost turns valid.
+          let placed = false;
+          let tries = 0;
+          const reasons = {};
+          for (; tries < 16 && !placed; tries++) {
+            const pitch = await ev(p, () => window.__rift.game.player.pitch);
+            const dy = (0.45 - pitch) * PX_PER_RAD;
+            await T.down(3, LOOK[0], LOOK[1]);
+            for (let i = 1; i <= 4; i++) { await T.move(3, LOOK[0] + (tries ? 36 * i : 0), LOOK[1] + (dy * i) / 4); await ev(p, () => window.__rift.advance(1 / 30)); }
+            await T.up(3);
+            ergo.lookSwipes++;
+            if (tries % 4 === 3) {
+              await T.down(2, STICK[0], STICK[1]);
+              await T.move(2, STICK[0], STICK[1] - 50);
+              await ev(p, () => window.__rift.advance(0.8));
+              await T.up(2);
+            }
+            const g = await ev(p, () => ({ valid: window.__rift.game.construction.valid, reason: window.__rift.game.construction.reason }));
+            reasons[g.reason] = (reasons[g.reason] || 0) + 1;
+            if (g.valid) {
+              const before = s.towers + builtThisPrep;
+              await tap('tc-fire');
+              await ev(p, () => window.__rift.advance(0.3));
+              placed = (await ev(p, () => window.__rift.game.turrets.turrets.length)) > before;
+            }
+          }
+          ergo.builds.push({ wave: s.wave, placed, tries, reasons });
+          builtThisPrep = placed ? builtThisPrep + 1 : 2;
+          await tap('tc-ab1'); // CANCEL leaves build mode
           await ev(p, () => window.__rift.advance(0.2));
-          // Level the view again.
-          await T.down(3, LOOK[0], LOOK[1]);
-          for (let i = 1; i <= 4; i++) { await T.move(3, LOOK[0], LOOK[1] - i * 10); await ev(p, () => window.__rift.advance(1 / 30)); }
-          await T.up(3);
           continue;
         }
         if (s.build) await tap('tc-ab1');
@@ -222,6 +239,7 @@ const SENSE = () => {
     console.log('\nwave  secs  1st-shot  shots  dmg     kills  minHP  reactor-lost  regrips  look-swipes  on-target');
     for (const w of waves) console.log(`${String(w.wave).padStart(4)}  ${w.secs.toFixed(1).padStart(4)}  ${(w.firstShot ?? NaN).toFixed(1).padStart(8)}  ${String(w.shots).padStart(5)}  ${String(w.dealt).padStart(6)}  ${String(w.kills).padStart(5)}  ${String(Math.round(w.hp)).padStart(5)}  ${String(w.reactorLost).padStart(12)}  ${String(w.regrips).padStart(7)}  ${String(w.swipes).padStart(11)}  ${(w.onTarget * 100).toFixed(0).padStart(8)}%`);
     console.log(`\ndeaths ${deaths} · towers ${end?.towers} · taps ${ergo.taps} · missing buttons ${JSON.stringify([...new Set(ergo.misses)])} · reactor ${Math.round(end?.reactor ?? 0)}`);
+    for (const bl of ergo.builds) console.log(`build wave ${bl.wave}: ${bl.placed ? 'placed' : 'FAILED'} after ${bl.tries} tries ${JSON.stringify(bl.reasons)}`);
     for (const l of log) console.log(l);
     const bad = errs.filter((e) => !/Error compiling effect|hit-?flash/i.test(e));
     console.log(`errors ${bad.length}${bad.length ? ': ' + bad.slice(0, 3).join(' | ') : ''}${SHOTS ? ` · screenshots in ${OUT}` : ''}`);
