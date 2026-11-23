@@ -231,7 +231,9 @@ jobs:
     # environment (Settings > Environments > production > Required reviewers). Manual runs still work.
     if: >-
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
-      github.ref == 'refs/heads/main'
+      github.ref == 'refs/heads/main' &&
+      github.actor == 'YKDBontekoe' &&
+      github.triggering_actor == 'YKDBontekoe'
     needs: [build-and-test, rust, browser-checks]
     runs-on: ubuntu-latest
     timeout-minutes: 30
