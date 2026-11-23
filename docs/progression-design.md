@@ -1,0 +1,174 @@
+# Riftwarden progression design (draft for owner review)
+
+Goal: progression that **never runs out** and **never sprints**: a steady stream of small wins plus rare, celebrated spikes, with **loot as the main source of power**. Written from the owner Q&A of 2026-11-23. Nothing here is built yet; numbers are first proposals to tune with a simulation test (see "Validation").
+
+## Owner answers (2026-11-23)
+
+| Topic | Answer |
+| --- | --- |
+| What feels wrong | Power jumps too fast; no long-term goal |
+| Horizon | Endless, evenly paced (no "done" point) |
+| Reward cadence | Mixed: constant small drips + rare big spikes |
+| Main power source | Loot (gear) |
+| Spike sources | All of them: rarity climbs too fast, item level jumps, crafting/merchant shortcuts, tree + run upgrades stacking |
+| Long-term goals | Tiers beyond V, collection/codex, pinnacle bosses + keys, Rift War regions |
+| Difficulty | Player picks the tier; acts/regions get harder on top, **multiplied by the tier** |
+| Feel of being strong | All of them: faster kills, build identity, surviving deeper |
+| Rarity pacing | **Tier-gated rarity** |
+| Crafting / merchant | **Expensive but strong** (a long-term sink, not a shortcut) |
+| Skill tree + run upgrades | **Keep as is** |
+| Tiers beyond V | **Endless numbered** (Rift Levels) |
+| Small drips | Weapon-family mastery; better loot feedback |
+| Big spikes | Chase drops, feature unlocks, tier breakthroughs, war victories |
+| New players | **Staged unlocks** |
+| Unlock trigger | Mixed (Warden level for basics, Rift Level for endgame) on a **visible unlock track** |
+| Mastery gives | Small stat bonuses, component unlocks, cosmetic finishes, family perks |
+| Item level vs tier | Owner left it to design: **the Rift Level sets the item level** (below) |
+| Existing profiles | **Fresh start is fine** (save version bump wipes) |
+
+## Diagnosis: where the speed comes from today
+
+1. **Rarity luck is exponential.** `rollRarity` multiplies rarity *i*'s weight by `luck^i` (capped at luck 4), and luck = source x tier (up to 3.2) x waves (+1.2%/wave). Current odds per drop:
+
+   | Situation | Luck | Epic | Legendary | Exotic |
+   | --- | --- | --- | --- | --- |
+   | Tier I, wave 1, walker | 1.00 | 2.8% | 0.6% | 0.1% |
+   | Tier I, wave 10, wave clear | 1.39 | 5.9% | 1.7% | 0.5% |
+   | Tier III, wave 15, elite | 3.57 | 22.3% | **17.1%** | **12.2%** |
+   | Tier V, wave 20, plain walker | 3.93 | 23.1% | **19.4%** | **15.3%** |
+
+   By tier III, roughly one drop in three is legendary or exotic, so the top of the ladder is used up within hours.
+2. **Item level jumps with the tier.** Tier bonuses of +0/8/18/32/50 levels and wave-based levels mean one tier unlock moves gear ~10-20 levels at once. Affix tiers unlock by level (`maxTierFor`), so this also unlocks top affixes early.
+3. **Crafting skips the chase.** A masterwork craft (tier III) guarantees an epic and sometimes a legendary for 420 salvage / 520 credits / 12 components, which a few runs pay for. Merchant stock goes up to epic at your progress level.
+4. **Multipliers stack** (gear x tree x run upgrades x forge). The owner keeps the tree and run upgrades as they are, so the fix goes into the loot curve and difficulty, not those systems.
+5. **Nothing past tier V.** Tier V unlocks after tier IV wave 20 + a boss; then nothing is left except records.
+
+## 1. Rift Levels: endless difficulty the player picks
+
+- Threat tiers become **Rift Levels** (RL) 1, 2, 3, ... with no cap. RL 1-5 keep the current I-V numbers (names stay as labels: Standard ... Apex); beyond RL 5:
+  - hostile HP x**1.17** per level, damage x**1.08** per level, budget +3% per level (capped at the spawn cap: surplus becomes HP as today), elite rate +4% per level, max mods 3 (4 from RL 15).
+  - boss first wave stays at 6; `bossPower` +5% per level.
+- **Unlocking**: RL N+1 unlocks when you **clear an act boss on RL N** (map runs) or reach wave 15 on RL N (classic). RL 1-2 also unlock at the first checkpoint, as today, so new players are not stuck.
+- **Acts and regions multiply on top** (owner: "the player picks a tier, acts get tougher, multiplied by the tier"): `effective = RL scaling x actEffect(act) x region difficulty`. The current act effect (+8% HP, +5% damage per act) stays; the Rift War adds a per-region factor (+6% HP per unlocked region index), so later regions are harder **at every RL**.
+- **Recommended RL**: the deploy terminal shows a "recommended" RL from the loadout score vs the RL's expected wave-10 HP pool (the intel threat math already exists in `runmap/intel.ts`). Players can go higher: higher RL = better drops, so pushing is the reward.
+- Records per RL (the existing per-tier records extend naturally); a **best Rift Level** headline replaces "best tier".
+
+## 2. Item level comes from the Rift Level
+
+`itemLevel = 10 x RL + min(5, floor(wave / 10)) + act - 1 + sourceBonus + jitter(-1..+1)`
+
+- One RL step = +10 item levels: a clear, predictable gear tier. Waves and acts add at most ~+8, so one lucky deep run cannot jump ahead.
+- `flatScale` and affix tier unlocks keep working on item level; enemy HP growth per RL (x1.17) is slightly faster than item power per 10 levels (~x1.1 from flat scaling + affix tiers), so **gear alone does not keep pace forever**: rarity, uniques, sets, ascension and mastery close the gap. That is the soft wall the design doc asks for ("deep endless is a soft wall on purpose").
+- Optional floor: drops never roll below `10 x (RL - 1)`, so dropping a level for farming still gives usable gear.
+
+## 3. Tier-gated rarity
+
+Replace `luck^index` with a **per-RL odds table** in which luck only moves weight between rarities that the RL has already unlocked, capped at x2.
+
+| Rarity | Can drop from | Odds per ordinary drop at its first RL | ... at RL +10 | Ceiling |
+| --- | --- | --- | --- | --- |
+| Rare | RL 1 | 8% | 12% | 15% |
+| Epic | RL 1 (bosses only on RL 1-2) | 1.5% (RL 3) | 5% | 8% |
+| Legendary | RL 4 (bosses / caches from RL 3) | 0.4% | 1.5% | 3% |
+| Exotic | RL 8 | 0.08% | 0.4% | 1% |
+| Ascended | RL 12 (promotion of an exotic, as today) | 1 in 20 exotics | 1 in 10 | 1 in 8 |
+
+- Sources keep a **floor** (boss = epic, checkpoint/elite cache = rare) and luck, but luck now multiplies only the next unlocked step and is capped (x2), so a tier V boss is exciting without being a legendary fountain.
+- **Bad-luck protection** stays hidden and small: each ordinary drop without a legendary+ (once legendary is unlocked) raises its chance by 1% of the base, reset on a hit. This cuts the long tail without changing the average much.
+- Uniques keep target farming (seed-decided), but each unique gets a **minimum RL** (boss uniques RL 4+, faction uniques RL 6+, Ninth Gate RL 8+).
+
+Rough targets for an average player (to check with the simulation): first epic in the first hour, first legendary around **4-6 h**, first exotic around **15-25 h**, first ascended around **40-60 h**, after which uniques, sets, ascension and mastery carry the chase.
+
+## 4. Crafting and the merchant: expensive but strong
+
+- **Fabrication stays strong** (it is the targeted way to get a slot/family), but costs scale with the RL whose loot pool you craft from and need the currency that is gated by progress:
+  - Craft level = `10 x highest cleared RL`, the same as drops.
+  - Grades: standard / refined / superior as today (prices x `rlFactor = 1 + 0.25 x (RL - 1)`); **masterwork** (epic, 15% legendary) adds **rift shards** (6 + RL); a new **apex** grade (legendary guaranteed, unlocks at RL 8) costs 40 shards + 2x masterwork materials.
+  - **Escalation per rotation**: each craft at superior or above in the same market rotation costs +25% more (reset on rotation), so crafting is a regular sink, not a farm.
+- **Merchant**: stock rarity follows the RL gates (max one grade below your highest unlocked rarity), prices x `rlFactor`; the featured slot can hold a legendary only from RL 6.
+- **Engineering** (rerolls, enhance, ascension) stays as is; it improves what you already found, which is the right job for it.
+- Exotics and uniques are still never craftable.
+
+## 5. Staged feature unlocks (visible unlock track)
+
+A new **Unlock Track** on the Command Console (and a compact strip in the HQ HUD) always shows the next three goals with their condition. Basics unlock with **Warden level**, endgame systems with **Rift Level**:
+
+| Unlock | Trigger |
+| --- | --- |
+| Plasma family, Frag Charge, Sentinel towers, storage, deploy | start |
+| Second ability slot | Warden 2 |
+| Railgun family | Warden 3 |
+| Secondary weapon slot | Warden 4 |
+| Exchange merchant, reclamation | Warden 5 |
+| Beam family, ultimate slot | Warden 7 |
+| Neural Lattice (skill tree) | Warden 8 |
+| Fabricator (standard/refined) | Warden 10 |
+| Drone Swarm family | Warden 12 |
+| Module broker + weapon modules | RL 3 |
+| Tower tech research, elite nodes | RL 3 |
+| Superior crafting, affix engineering | RL 4 |
+| Forge hubs, vaults on the map | RL 5 |
+| Masterwork crafting, enhancement past +6 | RL 6 |
+| Pinnacle keys + pinnacle bosses | RL 8 |
+| Ascension at the workshop | RL 12 |
+| Apex crafting | RL 8 |
+
+- Drops respect the unlocked set: no items for families or slots you can't use yet land in storage.
+- Every unlock is a **celebrated moment** (full-width banner, sound, the station lights up in the HQ, tutorial card for the new system).
+
+## 6. Small drips
+
+### Weapon-family mastery
+- Each family (plasma, rail, beam, swarm, later launcher/flamer) has **mastery XP** from damage dealt and kills with it (banked like Warden XP: lost unsecured share on defeat follows the same 25% rule).
+- **Ranks 1-50** (`xp(r) = 300 + 90 x r`), ~1 rank per 1-2 runs at first, slowing down.
+- Rewards:
+  - **+0.5% damage per rank** with that family, soft-capped toward +15% (same soft-cap curve as the tree).
+  - **Component unlocks**: some barrels/cores/mechanisms only roll (and craft) after rank 5/10/20 of their family (for example the rail `cycle` mechanism at rank 5, prism core at 20).
+  - **Cosmetic finishes** at ranks 10/20/30/40/50 (applied through the existing finish system) and a family title.
+  - **Family perks** every 5 ranks: pick 1 of 2 small rules (rail: keep charge on swap / +1 pierce on full charge; plasma: last bolt of a magazine-heat cycle crits / +10% bolt speed; beam: ramp kept 0.5 s after losing the target / +15% width; swarm: +1 drone at full lock / seekers re-target once). Perks are respeccable for free.
+- HUD: a thin mastery bar on the weapon card that fills during a run ("+340 PLASMA MASTERY").
+
+### Better loot feedback
+- **Build-aware upgrade score** (already on the roadmap): weights each stat by how much the current build uses it; drives the pickup prompt, the item card verdict and an "UPGRADE" beam pulse on the floor.
+- **NEW BEST** tag the first time an item beats every owned item in a slot (per family for weapons), with a distinct chime.
+- **Run loot recap**: on the summary screen, the 3 best finds with their verdicts, and "+N% power since last run".
+- Pickup prompt shows the item level against your RL baseline ("+3 above RL") so higher-level drops feel good even at the same rarity.
+
+## 7. Big spikes
+
+- **Chase drops**: uniques, sets (M11) and Ascended, each with a **codex** (HQ Archive station): silhouettes of undiscovered items with their source hint; completion bars per category; the first find of each entry gives a one-time shard bonus and a banner.
+- **Tier breakthroughs**: every **5th Rift Level** cleared (RL 5, 10, 15, ...) gives a breakthrough: guaranteed cache (one rarity above the RL's normal ceiling), a title, and the next unlock on the track.
+- **Pinnacle bosses** (RL 8+): keys drop from elites (1-2% each at RL 8, rising slowly) or are crafted from 20 shards at the HQ; one key = one pinnacle node on the war map. Pinnacle drops: guaranteed legendary, pinnacle-exclusive uniques, a high ascended chance.
+- **War victories**: when a Rift War region is liberated, everyone who secured at least one sector there gets a **region cache** at their next HQ visit (scaled to their own RL) and the region's codex page; the next region (harder at every RL) unlocks for everyone.
+
+## 8. Not changed (owner: keep as is)
+
+- Skill tree (Warden levels, rings, keystones) and run upgrades, forge stacks.
+- Stakes: unsecured loot lost on defeat, 25% XP kept, banking at checkpoints.
+- Tempo: 12 s prep, 20-35 s waves.
+
+## 9. Fresh start
+
+The owner accepts a wipe. Bump the save version with a migration that resets progress (`items`, resources, records, progress, market) while keeping settings and the profile id; PostgreSQL gets a matching migration that resets profile rows. The War state is not reset (it is shared, not per player).
+
+## 10. Build order (phases)
+
+1. **Loot curve**: Rift Levels (endless tiers, unlock rule, deploy terminal picker, records), item level from RL, gated rarity table + bad-luck protection, unique minimum RLs, save version bump (wipe). Simulation test for the time-to-first-X targets.
+2. **Sinks**: crafting/merchant cost scaling, masterwork/apex grades, rotation escalation.
+3. **Unlock track**: gate data table, Command Console track + HQ strip, unlock banners, drops respect locked families.
+4. **Mastery**: XP + ranks + damage bonus + component gates + finishes + perks, weapon card bar.
+5. **Feedback**: build-aware score, NEW BEST, run loot recap.
+6. **Spikes**: codex station, breakthroughs, pinnacle keys + bosses, war victory caches.
+
+## Validation
+
+- A pure **progression simulation** (`tests/progression-sim.test.ts`): a modelled player who clears N waves per run at the recommended RL, collects drops with the real `rollDrops`, banks with the real ledger, crafts with the real costs and climbs RL when its loadout score allows. It asserts the targets above (first legendary 4-6 h, first exotic 15-25 h, RL reached after 10/50/100 h) so later tuning cannot silently speed things up again.
+- Odds tables tested per RL (sum to 1, monotone in RL, gates respected).
+
+## Open questions for the next round
+
+- Paragon was not chosen as a drip: should Warden levels past the tree's last useful ring give anything, or just keep revealing rings?
+- Should a run's RL be locked at deploy, or can the map offer "step up" nodes mid-run (higher RL for the rest of the run)?
+- Seasons for the endless ladder (yearly leaderboards per RL), or no resets ever?
+- Mastery in co-op: personal per player (proposed), or a team bonus too?
+- Should locked families be visible in the codex as teasers before they unlock?
