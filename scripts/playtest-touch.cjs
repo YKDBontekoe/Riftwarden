@@ -83,7 +83,7 @@ const SENSE = () => {
     target: best ? { d: best.d, los: best.los } : null, dyaw, dpitch, alive: pl.alive, hp: pl.hp, cores: g.wallet.cores,
     build: g.construction.active, valid: !!g.construction.valid, towers: g.turrets.turrets.length,
     shots: g.weapon.shotsFired, dealt: g.director.dealt?.player ?? 0, reactor: g.reactorHp,
-    kills: g.cfg.run.kills, heat: g.weapon.heat, over: g.weapon.overheated, pitch: pl.pitch, yaw: pl.yaw, eyeY: eye.y, ty: best ? best.c.y : 0, pos: { x: pl.position.x, z: pl.position.z }, sprint: pl.sprinting,
+    kills: g.cfg.run.kills, heat: g.weapon.heat, over: g.weapon.overheated, pitch: pl.pitch, yaw: pl.yaw, stick: Math.hypot(g.input.stickX, g.input.stickZ), ring: !!document.querySelector('.tc-stick.on'), eyeY: eye.y, ty: best ? best.c.y : 0, pos: { x: pl.position.x, z: pl.position.z }, sprint: pl.sprinting,
   };
 };
 
@@ -95,7 +95,7 @@ const SENSE = () => {
   const cdp = await ctx.newCDPSession(p);
   const T = touches(cdp);
   const log = [];
-  const ergo = { builds: [], regrips: 0, lookSwipes: 0, fireFrames: 0, aimedFrames: 0, onTargetFrames: 0, taps: 0, misses: [] };
+  const ergo = { stickFrames: 0, ringFrames: 0, combatFrames: 0, builds: [], regrips: 0, lookSwipes: 0, fireFrames: 0, aimedFrames: 0, onTargetFrames: 0, taps: 0, misses: [] };
   const tap = async (testId) => {
     const c = await centre(p, testId);
     if (!c) { ergo.misses.push(testId); return false; }
@@ -207,6 +207,9 @@ const SENSE = () => {
       }
 
       // ---- combat: left thumb strafes, right thumb aims + fires
+      ergo.combatFrames++;
+      if (s.stick > 0.3) ergo.stickFrames++;
+      if (s.ring) ergo.ringFrames++;
       strafeT -= STEP;
       if (strafeT <= 0) { strafe = -strafe; strafeT = 1.2 + Math.random(); }
       const fwd = s.target && s.target.d > 26 ? -42 : s.target && s.target.d < 10 ? 30 : -8;
@@ -268,7 +271,8 @@ const SENSE = () => {
     const end = await ev(p, SENSE);
     console.log('\nwave  secs  1st-shot  shots  dmg     kills  minHP  reactor-lost  regrips  look-swipes  on-target');
     for (const w of waves) console.log(`${String(w.wave).padStart(4)}  ${w.secs.toFixed(1).padStart(4)}  ${(w.firstShot ?? NaN).toFixed(1).padStart(8)}  ${String(w.shots).padStart(5)}  ${String(w.dealt).padStart(6)}  ${String(w.kills).padStart(5)}  ${String(Math.round(w.hp)).padStart(5)}  ${String(w.reactorLost).padStart(12)}  ${String(w.regrips).padStart(7)}  ${String(w.swipes).padStart(11)}  ${(w.onTarget * 100).toFixed(0).padStart(8)}%`);
-    console.log(`\ndeaths ${deaths} · towers ${end?.towers} · taps ${ergo.taps} · missing buttons ${JSON.stringify([...new Set(ergo.misses)])} · reactor ${Math.round(end?.reactor ?? 0)}`);
+    console.log(`\nstick deflected in ${Math.round((100 * ergo.stickFrames) / Math.max(1, ergo.combatFrames))}% of combat frames, ring drawn in ${Math.round((100 * ergo.ringFrames) / Math.max(1, ergo.combatFrames))}%`);
+    console.log(`deaths ${deaths} · towers ${end?.towers} · taps ${ergo.taps} · missing buttons ${JSON.stringify([...new Set(ergo.misses)])} · reactor ${Math.round(end?.reactor ?? 0)}`);
     for (const bl of ergo.builds) console.log(`build wave ${bl.wave}: ${bl.placed ? 'placed' : 'FAILED'} after ${bl.tries} tries ${JSON.stringify(bl.reasons)}`);
     for (const l of log) console.log(l);
     const bad = errs.filter((e) => !/Error compiling effect|hit-?flash/i.test(e));
