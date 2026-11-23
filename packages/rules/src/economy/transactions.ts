@@ -414,12 +414,18 @@ export function modifyComponent(data: SaveData, uid: string, slot: ComponentSlot
 // ------------------------------------------------------------------ fabrication
 
 /** Craft cost including HQ facilities (Calibration Array: -10% credits/salvage). */
-export function craftCostFor(data: Pick<SaveData, 'base'>, recipe: Parameters<typeof craftCost>[0], q: Parameters<typeof craftCost>[1], level: number): Cost {
-  const c = craftCost(recipe, q, level);
+export function craftCostFor(data: Pick<SaveData, 'base'> & Partial<Pick<SaveData, 'economy' | 'market'>>, recipe: Parameters<typeof craftCost>[0], q: Parameters<typeof craftCost>[1], level: number): Cost {
+  const c = craftCost(recipe, q, level, heavyCrafts(data));
   if (!data.base.placeables.some((p) => p.type === 'calibrator')) return c;
   const out: Cost = { ...c };
   for (const k of ['credits', 'salvage'] as const) if (out[k]) out[k] = Math.max(1, Math.round(out[k]! * 0.9));
   return out;
+}
+
+/** Superior-or-better crafts already made in the current market rotation (cost escalation). */
+export function heavyCrafts(data: Partial<Pick<SaveData, 'economy' | 'market'>>): number {
+  const h = data.economy?.heavy;
+  return h && data.market && h.rotation === data.market.rotation ? h.n : 0;
 }
 
 export function fabricationLevel(data: SaveData): number {
@@ -455,6 +461,7 @@ export function craft(data: SaveData, recipeId: string, qualityId: string | null
     if (!item) return fail('Fabrication failed: no valid output');
     pay(data, cost);
     data.economy.crafts++;
+    if (q!.heavy) data.economy.heavy = { rotation: data.market.rotation, n: heavyCrafts(data) + 1 };
     data.items.push(item);
     data.storage.uids.push(item.uid);
     data.economy.stats.itemsCrafted++;

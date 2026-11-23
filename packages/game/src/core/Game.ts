@@ -578,6 +578,7 @@ export class Game {
       get run() { return g.cfg.run; }, // prettier-ignore
       get build() { return g.director.build; }, // prettier-ignore
       lootLevelAt: (wave: number) => lootLevel(g.cfg.tier, wave),
+      get riftLevel() { return g.cfg.tier.id; }, // prettier-ignore
       get cores() { return g.wallet.cores; }, // prettier-ignore
       set cores(v: number) { g.wallet.cores = Math.max(0, Math.floor(v)); }, // prettier-ignore
       get reactorHp() { return g.reactorHp; }, // prettier-ignore

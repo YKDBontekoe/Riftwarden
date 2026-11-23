@@ -1,7 +1,7 @@
 import { mulberry32 } from '../combat/damage';
 import { basesFor } from '../loot/bases';
 import { clampLevel, generateItem, hashSeed, pickWeighted } from '../loot/generate';
-import { rarity, type RarityId, rollRarity } from '../loot/rarity';
+import { RARITIES, rarity, rarityCeiling, type RarityId, rollGated } from '../loot/rarity';
 import type { Category, ItemInstance } from '../loot/types';
 import { getTier, lootLevel, MAX_RIFT_LEVEL } from '../progression/tiers';
 import { MARKET } from './config';
@@ -44,7 +44,7 @@ export interface MarketState {
 export interface MarketProgress {
   /** Typical item level the player is finding (see progressLevel). */
   level: number;
-  /** Highest unlocked threat tier. */
+  /** Highest unlocked Rift Level. */
   tier: number;
   /** M7: extra equipment slots from HQ facilities (Market Uplink). */
   extra?: number;
@@ -66,8 +66,15 @@ export function progressLevel(records: Record<string, { bestWave: number }>, unl
 
 const EQUIPMENT_WEIGHTS: Partial<Record<Category, number>> = { weapon: 3, armor: 2, shield: 2, reactor: 1.5, processor: 1.5, accessory: 1.5, ability: 1.4, ultimate: 0.7 };
 
-function cap(id: RarityId): RarityId {
-  return rarity(id).index > rarity(MARKET.maxRarity).index ? MARKET.maxRarity : id;
+/**
+ * Merchant rarity: the Rift Level's gate (never above what the player's own drops can be) and the merchant cap (epic);
+ * the featured slot may hold a legendary from `MARKET.featuredLegendaryAt`.
+ */
+function cap(id: RarityId, rl: number, featured: boolean): RarityId {
+  const top = featured && rl >= MARKET.featuredLegendaryAt ? 'legendary' : MARKET.maxRarity;
+  const gate = rarityCeiling(rl);
+  const max = Math.min(rarity(top).index, rarity(gate).index);
+  return rarity(id).index > max ? RARITIES[max].id : id;
 }
 
 function pickCategory(rand: () => number): Category {
@@ -93,7 +100,7 @@ export function generateMarket(profileId: string, rotation: number, progress: Ma
   const equipment: MarketEntry[] = [];
   for (let i = 0; i < MARKET.equipmentSlots + Math.max(0, Math.min(4, progress.extra ?? 0)); i++) {
     const featured = i === 0;
-    const rar = cap(rollRarity(rand, MARKET.equipmentLuck * luckT, featured ? 'rare' : 'common'));
+    const rar = cap(rollGated(rand, tier.id, MARKET.equipmentLuck * luckT, featured ? 'rare' : 'common', featured ? 2 : 0), tier.id, featured);
     const e = make('equipment', i, pickCategory(rand), rar);
     e.featured = featured;
     equipment.push(e);
@@ -102,7 +109,7 @@ export function generateMarket(profileId: string, rotation: number, progress: Ma
   const moduleBases = basesFor('module');
   for (let i = 0; i < MARKET.moduleSlots; i++) {
     const featured = i === 0;
-    const rar = cap(rollRarity(rand, MARKET.moduleLuck * luckT, featured ? 'rare' : 'uncommon'));
+    const rar = cap(rollGated(rand, tier.id, MARKET.moduleLuck * luckT, featured ? 'rare' : 'uncommon', featured ? 2 : 0), tier.id, false);
     const base = pickWeighted(moduleBases, (b) => b.weight, rand)!;
     const id = `mk${rotation}_m${i}`;
     const item = generateItem({ uid: `${id}_${profileId.slice(-6)}`, seed: Math.floor(rand() * 4294967296) >>> 0, level: level(), rarity: rar, baseId: base.id, source: 'merchant', now });

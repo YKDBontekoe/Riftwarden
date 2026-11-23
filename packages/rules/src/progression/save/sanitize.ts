@@ -315,6 +315,8 @@ function sanitizeEconomy(v: unknown): EconomyState {
   const e = emptyEconomy();
   e.tx = arr(r.tx).filter((x): x is string => typeof x === 'string').map((x) => x.slice(0, 64)).slice(-TX_HISTORY);
   e.crafts = int(r.crafts, 0);
+  const hv = obj(r.heavy);
+  if (typeof hv.rotation === 'number' && typeof hv.n === 'number') e.heavy = { rotation: int(hv.rotation, 0), n: int(hv.n, 0, 0, 1000) };
   const st = obj(r.stats);
   for (const k of Object.keys(e.stats) as (keyof EconomyStats)[]) e.stats[k] = int(st[k], 0);
   return e;

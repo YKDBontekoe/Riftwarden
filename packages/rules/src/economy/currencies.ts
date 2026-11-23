@@ -65,7 +65,7 @@ export const CURRENCIES: Record<CurrencyKey, CurrencyInfo> = {
     cls: 'res-sh',
     persistent: true,
     earned: 'Elites, bosses, elite caches, high-value targets and checkpoints from Rift Level 3.',
-    spent: 'Ascension: turning an Exotic into an Ascended item at the engineering workshop.',
+    spent: 'Masterwork and apex fabrication, and Ascension (turning an Exotic into an Ascended item at the workshop).',
     banking: 'Unsecured during an operation: banked at every 5-wave checkpoint, lost on defeat.',
   },
   xp: {

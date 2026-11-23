@@ -224,6 +224,8 @@ export interface EconomyState {
   tx: string[];
   /** Fabrication counter (deterministic crafting seeds). */
   crafts: number;
+  /** Superior-or-better crafts in a market rotation (cost escalation; optional, absent = none). */
+  heavy?: { rotation: number; n: number };
   stats: EconomyStats;
 }
 
