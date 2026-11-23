@@ -31,6 +31,12 @@ export interface Settings {
   renderer: 'webgl' | 'webgpu';
   /** M7: key bindings (action -> KeyboardEvent.code). */
   keys: Record<string, string>;
+  /** Touch controls: auto (touch screens), always on, or off. */
+  touchControls: 'auto' | 'on' | 'off';
+  /** Touch look speed (0.3..3), on top of the mouse sensitivity. */
+  touchLook: number;
+  /** Opacity of the touch buttons (0.2..1). */
+  touchOpacity: number;
 }
 
 const KEY = 'riftwarden.settings';
@@ -78,7 +84,15 @@ export const DEFAULT_SETTINGS: Settings = {
   ...PRESETS.high,
   renderer: 'webgl',
   keys: Object.fromEntries(ACTIONS.map((a) => [a.id, a.def])),
+  touchControls: 'auto',
+  touchLook: 1,
+  touchOpacity: 0.6,
 };
+
+/** First start on a phone or tablet: the performance preset (no SSR/SSAO/shadows/MSAA) at a lower render scale. */
+export function mobileDefaults(): Settings {
+  return { ...structuredClone(DEFAULT_SETTINGS), quality: 'low', ...PRESETS.low, renderScale: 0.7 };
+}
 
 function clampNum(v: unknown, lo: number, hi: number, fallback: number): number {
   return typeof v === 'number' && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : fallback;
@@ -117,13 +131,17 @@ export function sanitizeSettings(raw: unknown, version = VERSION): Settings {
     renderScale: v1 ? preset.renderScale : clampNum(r.renderScale, 0.5, 1, preset.renderScale),
     renderer: pick(r.renderer, ['webgl', 'webgpu'] as const, 'webgl'),
     keys,
+    touchControls: pick(r.touchControls, ['auto', 'on', 'off'] as const, 'auto'),
+    touchLook: clampNum(r.touchLook, 0.3, 3, 1),
+    touchOpacity: clampNum(r.touchOpacity, 0.2, 1, 0.6),
   };
 }
 
-export function loadSettings(): Settings {
+/** Stored settings, or `fallback` (default: DEFAULT_SETTINGS) when nothing was saved yet. */
+export function loadSettings(fallback: Settings = DEFAULT_SETTINGS): Settings {
   try {
     const txt = localStorage.getItem(KEY);
-    if (!txt) return structuredClone(DEFAULT_SETTINGS);
+    if (!txt) return structuredClone(fallback);
     const parsed = JSON.parse(txt) as { v?: number; data?: unknown };
     return sanitizeSettings(parsed.data, typeof parsed.v === 'number' ? parsed.v : 1);
   } catch {

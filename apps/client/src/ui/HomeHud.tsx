@@ -61,7 +61,7 @@ export function HomeHud({ flow }: { flow: Flow }) {
         </div>
       )}
       {walking && (
-        <div className="fixed bottom-[20px] left-[22px] text-[14px] text-faint tracking-[0.04em]">
+        <div className="hq-keys fixed bottom-[20px] left-[22px] text-[14px] text-faint tracking-[0.04em]">
           <BoundKey action="move" /> move <BoundKey action="use" /> use terminal <kbd>ESC</kbd> pause
         </div>
       )}

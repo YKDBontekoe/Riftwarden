@@ -27,6 +27,9 @@ import { milestoneLabel } from '@riftwarden/rules/survival/records';
 import { EVENTS, type EventId } from '@riftwarden/rules/survival/events';
 import { FieldArt } from './FieldArt';
 import { FieldIcon } from './FieldIcon';
+import { TouchControls } from '../touch/TouchControls';
+import { touchStore } from '../touch/touchMode';
+import { InstallApp, RotateHint, UpdateToast } from '../touch/MobileUi';
 
 interface Props {
   getFlow: () => Flow | null;
@@ -70,6 +73,9 @@ export function App({ getFlow }: Props) {
       {screen === 'summary' && flow && <SummaryScreen flow={flow} />}
       {screen === 'construct' && flow && home && <ConstructionPanel key={`cons${flow.transitions}`} flow={flow} />}
       {screen === 'transit' && <LoadingScreen />}
+      {flow && <TouchControls flow={flow} />}
+      <RotateHint />
+      <UpdateToast flow={flow} />
     </>
   );
 }
@@ -132,7 +138,30 @@ const BRIEFING = [
   ['Bank your salvage', 'Every five waves, a checkpoint secures your haul. Return home or stay for another wave. Losing the reactor costs your unsecured cargo.'],
 ] as const;
 
+const TOUCH_CONTROLS = [
+  ['LEFT THUMB', 'Move: the stick appears where you touch · push past the ring to sprint'],
+  ['RIGHT SIDE', 'Drag anywhere to aim · drag the FIRE button to aim while firing'],
+  ['JUMP · DASH', 'Jump (again in the air for a boost) · dash'],
+  ['SLIDE · HOOK', 'Slide while running, ground pound in the air · grapple to the surface under the crosshair'],
+  ['ABILITIES', 'Ability buttons above FIRE · ULT appears during waves'],
+  ['BUILD', 'Build mode: FIRE becomes PLACE, CANCEL leaves, WPN/CORE/MOD/BASE cycle parts'],
+  ['TOWER', 'Aim at a tower: LEVEL, REPAIR, hold RECYCLE'],
+  ['TOP RIGHT', 'Start wave · build · towers · slow time · run map · cargo · pause'],
+] as const;
+
 function Controls() {
+  const touch = useSyncExternalStore(touchStore.subscribe, touchStore.get);
+  if (touch)
+    return (
+      <div className="grid gap-[9px] text-[15px] text-muted [.modal_&]:mt-[16px]" data-testid="touch-legend">
+        {TOUCH_CONTROLS.map(([k, v]) => (
+          <div key={k} className="flex items-center gap-[8px]">
+            <kbd className="min-w-[96px] text-center">{k}</kbd>
+            <span>{v}</span>
+          </div>
+        ))}
+      </div>
+    );
   return (
     <div className="grid grid-cols-[1fr_1fr] gap-x-[18px] gap-y-[9px] text-[15px] text-muted [.modal_&]:mt-[16px] [@media(max-width:900px)]:grid-cols-1">
       {CONTROLS.map(([k, v]) => (
@@ -179,6 +208,7 @@ function MainMenu({ flow }: { flow: Flow }) {
           <button className="primary deploy" onClick={() => void flow.enterHq()}>
             <span>ENTER HEADQUARTERS</span><span aria-hidden="true">↗</span>
           </button>
+          <InstallApp />
         </section>
       ) : (
         <section className="menu-sheet" aria-label={MENU_SECTIONS[tab]}>

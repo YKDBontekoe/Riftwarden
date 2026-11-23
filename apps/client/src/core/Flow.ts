@@ -34,6 +34,7 @@ import { type ArenaConfig, Game } from '@riftwarden/game/core/Game';
 import { SurvivalPlanner } from '@riftwarden/rules/survival/plan';
 import { tutorialActive } from '@riftwarden/rules/progression/tutorial';
 import { Input } from '@riftwarden/game/core/Input';
+import { applyTouchPref } from '../touch/touchMode';
 import { ClientGame } from '@riftwarden/game/net/ClientGame';
 import { NetClient } from '@riftwarden/game/net/NetClient';
 import { sessionClient } from '../account/sync';
@@ -229,6 +230,7 @@ export class Flow {
     this.settings = s;
     saveSettings(s);
     applyGlobalSettings(s, this.input);
+    applyTouchPref(s.touchControls);
     this.resize();
     this.world?.applySettings(s);
     // Graphics quality is applied when a scene is built: rebuild the HQ right away.

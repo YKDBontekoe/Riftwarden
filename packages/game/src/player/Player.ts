@@ -422,7 +422,14 @@ export class Player implements KitBody {
       if (input.isDown('KeyS')) fz -= 1;
       if (input.isDown('KeyD')) fx += 1;
       if (input.isDown('KeyA')) fx -= 1;
+      // Touch stick (analog): replaces the keys while deflected.
+      if (input.stickX || input.stickZ) {
+        fx = input.stickX;
+        fz = input.stickZ;
+      }
     }
+    // Analog share of the run speed (keys and a fully deflected stick = 1).
+    const drive = active && (input.stickX || input.stickZ) ? Math.min(1, Math.hypot(fx, fz)) : 1;
     const sin = Math.sin(this.yaw);
     const cos = Math.cos(this.yaw);
     let wx = fx * cos + fz * sin;
@@ -498,7 +505,7 @@ export class Player implements KitBody {
       this.fovKick = move.dashFov;
       sfx.play('dash');
     }
-    this.sprinting = active && shiftHeld && fz > 0 && this.dashT <= 0;
+    this.sprinting = active && (shiftHeld || input.stickSprint === true) && fz > 0 && this.dashT <= 0;
     const dashDt = Math.min(dt, this.dashT);
     if (kit?.velocity(dt, wx, wz, moveSpeedMult)) {
       // Slide / wall-run / grapple / pound own the velocity this frame.
@@ -508,7 +515,7 @@ export class Player implements KitBody {
       const speed = move.dashCarrySpeed + (move.dashSpeed - move.dashCarrySpeed) * (dashDt / dt);
       this.hv.set(this.dashDir.x * speed, 0, this.dashDir.z * speed);
     } else if (!redirected && (this.grounded || wl > 0)) {
-      const speed = (this.sprinting ? move.sprintSpeed : move.runSpeed) * moveSpeedMult;
+      const speed = (this.sprinting ? move.sprintSpeed : move.runSpeed) * moveSpeedMult * drive;
       const cur = Math.hypot(this.hv.x, this.hv.z);
       const along = cur > 0 ? (this.hv.x * wx + this.hv.z * wz) / cur : 0;
       if (wl > 0 && cur > speed + 0.25 && along > 0.2) {
