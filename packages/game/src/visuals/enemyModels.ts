@@ -1,4 +1,5 @@
 import { PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial';
+import { enemyRolePalette } from './enemyRolePalette';
 import { Color3 } from '@babylonjs/core/Maths/math.color';
 import { type AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh';
 import { type TransformNode } from '@babylonjs/core/Meshes/transformNode';
@@ -138,6 +139,7 @@ export interface EnforcerRig {
 
 /** Tracked heavy chassis, curved frontal energy shield on the left arm, piston hammer on the right, generator pack on the back. */
 export function buildEnforcer(kit: Kit, P: Palette): EnforcerRig {
+  P = enemyRolePalette(P, 'enforcer');
   const M = enemyMats(P.white.getScene(), P);
   const root = kit.node('enforcer', null);
   const s = kit.node('eScale', root);
@@ -225,6 +227,7 @@ export interface ArtilleryRig {
 
 /** Hover mortar: hex deck on three stabilizer pods, turret with a long cannon and charge rings. */
 export function buildArtillery(kit: Kit, P: Palette): ArtilleryRig {
+  P = enemyRolePalette(P, 'artillery');
   const M = enemyMats(P.white.getScene(), P);
   const root = kit.node('artillery', null);
   const body = kit.node('aBody', root, [0, 3.0, 0]);
@@ -251,6 +254,10 @@ export function buildArtillery(kit: Kit, P: Palette): ArtilleryRig {
   kit.part('sphere', P.graphite, body, { pos: [0, -0.2, 0.78], scale: [0.6, 0.48, 0.6] });
   const optic = kit.part('sphere', M.chargeRed, body, { pos: [0, -0.22, 1.02], scale: [0.3, 0.22, 0.14], shadow: false });
   const turret = kit.node('aTurret', body, [0, 0.42, -0.1]);
+  for (const side of [-1, 1]) {
+    kit.part('box', P.enemyArmor, turret, { pos: [side * 0.42, 0.65, -0.5], rot: [-0.22, 0, side * 0.12], scale: [0.12, 0.9, 0.42] });
+    kit.part('box', P.graphite, turret, { pos: [side * 0.42, 1.08, -0.57], scale: [0.16, 0.08, 0.46] });
+  }
   kit.part('box', P.enemyArmor, turret, { scale: [1.0, 0.42, 1.2] });
   kit.part('box', P.graphite, turret, { pos: [0, 0.25, -0.2], scale: [0.8, 0.12, 0.7] });
   for (const side of [-1, 1]) kit.part('box', P.enemyDark, turret, { pos: [side * 0.56, 0.12, 0], scale: [0.14, 0.5, 0.9] });
@@ -285,6 +292,7 @@ export interface EngineerRig {
 
 /** Hovering support unit: armoured pod, antenna mast + dish, two articulated repair arms, teal emitters. */
 export function buildEngineer(kit: Kit, P: Palette): EngineerRig {
+  P = enemyRolePalette(P, 'engineer');
   const M = enemyMats(P.white.getScene(), P);
   const root = kit.node('engineer', null);
   const body = kit.node('gBody', root, [0, 1.65, 0]);
@@ -301,6 +309,10 @@ export function buildEngineer(kit: Kit, P: Palette): EngineerRig {
   // Mast + dish
   kit.part('cyl8', P.metal, body, { pos: [-0.18, 0.95, -0.25], scale: [0.07, 1.3, 0.07] });
   const dish = kit.node('dish', body, [-0.18, 1.55, -0.25]);
+  for (const side of [-1, 1]) {
+    kit.part('cyl8', P.graphite, body, { pos: [side * 0.43, 1.02, -0.33], rot: [0, 0, -side * 0.13], scale: [0.07, 1.15, 0.07] });
+    kit.part('box', M.supportDim, body, { pos: [side * 0.50, 1.57, -0.33], scale: [0.10, 0.08, 0.1], shadow: false });
+  }
   kit.part(reflector(kit), P.metal, dish, { rot: [-0.6, 0, 0], scale: [0.82, 0.92, 0.82] });
   kit.part('cyl8', P.metal, dish, { pos: [0, 0.08, 0.05], rot: [-0.6, 0, 0], scale: [0.04, 0.4, 0.04] });
   const beacon = kit.part('sphere', M.support, body, { pos: [-0.18, 1.72, -0.25], scale: [0.16, 0.16, 0.16], shadow: false });

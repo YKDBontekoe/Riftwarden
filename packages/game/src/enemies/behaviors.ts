@@ -288,9 +288,9 @@ export const artilleryBehavior: Behavior = {
     e.root.position.copyFrom(e.pos);
     if (ai.mode !== 'move') e.yaw = turnTowards(e.yaw, Math.atan2(R.x - e.pos.x, R.z - e.pos.z), hdt * 1.5);
     e.root.rotation.y = e.yaw;
-    rig.body.position.y = 3.0 + Math.sin(e.phase * 2.2) * 0.12 - ai.deploy * 0.25 - e.flinch * 0.2;
+    rig.body.position.y = 3.0 + Math.sin(e.phase * 2.2) * 0.12 * (1 - ai.deploy * .8) - ai.deploy * 0.33 - e.flinch * 0.2;
     rig.body.rotation.z = Math.sin(e.phase * 1.7) * 0.04 + e.flinch * 0.15;
-    for (const s of rig.stabilizers) s.rotation.x = -0.5 * ai.deploy;
+    for (const s of rig.stabilizers) s.rotation.x = -0.72 * ai.deploy;
     const aimTarget = ai.mode === 'charge' ? ai.target : TMP2.set(R.x, 0, R.z);
     const local = clampAngle(Math.atan2(aimTarget.x - e.pos.x, aimTarget.z - e.pos.z) - e.yaw, Math.PI);
     rig.turret.rotation.y += (local - rig.turret.rotation.y) * Math.min(1, hdt * 3);
@@ -413,7 +413,7 @@ export const engineerBehavior: Behavior = {
     e.root.position.copyFrom(e.pos);
     if (tgt) e.yaw = turnTowards(e.yaw, Math.atan2(tgt.pos.x - e.pos.x, tgt.pos.z - e.pos.z), hdt * 4);
     e.root.rotation.y = e.yaw;
-    rig.body.position.y = 1.65 + Math.sin(e.phase * 2.6) * 0.1 - e.flinch * 0.2;
+    rig.body.position.y = 1.65 + Math.sin(e.phase * 1.8) * 0.08 - e.flinch * 0.2;
     rig.body.rotation.z = Math.sin(e.phase * 1.3) * 0.06 + e.flinch * 0.3;
     ai.reach += ((tgt && !off ? 1 : 0) - ai.reach) * Math.min(1, hdt * 5);
     for (let i = 0; i < rig.arms.length; i++) {

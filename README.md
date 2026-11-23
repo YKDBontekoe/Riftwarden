@@ -54,6 +54,10 @@ In a co-op run the sim worker owns enemies, waves, the reactor, towers and loot;
 | `node --import tsx scripts/e2e-coop-protocol.mjs` | Co-op protocol suite (own stack; `RIFT_TEST_DATABASE_URL`, `RIFT_TEST_REDIS_URL`) |
 | `node --import tsx scripts/with-stack.mjs node scripts/e2e-accounts.cjs` | A browser suite that needs the backend |
 | `node scripts/e2e-m1.cjs` … | Solo browser acceptance suites (Playwright; `RIFT_URL` selects the client) |
+| `node scripts/e2e-feel-polish.cjs` | Movement, reduced-motion camera, first-frame weapon, enemy contacts and combat screenshots (`E2E_OUT` selects the output directory; `QA_GRAPHICS=high` checks high graphics) |
+| `node scripts/e2e-render-lifecycle.cjs` | Rapid scene disposal, asynchronous lighting lookup decode, and repeated deployment cleanup |
+| `node scripts/visual-review.cjs` | Seven matched high-preset captures; set `E2E_OUT` to `review/before` or `review/after` and reuse the generated profile |
+| `node scripts/visual-comparison.cjs review` | Build a self-contained HTML before/after comparison with sliders and side-by-side views |
 | `node --import tsx scripts/check-wgsl.mjs` | Compile the WebGPU shaders with the browser's WGSL compiler |
 
 Graphics: WebGL2 by default; **Settings > Graphics > Renderer > WebGPU (beta)** (or `?webgpu`) switches to Babylon's WebGPU renderer on the next start.

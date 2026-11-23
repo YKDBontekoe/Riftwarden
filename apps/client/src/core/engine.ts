@@ -4,6 +4,7 @@
 // (scripts/check-wgsl.mjs). `?webgl` forces WebGL2.
 import { type AbstractEngine } from '@babylonjs/core/Engines/abstractEngine';
 import { Engine } from '@babylonjs/core/Engines/engine';
+import { configureBrdfLifetime } from './brdfLifetime';
 
 export type Backend = 'webgpu' | 'webgl';
 
@@ -21,10 +22,13 @@ export async function createEngine(canvas: HTMLCanvasElement, prefer: Backend): 
       // initAsync requests the adapter itself (and throws without one): no separate support probe.
       const engine = new WebGPUEngine(canvas, { stencil: true, antialias: true, powerPreference: 'high-performance' });
       await engine.initAsync();
+      configureBrdfLifetime(engine);
       return { engine, backend: 'webgpu' };
     } catch (e) {
       console.warn('WebGPU unavailable, using WebGL2:', e);
     }
   }
-  return { engine: new Engine(canvas, true, { stencil: true, preserveDrawingBuffer: false, powerPreference: 'high-performance' }), backend: 'webgl' };
+  const engine = new Engine(canvas, true, { stencil: true, preserveDrawingBuffer: false, powerPreference: 'high-performance' });
+  configureBrdfLifetime(engine);
+  return { engine, backend: 'webgl' };
 }

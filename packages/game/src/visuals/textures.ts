@@ -158,7 +158,7 @@ export function arenaDeckWetness(x: number, z: number): number {
   const v = (z + 60) / 120;
   const depression = fbm(u, v, 25, 3, 21);
   const watershed = vnoise(u * 9, v * 9, 9, 83);
-  return smooth(Math.max(0, Math.min(1, (depression * 0.78 + watershed * 0.22 - 0.59) * 12)));
+  return smooth(Math.max(0, Math.min(1, (depression * 0.78 + watershed * 0.22 - 0.64) * 15)));
 }
 
 /** Poured yard slab. The macro map spans the entire yard so puddles don't repeat. */
@@ -210,12 +210,16 @@ export function yardDeckSet(scene: Scene, high: boolean, biome: BiomeId = 'outpo
       const rustStain = smooth(Math.max(0, Math.min(1, (fbm(u, v, 40, 3, 133) - 0.64) * 6))) * (0.4 + expansionJoint * 0.6);
       const crack = cracks[i + 3] / 255;
       const grainDetail = concreteGrain(x, y);
-      const base = (0.46 + (grit - 0.5) * 0.16 + (stain - 0.5) * 0.12 + grainDetail * 0.17 - wet * 0.115 - expansionJoint * 0.12) * (1 - oil * 0.45) * (1 - crack * 0.6);
+      // Occasional sealed service slabs sit among rough, porous concrete. The finish
+      // changes roughness as well as colour, so dry ground cannot read as polished metal.
+      const slabId = Math.floor(u * 9) + Math.floor(v * 9) * 9;
+      const sealed = slabId % 7 === 2 || slabId % 11 === 4;
+      const base = ((sealed ? 0.40 : 0.52) + (grit - 0.5) * 0.12 + (stain - 0.5) * 0.09 + grainDetail * 0.11 - wet * 0.16 - expansionJoint * 0.12) * (1 - oil * 0.45) * (1 - crack * 0.6);
       let red = base * (1 + rustStain * 0.12);
       let green = base * 0.98 * (1 - rustStain * 0.2);
-      let blue = base * 0.945 * (1 - rustStain * 0.42);
+      let blue = base * (sealed ? 1.08 : 0.975) * (1 - rustStain * 0.42);
       let relief = 0.5 + (grit - 0.5 + grainDetail * 0.55) * (0.035 - wet * 0.025) - expansionJoint * 0.19 - crack * 0.12;
-      let rough = 0.84 + (grit - 0.5) * 0.11 - grainDetail * 0.15 - wet * 0.63 - oil * 0.4 + crack * 0.1;
+      let rough = (sealed ? 0.64 : 0.94) + (grit - 0.5) * 0.08 - grainDetail * 0.10 - wet * 0.74 - oil * 0.44 + crack * 0.1;
       if (biome === 'cryo') {
         // Rime feathers accumulate in the slab joints and around frozen depressions.
         const grain = Math.abs(Math.sin((u + v * 0.64) * 490 + stain * 20));

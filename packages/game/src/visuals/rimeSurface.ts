@@ -4,8 +4,12 @@ import { type Scene } from '@babylonjs/core/scene';
 import { canvas, fbm, heightToNormal, toTexture } from './textures';
 import { surfaceGrain } from './surfaceSources';
 
+const cache = new WeakMap<Scene, PBRMaterial>();
+
 /** Feathered, opaque frost on lower walls and drainage grates. Separate from hazard effects. */
 export function rimeSurface(scene: Scene): PBRMaterial {
+  const cached = cache.get(scene);
+  if (cached) return cached;
   const size = 128;
   const { c, ctx } = canvas(size);
   const image = ctx.createImageData(size, size);
@@ -39,5 +43,6 @@ export function rimeSurface(scene: Scene): PBRMaterial {
   frost.metallic = 0;
   frost.roughness = 0.86;
   frost.backFaceCulling = false;
+  cache.set(scene, frost);
   return frost;
 }

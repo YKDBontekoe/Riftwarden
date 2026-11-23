@@ -38,7 +38,7 @@ const LIBS = new WeakMap<Scene, WeaponMaterials>();
 const SEAMS_U = [0.07, 0.31, 0.49, 0.78];
 
 /** Brushed and lightly worn finish shared by the viewmodel and the workshop preview. */
-function micro(scene: Scene): Micro {
+function micro(scene: Scene, finish: 'paint' | 'metal' | 'polymer'): Micro {
   const size = 256;
   const { c: ac, ctx: a } = canvas(size);
   const { c: oc, ctx: o } = canvas(size);
@@ -47,7 +47,7 @@ function micro(scene: Scene): Micro {
   const height = new Float32Array(size * size);
   const { ctx: scratch } = canvas(size);
   const random = rng(721);
-  for (let i = 0; i < 96; i++) {
+  for (let i = 0; i < (finish === 'polymer' ? 0 : 96); i++) {
     const x = random() * size, y = random() * size;
     const length = 0.8 + random() ** 2.5 * 16;
     scratch.strokeStyle = `rgba(255,255,255,${0.19 + random() * 0.55})`;
@@ -80,22 +80,28 @@ function micro(scene: Scene): Micro {
         const d = Math.hypot((u - su - 0.022) * size, (v - bv) * size);
         if (d < 2.6) bolt = Math.max(bolt, 1 - d / 2.6);
       }
-      const tint = (0.88 + grain * 0.14 + brush * 0.08 + rub * 0.42 + scrape * 0.32 - grime) * (1 - seam * 0.55) + bolt * 0.25;
+      const rim = Math.min(u, 1 - u, v, 1 - v);
+      const wear = finish === 'paint' ? Math.max(0, 1 - rim / .018) * Math.max(0, .6 + grain * 3) : 0;
+      if (finish !== 'paint') { seam *= finish === 'polymer' ? 0 : .25; bolt = 0; }
+      const stipple = finish === 'polymer' ? Math.sin(u * 420) * Math.sin(v * 420) * .035 : 0;
+      const tint = (0.88 + grain * 0.10 + brush * (finish === 'metal' ? .12 : .035) + rub * .22 + scrape * .25 + wear * .22 - grime) * (1 - seam * .45) + bolt * .2 + stipple;
       albedo.data[i] = albedo.data[i + 1] = albedo.data[i + 2] = Math.min(1, tint) * 255;
       albedo.data[i + 3] = 255;
       orm.data[i] = (1 - seam * 0.5) * 255;
-      orm.data[i + 1] = Math.min(1, 0.89 + grain * 0.19 + brush * 0.15 - rub * 0.52 - scrape * 0.26 + seam * 0.1 - bolt * 0.4) * 255;
-      orm.data[i + 2] = orm.data[i + 3] = 255;
-      height[y * size + x] = grain * 0.085 + brush * 0.05 - scrape * 0.037 - seam * 0.35 + bolt * 0.25;
+      const rough = finish === 'polymer' ? .97 + stipple : (finish === 'metal' ? .64 : .88) + grain * .10 + brush * .06 - rub * .25 - scrape * .2 - wear * .48 + seam * .1;
+      orm.data[i + 1] = Math.max(.15, Math.min(1, rough)) * 255;
+      orm.data[i + 2] = (finish === 'paint' ? Math.min(1, .045 + wear * .9 + scrape * .55) : 1) * 255;
+      orm.data[i + 3] = 255;
+      height[y * size + x] = grain * .04 + brush * (finish === 'metal' ? .025 : .008) - scrape * .022 - seam * .2 + bolt * .16 + stipple;
     }
   }
   a.putImageData(albedo, 0, 0);
   o.putImageData(orm, 0, 0);
-  const normal = toTexture('wpnMicroNrm', heightToNormal(height, size, 2.2), scene, { srgb: false });
-  normal.level = 0.45;
+  const normal = toTexture(`wpn${finish}Nrm`, heightToNormal(height, size, 2.2), scene, { srgb: false });
+  normal.level = finish === 'polymer' ? .32 : .22;
   return {
-    albedo: toTexture('wpnMicroAlb', ac, scene),
-    orm: toTexture('wpnMicroOrm', oc, scene, { srgb: false }),
+    albedo: toTexture(`wpn${finish}Alb`, ac, scene),
+    orm: toTexture(`wpn${finish}Orm`, oc, scene, { srgb: false }),
     normal,
   };
 }
@@ -148,11 +154,11 @@ function surface(scene: Scene, m: Micro, name: string, albedo: [number, number, 
   mat.useMetallnessFromMetallicTextureBlue = true;
   mat.useRoughnessFromMetallicTextureAlpha = false;
   mat.bumpTexture = m.normal;
-  mat.environmentIntensity = 1.3;
+  mat.environmentIntensity = 1.05;
   if (clearCoat) {
     mat.clearCoat.isEnabled = true;
     mat.clearCoat.intensity = clearCoat;
-    mat.clearCoat.roughness = 0.12;
+    mat.clearCoat.roughness = 0.28;
   }
   return mat;
 }
@@ -181,7 +187,9 @@ const TRIM: Record<Finish, [[number, number, number], number, number]> = {
 export function weaponMaterials(scene: Scene): WeaponMaterials {
   const cached = LIBS.get(scene);
   if (cached) return cached;
-  const m = micro(scene);
+  const m = micro(scene, 'metal');
+  const paint = micro(scene, 'paint');
+  const polymer = micro(scene, 'polymer');
   const shells = new Map<Finish, PBRMaterial>();
   const trims = new Map<Finish, PBRMaterial>();
   const glass = new PBRMaterial('wpnGlass', scene);
@@ -197,9 +205,9 @@ export function weaponMaterials(scene: Scene): WeaponMaterials {
   glass.backFaceCulling = true;
   const lib: WeaponMaterials = {
     graphite: surface(scene, m, 'wpnGraphite', [0.08, 0.087, 0.096], 0.52, 0.64),
-    satin: surface(scene, m, 'wpnSatin', [0.47, 0.48, 0.52], 0.82, 0.46),
-    dark: surface(scene, m, 'wpnDark', [0.03, 0.031, 0.035], 0.85, 0.4),
-    polymer: surface(scene, m, 'wpnPolymer', [0.028, 0.028, 0.03], 0, 0.82),
+    satin: surface(scene, m, 'wpnSatin', [0.56, 0.59, 0.64], 0.82, 0.46),
+    dark: surface(scene, m, 'wpnDark', [0.045, 0.051, 0.064], 0.85, 0.48),
+    polymer: surface(scene, polymer, 'wpnPolymer', [0.028, 0.028, 0.03], 0, 0.96),
     copper: surface(scene, m, 'wpnCopper', [0.62, 0.32, 0.17], 0.73, 0.43),
     frostCeramic: surface(scene, m, 'wpnFrostCeramic', [0.68, 0.82, 0.9], 0.06, 0.73),
     glass,
@@ -208,7 +216,8 @@ export function weaponMaterials(scene: Scene): WeaponMaterials {
       let mat = shells.get(f);
       if (!mat) {
         const [a, met, r, cc] = SHELL[f];
-        mat = surface(scene, m, `wpnShell_${f}`, a, met, r, cc);
+        const painted = f === 'arctic' || f === 'sand' || f === 'slate';
+        mat = surface(scene, painted ? paint : m, `wpnShell_${f}`, a, painted ? 1 : met, r, cc);
         if (f === 'iridescent') {
           mat.iridescence.isEnabled = true;
           mat.iridescence.intensity = 1;
@@ -255,13 +264,31 @@ export function weaponGlow(scene: Scene, name: string, c: [number, number, numbe
 /** Heat-reactive dark metal owned by one model: emissive rises from black to orange-white. */
 export function heatMetal(scene: Scene, name: string): PBRMaterial {
   const m = new PBRMaterial(name, scene);
-  m.albedoColor = new Color3(0.05, 0.05, 0.055);
+  m.albedoColor = new Color3(0.30, 0.33, 0.39);
+  m.albedoTexture = temperTexture(scene);
+  m.bumpTexture = weaponMaterials(scene).dark.bumpTexture;
   m.metallic = 0.85;
-  m.roughness = 0.38;
+  m.roughness = 0.46;
   m.usePhysicalLightFalloff = false;
   m.emissiveColor = new Color3(0, 0, 0);
   m.environmentIntensity = 1.2;
   return m;
+}
+
+const temperMaps = new WeakMap<Scene, Texture>();
+
+/** Restrained blue/purple/straw oxidation bands under the animated hot-metal glow. */
+function temperTexture(scene: Scene): Texture {
+  const cached = temperMaps.get(scene);
+  if (cached) return cached;
+  const { c, ctx } = canvas(64, 128);
+  const gradient = ctx.createLinearGradient(0, 0, 0, 128);
+  for (const [stop, color] of [[0, '#758798'], [.32, '#485f78'], [.53, '#766b87'], [.7, '#97846a'], [1, '#4b535d']]) gradient.addColorStop(stop as number, color as string);
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, 64, 128);
+  const texture = toTexture('weaponTemper', c, scene);
+  temperMaps.set(scene, texture);
+  return texture;
 }
 
 /** Emissive colour of glowing metal at heat h (0..1): black -> deep red -> orange -> yellow-white. */

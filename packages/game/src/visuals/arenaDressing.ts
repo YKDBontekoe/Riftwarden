@@ -9,6 +9,7 @@ import { prismData } from '../weapons/geometry';
 import type { Palette } from './materials';
 import { loftData, smoothLatheData } from './sculpt';
 import { rimeSurface } from './rimeSurface';
+import { biomeWeathering } from './biomeWeathering';
 
 /** What the dressing needs from the arena builder: merged-by-material boxes and meshes. */
 export interface DressingHost {
@@ -41,6 +42,7 @@ export class ArenaDressing {
     this.drains();
     this.outside();
     this.operationsGallery();
+    biomeWeathering(this.h, this.P, this.L);
   }
 
   // ------------------------------------------------------------------ helpers

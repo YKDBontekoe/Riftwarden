@@ -52,9 +52,9 @@ export class PostFx {
     if (high && supportsGBuffer) {
       try {
         const ssao = new SSAO2RenderingPipeline('ssao', scene, { ssaoRatio: 0.5, blurRatio: 1 }, [camera], true, Constants.TEXTURETYPE_HALF_FLOAT);
-        ssao.radius = 1.4;
-        ssao.totalStrength = 1.18;
-        ssao.base = 0.12;
+        ssao.radius = 0.85;
+        ssao.totalStrength = 1.35;
+        ssao.base = 0.20;
         ssao.samples = 12;
         ssao.maxZ = 120;
         ssao.minZAspect = 0.4;
@@ -68,7 +68,7 @@ export class PostFx {
     if (high && supportsGBuffer && wetReflections) {
       try {
         const ssr = new SSRRenderingPipeline('ssr', scene, [camera], true, Constants.TEXTURETYPE_HALF_FLOAT);
-        ssr.strength = 0.36;
+        ssr.strength = 0.26;
         ssr.reflectionSpecularFalloffExponent = 2.2;
         ssr.step = 1;
         ssr.maxSteps = 82;
@@ -78,8 +78,8 @@ export class PostFx {
         ssr.ssrDownsample = 1;
         ssr.blurDispersionStrength = 0.055;
         ssr.blurDownsample = 1;
-        ssr.roughnessFactor = 0.045;
-        ssr.reflectivityThreshold = 0.048;
+        ssr.roughnessFactor = 0.18;
+        ssr.reflectivityThreshold = 0.10;
         ssr.enableSmoothReflections = true;
         ssr.attenuateFacingCamera = true;
         ssr.attenuateScreenBorders = true;
@@ -105,7 +105,7 @@ export class PostFx {
     p.fxaaEnabled = true;
     p.bloomEnabled = true;
     p.bloomThreshold = 1.0;
-    p.bloomWeight = high ? 0.20 : 0.18;
+    p.bloomWeight = high ? 0.16 : 0.14;
     p.bloomKernel = high ? 65 : 46;
     p.bloomScale = 0.5;
     // FXAA softens the image; sharpen on every preset (stronger where there is no MSAA) to keep it crisp.
@@ -160,6 +160,8 @@ export class PostFx {
     this.reduceMotion = o.reduceMotion;
     this.pipeline.bloomEnabled = o.bloom;
     this.pipeline.chromaticAberrationEnabled = !o.reduceMotion;
+    this.pipeline.grain.animated = !o.reduceMotion;
+    if (o.reduceMotion) this.aberration = 0;
   }
 
   /**

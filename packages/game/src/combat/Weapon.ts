@@ -171,6 +171,17 @@ export class Weapon {
     this.modelKey.intensity = 0.86;
     this.modelKey.renderPriority = 2;
     this.setItem(item ?? null, def, true);
+    // A scene may render before its first simulation tick (loading-screen handoff).
+    this.syncViewmodelPose();
+  }
+
+  private syncViewmodelPose(): void {
+    const p = this.anim.pose;
+    // Compensate on the camera's X/Y axes so FOV kicks cannot stretch the model in depth.
+    const s = Math.tan(this.player.camera.fov / 2) / Math.tan(REF_FOV / 2);
+    this.vmProjection.scaling.set(s, s, 1);
+    this.vm.position.set(ANCHOR.x + p.x, ANCHOR.y + p.y, ANCHOR.z + p.z);
+    this.vm.rotation.set(ANCHOR.pitch + p.pitch, ANCHOR.yaw + p.yaw, ANCHOR.roll + p.roll);
   }
 
   /** Build/rebuild the model for an item (no-op if its look did not change). */
@@ -518,13 +529,7 @@ export class Weapon {
       active: this.beaming ? Math.min(1, 0.5 + this.ramp / (2 * Math.max(1, d.rampMax))) : active,
       holster: Math.max(this.holster, this.switchT),
     });
-    const p = this.anim.pose;
-    const cam = this.player.camera;
-    // Compensate on the camera's X/Y axes so FOV kicks cannot stretch the model in depth.
-    const s = Math.tan(cam.fov / 2) / Math.tan(REF_FOV / 2);
-    this.vmProjection.scaling.set(s, s, 1);
-    this.vm.position.set(ANCHOR.x + p.x, ANCHOR.y + p.y, ANCHOR.z + p.z);
-    this.vm.rotation.set(ANCHOR.pitch + p.pitch, ANCHOR.yaw + p.yaw, ANCHOR.roll + p.roll);
+    this.syncViewmodelPose();
 
     this.flashT -= dt;
     if (this.flashT <= 0) for (const f of this.flashMeshes) f.setEnabled(false);

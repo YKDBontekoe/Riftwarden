@@ -513,8 +513,9 @@ export class Effects {
     const over = this.particleCount > this.particleBudget;
     const k = over ? 0.4 : this.high ? 1 : 0.65;
     const rs = Math.sqrt(s);
-    // One star for ordinary wrecks (a pair from big blasts): a pack fight must stay readable through the bloom.
-    this.burst('flash', pos, s >= 1.5 ? 2 : 1, undefined, s * 0.75);
+    // Keep the white core inside the wreck silhouette. Overlapping full-size stars
+    // hid the next target in pack fights, especially through bloom.
+    this.burst('flash', pos, 1, undefined, Math.sqrt(s) * 0.34);
     if (st.fire > 0) this.burst('fire', pos, Math.round(13 * s * k * st.fire), undefined, s);
     if (st.plasma > 0) this.burst('plasma', pos, Math.round(st.plasma * rs * k), undefined, s);
     if (st.zap > 0) this.burst('zap', pos, Math.round(st.zap * rs * k), undefined, rs * 1.3);
