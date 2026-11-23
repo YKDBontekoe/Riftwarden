@@ -50,7 +50,7 @@ export const FAMILIES: Readonly<Record<WeaponFamily, FamilyDef>> = {
 
 export const SOCKET_LABEL: Record<SocketKind, string> = { barrel: 'BARREL', power: 'POWER', system: 'SYSTEM' };
 
-const FINISHES: Finish[] = ['arctic', 'gunmetal', 'sand', 'slate'];
+export const FINISHES: Finish[] = ['arctic', 'gunmetal', 'sand', 'slate'];
 
 function pick<T>(items: readonly T[], weight: (t: T) => number, rand: () => number): T {
   let total = 0;
@@ -70,16 +70,22 @@ const ATTACHMENTS: [number, number][] = [[0, 1], [1, 1], [1, 2], [2, 2], [2, 3],
  * Roll a valid component combination for a family. Only components offered for the
  * family (and rarity) are drawn, so every result has geometry and supported mechanics.
  */
-export function rollBuild(rand: () => number, family: WeaponFamily, chassis: string, rarityIndex: number, sockets: number): WeaponBuild {
+/** `exclude`: component ids the warden has not mastered yet (one rand draw per pick either way, so streams never shift). */
+export function rollBuild(rand: () => number, family: WeaponFamily, chassis: string, rarityIndex: number, sockets: number, exclude: readonly string[] = []): WeaponBuild {
   const ri = Math.max(0, Math.min(6, rarityIndex));
-  const one = (slot: 'barrel' | 'core' | 'cooling' | 'mechanism') => pick(componentsFor(slot, family, ri), (c) => c.weight * (c.minRarity ? 2 : 1), rand).id;
+  const open = (slot: 'barrel' | 'core' | 'cooling' | 'mechanism' | 'attachment') => {
+    const all = componentsFor(slot, family, ri);
+    const ok = exclude.length ? all.filter((c) => !exclude.includes(c.id)) : all;
+    return ok.length ? ok : all;
+  };
+  const one = (slot: 'barrel' | 'core' | 'cooling' | 'mechanism') => pick(open(slot), (c) => c.weight * (c.minRarity ? 2 : 1), rand).id;
   const barrel = one('barrel');
   const core = one('core');
   const cooling = one('cooling');
   const mechanism = one('mechanism');
   const [lo, hi] = ATTACHMENTS[ri];
   const n = lo + Math.floor(rand() * (hi - lo + 1));
-  const pool = [...componentsFor('attachment', family, ri)];
+  const pool = [...open('attachment')];
   const attachments: string[] = [];
   for (let i = 0; i < n && pool.length; i++) {
     const c = pick(pool, (x) => x.weight, rand);

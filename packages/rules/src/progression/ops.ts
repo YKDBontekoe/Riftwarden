@@ -17,7 +17,10 @@ const COMPONENT_SLOTS = ['barrel', 'core', 'cooling', 'mechanism', 'attachment']
 import { BUILD_OPS } from '../home/build/ops';
 import { TUTORIAL_OPS } from './tutorial';
 import { allocateNode, respecTree } from './treeOps';
-import { lockReason, opFeature, recipeFeature } from './unlocks';
+import { lockReason, lootLocks, opFeature, recipeFeature } from './unlocks';
+import { componentRank, FAMILY_NAME, finishesAt, MASTERY_FAMILIES, perkBlocker, rankOf } from './mastery';
+import type { WeaponFamily } from '../data/defs';
+import type { Finish } from '../weapons/build';
 import { recipeDef } from '../economy/recipes';
 
 /**
@@ -80,6 +83,9 @@ const DEFS: Record<string, OpDef> = {
   uninstallModule: { args: ['str', 'int'], run: (d, a, tx) => TX.withTx(d, tx, () => uninstallModule(d, a[0] as string, a[1] as number)) },
   transferModule: { args: ['str', 'int', 'str', 'int'], run: (d, a, tx) => TX.withTx(d, tx, () => transferModule(d, a[0] as string, a[1] as number, a[2] as string, a[3] as number)) },
   selectTier: { args: ['int'], run: (d, a) => bool(selectTier(d, a[0] as number), 'Tier locked') },
+  // ---- weapon-family mastery (perk choices are free to change; finishes need the rank)
+  masteryPerk: { args: ['str', 'int', 'int'], run: (d, a) => choosePerk(d, a[0] as string, a[1] as number, a[2] as number) },
+  masteryFinish: { args: ['str', 'str?'], run: (d, a) => chooseFinish(d, a[0] as string, (a[1] as string | null) ?? null) },
   // ---- Warden skill tree
   treeAllocate: { args: ['str'], run: (d, a) => allocateNode(d, a[0] as string) },
   treeRespec: { args: [], run: (d, _a, tx) => TX.withTx(d, tx, () => respecTree(d) as never) },
@@ -119,11 +125,47 @@ export function opError(name: unknown, args: unknown): string | null {
   return null;
 }
 
+/** Choose a mastery perk option for a tier (free to change: there is no respec cost). */
+function choosePerk(d: SaveData, family: string, tier: number, option: number): OpResult {
+  const f = family as WeaponFamily;
+  const why = perkBlocker(d.progress.mastery, f, tier, option);
+  if (why) return { ok: false, reason: why };
+  const m = { ...(d.progress.mastery ?? {}) };
+  const cur = m[f] ?? { xp: 0, perks: [] };
+  const perks = [...cur.perks];
+  while (perks.length < tier) perks.push(-1);
+  perks[tier - 1] = option;
+  m[f] = { ...cur, perks };
+  d.progress.mastery = m;
+  return { ok: true };
+}
+
+/** Pick (or clear with null) the cosmetic finish for a family's weapons. */
+function chooseFinish(d: SaveData, family: string, finish: string | null): OpResult {
+  const f = family as WeaponFamily;
+  if (!MASTERY_FAMILIES.includes(f)) return { ok: false, reason: 'Unknown weapon family' };
+  const cur = d.progress.mastery?.[f];
+  if (finish !== null && !finishesAt(rankOf(d.progress.mastery, f)).includes(finish as Finish)) return { ok: false, reason: 'That finish is not unlocked yet' };
+  const m = { ...(d.progress.mastery ?? {}) };
+  const next = { ...(cur ?? { xp: 0, perks: [] }) };
+  if (finish === null) delete next.finish;
+  else next.finish = finish as Finish;
+  m[f] = next;
+  d.progress.mastery = m;
+  return { ok: true };
+}
+
 /** Staged unlocks (progression/unlocks): a locked station, system or recipe refuses its operations. */
 function lockError(d: SaveData, name: string, args: unknown[]): string | null {
   const feature = name in BUILD_OPS ? 'station:architect' : opFeature(name, args);
   const reason = feature ? lockReason(d, feature) : null;
   if (reason) return reason;
+  if (name === 'modifyComponent') {
+    // Mastery components refit only once the family's rank unlocks them.
+    const it = d.items.find((x) => x.uid === args[0]);
+    const fam = it?.build?.family;
+    if (fam && lootLocks(d).includes(`comp:${fam}:${args[2] as string}`)) return `${FAMILY_NAME[fam]} mastery rank ${componentRank(fam, args[2] as string)} unlocks that component.`;
+  }
   if (name === 'craft') {
     const r = recipeDef(args[0] as string);
     const f = r ? recipeFeature(r.output) : null;

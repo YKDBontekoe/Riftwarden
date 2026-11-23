@@ -1,3 +1,4 @@
+import { bankMastery } from '../mastery';
 import { storageExpansionCost, STORAGE_EXPANSION } from '../../loot/economy';
 import { rarity } from '../../loot/rarity';
 import { fitsSlot, getSlot, type ItemInstance, SLOT_IDS, type SlotId, defaultSlot } from '../items';
@@ -169,6 +170,8 @@ function applyBanked(data: SaveData, a: NonNullable<SaveData['activeRun']>, rewa
   const xp = Math.max(0, Math.floor(rewards.xp ?? 0));
   a.salvageSecured += s;
   data.progress.xp = Math.min(MAX_XP, data.progress.xp + xp);
+  const mastery = bankMastery(data.progress.mastery, rewards.mastery);
+  if (mastery) data.progress.mastery = mastery;
   a.itemsSecured += incoming.length;
   a.creditsSecured += cr;
   a.componentsSecured += co;
@@ -243,6 +246,8 @@ export function recordRun(data: SaveData, result: RunResult): boolean {
     }
     // XP banked at checkpoints is already applied; the end of the run adds what was kept.
     data.progress.xp = Math.min(MAX_XP, data.progress.xp + Math.max(0, Math.floor(result.xpKept ?? 0)));
+    const mk = bankMastery(data.progress.mastery, result.masteryKept);
+    if (mk) data.progress.mastery = mk;
     data.totals.runs++;
     data.totals.kills += result.kills;
     data.totals.itemsLost += result.itemsLost;

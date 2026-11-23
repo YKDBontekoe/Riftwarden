@@ -343,7 +343,7 @@ export class Flow {
         milestones: [...save.milestones],
         tree: { seed: save.progress.tree.seed, allocated: [...save.progress.tree.allocated] },
         locks: save.activeRun?.id === run.id ? save.activeRun.locks : undefined,
-        lockedSlots: lockedSlots(save),
+        ...{ lockedSlots: lockedSlots(save), mastery: structuredClone(save.progress.mastery) },
         layout,
         tutorial: this.tutorialHost(),
         hooks: {

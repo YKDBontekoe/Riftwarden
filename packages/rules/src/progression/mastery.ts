@@ -217,3 +217,38 @@ export function sanitizeMastery(raw: unknown): MasteryState | undefined {
   }
   return Object.keys(out).length ? out : undefined;
 }
+
+/** Mastery XP per family (unsecured/secured pools of a run, banked into the save). */
+export type MasteryGain = Partial<Record<WeaponFamily, number>>;
+
+/** Sum of two gains (new object; non-finite or negative values are dropped). */
+export function addMastery(a: MasteryGain | undefined, b: MasteryGain | undefined, scale = 1): MasteryGain {
+  const out: MasteryGain = { ...(a ?? {}) };
+  for (const f of MASTERY_FAMILIES) {
+    const v = Math.floor((b?.[f] ?? 0) * scale);
+    if (Number.isFinite(v) && v > 0) out[f] = (out[f] ?? 0) + v;
+  }
+  return out;
+}
+
+export const masteryTotal = (g: MasteryGain | undefined): number => MASTERY_FAMILIES.reduce((s, f) => s + Math.max(0, g?.[f] ?? 0), 0);
+
+/** Apply banked mastery XP to a profile's mastery state (bounded). */
+export function bankMastery(m: MasteryState | undefined, g: MasteryGain | undefined): MasteryState | undefined {
+  if (!masteryTotal(g)) return m;
+  const out: MasteryState = { ...(m ?? {}) };
+  for (const f of MASTERY_FAMILIES) {
+    const v = Math.max(0, Math.floor(g?.[f] ?? 0));
+    if (!v) continue;
+    const cur = out[f] ?? { xp: 0, perks: [] };
+    out[f] = { ...cur, perks: [...cur.perks], xp: Math.min(MASTERY_XP_CAP, cur.xp + v) };
+  }
+  return out;
+}
+
+/** Mastery XP for a kill by role (elite modifiers count as elite). */
+export function killMastery(role: string | undefined, elite: boolean): number {
+  if (role === 'boss') return MASTERY_XP.boss;
+  if (role === 'hvt') return MASTERY_XP.hvt;
+  return elite ? MASTERY_XP.elite : MASTERY_XP.normal;
+}

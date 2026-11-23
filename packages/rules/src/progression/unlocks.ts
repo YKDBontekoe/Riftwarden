@@ -1,6 +1,7 @@
 // Staged feature unlocks (docs/progression-design.md §5): a new warden starts with one weapon family, one ability and
 // the core stations; families, slots, stations and endgame systems open with Warden level (basics) and the highest
 // Rift Level unlocked (endgame). Pure: the HQ unlock track, the op gate, the loot locks and the slot rules read it.
+import { ALL_COMPONENT_LOCKS, componentLocks, type MasteryState } from './mastery';
 import type { WeaponFamily } from '../data/defs';
 import type { Category } from '../loot/types';
 import type { SlotId } from './items';
@@ -45,7 +46,7 @@ const BY_ID = new Map(UNLOCKS.map((u) => [u.id, u]));
 
 /** What the unlock rules read from a save. */
 export interface UnlockProgress {
-  progress: { xp: number };
+  progress: { xp: number; mastery?: MasteryState };
   threat: { unlocked: number };
 }
 
@@ -98,14 +99,15 @@ export function lockedCategories(d: UnlockProgress): Category[] {
 
 /** Loot locks as one sorted list (recorded with loot rolls so the server replays the same pool). */
 export function lootLocks(d: UnlockProgress): string[] {
-  return [...lockedCategories(d).map((c) => `cat:${c}`), ...lockedFamilies(d).map((f) => `family:${f}`)].sort();
+  // Mastery components (`comp:<family>:<id>`) stay locked until the family's rank unlocks them.
+  return [...lockedCategories(d).map((c) => `cat:${c}`), ...lockedFamilies(d).map((f) => `family:${f}`), ...(unlockAll ? [] : componentLocks(d.progress.mastery))].sort();
 }
 
 export const lockedFamiliesOf = (locks: readonly string[] | undefined): WeaponFamily[] => (locks ?? []).filter((l) => l.startsWith('family:')).map((l) => l.slice(7) as WeaponFamily);
 export const lockedCategoriesOf = (locks: readonly string[] | undefined): Category[] => (locks ?? []).filter((l) => l.startsWith('cat:')).map((l) => l.slice(4) as Category);
 
 /** Every lock id that can appear in `lootLocks` (server validation of recorded locks). */
-export const ALL_LOOT_LOCKS: readonly string[] = ['cat:module', 'cat:ultimate', 'family:beam', 'family:rail', 'family:swarm'];
+export const ALL_LOOT_LOCKS: readonly string[] = ['cat:module', 'cat:ultimate', 'family:beam', 'family:rail', 'family:swarm', ...ALL_COMPONENT_LOCKS];
 
 const SLOT_UNLOCK: Partial<Record<SlotId, string>> = { ability2: 'slot:ability2', weapon2: 'slot:weapon2', accessory2: 'slot:accessory2', ultimate: 'slot:ultimate' };
 

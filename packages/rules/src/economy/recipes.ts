@@ -161,9 +161,9 @@ export function recipeBases(recipe: Recipe): BaseDef[] {
 }
 
 /** Generate the crafted item (deterministic for a seed). */
-export function fabricate(recipe: Recipe, q: QualityDef, level: number, seed: number, uid: string, rand: () => number, now = Date.now()): ItemInstance | null {
+export function fabricate(recipe: Recipe, q: QualityDef, level: number, seed: number, uid: string, rand: () => number, now = Date.now(), locks: readonly string[] = []): ItemInstance | null {
   if (recipe.output.kind !== 'item') return null;
   const base = pickWeighted(recipeBases(recipe), (b) => Math.max(0.0001, b.weight), rand);
   if (!base) return null;
-  return generateItem({ uid, seed, level, rarity: rollQualityRarity(rand, q), baseId: base.id, source: 'crafted', now });
+  return generateItem({ uid, seed, level, rarity: rollQualityRarity(rand, q), baseId: base.id, source: 'crafted', now, componentLocks: locks });
 }

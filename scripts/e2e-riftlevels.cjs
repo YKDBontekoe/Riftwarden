@@ -290,9 +290,7 @@ async function openDeploy(p) {
         const r = window.__rift;
         const g = r.game;
         const tick = () => new Promise((res) => setTimeout(res, 0));
-        let seen = 0;
-        const { uiEvents } = await import('/@id/@riftwarden/game/ui/store');
-        const off = uiEvents.on('mastery', (e) => { seen += e.xp; });
+        let seen = '';
         // Kill walkers with the real weapon pipeline (direct weapon damage) until wave 5 banks.
         for (let guard = 0; guard < 3000 && g.cfg.run.lastBankedWave < 5; guard++) {
           if (g.screen === 'upgrade' && g.offer) { g.chooseUpgrade(g.offer[0].id); await tick(); }
@@ -300,11 +298,14 @@ async function openDeploy(p) {
           if (g.waves.phase === 'prep') g.startWave();
           r.advance(0.5);
           for (const e of [...g.enemies.active]) g.damageEnemy('player', e, 1e6, e.center(), false);
+          if (!seen) {
+            await tick();
+            seen = document.querySelector('[data-testid=mastery-gain]')?.textContent ?? '';
+          }
         }
-        off();
         return { seen, unsecured: g.cfg.run.unsecured.mastery?.plasma ?? 0, saved: r.profile.save.progress.mastery?.plasma?.xp ?? 0, banked: g.cfg.run.lastBankedWave };
       });
-      check('F1 weapon kills earn plasma mastery (HUD event) and the checkpoint banks it into the profile', f1.seen > 0 && f1.saved > 0 && f1.banked === 5, JSON.stringify(f1));
+      check('F1 weapon kills earn plasma mastery (HUD event) and the checkpoint banks it into the profile', /PLASMA MASTERY/.test(f1.seen) && f1.saved > 0 && f1.banked === 5, JSON.stringify(f1));
       await ev(p4, () => window.__rift.flow.abandonRun());
       await waitFor(p4, () => window.__rift.state().location === 'home' && !window.__rift.flow.busy);
       // Rank 12 on plasma: rank damage + a perk in the arena's stat pipeline; the scatter mechanism (rank 5) unlocks.
@@ -320,7 +321,7 @@ async function openDeploy(p) {
         return { perk, tooDeep, fin, prestige, locks: lootLocks(r.profile.save) };
       });
       check('F2 perks need their rank, finishes need theirs; mastered components leave the loot locks', f2.perk && !f2.tooDeep && f2.fin && !f2.prestige && !f2.locks.includes('comp:plasma:mc_scatter') && f2.locks.includes('comp:plasma:co_prism'), JSON.stringify(f2));
-      await ev(p4, () => window.__rift.home.openTerminal('workshop'));
+      await ev(p4, () => { window.__rift.home.setScreen('home'); window.__rift.home.openTerminal('workshop'); });
       await p4.click('[data-tab=mastery]');
       await p4.waitForSelector('[data-testid=mastery-bench]', { timeout: 20000 });
       const f3 = await ev(p4, () => ({ rank: document.querySelector('[data-testid=mastery-rank]')?.textContent, perks: document.querySelectorAll('[data-testid=mastery-perks] button:not([disabled])').length, on: document.querySelector('[data-perk="2-1"]')?.className ?? '' }));

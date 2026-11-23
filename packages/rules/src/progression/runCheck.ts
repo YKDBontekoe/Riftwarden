@@ -7,6 +7,7 @@
 //   - resources, XP, kills and timing must fit generous per-wave ceilings.
 // It cannot stop a client that fishes run ids for a lucky stream, but it rejects edited or invented items and
 // edited resource numbers, which is what matters for a loot game. Co-op runs are server-simulated (no check).
+import { masteryTotal } from './mastery';
 import { mulberry32 } from '../combat/damage';
 import { DROP_SOURCES, type DropSource } from '../loot/drops';
 import { generateItem, hashSeed } from '../loot/generate';
@@ -27,6 +28,8 @@ export const CEILINGS = {
   componentsPerWave: (w: number) => 8 + Math.floor(w / 5),
   shardsPerWave: 12,
   xpPerWave: (w: number) => 3000 + 300 * w,
+  /** Mastery XP per wave (all families together; a boss is worth 300). */
+  masteryPerWave: (w: number) => 1500 + 40 * w,
   itemsPerWave: 40,
   killsPerWave: 220,
   /** Fastest plausible wave (seconds). */
@@ -134,7 +137,8 @@ function checkRewards(d: SaveData, runId: string, tier: number, mapSeed: number,
     within('salvage', rewards.salvage, CEILINGS.salvagePerWave(top) * f) ??
     within('components', rewards.components, CEILINGS.componentsPerWave(top) * f) ??
     within('shards', rewards.shards, CEILINGS.shardsPerWave * f) ??
-    within('xp', rewards.xp, CEILINGS.xpPerWave(top) * f);
+    within('xp', rewards.xp, CEILINGS.xpPerWave(top) * f) ??
+    within('mastery', masteryTotal(rewards.mastery), CEILINGS.masteryPerWave(top) * f);
   if (bad) return bad;
   const items = rewards.items ?? [];
   if (items.length > CEILINGS.itemsPerWave * span) return 'more items than the waves drop';

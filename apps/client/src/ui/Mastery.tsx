@@ -28,7 +28,7 @@ const FAMILY_UNLOCK: Record<WeaponFamily, string | null> = { plasma: null, rail:
 const pct = (v: number) => `${v > 0 ? '+' : ''}${Math.round(v * 1000) / 10}%`;
 function perkText(p: PerkDef): string {
   const d = STAT_DEFS[p.stat];
-  const v = p.op === 'add' && d.kind !== 'pct' ? `${p.value > 0 ? '+' : ''}${Math.round(p.value * 1000) / 1000}` : pct(p.value);
+  const v = p.op === 'add' && d.kind !== 'chance' ? `${p.value > 0 ? '+' : ''}${Math.round(p.value * 1000) / 1000}` : pct(p.value);
   return `${v} ${d.label.toLowerCase()}`;
 }
 
@@ -52,7 +52,7 @@ export function MasteryBench({ flow, save }: { flow: Flow; save: SaveData }) {
         {MASTERY_FAMILIES.map((f) => {
           const r = rankInfo(save.progress.mastery?.[f]?.xp ?? 0);
           return (
-            <button key={f} className={`m-0 text-left ${f === fam ? 'on' : ''}`} data-family={f} onClick={() => (setFam(f), setMsg(null))}>
+            <button key={f} className={`m-0 text-left ${f === fam ? 'on [border-color:var(--amber)]' : ''}`} data-family={f} onClick={() => (setFam(f), setMsg(null))}>
               <b className="block">{FAMILY_NAME[f]}</b>
               <span className="font-mono text-[10.5px] text-faint">RANK {r.rank}/{MAX_RANK}</span>
               <span className="block h-[3px] mt-[4px] bg-[rgb(255_255_255/0.08)]"><span className="block h-full bg-amber" style={{ width: `${Math.round((r.rank + r.frac) / MAX_RANK * 100)}%` }} /></span>
@@ -106,9 +106,9 @@ export function MasteryBench({ flow, save }: { flow: Flow; save: SaveData }) {
             const chosen = m?.perks[t - 1];
             const open = t <= tiers;
             return opts.map((p, o) => (
-              <button key={`${t}-${o}`} className={`m-0 text-left ${chosen === o ? 'on' : ''}`} disabled={!open} data-perk={`${t}-${o}`} onClick={() => op('masteryPerk', [fam, t, o], `${p.name} chosen`)}>
+              <button key={`${t}-${o}`} className={`m-0 text-left ${chosen === o ? 'on [border-color:var(--amber)] [background:rgb(255_181_71/0.12)] [box-shadow:inset_3px_0_0_var(--amber)]' : ''}`} disabled={!open} data-perk={`${t}-${o}`} onClick={() => op('masteryPerk', [fam, t, o], `${p.name} chosen`)}>
                 <span className="font-mono text-[10px] text-faint">RANK {t * PERK_EVERY}{open ? '' : ' · LOCKED'}</span>
-                <b className="block">{p.name}</b>
+                <b className="block">{chosen === o ? '✓ ' : ''}{p.name}</b>
                 <span className="text-[12.5px] text-muted">{perkText(p)} with {FAMILY_NAME[fam].toLowerCase()} weapons</span>
               </button>
             ));

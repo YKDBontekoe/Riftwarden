@@ -341,6 +341,8 @@ type EventMap = {
   hit: HitKind;
   damageNumber: DamageNumberEvent;
   banner: BannerEvent;
+  /** Weapon-family mastery XP earned by a kill (HUD float). */
+  mastery: { family: string; xp: number };
   /** severity 0..1; angle = source direction relative to view (radians, 0 = ahead, + = right), null if unknown. */
   hurt: { severity: number; angle: number | null };
   coresGained: number;

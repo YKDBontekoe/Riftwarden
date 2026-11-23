@@ -14,7 +14,7 @@ import type { ItemInstance } from '@riftwarden/rules/loot/types';
 import { rarity } from '@riftwarden/rules/loot/rarity';
 import type { Player } from '../player/Player';
 import { WeaponAnimator } from '../weapons/animator';
-import { defaultBuild, type WeaponBuild } from '@riftwarden/rules/weapons/build';
+import { defaultBuild, type WeaponBuild, type Finish } from '@riftwarden/rules/weapons/build';
 import { buildWeaponModel, type WeaponRig } from '../weapons/model';
 import { unlit } from '../visuals/materials';
 import { starSprite } from '../visuals/textures';
@@ -120,6 +120,8 @@ export class Weapon {
   rig!: WeaponRig;
   anim!: WeaponAnimator;
   private buildKey = '';
+  /** Mastery cosmetic finish per family (undefined = the item's own finish). */
+  finishFor: (family: WeaponFamily) => Finish | undefined = () => undefined;
   /** Built viewmodels by look key, most recently used last (at most two). */
   private models = new Map<string, { rig: WeaponRig; anim: WeaponAnimator }>();
   private flashMeshes: Mesh[] = [];
@@ -188,7 +190,9 @@ export class Weapon {
   setItem(item: ItemInstance | null, def: WeaponDef, initial = false, quick = false): void {
     this.def = def;
     this.spread = Math.max(def.spreadMin, Math.min(def.spreadMax, this.spread));
-    const build: WeaponBuild = item?.build ?? defaultBuild(def.id, def.family);
+    const own: WeaponBuild = item?.build ?? defaultBuild(def.id, def.family);
+    const finish = this.finishFor(own.family);
+    const build: WeaponBuild = finish && finish !== own.finish ? { ...own, finish } : own;
     const installed = item?.socketed ?? [];
     const key = JSON.stringify([build, installed.map((m) => m?.uid ?? null), item?.rarity, def.element, item?.uniqueId]);
     if (key === this.buildKey) return;

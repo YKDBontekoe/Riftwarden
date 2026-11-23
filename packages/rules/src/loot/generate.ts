@@ -1,3 +1,4 @@
+import { excludedComponents } from '../progression/mastery';
 import { rollSignature } from './signatures';
 import { mulberry32 } from '../combat/damage';
 import { STAT_DEFS, type StatKey } from '../combat/stats';
@@ -107,6 +108,8 @@ export interface GenSpec {
   fixedRoll?: number;
   /** Weapon families the warden has not unlocked (staged unlocks): their chassis are never picked. */
   excludeFamilies?: readonly string[];
+  /** Loot locks (`comp:<family>:<id>`): weapon components the warden has not mastered never roll. */
+  componentLocks?: readonly string[];
 }
 
 export function pickBase(category: Category, rand: () => number, allowExclusive: readonly string[] = [], excludeFamilies: readonly string[] = []): BaseDef {
@@ -146,7 +149,7 @@ export function generateItem(spec: GenSpec): ItemInstance {
       coolRate: lerp(w.coolRate[0], w.coolRate[1], roll()),
     };
     {
-      build = rollBuild(mulberry32((spec.seed ^ 0x5bd1e995) >>> 0), w.family, base.id, fixed === undefined ? r.index : 0, sockets);
+      build = rollBuild(mulberry32((spec.seed ^ 0x5bd1e995) >>> 0), w.family, base.id, fixed === undefined ? r.index : 0, sockets, excludedComponents(spec.componentLocks, w.family));
       if (fixed !== undefined) {
         // Starter-grade kit: plain default components.
         build.barrel = DEFAULT_PARTS[w.family].barrel;

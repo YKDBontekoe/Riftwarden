@@ -105,3 +105,50 @@ describe('mastery perks and modifiers', () => {
     expect((s as Record<string, unknown>).bogus).toBeUndefined();
   });
 });
+
+describe('mastery banking and loot', () => {
+  it('rides the ledger: banked at checkpoints, 25% of the unsecured pool kept on a loss', async () => {
+    const { RunLedger } = await import('@riftwarden/rules/progression/run');
+    const { createDefaultSave, beginRun, bankRewards, recordRun } = await import('@riftwarden/rules/progression/save');
+    const d = createDefaultSave(1);
+    beginRun(d, 'rm', 1, 1);
+    const run = new RunLedger('rm', 1, 1);
+    for (let w = 1; w <= 5; w++) run.waveCleared(w);
+    run.collect({ mastery: { plasma: 120 } });
+    const moved = run.bank(5)!;
+    expect(moved.mastery).toEqual({ plasma: 120 });
+    expect(bankRewards(d, 'rm', 5, moved)).toBe(true);
+    expect(d.progress.mastery?.plasma?.xp).toBe(120);
+    run.collect({ mastery: { plasma: 100, rail: 40 } });
+    const res = run.finalize('defeat');
+    expect(res.masteryKept).toEqual({ plasma: 25, rail: 10 });
+    recordRun(d, res);
+    expect(d.progress.mastery?.plasma?.xp).toBe(145);
+    expect(d.progress.mastery?.rail?.xp).toBe(10);
+  });
+
+  it('weapons never roll components the family has not mastered', async () => {
+    const { generateItem } = await import('@riftwarden/rules/loot/generate');
+    const locks = componentLocks({});
+    let scatter = 0;
+    for (let seed = 1; seed < 600; seed++) {
+      const it = generateItem({ uid: `m${seed}`, seed, level: 20, rarity: 'legendary', baseId: 'plasma_repeater', source: 't', componentLocks: locks });
+      expect(it.build!.mechanism).not.toBe('mc_scatter');
+      expect(it.build!.barrel).not.toBe('pb_long');
+      expect(it.build!.core).not.toBe('co_prism');
+      const free = generateItem({ uid: `m${seed}`, seed, level: 20, rarity: 'legendary', baseId: 'plasma_repeater', source: 't' });
+      if (free.build!.mechanism === 'mc_scatter') scatter++;
+    }
+    expect(scatter).toBeGreaterThan(0);
+  });
+
+  it('the server refuses mastery XP beyond the per-wave ceiling', async () => {
+    const { checkRunEntry } = await import('@riftwarden/rules/progression/runCheck');
+    const { createDefaultSave, beginRun } = await import('@riftwarden/rules/progression/save');
+    const d = createDefaultSave(1);
+    beginRun(d, 'rc', 1, 1);
+    const entry = (plasma: number) => ({ kind: 'bank' as const, runId: 'rc', wave: 5, bosses: 0, loot: [], rewards: { salvage: 0, credits: 0, components: 0, shards: 0, xp: 0, items: [], mastery: { plasma } } });
+    expect(checkRunEntry(d, entry(400), 2)).toBeNull();
+    expect(checkRunEntry(d, entry(10_000_000), 2)).toMatch(/mastery/);
+  });
+});

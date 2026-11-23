@@ -1,3 +1,4 @@
+import { lootLocks } from '../progression/unlocks';
 import { hashSeed } from '../loot/generate';
 import { mulberry32 } from '../combat/damage';
 import type { ItemInstance, RolledAffix } from '../loot/types';
@@ -457,7 +458,7 @@ export function craft(data: SaveData, recipeId: string, qualityId: string | null
     const owned = new Set(allOwnedUids(data));
     let uid = newUid('cr');
     while (owned.has(uid)) uid = newUid('cr');
-    const item = fabricate(recipe, q!, level, seed, uid, rand);
+    const item = fabricate(recipe, q!, level, seed, uid, rand, Date.now(), lootLocks(data));
     if (!item) return fail('Fabrication failed: no valid output');
     pay(data, cost);
     data.economy.crafts++;

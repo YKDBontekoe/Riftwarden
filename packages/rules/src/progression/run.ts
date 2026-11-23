@@ -1,3 +1,4 @@
+import { addMastery, masteryTotal, type MasteryGain } from './mastery';
 import type { ItemInstance } from './items';
 import { isCheckpointWave } from './tiers';
 import { XP, xpFor } from './level';
@@ -21,6 +22,8 @@ export interface Rewards {
   /** Warden XP (derived from run statistics by accrueXp; banked like salvage). */
   xp: number;
   items: ItemInstance[];
+  /** Weapon-family mastery XP (kills with the family; banked like XP, 25% kept on a loss). Optional. */
+  mastery?: MasteryGain;
 }
 
 export type RunOutcome = 'returned' | 'defeat' | 'abandoned';
@@ -71,6 +74,9 @@ export interface RunResult {
   xpSecured?: number;
   /** Unsecured XP kept at the end (all of it on extraction, a share on defeat/abandon). */
   xpKept?: number;
+  /** Mastery XP banked at checkpoints this run, and the share of the unsecured pool kept at the end. */
+  masterySecured?: MasteryGain;
+  masteryKept?: MasteryGain;
   xpLost?: number;
   /** Names of lost / secured items for the summary screens (capped). */
   lostItems?: ItemBrief[];
@@ -169,6 +175,8 @@ export class RunLedger {
     this.unsecured.salvage += s;
     this.unsecured.credits += cr;
     this.unsecured.components += co;
+    const mg = masteryTotal(r.mastery);
+    if (mg) this.unsecured.mastery = addMastery(this.unsecured.mastery, r.mastery);
     let added = 0;
     for (const it of r.items ?? []) {
       if (this.has(it.uid)) continue;
@@ -176,7 +184,7 @@ export class RunLedger {
       this.itemsCollected++;
       added++;
     }
-    return s > 0 || cr > 0 || co > 0 || sh > 0 || xp > 0 || added > 0;
+    return s > 0 || cr > 0 || co > 0 || sh > 0 || xp > 0 || mg > 0 || added > 0;
   }
 
   /** Items collected so far (for statistics). */
@@ -244,6 +252,7 @@ export class RunLedger {
     this.secured.components += moved.components;
     this.secured.shards += moved.shards;
     this.secured.xp += moved.xp;
+    if (moved.mastery) this.secured.mastery = addMastery(this.secured.mastery, moved.mastery);
     this.secured.items.push(...moved.items);
     this.lastBankedWave = wave;
     this.checkpoints++;
@@ -264,6 +273,7 @@ export class RunLedger {
     this.secured.components += moved.components;
     this.secured.shards += moved.shards;
     this.secured.xp += moved.xp;
+    if (moved.mastery) this.secured.mastery = addMastery(this.secured.mastery, moved.mastery);
     this.secured.items.push(...moved.items);
     return moved;
   }
@@ -337,6 +347,8 @@ export class RunLedger {
       xpSecured: this.secured.xp,
       xpKept,
       xpLost: this.unsecured.xp - xpKept,
+      masterySecured: addMastery(undefined, this.secured.mastery),
+      masteryKept: addMastery(undefined, this.unsecured.mastery, outcome === 'returned' ? 1 : XP.keepOnLoss),
       lostItems: this.unsecured.items.slice(0, 12).map(brief),
       securedItems: this.secured.items.slice(0, 12).map(brief),
       checkpoints: this.checkpoints,

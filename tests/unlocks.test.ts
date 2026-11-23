@@ -18,7 +18,8 @@ describe('unlock track', () => {
     const l = lootLocks(at(1));
     expect(l).toEqual([...l].sort());
     for (const x of l) expect(ALL_LOOT_LOCKS).toContain(x);
-    expect(lootLocks(at(30, 30))).toEqual([]);
+    // Only mastery components stay locked once every staged unlock is open.
+    expect(lootLocks(at(30, 30)).every((l) => l.startsWith('comp:'))).toBe(true);
   });
 
   it('slots, ops and reasons follow the track', () => {

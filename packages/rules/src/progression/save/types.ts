@@ -200,6 +200,8 @@ export interface ProgressState {
   tree: { seed: number; allocated: string[] };
   /** Paid respecs so far (respec cost escalates). */
   respecs: number;
+  /** Weapon-family mastery (optional: absent = nothing mastered yet). */
+  mastery?: import('../mastery').MasteryState;
 }
 
 /** Stable 32-bit seed for a profile's skill tree. */

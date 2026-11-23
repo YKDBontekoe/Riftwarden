@@ -1,3 +1,4 @@
+import { sanitizeMastery } from '../mastery';
 import { ALL_LOOT_LOCKS } from '../unlocks';
 import { sanitizeMapState } from '../../runmap/state';
 import { isDamageElement } from '../../combat/elements';
@@ -590,5 +591,7 @@ export function sanitizeProgress(raw: unknown, profileId: string): ProgressState
   out.tree.allocated = [...new Set(arr(tree.allocated).filter((x): x is string => typeof x === 'string' && x.length <= 24))].slice(0, 2000);
   out.respecs = int(p.respecs, 0, 0, 10_000);
   out.tree.allocated = pruneAllocation(out.tree.seed, levelForXp(out.xp), out.tree.allocated);
+  const mastery = sanitizeMastery(p.mastery);
+  if (mastery) out.mastery = mastery;
   return out;
 }

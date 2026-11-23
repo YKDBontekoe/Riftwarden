@@ -1,3 +1,5 @@
+import { baseDef } from '@riftwarden/rules/loot/bases';
+import { killMastery, masteryModifiers, type MasteryState } from '@riftwarden/rules/progression/mastery';
 import '../babylonSideEffects';
 import { sectorAffinity } from '@riftwarden/rules/combat/elements';
 import { Ray } from '@babylonjs/core/Culling/ray.core';
@@ -136,6 +138,8 @@ export interface ArenaConfig {
   locks?: readonly string[];
   /** Slots the warden has not unlocked (run equips refuse them). */
   lockedSlots?: readonly SlotId[];
+  /** Weapon-family mastery at deployment (rank damage, perks, finishes). */
+  mastery?: MasteryState;
   /** Arena layout for this run (procedural from the run seed); defaults to the classic hand-built arena. */
   layout?: ArenaLayout;
   /** Run map node this arena plays (absent = classic endless run with checkpoint choices). */
@@ -414,6 +418,7 @@ export class Game {
     this.loot.onLand = (p) => this.pickups.landed(p);
     this.inventory = new RunInventory(cfg.loadout, cfg.run);
     this.inventory.lockedSlots = cfg.lockedSlots ?? [];
+    this.weapon.finishFor = (f) => cfg.mastery?.[f]?.finish;
     if (cfg.node?.carry) this.inventory.adoptLoadout(cfg.node.carry.loadout);
     // Every map node rolls its own loot stream (a new arena must not replay the previous node's drops).
     const nodeSalt = cfg.node?.node.seed ?? 0;
@@ -815,7 +820,7 @@ export class Game {
    */
   rebuildStats(): void {
     this.gearEffects = gearUniques(this.inventory.equippedItems(this.weaponSlots.inactive));
-    const mods = [...equipmentModifiers(this.inventory.equippedItems(this.weaponSlots.inactive)), ...this.treeMods, ...this.modifiers, ...this.director.build.modifiers(), ...this.director.buffModifiers(), ...(this.node?.mods() ?? [])];
+    const mods = [...equipmentModifiers(this.inventory.equippedItems(this.weaponSlots.inactive)), ...this.treeMods, ...masteryModifiers(this.cfg.mastery, this.handFamily()), ...this.modifiers, ...this.director.build.modifiers(), ...this.director.buffModifiers(), ...(this.node?.mods() ?? [])];
     Object.assign(this.stats, computeStats(mods));
     this.player.applyStats(this.stats, this.attackerScale);
     this.tactical.rechargeMult = this.stats.tacticalRechargeMult;
@@ -1557,8 +1562,19 @@ export class Game {
         this.abilities.ult = Math.min(1, this.abilities.ult + f);
       },
       hitstop: (s, k) => this.hitstop(s, k),
+      masteryKill: (e) => this.gainMastery(this.weapon.def.family, killMastery(e.def.role, e.elite)),
       damageEnemy: (...a) => this.damageEnemy(...a),
     };
+  }
+
+  /** Weapon-family mastery XP into the run's unsecured pool (the co-op server routes it to the shooter). */
+  protected gainMastery(family: WeaponFamily, xp: number): void {
+    if (this.cfg.run.collect({ mastery: { [family]: xp } })) uiEvents.emit('mastery', { family, xp });
+  }
+
+  /** Family of the weapon in hand (mastery modifiers follow it). */
+  protected handFamily(): WeaponFamily | null {
+    return baseDef(this.inventory.equipped(this.weaponSlots.active)?.defId ?? '')?.weapon?.family ?? null;
   }
 
   /** Fire an ability slot (RMB ability I, F ability II, T ultimate in combat). */

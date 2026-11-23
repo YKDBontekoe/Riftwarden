@@ -69,6 +69,7 @@ export function rollLoot(p: RollParams): ItemInstance[] {
       baseId: d.baseId,
       allowExclusive: d.baseId ? [d.baseId] : [],
       excludeFamilies: families,
+      componentLocks: p.locks,
       source: p.originId,
     });
   });

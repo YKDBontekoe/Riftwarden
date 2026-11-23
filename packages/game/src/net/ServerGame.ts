@@ -1,3 +1,5 @@
+import { baseDef } from '@riftwarden/rules/loot/bases';
+import { masteryModifiers, type MasteryState, rankOf, squadMasteryMult, teamMasteryBonus } from '@riftwarden/rules/progression/mastery';
 import { treeModifiers, treeRules } from '@riftwarden/rules/progression/skilltree';
 import { TeamLedger } from '@riftwarden/rules/net/teamLedger';
 import { SCATTER_PELLETS } from '../combat/Weapon';
@@ -56,6 +58,8 @@ export interface ServerPlayerInit {
   locks?: readonly string[];
   /** Slots this player has not unlocked. */
   lockedSlots?: readonly SlotId[];
+  /** Weapon-family mastery of this player's profile (personal stats; ranks feed the team bonus). */
+  mastery?: MasteryState;
 }
 
 interface ServerPickup {
@@ -83,6 +87,8 @@ export class Avatar {
   lootCounter = 0;
   /** Staged-unlock loot locks (this player's profile). */
   locks: readonly string[] = [];
+  /** Weapon-family mastery of this player's profile. */
+  mastery: MasteryState = {};
   connected = true;
   left = false;
   lastSeq = -1;
@@ -263,6 +269,7 @@ export class ServerGame extends Game {
     if (p.restore) a.inventory.adoptLoadout(p.restore);
     a.locks = p.locks ?? [];
     a.inventory.lockedSlots = p.lockedSlots ?? [];
+    a.mastery = p.mastery ?? {};
     if (p.tree) {
       a.treeMods = treeModifiers(p.tree.seed, p.tree.allocated);
       p.ledger.xpMult = treeRules(p.tree.seed, p.tree.allocated).xpMult;
@@ -410,7 +417,7 @@ export class ServerGame extends Game {
     Object.assign(this.stats, computeStats([...towerGear, ...shared]));
     for (const a of this.avatars) {
       if (a.activeWeapon === 'weapon2' && !weaponDefFor(a.inventory.equipped('weapon2'))) a.activeWeapon = 'weapon';
-      a.stats = computeStats([...equipmentModifiers(a.inventory.equippedItems(otherSlot(a.activeWeapon))), ...a.treeMods, ...shared, ...this.director.buffModifiers(a.id)]);
+      a.stats = computeStats([...equipmentModifiers(a.inventory.equippedItems(otherSlot(a.activeWeapon))), ...a.treeMods, ...this.masteryMods(a, live), ...shared, ...this.director.buffModifiers(a.id)]);
       a.player.applyStats(a.stats, this.attackerScale);
       a.uniques = gearUniques(a.inventory.equippedItems(otherSlot(a.activeWeapon)));
       a.weaponDef = weaponDefFor(a.inventory.equipped(a.activeWeapon)) ?? a.weaponDef;
@@ -1027,6 +1034,32 @@ export class ServerGame extends Game {
 
   override openCheckpoint(): void {
     this.openVoteIfCheckpoint();
+  }
+
+  /** Family of an avatar's weapon in hand. */
+  private avatarFamily(a: Avatar): WeaponFamily | null {
+    return baseDef(a.inventory.equipped(a.activeWeapon)?.defId ?? '')?.weapon?.family ?? null;
+  }
+
+  /** Personal mastery (rank damage + perks) plus the co-op team bonus (shared family, veterans' aura). */
+  private masteryMods(a: Avatar, live: Avatar[]): StatModifier[] {
+    const fam = this.avatarFamily(a);
+    const team = live.filter((o) => o !== a).map((o) => {
+      const f = this.avatarFamily(o);
+      return { family: f, rank: f ? rankOf(o.mastery, f) : 0 };
+    });
+    const bonus = teamMasteryBonus(fam, team);
+    return [...masteryModifiers(a.mastery, fam), ...(bonus > 0 ? [{ stat: 'weaponDamageMult' as const, op: 'pct' as const, value: bonus, source: 'team mastery' }] : [])];
+  }
+
+  /** Mastery XP goes to the shooter's own ledger, with the squad bonus (+10% per other warden, max +30%). */
+  protected override gainMastery(family: WeaponFamily, xp: number): void {
+    const a = this.rec.owner ? this.avatar(this.rec.owner) : undefined;
+    if (!a) return;
+    const n = this.avatars.filter((o) => !o.left).length;
+    const got = Math.round(xp * squadMasteryMult(n));
+    // Inside `as(a)`: the recorder routes the personal UI event to the shooter only.
+    if (a.run.collect({ mastery: { [family]: got } })) uiEvents.emit('mastery', { family, xp: got });
   }
 
   override onEnemyKilled(e: Enemy): void {

@@ -1,3 +1,4 @@
+import { MasteryBench } from './Mastery';
 import { lockReason, unlockDef } from '@riftwarden/rules/progression/unlocks';
 import { useMemo, useState } from 'react';
 import { fmtNum, formatModifier, STAT_DEFS } from '@riftwarden/rules/combat/stats';
@@ -25,7 +26,7 @@ import { ComparisonPriorityPicker, ImpactBanner, useComparisonPriority } from '.
 import { SLOTS } from '@riftwarden/rules/progression/items';
 import { WeaponViewer } from './WeaponViewer';
 
-type Tab = 'modules' | 'affixes' | 'enhance' | 'components' | 'towers';
+type Tab = 'modules' | 'affixes' | 'enhance' | 'components' | 'towers' | 'mastery';
 
 interface EngEntry extends InvEntry {
   /** Weapon this module is installed in. */
@@ -40,16 +41,16 @@ function engEntries(save: SaveData): EngEntry[] {
 }
 
 /** Feature each workshop tab needs (staged unlocks). */
-const TAB_FEATURE: Record<Tab, string> = { modules: 'station:modules', affixes: 'workshop:affixes', enhance: 'workshop:enhance', components: 'workshop:components', towers: 'workshop:towers' };
+const TAB_FEATURE: Record<Tab, string> = { modules: 'station:modules', affixes: 'workshop:affixes', enhance: 'workshop:enhance', components: 'workshop:components', towers: 'workshop:towers', mastery: '' };
 
 export function EngineeringTerminal({ flow, close }: { flow: Flow; close: () => void }) {
   const save = useSave(flow);
   // Open on the first tab the warden can use (modules unlock at RL 3; enhancement at RL 2).
-  const [tab, setTab] = useState<Tab>(() => (['modules', 'enhance', 'affixes', 'components', 'towers'] as Tab[]).find((t) => !lockReason(save, TAB_FEATURE[t])) ?? 'modules');
+  const [tab, setTab] = useState<Tab>(() => (['modules', 'enhance', 'affixes', 'components', 'towers'] as Tab[]).find((t) => !lockReason(save, TAB_FEATURE[t])) ?? 'mastery');
   const [selW, setSelW] = useState<string | null>(() => save.loadout.weapon);
   const locked = lockReason(save, TAB_FEATURE[tab]);
   return (
-    <Shell code="WS-04" title="ENGINEERING WORKSHOP" sub="Modules · affix recalibration · enhancement · component engineering" close={close} accent="amber" wide>
+    <Shell code="WS-04" title="ENGINEERING WORKSHOP" sub="Modules · affix recalibration · enhancement · component engineering · mastery" close={close} accent="amber" wide>
       <div className="market-head">
         <div className="tabs term-tabs">
           {(
@@ -59,6 +60,7 @@ export function EngineeringTerminal({ flow, close }: { flow: Flow; close: () => 
               ['enhance', 'ENHANCE'],
               ['components', 'COMPONENTS'],
               ['towers', 'TOWER TECH'],
+              ['mastery', 'MASTERY'],
             ] as [Tab, string][]
           ).map(([id, label]) => (
             <button key={id} className={`${tab === id ? 'on' : ''}${lockReason(save, TAB_FEATURE[id]) ? ' opacity-55' : ''}`} data-tab={id} onClick={() => setTab(id)} title={lockReason(save, TAB_FEATURE[id]) ?? undefined}>
@@ -78,14 +80,15 @@ export function EngineeringTerminal({ flow, close }: { flow: Flow; close: () => 
         <>
           {tab === 'modules' && <ModuleBench flow={flow} selW={selW} setSelW={setSelW} />}
           {tab === 'towers' && <TowerTech flow={flow} save={save} />}
-          {tab !== 'modules' && tab !== 'towers' && <Bench key={tab} flow={flow} save={save} tab={tab} selW={selW} setSelW={setSelW} />}
+          {tab === 'mastery' && <MasteryBench flow={flow} save={save} />}
+          {tab !== 'modules' && tab !== 'towers' && tab !== 'mastery' && <Bench key={tab} flow={flow} save={save} tab={tab} selW={selW} setSelW={setSelW} />}
         </>
       )}
     </Shell>
   );
 }
 
-function Bench({ flow, save, tab, selW, setSelW }: { flow: Flow; save: SaveData; tab: Exclude<Tab, 'modules' | 'towers'>; selW: string | null; setSelW: (u: string) => void }) {
+function Bench({ flow, save, tab, selW, setSelW }: { flow: Flow; save: SaveData; tab: Exclude<Tab, 'modules' | 'towers' | 'mastery'>; selW: string | null; setSelW: (u: string) => void }) {
   const tx = useTx(flow, 'workshop');
   const weaponsOnly = tab === 'components';
   const all = useMemo(() => sortEntries(engEntries(save), 'rarity') as EngEntry[], [save]);

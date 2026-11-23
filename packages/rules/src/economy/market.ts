@@ -99,7 +99,7 @@ export function generateMarket(profileId: string, rotation: number, progress: Ma
   const lockedCats = lockedCategoriesOf(progress.locks);
   const make = (kind: MerchantId, i: number, category: Category, rar: RarityId): MarketEntry => {
     const id = `mk${rotation}_${kind[0]}${i}`;
-    const item = generateItem({ uid: `${id}_${profileId.slice(-6)}`, seed: Math.floor(rand() * 4294967296) >>> 0, level: level(), rarity: rar, category, source: 'merchant', now, excludeFamilies: families });
+    const item = generateItem({ uid: `${id}_${profileId.slice(-6)}`, seed: Math.floor(rand() * 4294967296) >>> 0, level: level(), rarity: rar, category, source: 'merchant', now, excludeFamilies: families, componentLocks: progress.locks });
     return { id, item, sold: false, featured: false };
   };
   const equipment: MarketEntry[] = [];
