@@ -6,6 +6,7 @@ import { buildMechanism, FAMILIES } from '../weapons/build';
 import { installedModules } from '../weapons/modules';
 import { enhanceStatMult, weaponEnhance } from '../economy/config';
 import { baseDef } from './bases';
+import { setBonusModifiers } from './sets';
 import type { ItemInstance, RolledStat } from './types';
 
 /**
@@ -42,6 +43,8 @@ export function moduleStats(item: ItemInstance): RolledStat[] {
 export function equipmentModifiers(items: readonly (ItemInstance | null | undefined)[]): StatModifier[] {
   const out: StatModifier[] = [];
   for (const it of items) if (it) out.push(...itemModifiers(it));
+  // Set bonuses (two / four equipped pieces of one set).
+  out.push(...setBonusModifiers(items));
   return out;
 }
 

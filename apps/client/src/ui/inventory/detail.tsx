@@ -1,3 +1,5 @@
+import { createContext, useContext } from 'react';
+import { SETS, setCounts } from '@riftwarden/rules/loot/sets';
 import { signatureDef } from '@riftwarden/rules/loot/signatures';
 import { ElementTag } from '../ElementTag';
 import { formatModifier, STAT_DEFS } from '@riftwarden/rules/combat/stats';
@@ -42,6 +44,7 @@ export function ItemDetail({ item, status, stage = true }: { item: ItemInstance;
               </span>
             )}
             {item.uniqueId && <span className="unique-tag">UNIQUE</span>}
+            {item.set && <span className="set-tag">SET · {SETS[item.set].name.toUpperCase()}</span>}
             {item.locked && <span className="lock-tag">LOCKED</span>}
             {item.source === 'crafted' && <span className="src-tag">FABRICATED</span>}
             {item.source === 'merchant' && <span className="src-tag">MERCHANT STOCK</span>}
@@ -76,6 +79,7 @@ export function ItemDetail({ item, status, stage = true }: { item: ItemInstance;
           <div className="faint small">Drops from: {uniqueSourceText(uniqueDef(item.uniqueId)!)}</div>
         </div>
       )}
+      {item.set && <SetBlock item={item} />}
       {signatureDef(item.signature) && !item.uniqueId && (
         <div className="id-block signature" data-testid="item-signature">
           <div className="id-label">SIGNATURE · {signatureDef(item.signature)!.exotic ? 'EXOTIC' : 'LEGENDARY'}</div>
@@ -237,6 +241,35 @@ function ModuleNote({ item }: { item: ItemInstance }) {
       {def.blurb} Fits a <b>{SOCKET_LABEL[def.socket]}</b> socket on{' '}
       <b>{def.families.length === 3 ? 'any weapon family' : def.families.map((f) => FAMILIES[f].label).join(' · ')}</b>. Install it at the HQ workshop; it takes effect while that weapon
       is equipped.
+    </div>
+  );
+}
+
+/** Equipped items around an item card (set piece counts); empty = unknown (bonuses are listed without a count). */
+export const EquippedItemsContext = createContext<readonly (ItemInstance | null | undefined)[]>([]);
+
+/** Item set: name, theme, equipped pieces and the 2 / 4 piece bonuses (active ones lit). */
+function SetBlock({ item }: { item: ItemInstance }) {
+  const equipped = useContext(EquippedItemsContext);
+  const set = SETS[item.set!];
+  const known = equipped.length > 0;
+  const worn = known ? setCounts(equipped).get(set.id) ?? 0 : 0;
+  // Counting as if this item were worn shows what it would complete.
+  const withThis = known ? setCounts([...equipped.filter((x) => x?.uid !== item.uid && !(x && x.category === item.category && x.set === item.set)), item]).get(set.id) ?? 0 : 0;
+  return (
+    <div className="id-block set" data-testid="item-set">
+      <div className="id-label">
+        SET · {set.name.toUpperCase()} · {set.theme.toUpperCase()}
+        {known && <span className="faint"> · {worn}/4 EQUIPPED</span>}
+      </div>
+      {set.bonuses.map((b) => (
+        <div key={b.pieces} className={`id-row ${known && worn >= b.pieces ? 'set-on' : 'faint'}`}>
+          <span>{b.pieces} pieces</span>
+          <b>{b.text}</b>
+        </div>
+      ))}
+      {known && withThis > worn && <div className="faint small">Equipping it brings the set to {withThis}/4.</div>}
+      <div className="faint small">{set.blurb}</div>
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import { activeSetBonuses } from '@riftwarden/rules/loot/sets';
 import { BASE_STATS, computeStats, fmtNum, formatStat, maxHull, mitigation, type StatKey, STAT_DEFS } from '@riftwarden/rules/combat/stats';
 import { ECONOMY, SENTINEL, towerCost } from '@riftwarden/rules/data/defs';
 import { equipmentModifiers, weaponDefFor, weaponSummary } from '@riftwarden/rules/loot/equipment';
@@ -39,6 +40,19 @@ export function DroneStats({ equipped }: { equipped: Record<SlotId, ItemInstance
     <>
       <div className="col-label">LOADOUT SCORE · hover any value for its sources</div>
       <ScoreCards score={score} />
+      {activeSetBonuses(list).length > 0 && (
+        <>
+          <div className="col-label">SETS</div>
+          <div className="stat-grid" data-testid="drone-sets">
+            {activeSetBonuses(list).map((a) => (
+              <div key={a.set.id} className={`stat has-tip ${a.bonuses.length ? "up" : ""}`} title={a.set.bonuses.map((b) => `${b.pieces} pieces: ${b.text}`).join('\n')}>
+                <span>{a.set.name.toUpperCase()} · {a.pieces}/4</span>
+                <b>{a.bonuses.length ? a.bonuses[a.bonuses.length - 1].text : `${2 - a.pieces} more for the first bonus`}</b>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
       {w && ws && (
         <>
           <div className="col-label">PRIMARY · {w.name}</div>

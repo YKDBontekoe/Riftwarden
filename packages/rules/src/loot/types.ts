@@ -1,3 +1,4 @@
+import type { SetId } from './sets';
 import type { DamageElement } from '../combat/elements';
 import type { StatKey, StatOp } from '../combat/stats';
 import type { WeaponBuild } from '../weapons/build';
@@ -106,6 +107,8 @@ export interface ItemInstance {
   signature: string | null;
   /** Hand-made unique id (loot/uniques.ts): fixed name, flavour and mechanic. Absent = procedural item. */
   uniqueId?: string;
+  /** Item set (loot/sets.ts) of rare+ gear; absent = no set. Decided by the seed at generation. */
+  set?: SetId;
   /** Generation metadata: seed and generator version. */
   seed: number;
   gen: number;

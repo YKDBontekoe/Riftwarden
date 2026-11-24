@@ -1,3 +1,4 @@
+import { setFor } from './sets';
 import { excludedComponents } from '../progression/mastery';
 import { rollSignature } from './signatures';
 import { mulberry32 } from '../combat/damage';
@@ -241,6 +242,9 @@ export function generateItem(spec: GenSpec): ItemInstance {
   };
   item.name = nameItem(item, base, mulberry32((spec.seed ^ 0x9e3779b9) >>> 0));
   item.signature = rollSignature(item);
+  // Sets: seed-decided (no stream draw); starter-grade and repaired kit never belongs to one.
+  const set = fixed === undefined ? setFor(spec.seed, r.index, base.category) : null;
+  if (set) item.set = set;
   return item;
 }
 

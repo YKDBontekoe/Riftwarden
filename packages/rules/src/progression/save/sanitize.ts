@@ -1,3 +1,4 @@
+import { isSetId, SET_CATEGORIES } from '../../loot/sets';
 import { rolloverSeason } from '../seasons';
 import { PINNACLE, sanitizeCodex } from '../spikes';
 import { sanitizeMastery } from '../mastery';
@@ -170,6 +171,8 @@ export function sanitizeItem(v: unknown, repairs: string[] = [], nested = false,
   };
   // Hand-made unique: only a known id on its own base keeps the identity.
   if (typeof r.uniqueId === 'string' && uniqueDef(r.uniqueId)?.baseId === defId) item.uniqueId = r.uniqueId;
+  // Sets: only on set gear without a unique identity.
+  if (isSetId(r.set) && !item.uniqueId && SET_CATEGORIES.includes(item.category)) item.set = r.set;
   // M4 engineering state (only stored when set).
   if (r.locked === true) item.locked = true;
   const enh = int(r.enhance, 0, 0, MAX_ENHANCE_ANY);

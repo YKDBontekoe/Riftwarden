@@ -193,6 +193,7 @@ export function generateUnique(def: UniqueDef, spec: { uid: string; seed: number
   if (it.weapon && def.element) it.weapon.element = def.element;
   it.signature = def.signature ?? null;
   it.uniqueId = def.id;
+  delete it.set;
   it.name = def.name;
   return it;
 }

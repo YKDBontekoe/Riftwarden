@@ -9,7 +9,7 @@ import { type Category, type ItemInstance } from '@riftwarden/rules/loot/types';
 import { getSlot, type SlotId, SLOTS, slotsFor, defaultSlot } from '@riftwarden/rules/progression/items';
 import { fmtNum } from '@riftwarden/rules/combat/stats';
 import { ComparePanel } from './compare';
-import { ItemDetail } from './detail';
+import { EquippedItemsContext, ItemDetail } from './detail';
 import { InvEntry, ItemCard, catLabel } from './entry';
 import { ItemGlyph } from './glyphs';
 
@@ -214,7 +214,9 @@ export function InventoryView({ entries, equipped, actions, extraFilter, header,
               {hovered && hovered !== selected && <div className="preview-flag">HOVER PREVIEW · click to select</div>}
               <div className={`detail-split ${!shownEntry.equippedIn && shown.category !== 'module' ? 'two' : ''}`}>
                 <div className="ds-item">
-                  <ItemDetail item={shown} status={shownEntry.equippedIn ? 'equipped' : shownEntry.status} />
+                  <EquippedItemsContext.Provider value={equippedList}>
+                    <ItemDetail item={shown} status={shownEntry.equippedIn ? 'equipped' : shownEntry.status} />
+                  </EquippedItemsContext.Provider>
                 </div>
                 {!shownEntry.equippedIn && shown.category !== 'module' && (
                   <div className="ds-compare">
