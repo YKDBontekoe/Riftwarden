@@ -1046,7 +1046,10 @@ button.comp-card.on { border-color: var(--amber); background: rgba(255, 181, 71,
 .uc-rarity { color: var(--rc); }
 .uc-key { border: 1px solid var(--line); padding: 3px 6px; }
 .uc-art { display: block; width: clamp(88px,15vh,150px); aspect-ratio: 1; flex: none; align-self: center; background: url('../assets/field-components.webp') 0 0 / 400% 200% no-repeat; mix-blend-mode: lighten; }
-.art-elemental { background-position: 33.3333% 0; } .art-defense { background-position: 66.6667% 0; } .art-mobility { background-position: 100% 0; }
+.art-elemental { background-position: 33.3333% 0; }
+/* One elemental cell artwork, tinted per element (the art is green / electric). */
+.art-elemental[data-el='cryo'] { filter: hue-rotate(78deg) saturate(1.1); }
+.art-elemental[data-el='thermal'] { filter: hue-rotate(-95deg) saturate(1.35); } .art-defense { background-position: 66.6667% 0; } .art-mobility { background-position: 100% 0; }
 .art-tower { background-position: 0 100%; } .art-economy { background-position: 33.3333% 100%; } .art-synergy { background-position: 66.6667% 100%; } .art-cache { background-position: 100% 100%; }
 .uc-name { font: 650 clamp(19px,1.8vw,27px)/1.1 var(--display); letter-spacing: -.035em; margin: 5px 0; }
 .uc-cat, .uc-stack { font: 10px/1.5 var(--mono); letter-spacing: .06em; color: var(--rc); }
@@ -1841,3 +1844,10 @@ button.inv-slot { position: relative; }
 
 /* Set gear on the arena pickup prompt. */
 .loot-prompt .lp-set { display: block; margin-top: 2px; font-family: var(--mono, monospace); font-size: 10px; letter-spacing: 0.14em; color: #7fe3c4; }
+
+/* Run summary: upgrades among the secured equipment. */
+.gear-up { margin: 4px 0 12px; padding: 8px 12px; border: 1px solid rgba(120, 230, 170, 0.35); background: rgba(80, 200, 140, 0.06); font-size: 13px; }
+.gear-up-row { margin: 2px 0; }
+.gear-up.done { color: rgba(170, 240, 200, 0.95); }
+/* The summary and defeat panels scroll instead of pushing their buttons off short screens. */
+.summary-screen .modal, .defeat .modal { max-height: calc(100vh - 32px); overflow-y: auto; }

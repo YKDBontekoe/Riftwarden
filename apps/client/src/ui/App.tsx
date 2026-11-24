@@ -8,7 +8,7 @@ import { MENU_SECTIONS, type MenuSection, useMenuSection } from './router';
 import { SettingsPanel } from './SettingsPanel';
 import { ConstructionPanel } from './Construction';
 import { ClientGame } from '@riftwarden/game/net/ClientGame';
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { Flow } from '../core/Flow';
 import type { Game } from '@riftwarden/game/core/Game';
 import type { RunResult } from '@riftwarden/rules/progression/run';
@@ -21,6 +21,7 @@ import { useHud } from './useHud';
 import { TerminalHost } from './TerminalHost';
 import { ArenaInventory } from './LootHud';
 import { BriefList } from './items';
+import { GearUpgrades } from './GearUpgrades';
 import { XpGain } from './Directory';
 import { XP } from '@riftwarden/rules/progression/level';
 import { BuildOverview, TowerPanel, UpgradePanel } from './Roguelite';
@@ -520,6 +521,7 @@ function DefeatScreen({ flow }: { flow: Flow }) {
 function SummaryScreen({ flow }: { flow: Flow }) {
   const result = useHud((s) => s.lastRun);
   const save = useSave(flow);
+  const secured = useMemo(() => (result?.securedItems ?? []).map((i) => i.uid), [result]);
   if (!result) return null;
   const extracted = result.outcome === 'returned';
   return (
@@ -534,6 +536,7 @@ function SummaryScreen({ flow }: { flow: Flow }) {
           </div>
         </div>
         {!result.survival?.dev && <XpGain gained={(result.xpSecured ?? 0) + (result.xpKept ?? 0)} totalAfter={save.progress.xp} />}
+        {!!result.securedItems?.length && <GearUpgrades flow={flow} save={save} uids={secured} />}
         <RunSummary result={result} powerAfter={savePower(save)} />
         <button className="primary" onClick={() => void flow.home?.takeControl()}>
           CONTINUE

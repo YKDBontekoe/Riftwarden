@@ -30,6 +30,7 @@ export const UNLOCKS: readonly UnlockDef[] = [
   { id: 'slot:accessory2', label: 'Second accessory slot', kind: 'slot', by: { warden: 5 }, blurb: 'A second accessory for more build room.' },
   { id: 'family:beam', label: 'Beam family', kind: 'family', by: { warden: 6 }, blurb: 'Continuous emitters whose damage ramps on one target.' },
   { id: 'slot:ultimate', label: 'Ultimate slot', kind: 'slot', by: { warden: 7 }, blurb: 'Ultimates (orbital lance, overdrive) start dropping; charge them by dealing damage.' },
+  { id: 'seasons', label: 'Seasons', kind: 'system', by: { warden: 6 }, blurb: 'Each month a fresh seasonal warden on a faster ladder with its own rule and leaderboards; its gains move to you when the month ends.' },
   { id: 'station:lattice', label: 'Neural Lattice', kind: 'station', by: { warden: 8 }, blurb: 'Spend skill points on your endless procedural skill tree.' },
   { id: 'family:launcher', label: 'Launcher family', kind: 'family', by: { warden: 9 }, blurb: 'Rockets that detonate on impact and splash everything around the hit.' },
   { id: 'station:fabricate', label: 'Fabricator', kind: 'station', by: { warden: 10 }, blurb: 'Craft the slot and family you want. Higher grades open with Rift Levels.' },
