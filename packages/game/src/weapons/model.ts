@@ -893,7 +893,9 @@ export function buildWeaponModel(scene: Scene, build: WeaponBuild, installed: (I
     meshes,
     dispose() {
       root.dispose(false, false);
-      for (const m of owned) m.dispose(true, true);
+      // Owned materials share library textures (the heat metal borrows the dark bump map and the
+      // per-scene temper map): never force-dispose textures here.
+      for (const m of owned) m.dispose(true, false);
     },
   };
 }

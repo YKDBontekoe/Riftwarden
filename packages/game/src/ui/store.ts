@@ -132,6 +132,8 @@ export interface LootTargetInfo {
   level: number;
   category: string;
   uniqueId?: string;
+  /** Base id (prompt thumbnail). */
+  defId?: string;
   expiresAfterWave: number;
   expiring: boolean;
   cargoFull: boolean;

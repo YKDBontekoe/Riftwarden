@@ -15,11 +15,15 @@ import { moduleTypeDef } from '@riftwarden/rules/weapons/modules';
 import { enhanceLevel, enhanceStatMult, maxEnhance } from '@riftwarden/rules/economy/config';
 import { EntryStatus, STATUS_LABEL, catLabel, itemTitle } from './entry';
 import { ItemGlyph, RarityTag, TierPips } from './glyphs';
+import { ItemStage, STAGE_ENABLED } from '../ItemStage';
+import { FieldIcon, statIcon } from '../FieldIcon';
+
+const StatIcon = ({ stat }: { stat: string }) => <span className="stat-ic"><FieldIcon name={statIcon(stat)} /></span>;
 
 import { FieldArt } from '../FieldArt';
 
 /** Full item readout: identity, base stats, affixes, weapon block, sockets/modules. */
-export function ItemDetail({ item, status }: { item: ItemInstance; status?: EntryStatus }) {
+export function ItemDetail({ item, status, stage = true }: { item: ItemInstance; status?: EntryStatus; stage?: boolean }) {
   const base = baseDef(item.defId);
   const r = rarity(item.rarity);
   const w = weaponDefFor(item);
@@ -45,6 +49,7 @@ export function ItemDetail({ item, status }: { item: ItemInstance; status?: Entr
           </div>
         </div>
       </div>
+      {stage && STAGE_ENABLED && <ItemStage item={item} />}
       {item.uniqueId && <FieldArt name={`unique-${item.uniqueId}`} className="item-portrait" />}
       <p className="id-blurb">{base ? base.blurb : 'This item’s definition is missing from this build. It is kept safely in storage but cannot be equipped.'}</p>
       {ws && w && <WeaponBlock item={item} />}
@@ -55,7 +60,7 @@ export function ItemDetail({ item, status }: { item: ItemInstance; status?: Entr
             const m = enhanceStatMult(item, s.stat, s.value, 'base');
             return (
               <div key={i} className="id-row" title={STAT_HELP[s.stat]}>
-                <span>{STAT_DEFS[s.stat].label}</span>
+                <span><StatIcon stat={s.stat} />{STAT_DEFS[s.stat].label}</span>
                 {m !== 1 && <small className="enh-up">+{Math.round((m - 1) * 100)}%</small>}
                 <b className={(s.value < 0) !== (STAT_DEFS[s.stat].better === 'lower') && s.value !== 0 ? 'neg' : ''}>{formatModifier(s.stat, s.op, s.value * m)}</b>
               </div>
@@ -87,6 +92,7 @@ export function ItemDetail({ item, status }: { item: ItemInstance; status?: Entr
             <div key={i} className={`id-row affix ${a.locked ? 'locked' : ''}`} title={`${STAT_HELP[a.stat]}\nTier ${a.tier} of 5`}>
               <span>
                 {a.locked && <i className="ic-lock" title="Locked affix: kept by full recalibration" />}
+                <StatIcon stat={a.stat} />
                 {STAT_DEFS[a.stat].label}
                 <small>{affixDef(a.id)?.adjective ?? ''}</small>
               </span>

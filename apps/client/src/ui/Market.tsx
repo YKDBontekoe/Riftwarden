@@ -16,7 +16,10 @@ import { FAMILIES, SOCKET_LABEL } from '@riftwarden/rules/weapons/build';
 import { canInstall, moduleTypeDef } from '@riftwarden/rules/weapons/modules';
 import { useSave } from './App';
 import { ConfirmButton, CostLine, costText, ResourceBar, TxMessage, useTx } from './economy';
-import { ComparePanel, type InvEntry, ItemCard, ItemDetail, itemTitle, RarityTag, sortEntries } from './items';
+import { ComparePanel, type InvEntry, ItemCard, ItemDetail, ItemGlyph, itemTitle, RarityTag, sortEntries } from './items';
+import { CurrencyIcon } from './inventory/thumbs';
+import { FieldIcon } from './FieldIcon';
+import type { CurrencyKey } from '@riftwarden/rules/economy/currencies';
 import { Shell } from './shell';
 import { saveEntries, useEquipped } from './Terminals';
 
@@ -494,6 +497,7 @@ export function FabricateTerminal({ flow, close }: { flow: Flow; close: () => vo
               <div className="col-label">{label}</div>
               {RECIPES.filter((r) => r.group === g).map((r) => (
                 <button key={r.id} className={`recipe ${r.id === recipe.id ? 'on' : ''}`} data-recipe={r.id} onClick={() => (setRid(r.id), tx.setMsg(null))}>
+                  <RecipeIcon recipe={r} />
                   {r.name}
                 </button>
               ))}
@@ -510,7 +514,7 @@ export function FabricateTerminal({ flow, close }: { flow: Flow; close: () => vo
               <div className="fab-bases">
                 <span className="font-mono text-[9.5px] tracking-[0.16em] text-faint">POSSIBLE OUTPUT</span>
                 {recipeBases(recipe).map((b) => (
-                  <em key={b.id}>{b.name}</em>
+                  <em key={b.id}><ItemGlyph item={{ defId: b.id, category: b.category, rarity: q.max }} size={30} portrait={false} />{b.name}</em>
                 ))}
                 <span className="font-mono text-[9.5px] tracking-[0.16em] text-faint">ITEM LEVEL</span>
                 <em>{level}</em>
@@ -579,12 +583,22 @@ export function FabricateTerminal({ flow, close }: { flow: Flow; close: () => vo
   );
 }
 
+/** Recipe list icon: a thumbnail of the first possible output, or the produced material. */
+function RecipeIcon({ recipe }: { recipe: Recipe }) {
+  if (recipe.output.kind === 'material') {
+    const k = Object.keys(recipe.output.give)[0] as CurrencyKey | undefined;
+    return <span className="recipe-ico">{k ? <CurrencyIcon k={k} /> : null}</span>;
+  }
+  const b = recipeBases(recipe)[0];
+  return b ? <ItemGlyph item={{ defId: b.id, category: b.category, rarity: 'common' }} size={24} portrait={false} /> : null;
+}
+
 function QualityCard({ q, on, save, recipe, level, pick }: { q: QualityDef; on: boolean; save: SaveData; recipe: Recipe; level: number; pick: () => void }) {
   const u = unlockedFor(recipe, q, save.threat.unlocked);
   const odds = qualityOdds(q);
   return (
     <button className={`q-card ${on ? 'on' : ''} ${u.ok ? '' : 'locked'}`} data-quality={q.id} onClick={pick}>
-      <b>{q.label.toUpperCase()}</b>
+      <b><span className="qcard-grade" style={{ color: rarity(q.max).color }}><FieldIcon name="grade" /></span>{q.label.toUpperCase()}</b>
       <span className="text-[12.5px] text-muted">{u.ok ? q.blurb : u.reason}</span>
       <div className="grid gap-[3px]">
         {odds.map((o) => (

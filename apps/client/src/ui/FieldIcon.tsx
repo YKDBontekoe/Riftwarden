@@ -1,5 +1,6 @@
 import type { CurrencyKey } from '@riftwarden/rules/economy/currencies';
 import type { Category } from '@riftwarden/rules/loot/types';
+import type { StatKey } from '@riftwarden/rules/combat/stats';
 import type { NodeKind } from '@riftwarden/rules/runmap/defs';
 import type { TerminalId } from '@riftwarden/game/ui/store';
 
@@ -46,6 +47,37 @@ const PATHS = {
   wave: 'M2 13h4l3-7 4 12 3-5h6',
   clock: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zm0 4v5l4 2',
   pickup: 'M4 14h16v7H4zm8-11v8m-4-4 4 4 4-4',
+  // stats (item cards, affixes, drone readouts)
+  damage: 'M12 3v4m0 10v4M3 12h4m10 0h4M6.3 6.3l2.4 2.4m6.6 6.6 2.4 2.4m0-11.4-2.4 2.4m-6.6 6.6-2.4 2.4M12 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4z',
+  firerate: 'M3 7h7l3 5-3 5H3l3-5zm10 0h3l3 5-3 5h-3l3-5z',
+  crit: 'm12 2 2.4 6.3L21 9l-5 4.4L17.4 21 12 17.2 6.6 21 8 13.4 3 9l6.6-.7z',
+  critdmg: 'm9 3 1.9 4.9 5.1.5-3.9 3.4 1.2 5.1L9 14.2l-4.3 2.7 1.2-5.1L2 8.4l5.1-.5zM19 13v8m-4-4h8',
+  heat: 'M10 4a2 2 0 0 1 4 0v9.5a4.5 4.5 0 1 1-4 0zm2 7v6.5M16 5h3m-3 3h3m-3 3h2',
+  hull: 'M4 4h16v9c0 3-3.5 6-8 8-4.5-2-8-5-8-8zm8 4v8m-4-4h8',
+  resist: 'm12 3 8 3v5c0 5-3 8-8 10-5-2-8-5-8-10V6zM7.5 15.5l9-9',
+  shieldcap: 'M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18zm0 4a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 4v2',
+  regen: 'M20 12a8 8 0 1 1-2.4-5.7M20 3.5V8h-4.5M12 9v6m-3-3h6',
+  dash: 'M3 12h8M5 8h6M6 16h5m3-9 5 5-5 5m-1-10 5 5-5 5',
+  range: 'M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16zm0 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm0 3.5v1M12 1v3m0 16v3m11-11h-3M4 12H1',
+  split: 'M3 12h6l4-5h8M9 12h12M9 12l4 5h8m-3-13 3 3-3 3m0 4 3 3-3 3',
+  spread: 'M3 12 21 4M3 12l18 8M3 12h18M17 6v12',
+  charge: 'M3 8h15v8H3zm15 3h3v2h-3M10 9l-2.5 3h4L9 15',
+  arc: 'M2 13c2.5-5 4.5 5 7 0s4.5 5 7 0 4 4 6 0M13 3l-3 5h4l-3 5',
+  pierce: 'M2 12h18m-4-4 4 4-4 4M8 6v12m5-12v12',
+  elements: 'M12 3c3 4 6.5 6.5 6.5 10.5a6.5 6.5 0 0 1-13 0C5.5 9.5 9 7 12 3zm0 8v6m-3-3h6',
+  apower: 'M9 4h6v3H9zm3-2v2M6.5 13a5.5 5.5 0 1 0 11 0 5.5 5.5 0 0 0-11 0M12 10v6m-3-3h6',
+  radius: 'M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16zm0 8h8m-2.5-2.5L20 12l-2.5 2.5M12 11v2',
+  ultcharge: 'M12 2v4m0 12v4M7 12a5 5 0 1 0 10 0 5 5 0 0 0-10 0m5-3-1.5 3h3L12 15M4.5 4.5l2 2m11 11 2 2m0-15-2 2m-11 11-2 2',
+  cost: 'M4 4h10l6 6-10 10-6-6zm4 4h.01M10 13l3-3',
+  income: 'M12 3v18M17 7H9.5a3 3 0 0 0 0 6h5a3 3 0 0 1 0 6H6',
+  // hub services / fabricator grades
+  repair: 'M14.5 6.5a4 4 0 0 1 5-5l-2.5 2.5.5 2.5 2.5.5 2.5-2.5a4 4 0 0 1-5 5L8 19a2.1 2.1 0 0 1-3-3z',
+  upgrade: 'M12 3 4 11h5v10h6V11h5zM9 21h6',
+  purge: 'M5 6h14M9 6V3h6v3m-8 0 1 15h8l1-15M10 10v7m4-7v7',
+  reflect: 'M12 3a9 9 0 1 0 9 9M12 7a5 5 0 1 0 5 5m-5-1v2M17 3l4 4m0-4-4 4',
+  grade: 'M4 20h16M6 20v-5m4 5v-9m4 9V8m4 12V4',
+  gamble: 'M4 4h16v16H4zm4.5 4h.01m7 0h.01M12 12h.01m-3.5 3.5h.01m7 0h.01',
+  seal: 'M5 11h14v10H5zm3 0V7a4 4 0 0 1 8 0v4m-4 4v3',
   accessory: 'm12 3 8 9-8 9-8-9zm-6 9h12m-9 0 3 5 3-5',
 } as const;
 
@@ -69,6 +101,31 @@ export const ITEM_ICON: Record<Category, FieldIconName> = {
   weapon: 'firepower', armor: 'survivability', shield: 'void', reactor: 'cores', processor: 'lattice',
   accessory: 'accessory', module: 'modules', ability: 'anomaly', ultimate: 'deploy',
 };
+
+/** Icon per stat key (item cards, affix rows, drone readouts). */
+export const STAT_ICON: Record<StatKey, FieldIconName> = {
+  weaponDamageMult: 'damage', fireRateMult: 'firerate', critChance: 'crit', critMultiplier: 'critdmg', heatEfficiency: 'heat', coolRateMult: 'cryo',
+  moveSpeedMult: 'mobility', dashRechargeMult: 'dash', maxHealthBonus: 'hull', maxHealthMult: 'hull', armor: 'survivability', damageResist: 'resist',
+  shieldCapacity: 'shieldcap', shieldRegen: 'regen', shieldDelay: 'clock', turretDamageMult: 'towers', turretFireRateMult: 'firerate', turretRangeMult: 'range',
+  buildCostMult: 'cost', tacticalRechargeMult: 'tactical', projectiles: 'split', spreadMult: 'spread', chargeRateMult: 'charge', arcChance: 'arc', arcDamage: 'arc',
+  heatDamage: 'thermal', pierce: 'pierce', rangeMult: 'range', coreIncomeMult: 'income', elementalPower: 'elements', eliteDamageMult: 'elite',
+  abilityPowerMult: 'apower', abilityCooldownMult: 'clock', abilityRadiusMult: 'radius', ultChargeMult: 'ultcharge',
+};
+
+export function statIcon(stat: string): FieldIconName {
+  return Object.hasOwn(STAT_ICON, stat) ? STAT_ICON[stat as StatKey] : 'balanced';
+}
+
+/** Icon for a hub station option (merchant services, forge, rest, anomaly choices, vault). */
+export function serviceIcon(station: string, id: string): FieldIconName {
+  const key = id.startsWith('svc:') ? id.slice(4) : id;
+  const table: Record<string, FieldIconName> = {
+    repair: 'repair', upgrade: 'upgrade', reflect: 'reflect', purge: 'purge', open: 'seal',
+    temper: 'damage', plating: 'hull', coolant: 'cryo', calibrate: 'towers',
+    bet: 'gamble', jackpot: 'gamble', leave: 'mobility', accept: 'upgrade', drink: 'shards', sip: 'shards',
+  };
+  return table[key] ?? (station === 'event' ? 'anomaly' : NODE_ICON[station as NodeKind] ?? 'cache');
+}
 
 export function itemIcon(category: string): FieldIconName {
   return Object.hasOwn(ITEM_ICON, category) ? ITEM_ICON[category as Category] : 'cache';

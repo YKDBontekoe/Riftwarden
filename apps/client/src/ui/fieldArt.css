@@ -61,3 +61,25 @@
   .menu-nav .field-icon { display: none; }
   .terminal-art, .station-art, .operation-art { width: 70%; opacity: 0.45; }
 }
+
+/* Rendered 3D item / currency thumbnails (home/ItemThumbs.ts) */
+.glyph-3d {
+  flex: none; display: block; object-fit: contain;
+  background: radial-gradient(circle at 50% 58%, color-mix(in srgb, var(--rc), transparent 70%), color-mix(in srgb, var(--rc), transparent 94%) 62%, rgba(8, 12, 16, 0.6));
+  border: 1px solid color-mix(in srgb, var(--rc), transparent 42%);
+  box-shadow: inset 0 0 10px color-mix(in srgb, var(--rc), transparent 80%);
+}
+.cur-3d { display: inline-block; width: 1.5em; height: 1.5em; object-fit: contain; vertical-align: -0.38em; filter: drop-shadow(0 0 5px color-mix(in srgb, var(--rcol, #7fe3ff), transparent 45%)); }
+.res-chip i .cur-3d { display: block; width: 30px; height: 30px; }
+.item-stage { position: relative; height: 150px; margin: 8px 0 4px; border: 1px solid color-mix(in srgb, var(--rc, #7fe3ff), transparent 70%); background: #06090c; overflow: hidden; }
+.item-stage canvas { display: block; width: 100%; height: 100%; outline: none; touch-action: none; }
+.stat-ic { display: inline-flex; margin-right: 6px; color: color-mix(in srgb, var(--rc, #7fe3ff), #cfe6ee 45%); opacity: 0.85; vertical-align: -0.2em; }
+.stat-ic .field-icon { width: 14px; height: 14px; }
+.st-opt .st-label .field-icon, .st-opt .st-label .glyph { margin-right: 6px; vertical-align: -0.25em; }
+.st-opt .st-ico { display: inline-flex; width: 26px; height: 26px; margin-right: 8px; align-items: center; justify-content: center; border: 1px solid color-mix(in srgb, var(--kc, #7fe3ff), transparent 55%); color: var(--kc, #7fe3ff); vertical-align: middle; }
+.st-opt .st-ico .field-icon { width: 17px; height: 17px; }
+.recipe .glyph, .recipe .recipe-ico { display: inline-flex; vertical-align: middle; margin-right: 8px; }
+.recipe .recipe-ico .field-icon { width: 18px; height: 18px; }
+.fab-bases em { display: inline-flex; align-items: center; gap: 6px; }
+.qcard-grade { display: inline-flex; margin-right: 6px; vertical-align: -0.25em; }
+.qcard-grade .field-icon { width: 16px; height: 16px; }

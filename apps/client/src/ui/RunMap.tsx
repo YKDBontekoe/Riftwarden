@@ -14,13 +14,13 @@ import { RarityName } from './RiftLevel';
 import { type NodeBrief, nodeBrief } from '@riftwarden/rules/runmap/brief';
 import type { RunMapView, StationPanel } from '@riftwarden/rules/runmap/view';
 import { AffinityRow } from './LoadingScreen';
-import { ItemDetail, RarityTag } from './items';
+import { ItemDetail, ItemGlyph, RarityTag } from './items';
 import { useHud } from './useHud';
 import { BIOMES } from '@riftwarden/rules/world/biomes';
 import { NamedDrops } from './NamedDrops';
 import { bossArtwork } from '@riftwarden/game/visuals/fieldArtwork';
 import { FieldArt } from './FieldArt';
-import { FieldIcon, NODE_ICON } from './FieldIcon';
+import { FieldIcon, NODE_ICON, serviceIcon } from './FieldIcon';
 
 /** Node colours per kind (map badges, chips). */
 export const KIND_COLOR: Record<NodeKind, string> = {
@@ -334,7 +334,10 @@ export function StationScreen({ game }: { game: Game }) {
                   tick((x) => x + 1);
                 }}
               >
-                <span className="st-label">{o.item && <RarityTag id={o.item.rarity} />}{o.label}</span>
+                <span className="st-label">
+                  {o.item ? <ItemGlyph item={o.item} size={26} /> : <span className="st-ico"><FieldIcon name={serviceIcon(p.station, o.id)} /></span>}
+                  {o.item && <RarityTag id={o.item.rarity} />}{o.label}
+                </span>
                 <span className="st-text">{o.text}</span>
                 <span className="st-price">{o.disabled ?? (o.price !== null ? `${o.price} cores` : 'Free')}</span>
               </button>

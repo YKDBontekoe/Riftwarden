@@ -4,15 +4,29 @@ import { type Category, type ItemInstance } from '@riftwarden/rules/loot/types';
 import { fmtNum } from '@riftwarden/rules/combat/stats';
 
 import { fieldArtwork } from '@riftwarden/game/visuals/fieldArtwork';
+import { useItemThumb } from './thumbs';
 
 const CATEGORY_ICON: Record<Category, IconKind> = { weapon: 'rifle', armor: 'plate', shield: 'ring', reactor: 'core', processor: 'chip', accessory: 'gem', module: 'cube', ability: 'gem', ultimate: 'core' };
 
-/** Inline SVG glyph per base icon kind (matches the pickup holograms). */
-export function ItemGlyph({ item, size = 34, portrait = true }: { item: Pick<ItemInstance, 'defId' | 'rarity' | 'category' | 'uniqueId'>; size?: number; portrait?: boolean }) {
-  const kind: IconKind = baseDef(item.defId)?.icon ?? CATEGORY_ICON[item.category] ?? 'cube';
+type GlyphItem = Pick<ItemInstance, 'defId' | 'rarity' | 'category' | 'uniqueId'> & Partial<Pick<ItemInstance, 'build' | 'socketed' | 'weapon'>>;
+
+/**
+ * Item icon: a rendered thumbnail of the item's 3D model (the same model the arena drop
+ * shows) on a rarity-framed tile; painted portraits for uniques; the SVG glyph while the
+ * thumbnail renders (and in headless tests).
+ */
+export function ItemGlyph({ item, size = 34, portrait = true }: { item: GlyphItem; size?: number; portrait?: boolean }) {
   const c = rarity(item.rarity).color;
   const art = portrait && item.uniqueId && fieldArtwork(`unique-${item.uniqueId}`);
+  const thumb = useItemThumb(art ? null : { defId: item.defId, category: item.category, rarity: item.rarity, build: item.build, socketed: item.socketed, element: item.weapon?.element, uniqueId: item.uniqueId });
   if (art) return <img className="glyph glyph-art" src={art} width={size} height={size} alt="" decoding="async" draggable={false} style={{ ['--rc' as string]: c }} />;
+  if (thumb) return <img className="glyph glyph-3d" src={thumb} width={size} height={size} alt="" draggable={false} data-thumb={item.defId} style={{ ['--rc' as string]: c }} />;
+  return <SvgGlyph item={item} size={size} />;
+}
+
+function SvgGlyph({ item, size }: { item: GlyphItem; size: number }) {
+  const kind: IconKind = baseDef(item.defId)?.icon ?? CATEGORY_ICON[item.category] ?? 'cube';
+  const c = rarity(item.rarity).color;
   return (
     <svg className="glyph" viewBox="0 0 40 40" width={size} height={size} style={{ ['--rc' as string]: c }}>
       <rect x="1" y="1" width="38" height="38" className="gl-bg" />

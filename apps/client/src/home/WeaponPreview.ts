@@ -1,24 +1,21 @@
 import '@riftwarden/game/babylonSideEffects';
 import { ArcRotateCamera } from '@babylonjs/core/Cameras/arcRotateCamera';
 import { Engine } from '@babylonjs/core/Engines/engine';
-import { DirectionalLight } from '@babylonjs/core/Lights/directionalLight';
-import { HemisphericLight } from '@babylonjs/core/Lights/hemisphericLight';
 import { ImageProcessingConfiguration } from '@babylonjs/core/Materials/imageProcessingConfiguration';
-import { PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial';
-import { Color3, Color4 } from '@babylonjs/core/Maths/math.color';
+import { Color4 } from '@babylonjs/core/Maths/math.color';
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
-import { Mesh } from '@babylonjs/core/Meshes/mesh';
-import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
 import { DefaultRenderingPipeline } from '@babylonjs/core/PostProcesses/RenderPipeline/Pipelines/defaultRenderingPipeline';
 import { Scene } from '@babylonjs/core/scene';
 import { rarity } from '@riftwarden/rules/loot/rarity';
 import type { ItemInstance } from '@riftwarden/rules/loot/types';
 import { WeaponAnimator } from '@riftwarden/game/weapons/animator';
 import { buildWeaponModel, type WeaponRig } from '@riftwarden/game/weapons/model';
-import { captureEnvironment } from '@riftwarden/game/visuals/envCapture';
+import { buildItemModel, type ItemModel, lookOf } from '@riftwarden/game/loot/itemModels';
+import { buildStudio } from './studio';
 
 /**
- * 3D weapon inspection stage (HQ terminals). Runs a tiny dedicated engine on its own
+ * 3D item inspection stage (HQ terminals). Weapons show their live procedural model; every
+ * other item its sculpt from loot/itemModels (the same model the arena drops show). Runs a tiny dedicated engine on its own
  * canvas inside the terminal UI, because the terminal overlay blurs the main canvas.
  * Uses the exact same model builder as the first-person viewmodel. The model is rebuilt
  * only when the weapon's build or installed modules change; everything (engine, scene,
@@ -29,6 +26,7 @@ export class WeaponPreview {
   readonly scene: Scene;
   readonly camera: ArcRotateCamera;
   private rig: WeaponRig | null = null;
+  private model: ItemModel | null = null;
   private anim: WeaponAnimator | null = null;
   private key = '';
   private idle = 0;
@@ -58,54 +56,7 @@ export class WeaponPreview {
     canvas.addEventListener('pointerdown', () => (this.idle = 0));
     canvas.addEventListener('wheel', () => (this.idle = 0), { passive: true });
 
-    // Studio: key, rim and cool fill lights; softboxes captured into the reflection env.
-    const hemi = new HemisphericLight('pvFill', new Vector3(0, 1, 0), scene);
-    hemi.intensity = 0.35;
-    hemi.groundColor = new Color3(0.08, 0.09, 0.1);
-    const key = new DirectionalLight('pvKey', new Vector3(0.6, -0.7, 0.4), scene);
-    key.intensity = 2.4;
-    key.diffuse = new Color3(1, 0.95, 0.9);
-    const rim = new DirectionalLight('pvRim', new Vector3(-0.4, -0.2, -0.9), scene);
-    rim.intensity = 1.6;
-    rim.diffuse = new Color3(0.6, 0.85, 1);
-
-    const studio: Mesh[] = [];
-    const glow = (name: string, c: [number, number, number]) => {
-      const m = new PBRMaterial(name, scene);
-      m.unlit = true;
-      m.albedoColor = Color3.Black();
-      m.emissiveColor = new Color3(...c);
-      m.backFaceCulling = false;
-      return m;
-    };
-    const dome = MeshBuilder.CreateSphere('pvDome', { diameter: 12, segments: 16, sideOrientation: Mesh.BACKSIDE }, scene);
-    dome.material = glow('pvDomeMat', [0.035, 0.05, 0.065]);
-    studio.push(dome);
-    for (const [pos, size, c] of [
-      [[2.5, 2.5, -1.5], [3, 1.4], [3, 3, 3]],
-      [[-3, 1.2, 2], [2, 2.5], [1.2, 1.8, 2.4]],
-      [[0, 4.5, 0], [4, 4], [1.6, 1.6, 1.7]],
-    ] as [[number, number, number], [number, number], [number, number, number]][]) {
-      const p = MeshBuilder.CreatePlane('pvSoftbox', { width: size[0], height: size[1] }, scene);
-      p.position.set(...pos);
-      p.lookAt(Vector3.Zero());
-      p.material = glow('pvSoftboxMat', c);
-      studio.push(p);
-    }
-    const floor = MeshBuilder.CreateDisc('pvFloor', { radius: 1.2, tessellation: 48 }, scene);
-    floor.rotation.x = Math.PI / 2;
-    floor.position.y = -0.16;
-    const fm = new PBRMaterial('pvFloorMat', scene);
-    fm.albedoColor = new Color3(0.02, 0.025, 0.03);
-    fm.metallic = 0.4;
-    fm.roughness = 0.35;
-    floor.material = fm;
-    const ring = MeshBuilder.CreateTorus('pvRing', { diameter: 1.6, thickness: 0.006, tessellation: 64 }, scene);
-    ring.position.y = -0.158;
-    ring.material = glow('pvRingMat', [0.037, 0.082, 0.108]);
-    studio.push(floor, ring);
-    // Softboxes double as visible studio lights and as the reflection environment.
-    captureEnvironment(scene, studio, [], new Vector3(0, 0.1, 0), 128);
+    buildStudio(scene);
 
     const pipe = new DefaultRenderingPipeline('pvPipe', true, scene, [cam]);
     pipe.samples = 4;
@@ -137,7 +88,15 @@ export class WeaponPreview {
     this.key = key;
     this.rig?.dispose();
     this.rig = null;
+    this.model?.dispose();
+    this.model = null;
     this.anim = null;
+    if (item && item.category !== 'weapon') {
+      this.model = buildItemModel(this.scene, lookOf(item), { size: 0.46, name: 'pvItem' });
+      this.builds++;
+      if (!sameWeapon) this.frameAt(0.62);
+      return;
+    }
     if (!item?.build) return;
     this.rig = buildWeaponModel(this.scene, item.build, item.socketed, { name: 'pv', mount: false, element: item.weapon?.element, uniqueId: item.uniqueId }, rarity(item.rarity).index);
     this.anim = new WeaponAnimator(this.rig);
@@ -147,19 +106,25 @@ export class WeaponPreview {
     this.rig.root.position.set(0, 0, -mid);
     if (!sameWeapon) {
       const halfWidth = Math.tan(this.camera.fov / 2) * this.engine.getAspectRatio(this.camera);
-      this.idle = 0;
-      this.camera.target.set(0, 0.02, 0);
-      this.camera.radius = Math.max(0.56, len * 1.12, len * 0.55 / halfWidth);
-      this.camera.alpha = Math.PI * 0.84;
-      this.camera.beta = 1.25;
+      this.frameAt(Math.max(0.56, len * 1.12, len * 0.55 / halfWidth));
     }
+  }
+
+  private frameAt(radius: number): void {
+    this.idle = 0;
+    this.camera.target.set(0, 0.02, 0);
+    this.camera.radius = radius;
+    this.camera.alpha = Math.PI * 0.84;
+    this.camera.beta = 1.25;
   }
 
   /** Idle presentation: slow turntable after a few seconds without input, live parts animate. */
   frame(dt: number): void {
     const d = Math.min(0.1, Math.max(0, dt));
     this.idle += d;
-    if (this.idle > 4) this.camera.alpha += d * 0.25;
+    if (this.idle > 4 && !this.model) this.camera.alpha += d * 0.25;
+    // Gear turns on the stage until the player grabs it.
+    if (this.model && this.idle > 0.5) this.model.root.rotation.y += d * 0.6;
     this.anim?.update({ dt: d, lookDx: 0, lookDy: 0, speed: 0, grounded: true, sprinting: false, dashing: false, verticalSpeed: 0, heat: 0, overheated: false, charge: 0, active: 0, holster: 0 });
     if (this.rig) {
       // The animator moves the slide/fins only; keep the root still on the stage.

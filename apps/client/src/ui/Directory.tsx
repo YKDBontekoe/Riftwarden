@@ -8,7 +8,8 @@ import { levelInfo, pointsAt, POINTS_PER_LEVEL, ringsAt } from '@riftwarden/rule
 import { useSave } from './App';
 import { stationArtwork } from '@riftwarden/game/visuals/fieldArtwork';
 import { FieldArt } from './FieldArt';
-import { CURRENCY_ICON, FieldIcon, STATION_ICON } from './FieldIcon';
+import { FieldIcon, STATION_ICON } from './FieldIcon';
+import { CurrencyIcon } from './inventory/thumbs';
 
 /** Command Console: Warden level, XP and skill points at a glance. */
 export function WardenProgress({ flow }: { flow: Flow }) {
@@ -60,7 +61,7 @@ export function StationDirectory({ flow, close }: { flow: Flow; close: () => voi
               {locked ? <span className="text-orange" data-testid={`dir-locked-${st.id}`}>⨯ {locked}</span> : <span>{info.purpose}</span>}
               <small>
                 {st.area}
-                {info.uses.length > 0 && <span className="directory-currencies">{info.uses.map((k) => <i key={k} className={CURRENCIES[k].cls} title={CURRENCIES[k].name}><FieldIcon name={CURRENCY_ICON[k]} /></i>)}</span>}
+                {info.uses.length > 0 && <span className="directory-currencies">{info.uses.map((k) => <i key={k} className={CURRENCIES[k].cls} title={CURRENCIES[k].name}><CurrencyIcon k={k} /></i>)}</span>}
               </small>
             </button>
           );
