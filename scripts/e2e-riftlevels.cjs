@@ -465,6 +465,61 @@ async function openDeploy(p) {
     }
   }
 
+  if (want('I')) {
+    // Seasons: start this month's seasonal profile, play a seasonal run, switch back; boards (offline here).
+    const { b: b7, p: p7, errs: errs7 } = await launch({});
+    try {
+      await ev(p7, () => window.__rift.flow.enterHq());
+      await waitFor(p7, () => window.__rift.state().location === 'home' && !window.__rift.flow.busy);
+      await ev(p7, () => window.__rift.home.openTerminal('deploy'));
+      await p7.waitForSelector('[data-testid=season-start]', { timeout: 20000 });
+      await p7.click('[data-testid=season-start]');
+      const i1 = await ev(p7, () => {
+        const pr = window.__rift.profile;
+        return { active: pr.seasonActive, seasonId: pr.save.seasonId, perm: pr.permanent.seasonId ?? null, bar: document.querySelector('[data-testid=season-bar]')?.textContent ?? '', unlocked: pr.save.threat.unlocked };
+      });
+      check('I1 starting the season switches to a fresh seasonal profile (bar says so)', i1.active && i1.seasonId >= 1 && i1.perm === null && /SEASONAL PROFILE/.test(i1.bar) && i1.unlocked === 1, JSON.stringify(i1).slice(0, 200));
+      if (captureScreens) await shot(p7, 'rl-season-bar', { frames: 2 });
+      await ev(p7, () => window.__rift.home.closeTerminal());
+      await ev(p7, () => window.__rift.flow.deploy(1));
+      await waitFor(p7, () => window.__rift.state().location === 'arena' && !window.__rift.flow.busy);
+      const i2 = await ev(p7, async () => {
+        const r = window.__rift;
+        const g = r.game;
+        const tick = () => new Promise((res) => setTimeout(res, 0));
+        for (let guard = 0; guard < 3000 && g.cfg.run.lastBankedWave < 5; guard++) {
+          if (g.screen === 'upgrade' && g.offer) { g.chooseUpgrade(g.offer[0].id); await tick(); }
+          if (g.screen !== 'playing' && !(g.screen === 'upgrade' && g.offer)) g.setScreen('playing');
+          if (g.waves.phase === 'prep') g.startWave();
+          r.advance(0.5);
+          r.killAll();
+        }
+        const pr = r.profile;
+        return { rule: g.cfg.seasonRule, seasonalUnlocked: pr.save.threat.unlocked, permUnlocked: pr.permanent.threat.unlocked, board: pr.save.board, tagged: pr.journal.state.entries.slice(-1)[0]?.season };
+      });
+      check('I2 the seasonal run plays under the season rule, banks into the seasonal profile only (board kept)', !!i2.rule && i2.seasonalUnlocked === 2 && i2.permUnlocked === 1 && i2.board?.rl === 2 && i2.tagged >= 1, JSON.stringify(i2));
+      await ev(p7, () => window.__rift.flow.abandonRun());
+      await waitFor(p7, () => window.__rift.state().location === 'home' && !window.__rift.flow.busy);
+      await ev(p7, () => { window.__rift.home.setScreen('home'); window.__rift.home.openTerminal('deploy'); });
+      await p7.waitForSelector('[data-testid=season-toggle]', { timeout: 20000 });
+      await p7.click('[data-testid=season-toggle]');
+      const i3 = await ev(p7, () => ({ active: window.__rift.profile.seasonActive, unlocked: window.__rift.profile.save.threat.unlocked }));
+      check('I3 PLAY PERMANENT switches back to the untouched permanent profile', !i3.active && i3.unlocked === 1, JSON.stringify(i3));
+      await ev(p7, () => { window.__rift.home.closeTerminal(); });
+      await ev(p7, () => { window.__rift.home.setScreen('home'); window.__rift.home.openTerminal('command'); });
+      await p7.waitForSelector('[data-testid=boards-offline]', { timeout: 20000 });
+      const i4 = await ev(p7, () => ({ journey: document.querySelector('[data-testid=season-panel]')?.textContent ?? '', boards: document.querySelector('[data-testid=boards]')?.textContent ?? '' }));
+      check('I4 command console shows the season journey and explains boards need the server', /JOURNEY · 0\/12/.test(i4.journey) && /Unlock Rift Level 3/.test(i4.journey) && /server/.test(i4.boards), JSON.stringify(i4).slice(0, 200));
+      if (captureScreens) await shot(p7, 'rl-season-console', { frames: 2 });
+      const bad7 = errs7.filter((e) => !/compil(e|ing) effect|Trying next fallback|BJS - \[[\d:]+\]: (Uniforms|Attributes|Defines|Error: (VERTEX|FRAGMENT))|GPU stall|favicon|Failed to load resource/.test(e));
+      check('I5 no runtime errors in the seasons flow', bad7.length === 0, bad7.slice(0, 3).join(' | '));
+    } catch (e) {
+      check('I no exception', false, e.stack || String(e));
+    } finally {
+      await b7.close();
+    }
+  }
+
   const bad = errs.filter((e) => !/compil(e|ing) effect|Trying next fallback|BJS - \[[\d:]+\]: (Uniforms|Attributes|Defines|Error: (VERTEX|FRAGMENT))|GPU stall|favicon/.test(e));
   check('Z no runtime errors', bad.length === 0, bad.slice(0, 3).join(' | '));
   console.log(`\n${stats.passes} passed, ${stats.failures} failed (${Math.round((Date.now() - t0) / 1000)} s)`);

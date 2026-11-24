@@ -3,6 +3,7 @@ import { generateMarket } from '@riftwarden/rules/economy/market';
 import { marketProgress } from '@riftwarden/rules/progression/save';
 import { lockedSlots, newlyUnlocked, setUnlockAll, unlockAllActive } from '@riftwarden/rules/progression/unlocks';
 import { bestPowers } from '@riftwarden/rules/loot/feedback';
+import { ruleOf } from '@riftwarden/rules/progression/seasons';
 export { pinnacleBlocker } from '@riftwarden/rules/progression/spikes';
 import { breakthroughShards, breakthroughTitle, CODEX } from '@riftwarden/rules/progression/spikes';
 import type { SaveData } from '@riftwarden/rules/progression/save';
@@ -56,8 +57,8 @@ export function unlockAllForTests(profile: Profile): void {
 }
 
 /** Profile progress an arena needs at deployment: locked slots, mastery and the best owned item per kind. */
-export function arenaProgress(save: SaveData): { lockedSlots: ReturnType<typeof lockedSlots>; mastery: SaveData['progress']['mastery']; ownedBest: Map<string, number> } {
-  return { lockedSlots: lockedSlots(save), mastery: structuredClone(save.progress.mastery), ownedBest: bestPowers(save.items) };
+export function arenaProgress(save: SaveData): { lockedSlots: ReturnType<typeof lockedSlots>; mastery: SaveData['progress']['mastery']; ownedBest: Map<string, number>; seasonRule: ReturnType<typeof ruleOf> } {
+  return { lockedSlots: lockedSlots(save), mastery: structuredClone(save.progress.mastery), ownedBest: bestPowers(save.items), seasonRule: ruleOf(save) };
 }
 
 /** A pinnacle run is harder and luckier throughout (the summoned boss leads wave 1). */

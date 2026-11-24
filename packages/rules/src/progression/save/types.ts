@@ -201,6 +201,14 @@ export interface SaveData {
   pinnacle?: { keys: number; runs: number };
   /** Rift War: regions this warden secured sectors in, and regions whose victory cache was claimed. */
   war?: { fought: number[]; claimed: number[] };
+  /** Seasonal profiles only: the season this document belongs to (absent = the permanent profile). */
+  seasonId?: number;
+  /** The permanent profile's running seasonal profile (a full document; entries tagged with its season apply to it). */
+  seasonal?: { id: number; doc: SaveData };
+  /** Finished seasons (what each one reached; titles are cosmetic). */
+  seasonsDone?: import('../seasons').SeasonArchive[];
+  /** Leaderboard summary kept by the rules when checkpoints bank (boards read it from server documents). */
+  board?: import('../seasons').BoardSummary;
   /** Set when a migration restarted progression (v11 Rift Levels): the HQ shows a one-time notice. */
   wiped?: { from: number; at: number };
 }

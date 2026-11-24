@@ -1,3 +1,4 @@
+import { startSeason } from './seasons';
 import * as TX from '../economy/transactions';
 import { SLOT_IDS, type SlotId } from './items';
 import {
@@ -40,7 +41,7 @@ export type OpResult = ({ ok: true } & Record<string, any>) | { ok: false; reaso
 type ArgKind = 'str' | 'str?' | 'int' | 'bool' | 'strs' | 'num' | 'json';
 interface OpDef {
   args: ArgKind[];
-  run(d: SaveData, a: unknown[], txId: string | undefined): OpResult;
+  run(d: SaveData, a: unknown[], txId: string | undefined, now: number): OpResult;
 }
 
 const bool = (ok: boolean, reason: string): { ok: true } | { ok: false; reason: string } => (ok ? { ok: true } : { ok: false, reason });
@@ -85,6 +86,11 @@ const DEFS: Record<string, OpDef> = {
   uninstallModule: { args: ['str', 'int'], run: (d, a, tx) => TX.withTx(d, tx, () => uninstallModule(d, a[0] as string, a[1] as number)) },
   transferModule: { args: ['str', 'int', 'str', 'int'], run: (d, a, tx) => TX.withTx(d, tx, () => transferModule(d, a[0] as string, a[1] as number, a[2] as string, a[3] as number)) },
   selectTier: { args: ['int'], run: (d, a) => bool(selectTier(d, a[0] as number), 'Tier locked') },
+  // ---- seasons (the permanent profile starts this month's seasonal profile)
+  startSeason: { args: ['int'], run: (d, a, _tx, now) => {
+    const why = startSeason(d, a[0] as number, now);
+    return why ? { ok: false, reason: why } : { ok: true };
+  } },
   // ---- big spikes: pinnacle keys (fabricator), Rift War victory caches
   craftKey: { args: [], run: (d, _a, tx) => TX.withTx(d, tx, () => craftKey(d) as never) },
   warContribute: { args: ['int'], run: (d, a) => warContribute(d, a[0] as number) },
@@ -220,11 +226,11 @@ function lockError(d: SaveData, name: string, args: unknown[]): string | null {
 }
 
 /** Run a named operation against a save (mutates on success; the caller persists). */
-export function runOp(d: SaveData, name: string, args: unknown[], txId?: string): OpResult {
+export function runOp(d: SaveData, name: string, args: unknown[], txId?: string, now = Date.now()): OpResult {
   const err = opError(name, args);
   if (err) return { ok: false, reason: err };
   const locked = lockError(d, name, args);
   if (locked) return { ok: false, reason: locked };
   if (txId !== undefined && (typeof txId !== 'string' || txId.length > 80)) return { ok: false, reason: 'Invalid transaction id' };
-  return DEFS[name].run(d, args, txId);
+  return DEFS[name].run(d, args, txId, now);
 }

@@ -46,7 +46,7 @@ export function HomeHud({ flow }: { flow: Flow }) {
         </div>
         <WardenLevel xp={save.progress.xp} allocated={save.progress.tree.allocated.length} />
         <div>
-          <span>RIFT LEVEL</span>
+          <span>{save.seasonId ? `SEASON ${save.seasonId} · RIFT LEVEL` : 'RIFT LEVEL'}</span>
           <b>
             RL {tier.id} · {tier.name}
           </b>

@@ -181,7 +181,7 @@ export class SessionClient implements CoopTunnel {
         try {
           const r = await this.syncCall(
             j.state.device,
-            pending.map((e) => ({ seq: e.seq, at: e.at, body: { op: e.op, run: e.run } })),
+            pending.map((e) => ({ seq: e.seq, at: e.at, body: { op: e.op, run: e.run, season: e.season } })),
           );
           this.profile.adoptServer(fromDoc(r.doc), Number(r.rev), upTo, r.results.map((x) => ({ seq: Number(x.seq), ok: x.ok, reason: x.reason })));
           this.status.set({

@@ -33,6 +33,11 @@ export class Profile {
   namespace: string | null = null;
   /** Called after every journaled change (the session client sends it when online). */
   onEntry: ((e: LogEntry) => void) | null = null;
+  /**
+   * Playing the seasonal profile (`SaveData.seasonal.doc`): `save`, rules, ops and run entries act on it, and its
+   * journal entries carry the season so the server applies them there too. Remembered per device.
+   */
+  private seasonMode = readSeasonMode();
   private readonly baseStorage: KeyValueStorage | null;
 
   constructor(private storage: KeyValueStorage | null = browserStorage()) {
@@ -43,7 +48,7 @@ export class Profile {
     this.loadNotes = r.notes;
     // A brand-new profile starts a complete log from its genesis; older saves have no log (not uploadable).
     this.journal = new SyncJournal(storage, r.status === 'new' ? snapshot(r.data) : null);
-    this.store = new Store({ save: snapshot(this.data), savedAt: 0, lastWriteOk: true });
+    this.store = new Store({ save: snapshot(this.active), savedAt: 0, lastWriteOk: true });
     const dirty = this.closeInterrupted() || r.status !== 'loaded' || r.notes.length > 0;
     if (dirty) this.persist();
   }
@@ -51,14 +56,48 @@ export class Profile {
   /** A run still marked active means the page closed mid-run: record it once (a paused map run stays). */
   private closeInterrupted(): boolean {
     const e: RunEntry = { kind: 'interrupt', at: Date.now(), keepResumable: true };
-    if (!applyRunEntry(this.data, e)) return false;
-    this.record({ run: e });
-    return true;
+    let changed = false;
+    if (applyRunEntry(this.data, e)) {
+      this.journal.append({ run: e });
+      changed = true;
+    }
+    const s = this.data.seasonal;
+    if (s && applyRunEntry(s.doc, e)) {
+      this.journal.append({ run: e, season: s.id });
+      changed = true;
+    }
+    return changed;
   }
 
   private record(body: { op?: { name: string; args: unknown[]; tx?: string }; run?: RunEntry }): void {
-    const e = this.journal.append(body);
+    const season = this.seasonActive ? this.data.seasonal!.id : undefined;
+    const e = this.journal.append(season === undefined ? body : { ...body, season });
     this.onEntry?.(e);
+  }
+
+  /** True while the seasonal profile is the active one. */
+  get seasonActive(): boolean {
+    return this.seasonMode && !!this.data.seasonal;
+  }
+
+  /** The permanent profile (seasons, boards and archives read it while the seasonal profile is active). */
+  get permanent(): Readonly<SaveData> {
+    return this.data;
+  }
+
+  /** The document rules act on right now. */
+  private get active(): SaveData {
+    return this.seasonActive ? this.data.seasonal!.doc : this.data;
+  }
+
+  /** Switch between the permanent and the seasonal profile (not during a run). */
+  setSeasonMode(on: boolean): boolean {
+    if (this.active.activeRun) return false;
+    if (on && !this.data.seasonal) return false;
+    this.seasonMode = on;
+    writeSeasonMode(on);
+    this.persist();
+    return true;
   }
 
   /** Apply a run lifecycle entry (runRules.ts) and log it. Returns true when the save changed. */
@@ -112,12 +151,12 @@ export class Profile {
   }
 
   get save(): Readonly<SaveData> {
-    return this.data;
+    return this.active;
   }
 
   /** Apply a rule. Persists and publishes only when the rule reports a change. */
   mutate(rule: (d: SaveData) => boolean | void): boolean {
-    const changed = rule(this.data) !== false;
+    const changed = rule(this.active) !== false;
     if (changed) this.persist();
     return changed;
   }
@@ -132,7 +171,7 @@ export class Profile {
     const before = JSON.stringify(this.data);
     let res: T;
     try {
-      res = rule(this.data);
+      res = rule(this.active);
     } catch (e) {
       this.data = JSON.parse(before) as SaveData;
       return { ok: false, reason: `Transaction error: ${(e as Error).message}` };
@@ -144,7 +183,7 @@ export class Profile {
     const written = this.persist();
     if (!written && this.storage) {
       this.data = JSON.parse(before) as SaveData;
-      this.store.set({ save: snapshot(this.data), savedAt: this.store.get().savedAt, lastWriteOk: false });
+      this.store.set({ save: snapshot(this.active), savedAt: this.store.get().savedAt, lastWriteOk: false });
       this.rollbacks++;
       return { ok: false, reason: 'Save failed: the transaction was rolled back, nothing changed' };
     }
@@ -161,6 +200,17 @@ export class Profile {
     return r;
   }
 
+  /** An op on the permanent profile whatever is active (starting a season). */
+  permanentOp(name: string, args: unknown[] = [], txId: string = newUid('tx')): OpResult {
+    const keep = this.seasonMode;
+    this.seasonMode = false;
+    try {
+      return this.op(name, args, txId);
+    } finally {
+      this.seasonMode = keep;
+    }
+  }
+
   rollbacks = 0;
   /** Test hook: make storage writes fail (verifies rollback). */
   failWrites = false;
@@ -168,8 +218,24 @@ export class Profile {
   persist(): boolean {
     const ok = !this.failWrites && writeSave(this.storage, this.data);
     this.writes++;
-    this.store.set({ save: snapshot(this.data), savedAt: Date.now(), lastWriteOk: ok });
+    this.store.set({ save: snapshot(this.active), savedAt: Date.now(), lastWriteOk: ok });
     return ok;
+  }
+}
+
+const SEASON_MODE_KEY = 'riftwarden.seasonMode';
+function readSeasonMode(): boolean {
+  try {
+    return typeof localStorage !== 'undefined' && localStorage.getItem(SEASON_MODE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+function writeSeasonMode(on: boolean): void {
+  try {
+    localStorage.setItem(SEASON_MODE_KEY, on ? '1' : '0');
+  } catch {
+    // the choice simply resets next session
   }
 }
 

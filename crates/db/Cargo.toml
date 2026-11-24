@@ -12,6 +12,7 @@ workspace = true
 [dependencies]
 chrono = "0.4.45"
 serde_json = "1.0.154"
+serde = { version = "1", features = ["derive"] }
 sqlx = { version = "0.9.1", default-features = false, features = ["runtime-tokio", "tls-rustls-ring-webpki", "postgres", "macros", "migrate", "uuid", "chrono", "json"] }
 thiserror = "2.0.21"
 tracing = "0.1.44"

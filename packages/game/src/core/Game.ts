@@ -1,3 +1,4 @@
+import type { SeasonRuleId } from '@riftwarden/rules/progression/seasons';
 import { PINNACLE, pinnacleBoss } from '@riftwarden/rules/progression/spikes';
 import { gearPower } from '@riftwarden/rules/progression/riftLevel';
 import { type LootVerdictHost, LootVerdicts } from '../arena/LootVerdicts';
@@ -147,6 +148,8 @@ export interface ArenaConfig {
   ownedBest?: ReadonlyMap<string, number>;
   /** A pinnacle run (a key was spent): the pinnacle boss leads wave 1 and drops the pinnacle table. */
   pinnacle?: boolean;
+  /** Seasonal profile: the month's season rule (progression/seasons). */
+  seasonRule?: SeasonRuleId | null;
   /** Arena layout for this run (procedural from the run seed); defaults to the classic hand-built arena. */
   layout?: ArenaLayout;
   /** Run map node this arena plays (absent = classic endless run with checkpoint choices). */
@@ -428,6 +431,8 @@ export class Game {
     this.inventory = new RunInventory(cfg.loadout, cfg.run);
     this.inventory.lockedSlots = cfg.lockedSlots ?? [];
     cfg.run.powerAtStart ??= gearPower(Object.values(cfg.loadout));
+    // Season rule Bountiful Rift: +15% loot luck on every level (the server accepts up to x4 node/act luck).
+    if (cfg.seasonRule === 'bountiful') cfg.tier = { ...cfg.tier, lootLuck: cfg.tier.lootLuck * 1.15 };
     this.weapon.finishFor = (f) => cfg.mastery?.[f]?.finish;
     if (cfg.node?.carry) this.inventory.adoptLoadout(cfg.node.carry.loadout);
     // Every map node rolls its own loot stream (a new arena must not replay the previous node's drops).
@@ -1598,7 +1603,8 @@ export class Game {
 
   /** Weapon-family mastery XP into the run's unsecured pool (the co-op server routes it to the shooter). */
   protected gainMastery(family: WeaponFamily, xp: number): void {
-    if (this.cfg.run.collect({ mastery: { [family]: xp } })) uiEvents.emit('mastery', { family, xp });
+    const got = this.cfg.seasonRule === 'masteryFever' ? Math.round(xp * 1.5) : xp;
+    if (this.cfg.run.collect({ mastery: { [family]: got } })) uiEvents.emit('mastery', { family, xp: got });
   }
 
   /** Family of the weapon in hand (mastery modifiers follow it). */
@@ -1744,7 +1750,7 @@ export class Game {
     if (e.elite) this.dropFrom(this.survival.eliteSource(e), at);
     if (boss && this.cfg.pinnacle) this.dropLoot('pinnacle', at);
     // Pinnacle keys: elites on RL 8+ (own stream, like shards, so loot rolls never shift).
-    if (e.elite && this.cfg.tier.id >= PINNACLE.minRl && this.shardRand() < PINNACLE.keyChance(e.mods.length) && this.cfg.run.collect({ keys: 1 })) uiEvents.emit('alert', { text: 'PINNACLE KEY · bank it to summon a pinnacle boss', tone: 'orange' });
+    if (e.elite && this.cfg.tier.id >= PINNACLE.minRl && this.shardRand() < PINNACLE.keyChance(e.mods.length) * (this.cfg.seasonRule === 'keyRush' ? 2 : 1) && this.cfg.run.collect({ keys: 1 })) uiEvents.emit('alert', { text: 'PINNACLE KEY · bank it to summon a pinnacle boss', tone: 'orange' });
     this.enemies.kill(e, this.enemyFx, this.enemyCtx);
   }
 

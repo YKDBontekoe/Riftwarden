@@ -1,10 +1,12 @@
+import { checkpointsNeeded, updateBoard } from '../seasons';
+import { MAX_TIER } from './coerce';
 import { breakthroughItem, breakthroughShards, isBreakthrough, newCodexEntries, PINNACLE } from '../spikes';
 import { bankMastery } from '../mastery';
 import { storageExpansionCost, STORAGE_EXPANSION } from '../../loot/economy';
 import { rarity } from '../../loot/rarity';
 import { fitsSlot, getSlot, type ItemInstance, SLOT_IDS, type SlotId, defaultSlot } from '../items';
 import type { Rewards, RunResult } from '../run';
-import { CHECKPOINT_INTERVAL, unlocksNextTier } from '../tiers';
+import { CHECKPOINT_INTERVAL } from '../tiers';
 import { lockedFamiliesOf, lockedSlots, lootLocks } from '../unlocks';
 
 /** The Rift Level an active run plays at: deploy level + Rift Surges taken on its map. */
@@ -149,10 +151,11 @@ export function bankRewards(data: SaveData, runId: string, wave: number, rewards
   const rl = runLevel(a);
   const rec = record(data, rl);
   rec.checkpoints++;
-  if (unlocksNextTier(rl, rec.checkpoints) && data.threat.unlocked < rl + 1) {
+  if (rl < MAX_TIER && rec.checkpoints >= checkpointsNeeded(data, rl) && data.threat.unlocked < rl + 1) {
     data.threat.unlocked = rl + 1;
     grantBreakthrough(data, rl);
   }
+  updateBoard(data, a.startedAt);
   void opts;
   return true;
 }

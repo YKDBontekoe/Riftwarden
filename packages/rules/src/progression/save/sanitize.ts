@@ -1,3 +1,4 @@
+import { rolloverSeason } from '../seasons';
 import { PINNACLE, sanitizeCodex } from '../spikes';
 import { sanitizeMastery } from '../mastery';
 import { ALL_LOOT_LOCKS } from '../unlocks';
@@ -329,7 +330,7 @@ function sanitizeEconomy(v: unknown): EconomyState {
  * Validate an arbitrary object into a consistent SaveData. Never throws.
  * `repairs` lists the fixes applied (useful for diagnostics/tests).
  */
-export function sanitizeSave(raw: unknown, now = Date.now()): { data: SaveData; repairs: string[] } {
+export function sanitizeSave(raw: unknown, now = Date.now(), nested = false): { data: SaveData; repairs: string[] } {
   const repairs: string[] = [];
   const r = obj(raw);
   const def = createDefaultSave(now);
@@ -544,6 +545,7 @@ export function sanitizeSave(raw: unknown, now = Date.now()): { data: SaveData; 
   const war = obj(r.war);
   const ks = (v: unknown) => [...new Set(arr(v).filter((x): x is number => Number.isInteger(x) && (x as number) >= 0 && (x as number) < 100_000))].slice(0, 500);
   if (Object.keys(war).length) data.war = { fought: ks(war.fought), claimed: ks(war.claimed) };
+  sanitizeSeasons(data, r, now, nested);
   const w = obj(r.wiped);
   if (typeof w.from === 'number' && typeof w.at === 'number') data.wiped = { from: int(w.from, 0, 0, 1000), at: num(w.at, 0, 0) };
 
@@ -605,4 +607,22 @@ export function sanitizeProgress(raw: unknown, profileId: string): ProgressState
   const mastery = sanitizeMastery(p.mastery);
   if (mastery) out.mastery = mastery;
   return out;
+}
+
+/** Seasonal fields: the season marker, the running seasonal document (sanitized as a nested save), archives and the
+ * board summary; then the end-of-month rollover (deterministic for `now`). */
+function sanitizeSeasons(data: SaveData, r: Record<string, unknown>, now: number, nested: boolean): void {
+  if (Number.isInteger(r.seasonId) && (r.seasonId as number) >= 1) data.seasonId = r.seasonId as number;
+  const b = obj(r.board);
+  if (typeof b.rl === 'number') data.board = { rl: int(b.rl, 1, 1, MAX_TIER), wave: int(b.wave, 0, 0, 1e6), waveRl: int(b.waveRl, 0, 0, MAX_TIER), at: num(b.at, 0, 0) };
+  const done = arr(r.seasonsDone).map(obj).filter((x) => Number.isInteger(x.id));
+  if (done.length) data.seasonsDone = done.slice(-60).map((x) => ({ id: int(x.id, 1, 1), rl: int(x.rl, 1, 1, MAX_TIER), wave: int(x.wave, 0, 0, 1e6), journey: int(x.journey, 0, 0, 100), title: typeof x.title === 'string' ? x.title.slice(0, 40) : null }));
+  if (nested || data.seasonId) return;
+  const sz = obj(r.seasonal);
+  if (Number.isInteger(sz.id) && (sz.id as number) >= 1 && sz.doc && typeof sz.doc === 'object') {
+    const doc = sanitizeSave(sz.doc, now, true).data;
+    doc.seasonId = sz.id as number;
+    data.seasonal = { id: sz.id as number, doc };
+  }
+  rolloverSeason(data, now);
 }

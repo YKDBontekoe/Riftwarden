@@ -52,7 +52,7 @@ export class SyncJournal {
     return this.state.entries;
   }
 
-  append(body: { op?: OpEntry; run?: RunEntry }): LogEntry {
+  append(body: { op?: OpEntry; run?: RunEntry; season?: number }): LogEntry {
     const e: LogEntry = { seq: this.state.nextSeq++, at: Date.now(), ...JSON.parse(JSON.stringify(body)) };
     this.state.entries.push(e);
     this.save();

@@ -8,6 +8,7 @@ import { deployBlocker, equippedItem, type SaveData } from '@riftwarden/rules/pr
 import { CHECKPOINT_INTERVAL, getTier, type ThreatTier } from '@riftwarden/rules/progression/tiers';
 import { LevelLootCard, RiftLevelPicker, savePower, UnlockBar, WipeNotice } from '../RiftLevel';
 import { PinnacleCard } from '../Spikes';
+import { SeasonBar } from '../Seasons';
 import { useSave } from '../App';
 import { Shell } from '../shell';
 import { CoopPanel } from '../Coop';
@@ -44,6 +45,8 @@ export function DeployTerminal({ flow, close }: { flow: Flow; close: () => void 
       {mode === 'coop' ? (
         <CoopPanel flow={flow} />
       ) : (
+      <>
+      <SeasonBar flow={flow} save={save} />
       <div className={`deploy-grid${flow.mapMode ? ' war' : ''}`}>
         <div className="arena-card">
           <ResumeCard flow={flow} save={save} />
@@ -80,6 +83,7 @@ export function DeployTerminal({ flow, close }: { flow: Flow; close: () => void 
           </button>
         </div>
       </div>
+      </>
       )}
     </Shell>
   );

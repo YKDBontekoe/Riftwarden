@@ -23,7 +23,7 @@ async function adopt(flow: Flow, account: string, c: SessionClient): Promise<voi
   const guest = p.journal.state;
   const upload = guest.complete && !!guest.genesis && guest.entries.length > 0;
   if (upload) {
-    const r = await c.syncCall(guest.device, guest.entries.map((e) => ({ seq: e.seq, at: e.at, body: { op: e.op, run: e.run } })), guest.genesis);
+    const r = await c.syncCall(guest.device, guest.entries.map((e) => ({ seq: e.seq, at: e.at, body: { op: e.op, run: e.run, season: e.season } })), guest.genesis);
     p.useNamespace(account);
     p.adoptServer(fromDoc(r.doc), Number(r.rev), 0, []);
     // The progress now lives in the account; the guest starts over so it cannot be uploaded twice.
