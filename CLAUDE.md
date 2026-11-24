@@ -60,7 +60,7 @@ packages/rules/src/runmap/state.ts        RUN MAP: RunMapState (persisted on act
 packages/rules/src/runmap/brief.ts, view.ts RUN MAP: NodeBrief (map/loading cards), NodeHud / RunMapView / StationPanel view models [pure]
 packages/game/src/arena/RunNode.ts       RUN MAP: the arena side of a node (NodeHost): carry restore, segment completion + rewards, hub stations (E), panels, guardians, map trigger, exportCarry; replica mode for co-op clients (netState/applyNet)
 packages/game/src/core/mapSession.ts     RUN MAP: solo map session (Flow helper): entered/leave bookkeeping, node leftovers banking, resume point, map view
-packages/game/src/visuals/nodeProps.ts   RUN MAP: station rigs (merchant, forge, rest, anomaly obelisk, vault, exit rift) from kit primitives
+packages/game/src/visuals/nodeProps.ts   RUN MAP: station rigs on a shared octagonal deck (trade kiosk, forge + hammer, repair arch + scanner, anomaly shard cluster, armoured safe, standing exit portal with the rift shader); used = glow material dimmed; tests/hub-stations.test.ts (headless build, bounds, dim, dispose)
 packages/rules/src/runmap/intel.ts        NODE INTEL: nodeIntel (the arena planner's real roster for a node: hostiles, elites, boss, events, total HP, time to clear at your DPS, threat 1-5, effect deltas, reward lines), lookahead (downstream nodes, rows to boss, fight range, shop/rest ahead) [pure]
 packages/rules/src/arena/Hunt.ts          SURVIVAL: Hunt (enemy layout whose reactor follows the hunted drone, nav re-seeding on the living drones), HUNT tuning
 packages/rules/src/net/mapVote.ts         RUN MAP: resolveMapVote / voteComplete (majority, host tie-break, home voters) [pure]
