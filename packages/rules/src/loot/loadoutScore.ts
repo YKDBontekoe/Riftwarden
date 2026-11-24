@@ -1,4 +1,8 @@
-import { type CombatStats, computeStats, formatModifier, maxHull, mitigation, type StatKey, type StatOp } from '../combat/stats';
+import { expectedModifiers } from '../combat/conditions';
+import { affinity } from '../combat/elements';
+import { type CombatStats, computeStats, formatModifier, maxHull, mitigation, type StatKey, type StatModifier, type StatOp } from '../combat/stats';
+import { masteryModifiers, type MasteryState } from '../progression/mastery';
+import { baseDef } from './bases';
 import { ECONOMY } from '../data/defs';
 import { equipmentModifiers, itemModifiers, weaponDefFor, weaponSummary } from './equipment';
 import type { ItemInstance } from './types';
@@ -61,19 +65,43 @@ export function weightsFor(priority: ComparisonPriority, base: Pick<LoadoutScore
 
 const live = (items: readonly (ItemInstance | null | undefined)[]) => items.filter((i): i is ItemInstance => !!i && i.category !== 'module');
 
-export function loadoutScore(items: readonly (ItemInstance | null | undefined)[]): LoadoutScore {
+/**
+ * The build around the gear (build-aware scoring): what else feeds the stat block and what the weapon will face.
+ * Without a context the score is the gear alone (conditional affixes still count at their expected uptime).
+ */
+export interface ScoreContext {
+  /** Modifiers outside the gear: skill tree, run upgrades, forge stacks. */
+  extra?: readonly StatModifier[];
+  /** Weapon-family mastery (rank damage + chosen perks of the weapon in hand). */
+  mastery?: MasteryState;
+  /** Faction of the sector ahead: elemental weapons are weighted by their affinity against it. */
+  faction?: string | null;
+}
+
+/** Stat block of a loadout in hand: gear (sets included) + context, conditional affixes at their expected uptime. */
+function scoredStats(list: readonly ItemInstance[], weapon: ItemInstance | undefined, ctx: ScoreContext): CombatStats {
+  const fam = weapon ? baseDef(weapon.defId)?.weapon?.family : undefined;
+  return computeStats(expectedModifiers([...equipmentModifiers(list), ...(ctx.extra ?? []), ...masteryModifiers(ctx.mastery, fam)]));
+}
+
+/** Weapon DPS in the build: elemental power for elemental weapons, times the affinity against the sector faction. */
+function buildDps(item: ItemInstance, st: CombatStats, ctx: ScoreContext): number {
+  const w = weaponDefFor(item);
+  if (!w) return 0;
+  const elemental = w.element !== 'kinetic' ? st.elementalPower : 1;
+  return weaponSummary(w, st).dps * elemental * affinity(w.element, { kind: 'walker', mods: [] }, ctx.faction);
+}
+
+export function loadoutScore(items: readonly (ItemInstance | null | undefined)[], ctx: ScoreContext = {}): LoadoutScore {
   const all = live(items);
   // Two carried weapons: only the one in hand applies its affixes and modules. Firepower is the better of the two
   // (each with its own stat block); the other headlines use the first (primary) weapon.
   const weapons = all.filter((i) => i.category === 'weapon');
   const gear = all.filter((i) => i.category !== 'weapon');
   const list = weapons.length ? [...gear, weapons[0]] : gear;
-  const st = computeStats(equipmentModifiers(list));
+  const st = scoredStats(list, weapons[0], ctx);
   let dps = 0;
-  for (const weapon of weapons) {
-    const w = weaponDefFor(weapon);
-    if (w) dps = Math.max(dps, weaponSummary(w, weapon === weapons[0] ? st : computeStats(equipmentModifiers([...gear, weapon]))).dps);
-  }
+  for (const weapon of weapons) dps = Math.max(dps, buildDps(weapon, weapon === weapons[0] ? st : scoredStats([...gear, weapon], weapon, ctx), ctx));
   const pool = maxHull(ECONOMY.playerMaxHp, st) + st.shieldCapacity;
   const ehp = pool / Math.max(0.05, 1 - mitigation(st));
   const mobility = 100 * (0.7 * st.moveSpeedMult + 0.3 * st.dashRechargeMult);
@@ -110,9 +138,9 @@ export function swapped(equipped: readonly (ItemInstance | null)[], candidate: I
 }
 
 /** What equipping `candidate` instead of `replaced` does to the headline numbers. */
-export function swapImpact(equipped: readonly (ItemInstance | null)[], candidate: ItemInstance | null, replaced: ItemInstance | null, base?: LoadoutScore, priority: ComparisonPriority = 'balanced', targetIndex?: number): SwapImpact {
-  const b = base ?? loadoutScore(equipped);
-  const a = loadoutScore(swapped(equipped, candidate, replaced, targetIndex));
+export function swapImpact(equipped: readonly (ItemInstance | null)[], candidate: ItemInstance | null, replaced: ItemInstance | null, base?: LoadoutScore, priority: ComparisonPriority = 'balanced', targetIndex?: number, ctx: ScoreContext = {}): SwapImpact {
+  const b = base ?? loadoutScore(equipped, ctx);
+  const a = loadoutScore(swapped(equipped, candidate, replaced, targetIndex), ctx);
   return impactBetween(b, a, priority);
 }
 

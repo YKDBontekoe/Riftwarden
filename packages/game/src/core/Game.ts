@@ -1,3 +1,4 @@
+import type { ScoreContext } from '@riftwarden/rules/loot/loadoutScore';
 import { ConditionTracker, hasConditional } from '@riftwarden/rules/combat/conditions';
 import type { SeasonRuleId } from '@riftwarden/rules/progression/seasons';
 import { PINNACLE, pinnacleBoss } from '@riftwarden/rules/progression/spikes';
@@ -940,7 +941,13 @@ export class Game {
       equippedList: () => SLOT_IDS.map((s) => g.inventory.equipped(s)),
       replaced: (it) => g.inventory.equipped(g.inventory.targetSlot(it) ?? 'weapon'),
       baseline: (wave) => lootLevel(g.cfg.tier, wave),
+      scoreContext: () => g.scoreContext(),
     };
+  }
+
+  /** Build-aware scoring context of this drone: tree, run upgrades and node effects, mastery, the sector's faction. */
+  scoreContext(): ScoreContext {
+    return { extra: [...this.treeMods, ...this.director.build.modifiers(), ...(this.node?.mods() ?? [])], mastery: this.cfg.mastery, faction: this.director.faction };
   }
 
   private lootHost(): LootHost {

@@ -1,3 +1,4 @@
+import { ScoreCtx } from './compare';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { BoundKey } from './hud/widgets';
 import { fmtNum } from '@riftwarden/rules/combat/stats';
@@ -188,6 +189,9 @@ export function ArenaInventory({ game }: { game: Game }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [game]);
   const run = game.cfg.run;
+  // Build-aware verdicts in the arena: tree, run upgrades, node effects, mastery and the sector faction.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const scoreCtx = useMemo(() => game.scoreContext(), [game, version]);
   const refresh = () => force((n) => n + 1);
   const unsecured = run.unsecured.items.length;
   return (
@@ -206,6 +210,7 @@ export function ArenaInventory({ game }: { game: Game }) {
           </button>
         </div>
         <div className="term-body">
+          <ScoreCtx.Provider value={scoreCtx}>
           <InventoryView
             entries={entries}
             equipped={equipped}
@@ -245,6 +250,7 @@ export function ArenaInventory({ game }: { game: Game }) {
               </div>
             }
           />
+          </ScoreCtx.Provider>
         </div>
       </div>
     </div>

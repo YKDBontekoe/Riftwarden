@@ -22,7 +22,7 @@ import { Shell } from './shell';
 import { TowerTech } from './TowerTech';
 import { ModuleBench, saveEntries, useEquipped } from './Terminals';
 import { swapImpact } from '@riftwarden/rules/loot/loadoutScore';
-import { ComparisonPriorityPicker, ImpactBanner, useComparisonPriority } from './compare';
+import { ComparisonPriorityPicker, ImpactBanner, useComparisonPriority, useScoreContext } from './compare';
 import { SLOTS } from '@riftwarden/rules/progression/items';
 import { WeaponViewer } from './WeaponViewer';
 
@@ -167,10 +167,11 @@ function EquippedImpact({ save, before, after }: { save: SaveData; before: ItemI
   const equipped = useEquipped(save);
   const list = useMemo(() => SLOTS.map((s) => equipped[s.id]), [equipped]);
   const priority = useComparisonPriority();
+  const ctx = useScoreContext();
   const impact = useMemo(() => {
     if (before === after || !list.some((i) => i?.uid === before.uid)) return null;
-    return swapImpact(list, after, before, undefined, priority);
-  }, [list, before, after, priority]);
+    return swapImpact(list, after, before, undefined, priority, undefined, ctx);
+  }, [list, before, after, priority, ctx]);
   return impact ? <><ComparisonPriorityPicker /><ImpactBanner impact={impact} title="IF APPLIED · LOADOUT IMPACT" /></> : null;
 }
 
