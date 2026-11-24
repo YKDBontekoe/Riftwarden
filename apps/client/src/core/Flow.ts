@@ -852,10 +852,9 @@ export class Flow {
           rarity: o.rarity ?? 'rare',
           category: o.category ?? 'weapon',
           baseId: o.baseId,
-          allowExclusive: o.baseId ? [o.baseId] : [],
-          source: a.cfg.run.id,
+          allowExclusive: o.baseId ? [o.baseId] : [], source: a.cfg.run.id,
         });
-        if (o.set) item.set = o.set;
+        Object.assign(item, o.set ? { set: o.set } : {});
         const p = a.spawnPickup(item, new Vector3(o.x ?? 0, 1.5, o.z ?? -12), a.waves.number);
         return p ? item.uid : null;
       },
