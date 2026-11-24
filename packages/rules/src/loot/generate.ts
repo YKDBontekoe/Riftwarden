@@ -199,7 +199,8 @@ export function generateItem(spec: GenSpec): ItemInstance {
     // Modules exist for their affixes: always at least one.
     const lo = base.category === 'module' ? Math.max(1, r.affixes[0]) : r.affixes[0];
     const count = lo + Math.floor(rand() * (Math.max(lo, r.affixes[1]) - lo + 1));
-    const used = new Set<string>(base.implicit.map((s) => groupOfStat(s.stat)));
+    // Implicit stats block every affix on the same stat (conditional variants included).
+    const used = new Set<string>(base.implicit.flatMap((s) => groupsOfStat(s.stat)));
     const maxTier = maxTierFor(level);
     for (let i = 0; i < count; i++) {
       const pool = affixPool(base.category, used, base.affixes);
@@ -215,7 +216,7 @@ export function generateItem(spec: GenSpec): ItemInstance {
 
   // Ascended: one extra affix at the level's top tier with a perfect roll (consumes the stream only for ascended).
   if (fixed === undefined && r.id === 'ascended') {
-    const used = new Set<string>([...base.implicit.map((s) => groupOfStat(s.stat)), ...affixes.map((a) => AFFIXES.find((x) => x.id === a.id)?.group ?? '')]);
+    const used = new Set<string>([...base.implicit.flatMap((s) => groupsOfStat(s.stat)), ...affixes.map((a) => AFFIXES.find((x) => x.id === a.id)?.group ?? '')]);
     const a = pickWeighted(affixPool(base.category, used, base.affixes), (x) => x.weights[base.category] ?? 0, rand);
     if (a) affixes.push(rollAffix(a, maxTierFor(level), 1, level, r));
   }
@@ -252,6 +253,11 @@ export function generateItem(spec: GenSpec): ItemInstance {
 export function rollTier(rand: () => number, r: RarityDef, maxTier: number): number {
   const p = 1.6 / (1 + r.tierBias);
   return Math.min(maxTier, Math.max(1, 1 + Math.floor(Math.pow(rand(), p) * maxTier)));
+}
+
+/** Every affix group on a stat (plain and conditional variants). */
+export function groupsOfStat(stat: StatKey): string[] {
+  return [groupOfStat(stat), ...AFFIXES.filter((a) => a.stat === stat).map((a) => a.group)];
 }
 
 export function groupOfStat(stat: StatKey): string {

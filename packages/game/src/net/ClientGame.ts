@@ -553,6 +553,7 @@ export class ClientGame extends Game {
     this.hazards?.decay(hdt, this.hostileT);
     this.hazards?.affectPlayer(0);
     this.player.update(dt, input, this.stats.moveSpeedMult * (this.hazards?.playerSpeed ?? 1), controls);
+    this.tickConditions();
     this.blendCorrection(dt);
     if (this.player.dashedThisFrame) {
       this.player.dashedThisFrame = false;
@@ -604,7 +605,7 @@ export class ClientGame extends Game {
     if (this.inputT <= 0 || this.pendingShots.length >= 8) {
       this.inputT = 1 / INPUT_HZ;
       const p = this.player.position;
-      const fl = (this.player.dashing ? 1 : 0) | (this.player.sprinting ? 2 : 0) | (trigger ? 4 : 0) | (this.construction.active ? 8 : 0) | (this.dashFlag ? 16 : 0);
+      const fl = (this.player.dashing ? 1 : 0) | (this.player.sprinting ? 2 : 0) | (trigger ? 4 : 0) | (this.construction.active ? 8 : 0) | (this.dashFlag ? 16 : 0) | (this.player.grounded ? 0 : 32);
       this.dashFlag = false;
       this.link.send({ t: 'input', seq: ++this.seq, p: [round2(p.x), round2(p.y), round2(p.z)], yaw: round3(this.player.yaw), pitch: round3(this.player.pitch), sp: round2(this.player.speed), fl, heat: round2(this.weapon.heat / 100), shots: this.pendingShots.length ? this.pendingShots : undefined });
       this.pendingShots = [];
@@ -913,7 +914,10 @@ export class ClientGame extends Game {
       case 'u': {
         const payload = dec(ev[2]);
         // Personal kill confirmations keep the local (client-predicted) drone's dash topped up, as in single player.
-        if (ev[1] === 'hit' && payload === 'kill') this.player.refundDash(MOVE.killDashRefund);
+        if (ev[1] === 'hit' && payload === 'kill') {
+          this.player.refundDash(MOVE.killDashRefund);
+          this.conditions.note('kill', this.runTime);
+        }
         (uiEvents.emit as (k: string, v: unknown) => void)(ev[1], payload);
         return;
       }

@@ -930,6 +930,7 @@ button.icard.dis:hover { background: rgba(255, 255, 255, 0.025); }
 .id-block.set { border-left: 2px solid #6fe0b0; padding-left: 10px; }
 .id-block.set .id-label { color: #6fe0b0; }
 .id-block.set .set-on b { color: #8ff5c8; text-shadow: 0 0 8px rgba(111, 224, 176, 0.45); }
+.cond-tag { display: block; font-style: normal; font-size: 10.5px; letter-spacing: 0.06em; color: #9ad8ff; opacity: 0.9; }
 .set-tag { color: #6fe0b0; border: 1px solid rgba(111, 224, 176, 0.55); padding: 0 5px; letter-spacing: 0.12em; }
 .unique-flavour { font-style: italic; color: #c9b89a; margin: 4px 0; }
 .src-tag { color: var(--muted); }

@@ -5,6 +5,7 @@ import type { WeaponDef } from '../data/defs';
 import { buildMechanism, FAMILIES } from '../weapons/build';
 import { installedModules } from '../weapons/modules';
 import { enhanceStatMult, weaponEnhance } from '../economy/config';
+import { affixDef } from './affixes';
 import { baseDef } from './bases';
 import { setBonusModifiers } from './sets';
 import type { ItemInstance, RolledStat } from './types';
@@ -25,7 +26,10 @@ export function itemModifiers(item: ItemInstance): StatModifier[] {
   // Enhancement (M4) scales beneficial stored values; the stored roll itself never changes.
   const push = (it: ItemInstance) => {
     for (const s of it.base) out.push({ stat: s.stat, op: s.op, value: s.value * enhanceStatMult(it, s.stat, s.value, 'base'), source: it.uid });
-    for (const a of it.affixes) out.push({ stat: a.stat, op: a.op, value: a.value * enhanceStatMult(it, a.stat, a.value, 'affix'), source: it.uid });
+    for (const a of it.affixes) {
+      const cond = affixDef(a.id)?.cond;
+      out.push({ stat: a.stat, op: a.op, value: a.value * enhanceStatMult(it, a.stat, a.value, 'affix'), source: it.uid, ...(cond ? { cond } : {}) });
+    }
   };
   push(item);
   if (item.category === 'weapon') for (const m of installedModules(item)) push(m);

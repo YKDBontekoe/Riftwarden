@@ -1,3 +1,4 @@
+import { ConditionTracker, hasConditional } from '@riftwarden/rules/combat/conditions';
 import { baseDef } from '@riftwarden/rules/loot/bases';
 import { masteryModifiers, type MasteryState, rankOf, squadMasteryMult, teamMasteryBonus } from '@riftwarden/rules/progression/mastery';
 import { treeModifiers, treeRules } from '@riftwarden/rules/progression/skilltree';
@@ -81,6 +82,9 @@ export class Avatar {
   weaponDef: WeaponDef;
   /** Weapon in hand: only its affixes/modules count, claims must match its family. */
   activeWeapon: WeaponSlot = 'weapon';
+  /** Conditional affixes: what holds for this warden (airborne from the input flags, dash/swap/kill events, hull). */
+  readonly conds = new ConditionTracker();
+  condMods = false;
   /** Ability I/II and ultimate (swapped into the game by `as`, so damage charges this player's ultimate). */
   abilities!: Abilities;
   rand: () => number;
@@ -417,7 +421,9 @@ export class ServerGame extends Game {
     Object.assign(this.stats, computeStats([...towerGear, ...shared]));
     for (const a of this.avatars) {
       if (a.activeWeapon === 'weapon2' && !weaponDefFor(a.inventory.equipped('weapon2'))) a.activeWeapon = 'weapon';
-      a.stats = computeStats([...equipmentModifiers(a.inventory.equippedItems(otherSlot(a.activeWeapon))), ...a.treeMods, ...this.masteryMods(a, live), ...shared, ...this.director.buffModifiers(a.id)]);
+      const mods = [...equipmentModifiers(a.inventory.equippedItems(otherSlot(a.activeWeapon))), ...a.treeMods, ...this.masteryMods(a, live), ...shared, ...this.director.buffModifiers(a.id)];
+      a.condMods = hasConditional(mods);
+      a.stats = computeStats(mods, undefined, a.conds.active);
       a.player.applyStats(a.stats, this.attackerScale);
       a.uniques = gearUniques(a.inventory.equippedItems(otherSlot(a.activeWeapon)));
       a.weaponDef = weaponDefFor(a.inventory.equipped(a.activeWeapon)) ?? a.weaponDef;
@@ -522,8 +528,13 @@ export class ServerGame extends Game {
       }
       a.player.camera.position.set(a.lastPos.x, a.lastPos.y + 0.55, a.lastPos.z);
       a.player.camera.rotation.set(a.pitch, a.player.yaw, 0);
-      if (m.fl & 16) this.as(a, () => this.director.bus.emit({ type: 'dash', chain: this.director.bus.newChain(), source: { kind: 'weapon', id: 'dash' }, value: 1 }));
+      if (m.fl & 16) {
+        a.conds.note('dash', this.clock);
+        this.as(a, () => this.director.bus.emit({ type: 'dash', chain: this.director.bus.newChain(), source: { kind: 'weapon', id: 'dash' }, value: 1 }));
+      }
     }
+    // Conditional affixes: airborne rides the input flags (movement is client-predicted anyway).
+    if (a.conds.update(this.clock, { airborne: !!(m.fl & 32), hullFrac: a.player.hp / Math.max(1, a.player.maxHp), alive: a.player.alive }) && a.condMods) this.rebuildStats();
     for (const s of m.shots ?? []) this.shot(a, s);
   }
 
@@ -819,6 +830,7 @@ export class ServerGame extends Game {
         if (m.slot === a.activeWeapon) return null;
         if (!weaponDefFor(a.inventory.equipped(m.slot))) return 'No weapon in that slot';
         a.activeWeapon = m.slot;
+        a.conds.note('swap', this.clock);
         this.rebuildStats();
         return null;
       }
@@ -1101,6 +1113,7 @@ export class ServerGame extends Game {
     if (!a) return;
     const n = this.avatars.filter((o) => !o.left).length;
     const got = Math.round(xp * squadMasteryMult(n));
+    a.conds.note('kill', this.clock);
     // Inside `as(a)`: the recorder routes the personal UI event to the shooter only.
     if (a.run.collect({ mastery: { [family]: got } })) uiEvents.emit('mastery', { family, xp: got });
   }

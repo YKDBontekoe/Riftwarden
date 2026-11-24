@@ -827,6 +827,50 @@ async function deploy(p) {
       await ev(p, () => window.__rift.flow.abandonRun());
       await H.waitFor(p, () => window.__rift.state().location === 'home' && !window.__rift.state().busy);
     }
+    if (want('J')) {
+      // Conditional affixes: an airborne damage affix counts only while the drone is off the ground.
+      await ev(p, () => {
+        const R = window.__rift;
+        const w = R.makeItem({ seed: 7301, rarity: 'rare', baseId: 'plasma_repeater', level: 3 });
+        w.affixes.push({ id: 'c_airdmg', stat: 'weaponDamageMult', op: 'pct', value: 0.5, tier: 3, roll: 1 });
+        R.profile.mutate((d) => {
+          d.items.push(w);
+          if (d.loadout.weapon) d.storage.uids.push(d.loadout.weapon);
+          d.loadout.weapon = w.uid;
+          return true;
+        });
+      });
+      await deploy(p);
+      const j1 = await ev(p, () => {
+        const R = window.__rift;
+        const g = R.game;
+        R.advance(0.5);
+        const ground = { dmg: g.stats.weaponDamageMult, active: [...g.conditions.active] };
+        g.input.simulateKey('Space', true);
+        R.advance(0.12);
+        g.input.simulateKey('Space', false);
+        R.advance(0.15);
+        const air = { dmg: g.stats.weaponDamageMult, active: [...g.conditions.active], grounded: g.player.grounded };
+        R.advance(2.5);
+        const landed = { dmg: g.stats.weaponDamageMult, active: [...g.conditions.active] };
+        return { ground, air, landed };
+      });
+      check('J1 an airborne damage affix counts only while airborne', !j1.ground.active.includes('airborne') && j1.air.active.includes('airborne') && j1.air.dmg > j1.ground.dmg + 0.4 && Math.abs(j1.landed.dmg - j1.ground.dmg) < 1e-6, JSON.stringify(j1));
+      const j2 = await ev(p, () => {
+        const R = window.__rift;
+        const g = R.game;
+        g.input.simulateKey('ShiftLeft', true);
+        R.advance(1 / 60);
+        g.input.simulateKey('ShiftLeft', false);
+        R.advance(0.2);
+        const after = [...g.conditions.active];
+        R.advance(2.5);
+        return { after, later: [...g.conditions.active] };
+      });
+      check('J2 a dash opens the 2 s dash window, which then closes', j2.after.includes('dash') && !j2.later.includes('dash'), JSON.stringify(j2));
+      await ev(p, () => window.__rift.flow.abandonRun());
+      await H.waitFor(p, () => window.__rift.state().location === 'home' && !window.__rift.state().busy);
+    }
     const bad = errs.filter((e) => !/Error compiling effect/.test(e));
     check('Z no page/console errors', bad.length === 0, bad.slice(0, 3).join(' | '));
   } catch (e) {

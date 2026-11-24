@@ -1,3 +1,4 @@
+import { CONDITIONS } from '@riftwarden/rules/combat/conditions';
 import { createContext, useContext } from 'react';
 import { SETS, setCounts } from '@riftwarden/rules/loot/sets';
 import { signatureDef } from '@riftwarden/rules/loot/signatures';
@@ -99,6 +100,7 @@ export function ItemDetail({ item, status, stage = true }: { item: ItemInstance;
                 <StatIcon stat={a.stat} />
                 {STAT_DEFS[a.stat].label}
                 <small>{affixDef(a.id)?.adjective ?? ''}</small>
+                {affixDef(a.id)?.cond && <em className="cond-tag" data-testid="affix-cond">{CONDITIONS[affixDef(a.id)!.cond!].text}</em>}
               </span>
               {m !== 1 && <small className="enh-up">+{Math.round((m - 1) * 100)}%</small>}
               <TierPips tier={a.tier} />
