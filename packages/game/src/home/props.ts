@@ -32,6 +32,8 @@ export interface PropCtx {
   /** Add a static collider box (world-space corners). */
   collider: (x0: number, y0: number, z0: number, x1: number, y1: number, z1: number) => void;
   animators: Animator[];
+  /** Staged unlocks: the station is still locked, so its hardware is built powered off. */
+  stationOff?: (id: string) => boolean;
 }
 
 const ACCENT_GLOW: Record<string, [number, number, number]> = {
@@ -153,47 +155,6 @@ export function planeBuilder(scene: Scene, name: string, w: number, h: number) {
 const PLANE_FLIP = Matrix.RotationY(Math.PI);
 
 // ------------------------------------------------------------------ stations
-
-/**
- * Console desk: pedestal, angled work surface and a tilted screen facing local +z.
- * Returns the root (already positioned) so callers can add station-specific parts.
- */
-export function consoleDesk(ctx: PropCtx, st: Station, screen: ScreenTex, width = 1.5): TransformNode {
-  const { kit, M } = ctx;
-  const root = kit.node(`station_${st.id}`, null, [st.pos[0], 0, st.pos[1]]);
-  root.rotation.y = st.yaw;
-  const pedestal = kit.sculpt('consolePedestal', () => loftData([
-    { t: 0.07, w: 0.31, h: 0.35, n: 6 }, { t: 0.25, w: 0.27, h: 0.24, v: -0.045, n: 6 },
-    { t: 0.68, w: 0.30, h: 0.24, v: -0.07, n: 6 }, { t: 0.92, w: 0.42, h: 0.35, n: 6 },
-  ], 'y', 20));
-  kit.part(pedestal, M.graphite, root, { scale: [width, 1, 1] });
-  kit.part('box', M.white, root, { pos: [0, 0.92, 0.05], rot: [-0.25, 0, 0], scale: [width, 0.12, 0.75] });
-  kit.part('box', M.cyan, root, { pos: [0, 0.9, 0.43], rot: [-0.25, 0, 0], scale: [width * 0.96, 0.025, 0.02] });
-  kit.part('box', M.graphite, root, { pos: [0, 0.06, 0.05], scale: [width * 0.9, 0.12, 0.9] });
-  kit.part('box', M.metal, root, { pos: [0, 0.39, 0.197], rot: [0.07, 0, 0], scale: [width * 0.43, 0.50, 0.12] });
-  for (let i = 0; i < 5; i++) kit.part('box', M.graphite, root, { pos: [0, 0.23 + i * 0.076, 0.264 - i * 0.005], scale: [width * 0.34, 0.032, 0.019] });
-  for (const side of [-1, 1]) {
-    kit.part('box', M.metal, root, { pos: [side * width * 0.33, 1.08, -0.315], rot: [-0.22, 0, 0], scale: [0.105, 0.46, 0.13] });
-    kit.part('cyl6', M.graphite, root, { pos: [side * width * 0.33, 1.23, -0.27], rot: [0, 0, Math.PI / 2], scale: [0.13, 0.155, 0.13] });
-    kit.part('box', M.screenFrame, root, { pos: [side * width * 0.39, 0.976, 0.23], rot: [-0.25, 0, 0], scale: [width * 0.12, 0.018, 0.19] });
-  }
-  // Screen housing + screen
-  kit.part('box', M.screenFrame, root, { pos: [0, 1.36, -0.22], rot: [-0.35, 0, 0], scale: [width * 0.92, 0.62, 0.06] });
-  const plane = planeBuilder(ctx.scene, `screen_${st.id}`, width * 0.86, 0.54);
-  plane.material = screen.mat;
-  plane.parent = root;
-  plane.position.set(0, 1.36, -0.185);
-  plane.rotation.x = -0.35;
-  // Status light on the pedestal
-  for (let i = -1; i <= 1; i++) kit.part('box', i === 0 ? M.teal : M.cyan, root, { pos: [i * 0.077, 0.589, 0.248], scale: [0.044, 0.024, 0.012], shadow: false });
-  // Collider (rotated footprint approximated by its AABB)
-  const r = width / 2 + 0.1;
-  const along = Math.abs(Math.sin(st.yaw)) > 0.5;
-  const hx = along ? 0.5 : r;
-  const hz = along ? r : 0.5;
-  ctx.collider(st.pos[0] - hx, 0, st.pos[1] - hz, st.pos[0] + hx, 1.7, st.pos[1] + hz);
-  return root;
-}
 
 /** Launch ring at the end of the launch bay with an animated energy membrane. */
 export function launchRing(ctx: PropCtx): void {
@@ -404,21 +365,37 @@ export function storageRacks(ctx: PropCtx, stored: number, capacity: number): vo
   const perRack = Math.ceil(capacity / racks);
   const rows = 4;
   const cols = Math.ceil(perRack / rows);
+  const accent = M.accents?.works ?? M.cyanDim;
   let idx = 0;
   const z = 8.35;
   for (let r = 0; r < racks; r++) {
     const x = 12.6 + r * 1.75;
     const root = kit.node(`rack${r}`, null, [x, 0, z]);
-    kit.part('box', M.graphite, root, { pos: [0, 1.5, 0], scale: [1.6, 3.0, 0.9] });
-    kit.part('box', M.white, root, { pos: [0, 3.05, -0.02], scale: [1.66, 0.1, 0.94] });
+    // Frame: back panel, posts, plinth with a toe light, header with a light bar.
+    kit.part('box', M.graphite, root, { pos: [0, 1.55, 0.12], scale: [1.56, 2.9, 0.66] });
+    for (const s of [-1, 1]) {
+      kit.part('box', M.metal, root, { pos: [s * 0.8, 1.55, -0.02], scale: [0.08, 3.1, 0.92] });
+      kit.part('box', M.white, root, { pos: [s * 0.8, 1.55, -0.47], scale: [0.1, 3.1, 0.04] });
+    }
+    kit.part('box', M.graphite, root, { pos: [0, 0.09, -0.02], scale: [1.62, 0.18, 0.94] });
+    kit.part('box', accent, root, { pos: [0, 0.05, -0.49], scale: [1.4, 0.018, 0.012], shadow: false });
+    kit.part('box', M.white, root, { pos: [0, 3.08, -0.02], scale: [1.68, 0.16, 0.96] });
+    kit.part('box', accent, root, { pos: [0, 3.0, -0.505], scale: [1.4, 0.022, 0.012], shadow: false });
+    // Shelves between the rows.
+    for (let row = 0; row <= rows; row++) kit.part('box', M.metal, root, { pos: [0, 0.18 + row * 0.69, -0.04], scale: [1.52, 0.035, 0.86] });
     for (let row = 0; row < rows; row++)
       for (let col = 0; col < cols; col++) {
         if (idx >= capacity) continue;
-        const px = -0.4 + (col * 0.8) / Math.max(1, cols - 1);
-        const py = 0.45 + row * 0.66;
+        const single = cols <= 1;
+        const px = single ? 0 : -0.37 + (col * 0.74) / Math.max(1, cols - 1);
+        const py = 0.53 + row * 0.69;
         const occupied = idx < stored;
-        kit.part('box', M.white, root, { pos: [cols > 1 ? px : 0, py, -0.42], scale: [cols > 1 ? 0.72 : 1.4, 0.56, 0.06] });
-        kit.part('box', occupied ? M.cyan : M.graphite, root, { pos: [cols > 1 ? px : 0, py - 0.2, -0.46], scale: [0.22, 0.03, 0.01] });
+        const dw = single ? 1.4 : 0.7;
+        // Locker door: panel, recessed window, pull handle, status light.
+        kit.part('box', M.white, root, { pos: [px, py, -0.43], scale: [dw, 0.6, 0.04] });
+        kit.part('box', M.graphite, root, { pos: [px, py + 0.08, -0.455], scale: [dw * 0.72, 0.2, 0.012] });
+        kit.part('box', M.metal, root, { pos: [px, py - 0.14, -0.47], scale: [dw * 0.42, 0.035, 0.03] });
+        kit.part('box', occupied ? M.cyan : M.graphite, root, { pos: [px + dw * 0.36, py - 0.22, -0.455], scale: [0.05, 0.05, 0.012], shadow: false });
         idx++;
       }
   }

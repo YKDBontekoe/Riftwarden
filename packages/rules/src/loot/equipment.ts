@@ -1,3 +1,4 @@
+import { CONDITIONS, type CondId } from '../combat/conditions';
 import { ELEMENT_INFO } from '../combat/elements';
 import { BASE_STATS, type CombatStats, computeStats, formatModifier, formatStat, fmtNum, type StatKey, STAT_DEFS, type StatModifier, STAT_KEYS, type StatOp } from '../combat/stats';
 import { DAMAGE_PACE, HEAT_PACE } from '../combat/heat';
@@ -5,7 +6,9 @@ import type { WeaponDef } from '../data/defs';
 import { buildMechanism, FAMILIES } from '../weapons/build';
 import { installedModules } from '../weapons/modules';
 import { enhanceStatMult, weaponEnhance } from '../economy/config';
+import { affixDef } from './affixes';
 import { baseDef } from './bases';
+import { setBonusModifiers } from './sets';
 import type { ItemInstance, RolledStat } from './types';
 
 /**
@@ -24,7 +27,10 @@ export function itemModifiers(item: ItemInstance): StatModifier[] {
   // Enhancement (M4) scales beneficial stored values; the stored roll itself never changes.
   const push = (it: ItemInstance) => {
     for (const s of it.base) out.push({ stat: s.stat, op: s.op, value: s.value * enhanceStatMult(it, s.stat, s.value, 'base'), source: it.uid });
-    for (const a of it.affixes) out.push({ stat: a.stat, op: a.op, value: a.value * enhanceStatMult(it, a.stat, a.value, 'affix'), source: it.uid });
+    for (const a of it.affixes) {
+      const cond = affixDef(a.id)?.cond;
+      out.push({ stat: a.stat, op: a.op, value: a.value * enhanceStatMult(it, a.stat, a.value, 'affix'), source: it.uid, ...(cond ? { cond } : {}) });
+    }
   };
   push(item);
   if (item.category === 'weapon') for (const m of installedModules(item)) push(m);
@@ -42,6 +48,8 @@ export function moduleStats(item: ItemInstance): RolledStat[] {
 export function equipmentModifiers(items: readonly (ItemInstance | null | undefined)[]): StatModifier[] {
   const out: StatModifier[] = [];
   for (const it of items) if (it) out.push(...itemModifiers(it));
+  // Set bonuses (two / four equipped pieces of one set).
+  out.push(...setBonusModifiers(items));
   return out;
 }
 
@@ -78,6 +86,9 @@ export function weaponDefFor(item: ItemInstance | null | undefined): WeaponDef |
     rampMax: w.rampMax ?? t.rampMax,
     drones: w.drones ?? t.drones,
     seekCone: w.seekCone ?? t.seekCone,
+    splash: w.splash ?? t.splash,
+    spray: w.spray ?? t.spray,
+    targets: w.targets ?? t.targets,
     element: w.element ?? 'kinetic',
   };
 }
@@ -94,17 +105,17 @@ export interface CompareRow {
   verdict: -1 | 0 | 1;
 }
 
-/** Sum an item's contributions per (stat, op). */
-export function statTotals(item: ItemInstance | null | undefined): Map<string, RolledStat> {
-  const m = new Map<string, RolledStat>();
+/** Sum an item's contributions per (stat, op, condition). */
+export function statTotals(item: ItemInstance | null | undefined): Map<string, RolledStat & { cond?: CondId }> {
+  const m = new Map<string, RolledStat & { cond?: CondId }>();
   if (!item) return m;
   // Weapons include their installed modules.
-  const list = item.category === 'module' ? moduleStats(item) : itemModifiers(item);
+  const list: readonly (RolledStat & { cond?: CondId })[] = item.category === 'module' ? moduleStats(item) : itemModifiers(item);
   for (const s of list) {
-    const k = `${s.stat}|${s.op}`;
+    const k = `${s.stat}|${s.op}|${s.cond ?? ''}`;
     const cur = m.get(k);
     if (cur) cur.value += s.value;
-    else m.set(k, { stat: s.stat, op: s.op, value: s.value });
+    else m.set(k, { stat: s.stat, op: s.op, value: s.value, ...(s.cond ? { cond: s.cond } : {}) });
   }
   return m;
 }
@@ -119,6 +130,26 @@ const verdictOf = (a: number, b: number, better: 'higher' | 'lower'): -1 | 0 | 1
 export function chargeFactor(c: number): number {
   const x = Math.max(0, Math.min(1, c));
   return 0.3 + 0.7 * Math.pow(x, 1.3);
+}
+
+/** Machines in the "pack" readout. */
+export const PACK_SIZE = 3;
+
+/**
+ * Damage dealt to a pack of PACK_SIZE grouped machines per unit of single-target damage. Mirrors the arena rules:
+ * launcher = direct hit + 75% blast (55% falloff, the others at half radius) + cluster bomblets (3 x 30%, ~1 machine
+ * each at 80%); flamer = every machine in the cone up to `targets`; rail = pierced slugs at -15% each.
+ */
+export function packFactor(w: Pick<WeaponDef, 'family' | 'mechanism' | 'targets'>, pierce: number): number {
+  const others = PACK_SIZE - 1;
+  if (w.family === 'launcher') return 1 + others * 0.75 * (1 - 0.55 * 0.5) + (w.mechanism === 'cluster' ? 3 * 0.3 * 0.8 : 0);
+  if (w.family === 'flamer') return Math.min(PACK_SIZE, Math.max(1, w.targets));
+  if (w.family === 'rail') {
+    let f = 1;
+    for (let k = 1; k <= Math.min(others, Math.max(0, pierce)); k++) f += Math.pow(0.85, k);
+    return f;
+  }
+  return 1;
 }
 
 /**
@@ -141,11 +172,14 @@ export function weaponSummary(w: WeaponDef, stats: CombatStats = BASE_STATS) {
   const perShot = dmg * proj;
   // Pulse: every pulse also detonates (60% splash, counted once for a single target group of ~2).
   const dps = (perShot / cycle) * critFactor * rampAvg * (w.mechanism === 'pulse' ? 1.6 : 1);
+  const pierce = w.pierce + Math.floor(stats.pierce);
   return {
     damage: dmg,
     projectiles: proj,
     rate,
     dps,
+    /** Damage per second spread over a pack of PACK_SIZE machines standing together (area weapons gain, single-target ones do not). */
+    packDps: dps * packFactor(w, pierce),
     heat,
     shotsToOverheat: Math.ceil(100 / Math.max(0.01, heat)),
     cool: w.coolRate * stats.coolRateMult * HEAT_PACE.cool,
@@ -153,11 +187,16 @@ export function weaponSummary(w: WeaponDef, stats: CombatStats = BASE_STATS) {
     chargeTime,
     rampTime,
     rampMax: w.rampMax,
-    pierce: w.pierce + Math.floor(stats.pierce),
+    pierce,
     spread: w.spreadMin * stats.spreadMult,
     beamWidth: w.beamWidth,
     /** Swarm lock cone half-angle in degrees (0 for other families). */
     lockCone: w.family === 'swarm' ? (Math.atan(w.seekCone) * 180) / Math.PI : 0,
+    /** Launcher blast radius (m, 0 for other families). */
+    splash: w.family === 'launcher' ? w.splash : 0,
+    /** Flamer spray cone half-angle in degrees and machines reached per tick (0 for other families). */
+    sprayCone: w.family === 'flamer' ? (Math.atan(w.spray) * 180) / Math.PI : 0,
+    targets: w.family === 'flamer' ? Math.max(1, w.targets) : 0,
     /** Seconds of continuous fire from cold to overheat. */
     sustain: (100 / Math.max(0.01, heat)) / (w.mechanism === 'charge' || w.mechanism === 'salvo' ? 1 / cycle : rate),
   };
@@ -178,12 +217,16 @@ export function compareItems(a: ItemInstance, b: ItemInstance | null): CompareRo
       rows.push({ key, label, a: fmt(va), b: vb === undefined ? '' : fmt(vb), verdict: vb === undefined ? 0 : verdictOf(va, vb, better) });
     const same = !wb || wb.family === wa.family;
     add('w.dps', 'Sustained DPS', sa.dps, sb?.dps, 'higher');
+    if (sa.packDps > sa.dps * 1.05 || (sb && sb.packDps > sb.dps * 1.05)) add('w.pack', `Pack DPS (${PACK_SIZE} machines)`, sa.packDps, sb?.packDps, 'higher');
     rows.push({ key: 'w.element', label: 'Element', a: ELEMENT_INFO[wa.element].name, b: wb ? ELEMENT_INFO[wb.element].name : '', verdict: 0 });
-    add('w.damage', wa.family === 'beam' ? 'Damage / tick' : wa.family === 'swarm' ? 'Damage / drone' : 'Damage / shot', sa.damage, same ? sb?.damage : undefined, 'higher');
+    add('w.damage', wa.family === 'beam' || wa.family === 'flamer' ? 'Damage / tick' : wa.family === 'swarm' ? 'Damage / drone' : wa.family === 'launcher' ? 'Direct hit' : 'Damage / shot', sa.damage, same ? sb?.damage : undefined, 'higher');
     add('w.rate', wa.family === 'beam' ? 'Tick rate' : 'Fire rate', sa.rate, same ? sb?.rate : undefined, 'higher', (v) => `${fmtNum(v)}/s`);
     add('w.range', 'Range', sa.range, sb?.range, 'higher', (v) => `${fmtNum(v)} m`);
     add('w.sustain', 'Fire time to overheat', sa.sustain, sb?.sustain, 'higher', (v) => `${fmtNum(v)} s`);
     add('w.cool', 'Cooling', sa.cool, sb?.cool, 'higher', (v) => `${fmtNum(v)}/s`);
+    if (wa.family === 'launcher' && same) add('w.splash', 'Blast radius', sa.splash, sb?.splash, 'higher', (v) => `${fmtNum(v)} m`);
+    if (wa.family === 'flamer' && same) add('w.targets', 'Machines per tick', sa.targets, sb?.targets, 'higher', (v) => String(v));
+    if (wa.family === 'flamer' && same) add('w.spray', 'Spray cone', sa.sprayCone, sb?.sprayCone, 'higher', (v) => `${fmtNum(v)}°`);
     if (wa.family === 'rail' && same) add('w.pierce', 'Pierce', sa.pierce, sb?.pierce, 'higher', (v) => `${v} targets`);
     if (wa.family === 'rail' && wa.mechanism === 'charge' && same) add('w.charge', 'Charge time', sa.chargeTime, sb?.chargeTime, 'lower', (v) => `${fmtNum(v)} s`);
     if (wa.family === 'swarm' && same) add('w.drones', 'Drones / launch', sa.projectiles, sb?.projectiles, 'higher', (v) => String(v));
@@ -195,12 +238,12 @@ export function compareItems(a: ItemInstance, b: ItemInstance | null): CompareRo
   const keys = [...new Set([...ta.keys(), ...tb.keys()])];
   keys.sort((x, y) => STAT_KEYS.indexOf(x.split('|')[0] as StatKey) - STAT_KEYS.indexOf(y.split('|')[0] as StatKey));
   for (const k of keys) {
-    const [stat, op] = k.split('|') as [StatKey, StatOp];
+    const [stat, op, cond] = k.split('|') as [StatKey, StatOp, CondId | ''];
     const va = ta.get(k)?.value ?? 0;
     const vb = tb.get(k)?.value ?? 0;
     rows.push({
       key: k,
-      label: STAT_DEFS[stat].label,
+      label: cond ? `${STAT_DEFS[stat].label} (${CONDITIONS[cond].text})` : STAT_DEFS[stat].label,
       a: ta.has(k) ? formatModifier(stat, op, va) : '',
       b: tb.has(k) ? formatModifier(stat, op, vb) : '',
       verdict: b ? verdictOf(va, vb, STAT_DEFS[stat].better) : 0,

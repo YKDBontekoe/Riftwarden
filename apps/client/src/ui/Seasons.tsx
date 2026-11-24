@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import type { Flow } from '../core/Flow';
 import { JOURNEY, journeyDone, journeyTitle, seasonEnd, seasonOf, seasonRule } from '@riftwarden/rules/progression/seasons';
 import type { SaveData } from '@riftwarden/rules/progression/save';
+import { isUnlocked } from '@riftwarden/rules/progression/unlocks';
 import { apiBase } from '../account/api';
 import { sfx } from '@riftwarden/game/audio/Sfx';
 
@@ -20,6 +21,8 @@ export function SeasonBar({ flow, save }: { flow: Flow; save: SaveData }) {
   const [msg, setMsg] = useState<string | null>(null);
   const started = perm.seasonal?.id === id;
   const busy = !!save.activeRun;
+  // Staged unlocks: a new warden does not need a second ladder yet (an already started season always shows).
+  if (!started && !seasonal && !isUnlocked(perm, 'seasons')) return null;
   return (
     <div className={`flex flex-wrap items-center gap-[10px] border p-[8px_12px] m-[0_0_12px] ${seasonal ? 'border-violet/60 bg-[rgb(170_120_255/0.08)]' : 'border-line'}`} data-testid="season-bar">
       <div className="grid">
@@ -53,6 +56,7 @@ export function SeasonPanel({ flow }: { flow: Flow }) {
   const perm = flow.profile.permanent;
   const s = perm.seasonal;
   const done = s ? journeyDone(s.doc) : [];
+  if (!s && !isUnlocked(perm, 'seasons')) return null;
   return (
     <div className="grid gap-[6px]" data-testid="season-panel">
       <div className="col-label">SEASON {s?.id ?? seasonOf(Date.now())} JOURNEY · {done.length}/{JOURNEY.length}</div>

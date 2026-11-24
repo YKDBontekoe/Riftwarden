@@ -1,3 +1,4 @@
+import { setFor } from './sets';
 import { excludedComponents } from '../progression/mastery';
 import { rollSignature } from './signatures';
 import { mulberry32 } from '../combat/damage';
@@ -110,6 +111,8 @@ export interface GenSpec {
   excludeFamilies?: readonly string[];
   /** Loot locks (`comp:<family>:<id>`): weapon components the warden has not mastered never roll. */
   componentLocks?: readonly string[];
+  /** Drop source id (`DROP_SOURCES`): sources that favour a set raise its odds (target farming). */
+  dropSource?: string;
 }
 
 export function pickBase(category: Category, rand: () => number, allowExclusive: readonly string[] = [], excludeFamilies: readonly string[] = []): BaseDef {
@@ -174,6 +177,11 @@ export function generateItem(spec: GenSpec): ItemInstance {
         weapon.drones = t.drones + e.drones;
         weapon.seekCone = Math.round(t.seekCone * e.seekCone * 1000) / 1000;
       }
+      if (w.family === 'launcher') weapon.splash = Math.round(t.splash * e.splash * 100) / 100;
+      if (w.family === 'flamer') {
+        weapon.spray = Math.round(t.spray * e.spray * 1000) / 1000;
+        weapon.targets = Math.max(1, t.targets + e.targets);
+      }
       if (w.family === 'beam') {
         weapon.beamWidth = Math.round(t.beamWidth * e.beamWidth * 100) / 100;
         weapon.rampMax = Math.round(t.rampMax * e.rampMax * 100) / 100;
@@ -193,7 +201,8 @@ export function generateItem(spec: GenSpec): ItemInstance {
     // Modules exist for their affixes: always at least one.
     const lo = base.category === 'module' ? Math.max(1, r.affixes[0]) : r.affixes[0];
     const count = lo + Math.floor(rand() * (Math.max(lo, r.affixes[1]) - lo + 1));
-    const used = new Set<string>(base.implicit.map((s) => groupOfStat(s.stat)));
+    // Implicit stats block every affix on the same stat (conditional variants included).
+    const used = new Set<string>(base.implicit.flatMap((s) => groupsOfStat(s.stat)));
     const maxTier = maxTierFor(level);
     for (let i = 0; i < count; i++) {
       const pool = affixPool(base.category, used, base.affixes);
@@ -209,7 +218,7 @@ export function generateItem(spec: GenSpec): ItemInstance {
 
   // Ascended: one extra affix at the level's top tier with a perfect roll (consumes the stream only for ascended).
   if (fixed === undefined && r.id === 'ascended') {
-    const used = new Set<string>([...base.implicit.map((s) => groupOfStat(s.stat)), ...affixes.map((a) => AFFIXES.find((x) => x.id === a.id)?.group ?? '')]);
+    const used = new Set<string>([...base.implicit.flatMap((s) => groupsOfStat(s.stat)), ...affixes.map((a) => AFFIXES.find((x) => x.id === a.id)?.group ?? '')]);
     const a = pickWeighted(affixPool(base.category, used, base.affixes), (x) => x.weights[base.category] ?? 0, rand);
     if (a) affixes.push(rollAffix(a, maxTierFor(level), 1, level, r));
   }
@@ -236,6 +245,9 @@ export function generateItem(spec: GenSpec): ItemInstance {
   };
   item.name = nameItem(item, base, mulberry32((spec.seed ^ 0x9e3779b9) >>> 0));
   item.signature = rollSignature(item);
+  // Sets: seed-decided (no stream draw); starter-grade and repaired kit never belongs to one.
+  const set = fixed === undefined ? setFor(spec.seed, r.index, base.category, spec.dropSource) : null;
+  if (set) item.set = set;
   return item;
 }
 
@@ -243,6 +255,11 @@ export function generateItem(spec: GenSpec): ItemInstance {
 export function rollTier(rand: () => number, r: RarityDef, maxTier: number): number {
   const p = 1.6 / (1 + r.tierBias);
   return Math.min(maxTier, Math.max(1, 1 + Math.floor(Math.pow(rand(), p) * maxTier)));
+}
+
+/** Every affix group on a stat (plain and conditional variants). */
+export function groupsOfStat(stat: StatKey): string[] {
+  return [groupOfStat(stat), ...AFFIXES.filter((a) => a.stat === stat).map((a) => a.group)];
 }
 
 export function groupOfStat(stat: StatKey): string {

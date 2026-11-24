@@ -842,7 +842,7 @@ export class Flow {
         p.controller.setVelocity(Vector3.Zero());
       },
       /** Spawn a generated drop at x/z (arena). Returns the item uid. */
-      spawnLoot: (o: { x?: number; z?: number; rarity?: RarityId; category?: Category; baseId?: string; level?: number; seed?: number } = {}) => {
+      spawnLoot: (o: { x?: number; z?: number; rarity?: RarityId; category?: Category; baseId?: string; level?: number; seed?: number; set?: ItemInstance['set'] } = {}) => {
         const a = flow.arena;
         if (!a) return null;
         const item = generateItem({
@@ -852,9 +852,9 @@ export class Flow {
           rarity: o.rarity ?? 'rare',
           category: o.category ?? 'weapon',
           baseId: o.baseId,
-          allowExclusive: o.baseId ? [o.baseId] : [],
-          source: a.cfg.run.id,
+          allowExclusive: o.baseId ? [o.baseId] : [], source: a.cfg.run.id,
         });
+        Object.assign(item, o.set ? { set: o.set } : {});
         const p = a.spawnPickup(item, new Vector3(o.x ?? 0, 1.5, o.z ?? -12), a.waves.number);
         return p ? item.uid : null;
       },

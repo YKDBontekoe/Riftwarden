@@ -3,13 +3,13 @@ import { STAT_DEFS } from '@riftwarden/rules/combat/stats';
 import { affixDef } from '@riftwarden/rules/loot/affixes';
 import { baseDef } from '@riftwarden/rules/loot/bases';
 import { swapImpact, type SwapImpact } from '@riftwarden/rules/loot/loadoutScore';
-import { ComparisonPriorityPicker, useComparisonPriority, useScore, VerdictTag } from '../compare';
+import { ComparisonPriorityPicker, useComparisonPriority, useScore, useScoreContext, VerdictTag } from '../compare';
 import { rarity } from '@riftwarden/rules/loot/rarity';
 import { type Category, type ItemInstance } from '@riftwarden/rules/loot/types';
 import { getSlot, type SlotId, SLOTS, slotsFor, defaultSlot } from '@riftwarden/rules/progression/items';
 import { fmtNum } from '@riftwarden/rules/combat/stats';
 import { ComparePanel } from './compare';
-import { ItemDetail } from './detail';
+import { EquippedItemsContext, ItemDetail } from './detail';
 import { InvEntry, ItemCard, catLabel } from './entry';
 import { ItemGlyph } from './glyphs';
 
@@ -78,15 +78,16 @@ export function InventoryView({ entries, equipped, actions, extraFilter, header,
 
   const equippedList = useMemo(() => SLOTS.map((s) => equipped[s.id]), [equipped]);
   const base = useScore(equippedList);
+  const ctx = useScoreContext();
   const impacts = useMemo(() => {
     const m = new Map<string, SwapImpact>();
     for (const e of entries) {
       if (e.equippedIn || e.item.category === 'module' || !baseDef(e.item.defId)) continue;
       const s = defaultSlot(e.item.category, equipped, lockedSlots);
-      if (s) m.set(e.item.uid, swapImpact(equippedList, e.item, equipped[s], base, priority, SLOTS.findIndex((slot) => slot.id === s)));
+      if (s) m.set(e.item.uid, swapImpact(equippedList, e.item, equipped[s], base, priority, SLOTS.findIndex((slot) => slot.id === s), ctx));
     }
     return m;
-  }, [entries, equipped, equippedList, base, priority, lockedSlots]);
+  }, [entries, equipped, equippedList, base, priority, lockedSlots, ctx]);
 
   const list = useMemo(() => {
     const f = entries.filter((e) => (filter === 'all' ? true : filter === 'unsecured' ? e.status === 'unsecured' : e.item.category === filter) && matchesQuery(e.item, query) && (!upOnly || impacts.get(e.item.uid)?.verdict === 'upgrade'));
@@ -103,7 +104,7 @@ export function InventoryView({ entries, equipped, actions, extraFilter, header,
   const slot = targetSlot && slots.includes(targetSlot) ? targetSlot : shown ? defaultSlot(shown.category, equipped, lockedSlots) : null;
   const against = slot ? equipped[slot] : null;
   const selectedImpact = item && shown === item && slot && selected && !selected.equippedIn && impacts.has(item.uid)
-    ? swapImpact(equippedList, item, against, base, priority, SLOTS.findIndex((s) => s.id === slot))
+    ? swapImpact(equippedList, item, against, base, priority, SLOTS.findIndex((s) => s.id === slot), ctx)
     : null;
   const counts = useMemo(() => {
     const m: Record<string, number> = { all: entries.length, unsecured: entries.filter((e) => e.status === 'unsecured').length };
@@ -214,7 +215,9 @@ export function InventoryView({ entries, equipped, actions, extraFilter, header,
               {hovered && hovered !== selected && <div className="preview-flag">HOVER PREVIEW · click to select</div>}
               <div className={`detail-split ${!shownEntry.equippedIn && shown.category !== 'module' ? 'two' : ''}`}>
                 <div className="ds-item">
-                  <ItemDetail item={shown} status={shownEntry.equippedIn ? 'equipped' : shownEntry.status} />
+                  <EquippedItemsContext.Provider value={equippedList}>
+                    <ItemDetail item={shown} status={shownEntry.equippedIn ? 'equipped' : shownEntry.status} />
+                  </EquippedItemsContext.Provider>
                 </div>
                 {!shownEntry.equippedIn && shown.category !== 'module' && (
                   <div className="ds-compare">

@@ -415,8 +415,20 @@ export class WeaponFx {
     }
   }
 
+  /** Presentation timers (rocket smoke, cluster bomblets): real time, every side (solo, replica). */
+  private timers: { t: number; fn: () => void }[] = [];
+  later(seconds: number, fn: () => void): void {
+    if (this.timers.length < 160) this.timers.push({ t: seconds, fn });
+  }
+
   update(dt: number, eye?: Vector3): void {
     this.t += dt;
+    for (let i = this.timers.length - 1; i >= 0; i--) {
+      const x = this.timers[i];
+      if ((x.t -= dt) > 0) continue;
+      this.timers.splice(i, 1);
+      x.fn();
+    }
     if (eye) this.eye.copyFrom(eye);
     for (const b of this.bolts) {
       if (!b.active) continue;
@@ -463,6 +475,7 @@ export class WeaponFx {
   }
 
   reset(): void {
+    this.timers.length = 0;
     for (const b of this.bolts) {
       b.active = false;
       b.arrive = null;

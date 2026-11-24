@@ -56,7 +56,7 @@ export function UpgradePanel({ game }: { game: Game }) {
                   <span className="uc-rarity">{u.rarity.toUpperCase()}</span>
                   <span className="uc-key">{i + 1}</span>
                 </div>
-                <span aria-hidden="true" className={`uc-art art-${u.category}`} />
+                <span aria-hidden="true" className={`uc-art art-${u.category}`} data-el={u.tags.find((t) => t === 'thermal' || t === 'cryo') ?? undefined} />
                 <div className="uc-name">{u.name}</div>
                 <div className="uc-cat">{CATEGORY_LABEL[u.category]}{u.needs?.towers ? ' · TOWERS' : ''}</div>
                 <div className="uc-text">{u.text(have + 1)}</div>

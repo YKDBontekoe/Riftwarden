@@ -736,6 +736,182 @@ async function deploy(p) {
       await ev(p, () => window.__rift.flow.abandonRun());
       await H.waitFor(p, () => window.__rift.state().location === 'home' && !window.__rift.state().busy);
     }
+    if (want('I')) {
+      // Launcher + Flamer families.
+      const equip = (baseId, mech, seed) => ev(p, ({ baseId, mech, seed }) => {
+        const R = window.__rift;
+        const w = R.makeItem({ seed, rarity: 'rare', baseId, level: 3 });
+        w.build.mechanism = mech;
+        R.profile.mutate((d) => {
+          d.items.push(w);
+          if (d.loadout.weapon) d.storage.uids.push(d.loadout.weapon);
+          d.loadout.weapon = w.uid;
+          return true;
+        });
+      }, { baseId, mech, seed });
+      // Walkers placed relative to the crosshair (dist m ahead, side offsets in m).
+      const place = (dist, sides) => ev(p, ({ dist, sides }) => {
+        const R = window.__rift;
+        const g = R.game;
+        R.look(0, 0);
+        R.advance(1 / 60);
+        const cam = g.player.camera;
+        const f = cam.getDirection(new R.V3(0, 0, 1));
+        const r = cam.getDirection(new R.V3(1, 0, 0));
+        window.__heavy = sides.map((side) => {
+          const e = R.dev.spawn('walker');
+          const at = cam.position.add(f.scale(dist)).add(r.scale(side));
+          e.pos.set(at.x, 0, at.z);
+          e.root.position.copyFrom(e.pos);
+          e.shotT = 99;
+          e.hp = e.maxHp = 2000;
+          return e;
+        });
+        R.advance(1 / 60);
+      }, { dist, sides });
+      await equip('launcher_tube', 'mc_rocket', 6101);
+      await deploy(p);
+      await place(14, [0, 1.6, -1.6]);
+      const i1 = await ev(p, () => {
+        const R = window.__rift;
+        const g = R.game;
+        const es = window.__heavy;
+        const hp0 = es.map((e) => e.hp);
+        const i = R.flow.input;
+        i.simulateMouse(0, true);
+        R.advance(1 / 60);
+        i.simulateMouse(0, false);
+        R.advance(1 / 60);
+        const early = es.map((e, k) => Math.round(hp0[k] - e.hp));
+        const flying = g.wfx.liveBolts;
+        R.advance(0.8);
+        return { fam: g.weapon.def.family, splash: g.weapon.def.splash, early, flying, dmg: es.map((e, k) => Math.round(hp0[k] - e.hp)) };
+      });
+      check('I1 a rocket lands after its flight: direct hit plus splash on the machines around it', i1.fam === 'launcher' && i1.early.every((d) => d === 0) && i1.flying >= 1 && i1.dmg.every((d) => d > 0) && i1.dmg[0] > i1.dmg[1], JSON.stringify(i1));
+      await ev(p, () => {
+        window.__rift.game.input.simulateMouse(0, true);
+        for (let k = 0; k < 4; k++) window.__rift.advance(1 / 60);
+      });
+      await H.shot(p, 'heavy-launcher', { frames: 2 });
+      await ev(p, () => window.__rift.game.input.simulateMouse(0, false));
+      await ev(p, () => window.__rift.flow.abandonRun());
+      await H.waitFor(p, () => window.__rift.state().location === 'home' && !window.__rift.state().busy);
+      await equip('flamer_torch', 'mc_spray', 6202);
+      await deploy(p);
+      await place(7, [0, 0.9, -0.9]);
+      const i2 = await ev(p, () => {
+        const R = window.__rift;
+        const g = R.game;
+        const es = window.__heavy;
+        // One more walker well beyond the stream's reach.
+        const cam = g.player.camera;
+        const far = R.dev.spawn('walker');
+        const at = cam.position.add(cam.getDirection(new R.V3(0, 0, 1)).scale(40));
+        far.pos.set(at.x, 0, at.z);
+        far.root.position.copyFrom(far.pos);
+        far.hp = far.maxHp = 2000;
+        R.advance(1 / 60);
+        const hp0 = es.map((e) => e.hp);
+        const farHp = far.hp;
+        const i = R.flow.input;
+        const ticks0 = g.weapon.shotsFired;
+        i.simulateMouse(0, true);
+        for (let k = 0; k < 30; k++) R.advance(1 / 60);
+        const ticks = g.weapon.shotsFired - ticks0;
+        return { fam: g.weapon.def.family, element: g.weapon.def.element, targets: g.weapon.def.targets, ticks, dmg: es.map((e, k) => Math.round(hp0[k] - e.hp)), far: Math.round(farHp - far.hp), beaming: g.weapon.beaming };
+      });
+      check('I2 a flamer tick reaches every machine in its cone (not one out of range) and stays lit while held', i2.fam === 'flamer' && i2.element !== 'kinetic' && i2.ticks >= 4 && i2.dmg.filter((d) => d > 0).length === 3 && i2.far === 0 && i2.beaming, JSON.stringify(i2));
+      await H.shot(p, 'heavy-flamer', { frames: 2 });
+      check('I3 launcher and flamer viewmodels render while firing (screenshots heavy-launcher, heavy-flamer)', true);
+      await ev(p, () => window.__rift.game.input.simulateMouse(0, false));
+      await ev(p, () => window.__rift.flow.abandonRun());
+      await H.waitFor(p, () => window.__rift.state().location === 'home' && !window.__rift.state().busy);
+    }
+    if (want('J')) {
+      // Conditional affixes: an airborne damage affix counts only while the drone is off the ground.
+      await ev(p, () => {
+        const R = window.__rift;
+        const w = R.makeItem({ seed: 7301, rarity: 'rare', baseId: 'plasma_repeater', level: 3 });
+        w.affixes.push({ id: 'c_airdmg', stat: 'weaponDamageMult', op: 'pct', value: 0.5, tier: 3, roll: 1 });
+        R.profile.mutate((d) => {
+          d.items.push(w);
+          if (d.loadout.weapon) d.storage.uids.push(d.loadout.weapon);
+          d.loadout.weapon = w.uid;
+          return true;
+        });
+      });
+      await deploy(p);
+      const j1 = await ev(p, () => {
+        const R = window.__rift;
+        const g = R.game;
+        R.advance(0.5);
+        const ground = { dmg: g.stats.weaponDamageMult, active: [...g.conditions.active] };
+        g.input.simulateKey('Space', true);
+        R.advance(0.12);
+        g.input.simulateKey('Space', false);
+        R.advance(0.15);
+        const air = { dmg: g.stats.weaponDamageMult, active: [...g.conditions.active], grounded: g.player.grounded };
+        R.advance(2.5);
+        const landed = { dmg: g.stats.weaponDamageMult, active: [...g.conditions.active] };
+        return { ground, air, landed };
+      });
+      check('J1 an airborne damage affix counts only while airborne', !j1.ground.active.includes('airborne') && j1.air.active.includes('airborne') && j1.air.dmg > j1.ground.dmg + 0.4 && Math.abs(j1.landed.dmg - j1.ground.dmg) < 1e-6, JSON.stringify(j1));
+      const j2 = await ev(p, () => {
+        const R = window.__rift;
+        const g = R.game;
+        g.input.simulateKey('ShiftLeft', true);
+        R.advance(1 / 60);
+        g.input.simulateKey('ShiftLeft', false);
+        R.advance(0.2);
+        const after = [...g.conditions.active];
+        R.advance(2.5);
+        return { after, later: [...g.conditions.active] };
+      });
+      check('J2 a dash opens the 2 s dash window, which then closes', j2.after.includes('dash') && !j2.later.includes('dash'), JSON.stringify(j2));
+      // The HUD lists the conditions the gear needs and lights the ones that hold.
+      const j3 = await ev(p, async () => {
+        const R = window.__rift;
+        const g = R.game;
+        const chips = () => [...document.querySelectorAll('[data-testid=cond-row] .cond-chip')].map((c) => `${c.getAttribute('data-cond')}:${c.classList.contains('on') ? 1 : 0}`);
+        R.advance(0.3);
+        await new Promise((r) => setTimeout(r, 120));
+        const ground = chips();
+        g.input.simulateKey('Space', true);
+        R.advance(0.12);
+        g.input.simulateKey('Space', false);
+        R.advance(0.12);
+        await new Promise((r) => setTimeout(r, 120));
+        const air = chips();
+        R.advance(2.5);
+        return { ground, air };
+      });
+      check('J3 the HUD shows the AIRBORNE chip, lit only while airborne', j3.ground.join() === 'airborne:0' && j3.air.join() === 'airborne:1', JSON.stringify(j3));
+      // Set gear in the arena: a teal hexagon marker on the pickup and the set line on the prompt.
+      const j4 = await ev(p, async () => {
+        const R = window.__rift;
+        const g = R.game;
+        const plain = g.loot.pickups.length;
+        R.spawnLoot({ category: 'armor', rarity: 'rare', set: 'bastion', x: g.player.position.x, z: g.player.position.z + 6 });
+        R.advance(2);
+        const pk = g.loot.pickups[g.loot.pickups.length - 1];
+        const ticks = pk.root.getChildMeshes().filter((m) => m.material && m.material.name === 'lootSetGlow').length;
+        R.approach(pk.id);
+        R.advance(0.3);
+        await new Promise((r) => setTimeout(r, 150));
+        let line = '';
+        for (let i = 0; i < 20 && !line; i++) {
+          R.advance(0.1);
+          await new Promise((r) => setTimeout(r, 100));
+          line = document.querySelector('[data-testid=lp-set]')?.textContent ?? '';
+        }
+        const t = g.lootTarget;
+        return { plain, ticks, line, screen: R.state().screen, target: t ? t.item.uid === pk.item.uid : null, landed: g.loot.landed(pk), cargoFull: g.inventory.cargoFull };
+      });
+      await H.shot(p, 'set-pickup', { frames: 2 });
+      check('J4 set gear shows its hexagon marker and the set line on the pickup prompt', j4.ticks === 6 && /BASTION PROTOCOL/.test(j4.line) && /1\/4/.test(j4.line), JSON.stringify(j4));
+      await ev(p, () => window.__rift.flow.abandonRun());
+      await H.waitFor(p, () => window.__rift.state().location === 'home' && !window.__rift.state().busy);
+    }
     const bad = errs.filter((e) => !/Error compiling effect/.test(e));
     check('Z no page/console errors', bad.length === 0, bad.slice(0, 3).join(' | '));
   } catch (e) {

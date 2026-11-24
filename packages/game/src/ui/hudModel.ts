@@ -1,3 +1,4 @@
+import { type SetId, SETS, setCounts } from '@riftwarden/rules/loot/sets';
 // HUD view-model pieces as pure functions of plain data. The arena gathers the inputs; nothing here touches a scene,
 // the store or `Game`, so every branch is unit-testable and the same rules serve every Game flavour.
 import { DEFAULT_SETTINGS, keyLabel, type Settings } from '../core/settings';
@@ -36,8 +37,10 @@ export function hintFor(s: HintState, keys: Settings['keys'] = DEFAULT_SETTINGS.
 }
 
 export interface LootTargetInput {
-  item: { uid: string; name: string; rarity: string; level: number; category: string; uniqueId?: string; defId?: string };
+  item: { uid: string; name: string; rarity: string; level: number; category: string; uniqueId?: string; defId?: string; set?: SetId };
   droppedWave: number;
+  /** Equipped items (set progress the pickup would bring: it replaces the item of its own slot). */
+  worn?: readonly ({ uid: string; set?: SetId; category: string } | null | undefined)[];
   expiring: boolean;
   cargoFull: boolean;
   /** Item currently in the slot this would go to. */
@@ -68,6 +71,7 @@ export function lootTargetInfo(i: LootTargetInput): LootTargetInfo {
     newBest: !!i.newBest,
     verdict: i.verdict ?? null,
     levelDelta: i.levelDelta ?? 0,
+    ...(i.item.set ? { set: SETS[i.item.set].name, setPieces: setCounts([...(i.worn ?? []).filter((x) => x && x.category !== i.item.category), i.item]).get(i.item.set) ?? 1 } : {}),
   };
 }
 

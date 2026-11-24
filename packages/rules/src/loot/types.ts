@@ -1,3 +1,4 @@
+import type { SetId } from './sets';
 import type { DamageElement } from '../combat/elements';
 import type { StatKey, StatOp } from '../combat/stats';
 import type { WeaponBuild } from '../weapons/build';
@@ -55,6 +56,10 @@ export interface WeaponRoll {
   /** Swarm: drones per launch and lock cone (absent on other families). */
   drones?: number;
   seekCone?: number;
+  /** Launcher: blast radius (m). Flamer: spray cone and machines per tick (absent on other families). */
+  splash?: number;
+  spray?: number;
+  targets?: number;
   /** Damage element (absent on pre-element weapons = kinetic). */
   element?: DamageElement;
 }
@@ -102,6 +107,8 @@ export interface ItemInstance {
   signature: string | null;
   /** Hand-made unique id (loot/uniques.ts): fixed name, flavour and mechanic. Absent = procedural item. */
   uniqueId?: string;
+  /** Item set (loot/sets.ts) of rare+ gear; absent = no set. Decided by the seed at generation. */
+  set?: SetId;
   /** Generation metadata: seed and generator version. */
   seed: number;
   gen: number;

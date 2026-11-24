@@ -18,12 +18,18 @@ import {
   rankInfo,
 } from '@riftwarden/rules/progression/mastery';
 import { componentDef } from '@riftwarden/rules/weapons/components';
-import { isUnlocked } from '@riftwarden/rules/progression/unlocks';
+import { isUnlocked, requirementText, unlockDef } from '@riftwarden/rules/progression/unlocks';
 import type { SaveData } from '@riftwarden/rules/progression/save';
 import { uiEvents } from '@riftwarden/game/ui/store';
 import { sfx } from '@riftwarden/game/audio/Sfx';
 
-const FAMILY_UNLOCK: Record<WeaponFamily, string | null> = { plasma: null, rail: 'family:rail', beam: 'family:beam', swarm: 'family:swarm' };
+/** Warden level a family opens at (0 = from the start): the list follows the unlock track. */
+const familyGateLevel = (f: WeaponFamily): number => {
+  const u = FAMILY_UNLOCK[f] ? unlockDef(FAMILY_UNLOCK[f]!) : undefined;
+  return u && 'warden' in u.by ? u.by.warden : 0;
+};
+
+const FAMILY_UNLOCK: Record<WeaponFamily, string | null> = { plasma: null, rail: 'family:rail', beam: 'family:beam', swarm: 'family:swarm', launcher: 'family:launcher', flamer: 'family:flamer' };
 
 const pct = (v: number) => `${v > 0 ? '+' : ''}${Math.round(v * 1000) / 10}%`;
 function perkText(p: PerkDef): string {
@@ -49,12 +55,13 @@ export function MasteryBench({ flow, save }: { flow: Flow; save: SaveData }) {
     <div className="grid grid-cols-[200px_minmax(0,1fr)] gap-[16px]" data-testid="mastery-bench">
       <div className="grid content-start gap-[6px]">
         <div className="col-label">WEAPON FAMILIES</div>
-        {MASTERY_FAMILIES.map((f) => {
+        {[...MASTERY_FAMILIES].sort((a, b) => familyGateLevel(a) - familyGateLevel(b)).map((f) => {
           const r = rankInfo(save.progress.mastery?.[f]?.xp ?? 0);
+          const gate = FAMILY_UNLOCK[f] && !isUnlocked(save, FAMILY_UNLOCK[f]!) ? unlockDef(FAMILY_UNLOCK[f]!) : undefined;
           return (
-            <button key={f} className={`m-0 text-left ${f === fam ? 'on [border-color:var(--amber)]' : ''}`} data-family={f} onClick={() => (setFam(f), setMsg(null))}>
+            <button key={f} className={`m-0 text-left ${f === fam ? 'on [border-color:var(--amber)]' : ''} ${gate ? 'opacity-55' : ''}`} data-family={f} data-locked={gate ? 1 : undefined} onClick={() => (setFam(f), setMsg(null))}>
               <b className="block">{FAMILY_NAME[f]}</b>
-              <span className="font-mono text-[10.5px] text-faint">RANK {r.rank}/{MAX_RANK}</span>
+              <span className="font-mono text-[10.5px] text-faint">{gate ? `${requirementText(gate).toUpperCase()}` : `RANK ${r.rank}/${MAX_RANK}`}</span>
               <span className="block h-[3px] mt-[4px] bg-[rgb(255_255_255/0.08)]"><span className="block h-full bg-amber" style={{ width: `${Math.round((r.rank + r.frac) / MAX_RANK * 100)}%` }} /></span>
             </button>
           );

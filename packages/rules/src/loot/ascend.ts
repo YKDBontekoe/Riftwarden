@@ -1,7 +1,7 @@
 import { STAT_DEFS } from '../combat/stats';
 import { AFFIXES, affixPool, MAX_TIER } from './affixes';
 import { baseDef } from './bases';
-import { groupOfStat, maxTierFor, pickWeighted, rollAffix } from './generate';
+import { groupsOfStat, maxTierFor, pickWeighted, rollAffix } from './generate';
 import { rarity } from './rarity';
 import type { ItemInstance, RolledAffix } from './types';
 
@@ -32,7 +32,7 @@ export function ascendDrop(seed: number, _wave: number, tier: number): boolean {
 /** The perfect affix an ascension adds: any compatible affix whose group the item does not use yet. */
 export function perfectAffix(item: ItemInstance, rand: () => number): RolledAffix | null {
   const base = baseDef(item.defId);
-  const used = new Set<string>([...item.base.map((s) => groupOfStat(s.stat)), ...item.affixes.map((a) => affixGroup(a.id))]);
+  const used = new Set<string>([...item.base.flatMap((s) => groupsOfStat(s.stat)), ...item.affixes.map((a) => affixGroup(a.id))]);
   const pool = affixPool(item.category, used, base?.affixes);
   const a = pickWeighted(pool, (x) => x.weights[item.category] ?? 0, rand);
   if (!a) return null;

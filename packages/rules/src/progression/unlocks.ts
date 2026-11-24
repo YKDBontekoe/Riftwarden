@@ -1,6 +1,8 @@
 // Staged feature unlocks (docs/progression-design.md §5): a new warden starts with one weapon family, one ability and
 // the core stations; families, slots, stations and endgame systems open with Warden level (basics) and the highest
 // Rift Level unlocked (endgame). Pure: the HQ unlock track, the op gate, the loot locks and the slot rules read it.
+import { RESOURCE_KEYS } from '../economy/config';
+import type { ResourceKey } from '../economy/config';
 import { ALL_COMPONENT_LOCKS, componentLocks, type MasteryState } from './mastery';
 import type { WeaponFamily } from '../data/defs';
 import type { Category } from '../loot/types';
@@ -28,9 +30,12 @@ export const UNLOCKS: readonly UnlockDef[] = [
   { id: 'slot:accessory2', label: 'Second accessory slot', kind: 'slot', by: { warden: 5 }, blurb: 'A second accessory for more build room.' },
   { id: 'family:beam', label: 'Beam family', kind: 'family', by: { warden: 6 }, blurb: 'Continuous emitters whose damage ramps on one target.' },
   { id: 'slot:ultimate', label: 'Ultimate slot', kind: 'slot', by: { warden: 7 }, blurb: 'Ultimates (orbital lance, overdrive) start dropping; charge them by dealing damage.' },
+  { id: 'seasons', label: 'Seasons', kind: 'system', by: { warden: 6 }, blurb: 'Each month a fresh seasonal warden on a faster ladder with its own rule and leaderboards; its gains move to you when the month ends.' },
   { id: 'station:lattice', label: 'Neural Lattice', kind: 'station', by: { warden: 8 }, blurb: 'Spend skill points on your endless procedural skill tree.' },
+  { id: 'family:launcher', label: 'Launcher family', kind: 'family', by: { warden: 9 }, blurb: 'Rockets that detonate on impact and splash everything around the hit.' },
   { id: 'station:fabricate', label: 'Fabricator', kind: 'station', by: { warden: 10 }, blurb: 'Craft the slot and family you want. Higher grades open with Rift Levels.' },
   { id: 'family:swarm', label: 'Drone Swarm family', kind: 'family', by: { warden: 12 }, blurb: 'Hives of seeker drones that lock onto targets around the crosshair.' },
+  { id: 'family:flamer', label: 'Flamer family', kind: 'family', by: { warden: 11 }, blurb: 'Short-range streams that sweep several machines at once and stack burn, chill or corrosion.' },
   { id: 'station:architect', label: 'HQ construction', kind: 'station', by: { warden: 14 }, blurb: 'Expand and decorate the HQ; facilities give real bonuses.' },
   { id: 'workshop:enhance', label: 'Enhancement', kind: 'system', by: { rl: 2 }, blurb: 'Raise an item\'s power level by level at the workshop.' },
   { id: 'station:modules', label: 'Weapon modules', kind: 'station', by: { rl: 3 }, blurb: 'Modules drop and the Broker opens; install them in weapon sockets.' },
@@ -81,9 +86,31 @@ export function lockReason(d: UnlockProgress, id: string): string | null {
   return `${u.label} unlocks at ${requirementText(u)}.`;
 }
 
+/** The HQ station an unlock powers up (stations and workshop systems), or null. */
+export function stationForUnlock(id: string): string | null {
+  for (const [station, feature] of Object.entries(STATION_FEATURE)) if (feature === id) return station;
+  return id.startsWith('workshop:') ? 'workshop' : null;
+}
+
+/** Unlocks that put each currency to use (credits are used from the start). */
+const CURRENCY_FEATURES: Record<ResourceKey, readonly string[]> = {
+  credits: [],
+  salvage: ['station:salvage', 'station:modules'],
+  components: ['station:fabricate', 'station:modules', 'workshop:enhance', 'workshop:towers'],
+  shards: ['workshop:ascension', 'pinnacle', 'loot:exotic'],
+};
+
+/**
+ * Currencies worth showing (resource bars, HQ reserves): credits always; the others once the warden holds any
+ * or a system that spends them is open, so a fresh warden is not shown four counters at zero.
+ */
+export function visibleCurrencies(d: UnlockProgress & { resources: Readonly<Record<ResourceKey, number>> }): ResourceKey[] {
+  return RESOURCE_KEYS.filter((k) => k === 'credits' || d.resources[k] > 0 || CURRENCY_FEATURES[k].some((f) => isUnlocked(d, f)));
+}
+
 // ------------------------------------------------------------------ what the locks mean for loot, slots and ops
 
-const FAMILY_UNLOCK: Partial<Record<WeaponFamily, string>> = { rail: 'family:rail', beam: 'family:beam', swarm: 'family:swarm' };
+const FAMILY_UNLOCK: Partial<Record<WeaponFamily, string>> = { rail: 'family:rail', beam: 'family:beam', swarm: 'family:swarm', launcher: 'family:launcher', flamer: 'family:flamer' };
 
 /** Weapon families that cannot drop / be crafted / be sold to this warden yet. */
 export function lockedFamilies(d: UnlockProgress): WeaponFamily[] {
@@ -108,7 +135,7 @@ export const lockedFamiliesOf = (locks: readonly string[] | undefined): WeaponFa
 export const lockedCategoriesOf = (locks: readonly string[] | undefined): Category[] => (locks ?? []).filter((l) => l.startsWith('cat:')).map((l) => l.slice(4) as Category);
 
 /** Every lock id that can appear in `lootLocks` (server validation of recorded locks). */
-export const ALL_LOOT_LOCKS: readonly string[] = ['cat:module', 'cat:ultimate', 'family:beam', 'family:rail', 'family:swarm', ...ALL_COMPONENT_LOCKS];
+export const ALL_LOOT_LOCKS: readonly string[] = ['cat:module', 'cat:ultimate', 'family:beam', 'family:flamer', 'family:launcher', 'family:rail', 'family:swarm', ...ALL_COMPONENT_LOCKS];
 
 const SLOT_UNLOCK: Partial<Record<SlotId, string>> = { ability2: 'slot:ability2', weapon2: 'slot:weapon2', accessory2: 'slot:accessory2', ultimate: 'slot:ultimate' };
 

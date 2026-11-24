@@ -323,6 +323,8 @@ b.v { color: var(--violet); }
 .mv-chip.cooling i { background: rgba(156, 207, 194, 0.5); }
 .mv-chip.active { border-color: var(--cyan); box-shadow: 0 0 8px rgba(120, 220, 230, 0.35); }
 .mv-state { color: var(--cyan); font-weight: 700; letter-spacing: 0.14em; }
+.cond-chip { padding: 2px 6px; border: 1px solid rgba(255, 196, 110, 0.18); color: rgba(240, 220, 190, 0.4); background: rgba(4, 11, 17, 0.45); transition: color 0.12s, border-color 0.12s, box-shadow 0.12s; }
+.cond-chip.on { color: #ffd08a; border-color: rgba(255, 196, 110, 0.85); box-shadow: 0 0 8px rgba(255, 180, 90, 0.4); }
 
 /* bottom center */
 .bottom-center { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); width: 380px; text-align: center; }
@@ -927,6 +929,11 @@ button.icard.dis:hover { background: rgba(255, 255, 255, 0.025); }
 .unique-tag { color: #ffb347; border: 1px solid rgba(255, 179, 71, 0.6); padding: 0 5px; letter-spacing: 0.12em; text-shadow: 0 0 8px rgba(255, 150, 40, 0.6); }
 .id-block.unique { border-left: 2px solid #ffb347; padding-left: 10px; }
 .id-block.unique .id-label { color: #ffb347; }
+.id-block.set { border-left: 2px solid #6fe0b0; padding-left: 10px; }
+.id-block.set .id-label { color: #6fe0b0; }
+.id-block.set .set-on b { color: #8ff5c8; text-shadow: 0 0 8px rgba(111, 224, 176, 0.45); }
+.cond-tag { display: block; font-style: normal; font-size: 10.5px; letter-spacing: 0.06em; color: #9ad8ff; opacity: 0.9; }
+.set-tag { color: #6fe0b0; border: 1px solid rgba(111, 224, 176, 0.55); padding: 0 5px; letter-spacing: 0.12em; }
 .unique-flavour { font-style: italic; color: #c9b89a; margin: 4px 0; }
 .src-tag { color: var(--muted); }
 .enh-up { color: var(--comp) !important; }
@@ -1039,7 +1046,10 @@ button.comp-card.on { border-color: var(--amber); background: rgba(255, 181, 71,
 .uc-rarity { color: var(--rc); }
 .uc-key { border: 1px solid var(--line); padding: 3px 6px; }
 .uc-art { display: block; width: clamp(88px,15vh,150px); aspect-ratio: 1; flex: none; align-self: center; background: url('../assets/field-components.webp') 0 0 / 400% 200% no-repeat; mix-blend-mode: lighten; }
-.art-elemental { background-position: 33.3333% 0; } .art-defense { background-position: 66.6667% 0; } .art-mobility { background-position: 100% 0; }
+.art-elemental { background-position: 33.3333% 0; }
+/* One elemental cell artwork, tinted per element (the art is green / electric). */
+.art-elemental[data-el='cryo'] { filter: hue-rotate(78deg) saturate(1.1); }
+.art-elemental[data-el='thermal'] { filter: hue-rotate(-95deg) saturate(1.35); } .art-defense { background-position: 66.6667% 0; } .art-mobility { background-position: 100% 0; }
 .art-tower { background-position: 0 100%; } .art-economy { background-position: 33.3333% 100%; } .art-synergy { background-position: 66.6667% 100%; } .art-cache { background-position: 100% 100%; }
 .uc-name { font: 650 clamp(19px,1.8vw,27px)/1.1 var(--display); letter-spacing: -.035em; margin: 5px 0; }
 .uc-cat, .uc-stack { font: 10px/1.5 var(--mono); letter-spacing: .06em; color: var(--rc); }
@@ -1831,3 +1841,13 @@ button.inv-slot { position: relative; }
 .deploy-grid.war { grid-template-columns: minmax(0, 1.75fr) minmax(280px, 1fr); }
 .deploy-grid.war .dm-war { grid-template-columns: 150px minmax(0, 1fr); }
 .deploy-grid.war .war-map { max-height: 380px; }
+
+/* Set gear on the arena pickup prompt. */
+.loot-prompt .lp-set { display: block; margin-top: 2px; font-family: var(--mono, monospace); font-size: 10px; letter-spacing: 0.14em; color: #7fe3c4; }
+
+/* Run summary: upgrades among the secured equipment. */
+.gear-up { margin: 4px 0 12px; padding: 8px 12px; border: 1px solid rgba(120, 230, 170, 0.35); background: rgba(80, 200, 140, 0.06); font-size: 13px; }
+.gear-up-row { margin: 2px 0; }
+.gear-up.done { color: rgba(170, 240, 200, 0.95); }
+/* The summary and defeat panels scroll instead of pushing their buttons off short screens. */
+.summary-screen .modal, .defeat .modal { max-height: calc(100vh - 32px); overflow-y: auto; }

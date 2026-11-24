@@ -46,6 +46,8 @@ const RECOIL: Record<WeaponFamily, { back: number; pitch: number; roll: number; 
   rail: { back: 0.075, pitch: 0.2, roll: 0.06, slide: 0.034, stiff: 170, damp: 17 },
   beam: { back: 0.006, pitch: 0.006, roll: 0.004, slide: 0.004, stiff: 260, damp: 26 },
   swarm: { back: 0.02, pitch: 0.04, roll: 0.05, slide: 0.012, stiff: 420, damp: 24 },
+  launcher: { back: 0.085, pitch: 0.16, roll: 0.05, slide: 0.03, stiff: 150, damp: 15 },
+  flamer: { back: 0.008, pitch: 0.01, roll: 0.008, slide: 0.004, stiff: 280, damp: 26 },
 };
 
 export class WeaponAnimator {

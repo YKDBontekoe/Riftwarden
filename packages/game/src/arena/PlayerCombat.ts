@@ -8,10 +8,11 @@ import type { Director } from '../combat/Director';
 import type { CombatStats } from '@riftwarden/rules/combat/stats';
 import { isBurning, isChilled, isFrozen, speedFactor } from '@riftwarden/rules/combat/status';
 import type { ShotOutcome, ShotRequest, SurfaceImpact, Weapon, WeaponFxHooks } from '../combat/Weapon';
-import type { WeaponFamily } from '@riftwarden/rules/data/defs';
+import type { WeaponDef, WeaponFamily } from '@riftwarden/rules/data/defs';
 import type { Enemy, EnemyManager } from '../enemies/EnemyManager';
 import type { Turret } from '../defense/Turrets';
-import type { Effects } from '../fx/Effects';
+import type { BurstKind, Effects } from '../fx/Effects';
+import type { ExplosionStyle } from '../fx/explosionStyles';
 import { trackSeeker, type WeaponFx } from '../fx/WeaponFx';
 import { MOVE, type Player } from '../player/Player';
 import { hasLost, LIMB_IDS } from '@riftwarden/rules/enemies/limbs';
@@ -57,6 +58,15 @@ export interface CombatHost {
 }
 
 const KILL_AT = new Vector3();
+const TMP_C = new Vector3();
+
+/** Particle burst that draws a flamer stream per element (a cryo flamer is a frost spray). */
+const FLAME_KIND: Partial<Record<WeaponDef['element'], BurstKind>> = { thermal: 'fire', cryo: 'frost', corrosive: 'oil', electric: 'zap', void: 'plasma', kinetic: 'puff' };
+
+/** Explosion look of a rocket per element. */
+function explosionStyleFor(element: WeaponDef['element']): ExplosionStyle {
+  return element === 'cryo' ? 'cryo' : element === 'electric' ? 'electric' : element === 'void' ? 'plasma' : element === 'thermal' ? 'heavy' : 'fire';
+}
 const KILL_LIGHT = new Color3(1.6, 1.5, 1.35);
 
 export type DamageSource = 'player' | 'turret';
@@ -82,6 +92,17 @@ export class PlayerCombat {
     const { struck, wall } = traceShot(h.scene, h.enemies.active, r);
     // Read the outcome before damage lands (a shot that breaks a shield still shows the shield impact).
     const out = shotOutcome(r, struck, wall);
+    if (r.family === 'flamer') {
+      // The stream reaches every machine in its cone for the full tick (no falloff, never a weakpoint).
+      for (const s of struck) h.damageEnemy('player', s.enemy, r.damage, s.point, false, undefined, 'flamer');
+      return out;
+    }
+    if (r.family === 'launcher') {
+      const hit = struck[0];
+      const at = hit?.point ?? wall?.pickedPoint ?? null;
+      if (at) this.launch(at, hit?.enemy ?? null, hit?.weak ?? false, r.damage, h.weapon.muzzleWorld(), h.weapon.def);
+      return out;
+    }
     let dmg = r.damage;
     for (const s of struck) {
       if (s.assisted) {
@@ -94,6 +115,38 @@ export class PlayerCombat {
       dmg *= h.signature() === 'u_ninthgate' ? 1.2 : 0.85;
     }
     return out;
+  }
+
+  /**
+   * Launcher: the rocket flies to `at` at the weapon's rocket speed and detonates there (damage lands on arrival).
+   * Blast radius, cluster payload and element are taken from `def` at launch. `wrap` runs the detonation in the
+   * shooter's context (the co-op server swaps avatars); it may drop it (the shooter left).
+   */
+  launch(at: Vector3, direct: Enemy | null, weak: boolean, dmg: number, from: Vector3, def: WeaponDef, wrap: (fn: () => void) => void = (fn) => fn()): void {
+    const eta = Math.min(2.5, Vector3.Distance(from, at) / Math.max(10, def.boltSpeed));
+    const gen = direct?.gen;
+    const o = { splash: Math.max(0.5, def.splash), cluster: def.mechanism === 'cluster', element: def.element };
+    const point = at.clone();
+    this.h.director.later(eta, () => wrap(() => this.detonate(point, direct && direct.alive && direct.gen === gen ? direct : null, weak, dmg, o)));
+  }
+
+  /** Rocket impact: full damage to a direct hit, a falloff blast around it, cluster bomblets; splash kills count for mastery. */
+  detonate(point: Vector3, direct: Enemy | null, weak: boolean, dmg: number, o: { splash: number; cluster: boolean; element: WeaponDef['element'] }): void {
+    const h = this.h;
+    const d = h.director;
+    const near = h.enemies.active.filter((e) => e.alive && e !== direct && Vector3.Distance(e.center(TMP_C), point) <= o.splash * 1.6 + e.def.bodyR);
+    if (direct?.alive) h.damageEnemy('player', direct, dmg, point, weak, undefined, 'launcher');
+    const src = { kind: 'weapon' as const, id: 'launcher' };
+    const apply = elementPayload(o.element, dmg * 0.6, this.procWeight(), Math.random());
+    d.blast(point, o.splash, dmg * 0.75, o.element, src, d.bus.newChain(), { falloff: 0.55, exclude: direct, family: 'splash', apply });
+    if (o.cluster) {
+      for (let i = 0; i < 3; i++) {
+        const a = (i / 3) * Math.PI * 2 + Math.random();
+        const q = point.add(new Vector3(Math.cos(a) * o.splash * 0.65, 0, Math.sin(a) * o.splash * 0.65));
+        d.later(0.12 + i * 0.07, () => d.blast(q, o.splash * 0.5, dmg * 0.3, o.element, src, d.bus.newChain(), { falloff: 0.4, family: 'splash' }));
+      }
+    }
+    for (const e of near) if (!e.alive) h.masteryKill(e);
   }
 
   /** World-space shot visuals and impacts per family (presentation only). */
@@ -110,6 +163,15 @@ export class PlayerCombat {
         return;
       }
       const impact = () => this.impactFx(family, out, power);
+      if (family === 'launcher') {
+        const def = weapon.def;
+        this.rocketFx(from, out, speed, { splash: def.splash, cluster: def.mechanism === 'cluster', element: def.element, color: weapon.rig.energyBase });
+        return;
+      }
+      if (family === 'flamer') {
+        this.flameFx(from, out.point, weapon.def.element);
+        return;
+      }
       if (family === 'swarm') {
         const enemy = out.enemyId === null ? undefined : this.h.enemies.active.find((e) => e.id === out.enemyId);
         wfx.seeker(from, out.point, speed, out.target === 'none' ? null : (point) => this.impactFx(family, { ...out, point }, power), trackSeeker(enemy, out.point));
@@ -130,6 +192,16 @@ export class PlayerCombat {
     },
     beam: (on, from, to, intensity, contact) => this.h.wfx.beam(on, from, to, intensity, contact),
   };
+
+  /** Rocket: a glowing projectile with a smoke trail; the explosion (and cluster bomblets) on arrival. */
+  rocketFx(from: Vector3, out: ShotOutcome, speed: number, o: { splash: number; cluster: boolean; element: WeaponDef['element']; color: Color3 }): void {
+    rocketFx(this.h.wfx, this.h.fx, from, out, speed, o);
+  }
+
+  /** Flamer tick: puffs of the element along the stream toward its end. */
+  flameFx(from: Vector3, to: Vector3, element: WeaponDef['element']): void {
+    flameFx(this.h.fx, from, to, element);
+  }
 
   impactFx(family: WeaponFamily, out: ShotOutcome, power: number): void {
     const { fx, weapon } = this.h;
@@ -353,4 +425,42 @@ export function shotOutcome(r: ShotRequest, struck: readonly { enemy: Enemy; poi
     return { point, normal: n, target: 'surface', surface, enemyId: null };
   }
   return { point: r.origin.add(r.dir.scale(r.range)), normal: null, target: 'none', enemyId: null };
+}
+
+/** Rocket visual: projectile + smoke puffs released along the path; explosion (and cluster bomblets) on arrival. */
+export function rocketFx(wfx: WeaponFx, fx: Effects, from: Vector3, out: ShotOutcome, speed: number, o: { splash: number; cluster: boolean; element: WeaponDef['element']; color: Color3 }): void {
+  const to = out.point.clone();
+  const dist = Vector3.Distance(from, to);
+  const splash = Math.max(0.5, o.splash);
+  const style = explosionStyleFor(o.element);
+  const color = o.color.clone();
+  const v = Math.max(10, speed);
+  wfx.bolt(from, to, v, 0.55, out.target !== 'none' ? () => {
+    fx.explode(to, { scale: 0.45 + splash * 0.16, debris: 2, color, style });
+    fx.ring(to, splash, 0.3, color.scale(0.6), true);
+    if (o.cluster) {
+      for (let i = 0; i < 3; i++) {
+        const a = (i / 3) * Math.PI * 2 + Math.random();
+        const q = to.add(new Vector3(Math.cos(a) * splash * 0.65, 0, Math.sin(a) * splash * 0.65));
+        wfx.later(0.12 + i * 0.07, () => fx.explode(q, { scale: 0.3 + splash * 0.06, debris: 1, color, style }));
+      }
+    }
+  } : null);
+  const steps = Math.min(14, Math.floor(dist / 3));
+  for (let i = 1; i <= steps; i++) {
+    const f = i / (steps + 1);
+    const p = Vector3.Lerp(from, to, f);
+    wfx.later((dist * f) / v, () => fx.burst('smoke', p, 2, undefined, 0.45));
+  }
+}
+
+/** Flamer tick visual: puffs of the element (fire, frost, acid, sparks...) along the stream toward its end. */
+export function flameFx(fx: Effects, from: Vector3, to: Vector3, element: WeaponDef['element']): void {
+  const dir = to.subtract(from);
+  const len = dir.length();
+  if (len < 0.2) return;
+  dir.scaleInPlace(1 / len);
+  const kind = FLAME_KIND[element] ?? 'fire';
+  for (const f of [0.18, 0.45, 0.75, 1]) fx.burst(kind, from.add(dir.scale(len * f)), f === 1 ? 2 : 3, dir, 0.45 + f * 0.9);
+  if (Math.random() < 0.35) fx.burst(kind === 'fire' ? 'embers' : 'mist', to, 2, undefined, 0.8);
 }

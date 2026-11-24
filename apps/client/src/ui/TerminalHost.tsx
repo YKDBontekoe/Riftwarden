@@ -2,6 +2,13 @@ import type { Flow } from '../core/Flow';
 import type { HomeBase } from '@riftwarden/game/home/HomeBase';
 import { EngineeringTerminal } from './Engineering';
 import { FabricateTerminal, MerchantTerminal, SalvageTerminal } from './Market';
+import { useMemo } from 'react';
+import type { ScoreContext } from '@riftwarden/rules/loot/loadoutScore';
+import { treeModifiers } from '@riftwarden/rules/progression/skilltree';
+import { useSave } from './App';
+import { ScoreCtx } from './compare';
+import { ShellCurrencies } from './shell';
+import { visibleCurrencies } from '@riftwarden/rules/progression/unlocks';
 import { useHud } from './useHud';
 import { ArchitectTerminal } from './Construction';
 import { SkillTreeTerminal } from './SkillTree';
@@ -10,6 +17,18 @@ import { CommandTerminal, DeployTerminal, LoadoutTerminal, StorageTerminal } fro
 /** Routes the open station to its interface. */
 export function TerminalHost({ flow, home }: { flow: Flow; home: HomeBase }) {
   const id = useHud((s) => s.terminal);
+  const save = useSave(flow);
+  // Build-aware verdicts in every terminal: the warden's skill tree and weapon mastery (no sector faction at home).
+  const ctx = useMemo<ScoreContext>(() => ({ extra: treeModifiers(save.progress.tree.seed, save.progress.tree.allocated), mastery: save.progress.mastery, faction: null }), [save.progress.tree, save.progress.mastery]);
+  const shown = useMemo(() => visibleCurrencies(save), [save]);
+  return (
+    <ScoreCtx.Provider value={ctx}>
+      <ShellCurrencies.Provider value={shown}>{terminal(id, flow, home)}</ShellCurrencies.Provider>
+    </ScoreCtx.Provider>
+  );
+}
+
+function terminal(id: string | null, flow: Flow, home: HomeBase) {
   const close = () => void home.closeTerminal();
   switch (id) {
     case 'deploy':

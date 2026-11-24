@@ -1,3 +1,5 @@
+import type { ScoreContext } from '@riftwarden/rules/loot/loadoutScore';
+import { condHud, type CondId, condIdsOf, ConditionTracker, hasConditional } from '@riftwarden/rules/combat/conditions';
 import type { SeasonRuleId } from '@riftwarden/rules/progression/seasons';
 import { PINNACLE, pinnacleBoss } from '@riftwarden/rules/progression/spikes';
 import { gearPower } from '@riftwarden/rules/progression/riftLevel';
@@ -191,6 +193,13 @@ export class Game {
   protected lastFlash = 0;
   protected arenaVisuals: ArenaBuilder;
 
+  /** Conditional affixes (combat/conditions.ts): what holds right now for the local drone. */
+  readonly conditions = new ConditionTracker();
+  private condDashing = false;
+  /** The stat block holds conditional modifiers (otherwise condition changes skip the rebuild). */
+  protected condMods = false;
+  /** Conditions the stat block depends on (HUD chips). */
+  protected condIds: CondId[] = [];
   /** Extra modifiers (debug); equipment, run upgrades and temporary buffs are composed in rebuildStats. */
   modifiers: StatModifier[] = [];
   stats: CombatStats = { ...BASE_STATS };
@@ -836,7 +845,9 @@ export class Game {
   rebuildStats(): void {
     this.gearEffects = gearUniques(this.inventory.equippedItems(this.weaponSlots.inactive));
     const mods = [...equipmentModifiers(this.inventory.equippedItems(this.weaponSlots.inactive)), ...this.treeMods, ...masteryModifiers(this.cfg.mastery, this.handFamily()), ...this.modifiers, ...this.director.build.modifiers(), ...this.director.buffModifiers(), ...(this.node?.mods() ?? [])];
-    Object.assign(this.stats, computeStats(mods));
+    this.condMods = hasConditional(mods);
+    this.condIds = condIdsOf(mods);
+    Object.assign(this.stats, computeStats(mods, undefined, this.conditions.active));
     this.player.applyStats(this.stats, this.attackerScale);
     this.tactical.rechargeMult = this.stats.tacticalRechargeMult;
     this.statsVersion++;
@@ -933,7 +944,13 @@ export class Game {
       equippedList: () => SLOT_IDS.map((s) => g.inventory.equipped(s)),
       replaced: (it) => g.inventory.equipped(g.inventory.targetSlot(it) ?? 'weapon'),
       baseline: (wave) => lootLevel(g.cfg.tier, wave),
+      scoreContext: () => g.scoreContext(),
     };
+  }
+
+  /** Build-aware scoring context of this drone: tree, run upgrades and node effects, mastery, the sector's faction. */
+  scoreContext(): ScoreContext {
+    return { extra: [...this.treeMods, ...this.director.build.modifiers(), ...(this.node?.mods() ?? [])], mastery: this.cfg.mastery, faction: this.director.faction };
   }
 
   private lootHost(): LootHost {
@@ -1378,6 +1395,7 @@ export class Game {
       this.cfg.run.tick(dt);
     }
     this.player.update(dt, input, this.stats.moveSpeedMult * (this.hazards?.playerSpeed ?? 1), controls);
+    this.tickConditions();
     this.hunt?.update(dt, this.enemies.nav, this.player.alive ? [this.player.position] : []);
     if (this.player.dashedThisFrame) {
       this.player.dashedThisFrame = false;
@@ -1596,7 +1614,10 @@ export class Game {
         this.abilities.ult = Math.min(1, this.abilities.ult + f);
       },
       hitstop: (s, k) => this.hitstop(s, k),
-      masteryKill: (e) => this.gainMastery(this.weapon.def.family, killMastery(e.def.role, e.elite)),
+      masteryKill: (e) => {
+        this.conditions.note('kill', this.runTime);
+        this.gainMastery(this.weapon.def.family, killMastery(e.def.role, e.elite));
+      },
       damageEnemy: (...a) => this.damageEnemy(...a),
     };
   }
@@ -1687,7 +1708,17 @@ export class Game {
   /** Swap to the other carried weapon (or to `slot`). Out of build mode only. */
   swapWeapon(slot?: WeaponSlot): boolean {
     if (this.construction.active) return false;
-    return this.weaponSlots.swap(slot);
+    const ok = this.weaponSlots.swap(slot);
+    if (ok) this.conditions.note('swap', this.runTime);
+    return ok;
+  }
+
+  /** Conditional affixes: feed the tracker (dash edge, airborne, hull) and rebuild stats when the active set changes. */
+  protected tickConditions(): void {
+    const p = this.player;
+    if (p.dashing && !this.condDashing) this.conditions.note('dash', this.runTime);
+    this.condDashing = p.dashing;
+    if (this.conditions.update(this.runTime, { airborne: !p.grounded, hullFrac: p.hp / Math.max(1, p.maxHp), alive: p.alive }) && this.condMods) this.rebuildStats();
   }
 
   private weaponSlotsHost(): WeaponSlotsHost {
@@ -2250,6 +2281,7 @@ export class Game {
         expiring: lt.expiring,
         cargoFull: this.inventory.cargoFull,
         equipped: cur ? { name: cur.name, level: cur.level, rarity: cur.rarity } : null,
+        worn: this.inventory.equippedItems(),
         ...this.verdicts.of(lt.item, lt.droppedWave),
       });
     }
@@ -2280,6 +2312,7 @@ export class Game {
       holster: this.holsterHud(),
       abilities: this.abilities.hud(),
       moves: this.movement.hud(),
+      conds: condHud(this.condIds, this.conditions.active),
       heat: this.weapon.heat / 100,
       overheated: this.weapon.overheated,
       charge: this.weapon.def.mechanism === 'charge' || this.weapon.def.mechanism === 'cycle' || this.weapon.def.mechanism === 'salvo' ? this.weapon.charge : 0,

@@ -28,6 +28,8 @@ export type SfxName =
   | 'chargeReady'
   | 'railFire'
   | 'swarmLaunch'
+  | 'rocketLaunch'
+  | 'flame'
   | 'vent'
   | 'arc'
   | 'weaponSwitch'
@@ -440,6 +442,20 @@ export class Sfx {
   /** Voices dropped by the cap (diagnostics). */
   dropped = 0;
 
+  /** Launcher and flamer shots (kept out of `play` to hold its size). */
+  private heavyWeapon(name: 'rocketLaunch' | 'flame', v: number, p: number, j: number, out: AudioNode): void {
+    if (name === 'rocketLaunch') {
+      // Ignition crack, low thump and a hissing motor that trails off.
+      this.noiseBurst(0.06, 0.4 * v, 5200 * p, 1400, out, 'bandpass', 0.9);
+      this.osc('sine', 140 * p, 42, 0.32, 0.5 * v, out);
+      this.noiseBurst(0.55, 0.2 * v, 1800 * p * j, 600, out, 'bandpass', 0.6, 0.02);
+      return;
+    }
+    // One tick of the stream: a soft roar with an occasional crackle.
+    this.noiseBurst(0.14, 0.09 * v, 900 * p * j, 420, out, 'lowpass', 0.7);
+    if (Math.random() < 0.3) this.noiseBurst(0.03, 0.05 * v, 6200, 3000, out, 'highpass', 1, Math.random() * 0.05);
+  }
+
   play(name: SfxName, o: PlayOpts = {}): void {
     if (this.suppress > 0 || !this.ctx || this.ctx.state !== 'running') return;
     if (this.voices >= Sfx.MAX_VOICES && !UI_SOUNDS.has(name)) {
@@ -456,12 +472,11 @@ export class Sfx {
 
     const v = o.volume ?? 1;
     const p = o.pitch ?? 1;
-    const pan = this.ctx.createStereoPanner();
-    pan.pan.value = Math.max(-1, Math.min(1, o.pan ?? 0));
-    pan.connect(UI_SOUNDS.has(name) ? this.uiBus : this.sfxBus);
-    const out = pan;
+    const out = this.ctx.createStereoPanner();
+    out.pan.value = Math.max(-1, Math.min(1, o.pan ?? 0));
+    out.connect(UI_SOUNDS.has(name) ? this.uiBus : this.sfxBus);
     const j = 0.94 + Math.random() * 0.12; // pitch jitter
-
+    if (name === 'rocketLaunch' || name === 'flame') return this.heavyWeapon(name, v, p, j, out);
     switch (name) {
       case 'shoot':
         this.osc('sawtooth', 1250 * p * j, 220 * p, 0.09, 0.16 * v, out);

@@ -46,6 +46,8 @@ export function StationDirectory({ flow, close }: { flow: Flow; close: () => voi
           const info = STATION_INFO[st.id];
           if (!info) return null;
           const locked = STATION_FEATURE[st.id] ? lockReason(save, STATION_FEATURE[st.id]) : null;
+          // Staged unlocks: offline stations are summarised below instead of listed.
+          if (locked) return null;
           return (
             <button
               key={st.id}
@@ -67,6 +69,7 @@ export function StationDirectory({ flow, close }: { flow: Flow; close: () => voi
           );
         })}
       </div>
+      <OfflineStations save={save} />
     </>
   );
 }
@@ -91,5 +94,16 @@ export function XpGain({ gained, totalAfter, label = 'WARDEN XP' }: { gained: nu
       </div>
       {ups > 0 && <small>{isUnlocked({ progress: { xp: totalAfter }, threat: { unlocked: 1 } }, 'station:lattice') ? 'Spend skill points at the Neural Lattice in the drone bay.' : `Skill points wait for the Neural Lattice (opens at Warden level ${LATTICE_LEVEL}).`}</small>}
     </div>
+  );
+}
+
+/** One line for the stations still offline (the unlock track in this console says when each opens). */
+function OfflineStations({ save }: { save: Parameters<typeof lockReason>[0] }) {
+  const off = HQ_STATIONS.filter((st) => STATION_INFO[st.id] && STATION_FEATURE[st.id] && lockReason(save, STATION_FEATURE[st.id]));
+  if (!off.length) return null;
+  return (
+    <small className="text-faint" data-testid="dir-offline">
+      {off.length} more station{off.length === 1 ? ' is' : 's are'} offline. They power up as you level; see the unlock track.
+    </small>
   );
 }

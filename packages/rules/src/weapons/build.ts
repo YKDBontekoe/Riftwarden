@@ -1,4 +1,4 @@
-import { BEAM_EMITTER, type Mechanism, PLASMA_REPEATER, RAILGUN, SWARM_HIVE, type WeaponDef, type WeaponFamily } from '../data/defs';
+import { BEAM_EMITTER, FLAMER, LAUNCHER, type Mechanism, PLASMA_REPEATER, RAILGUN, SWARM_HIVE, type WeaponDef, type WeaponFamily } from '../data/defs';
 import { type ComponentDef, componentDef, componentsFor, type ComponentEffects } from './components';
 
 /**
@@ -46,6 +46,8 @@ export const FAMILIES: Readonly<Record<WeaponFamily, FamilyDef>> = {
   rail: { id: 'rail', label: 'Railgun', role: 'Charged precision slugs that pierce targets', template: RAILGUN, socketPattern: ['power', 'barrel', 'system', 'power'], energy: [1.9, 0.7, 3.8] },
   beam: { id: 'beam', label: 'Beam Emitter', role: 'Continuous beam, damage ramps on a held target', template: BEAM_EMITTER, socketPattern: ['power', 'system', 'barrel', 'system'], energy: [0.5, 2.6, 0.9] },
   swarm: { id: 'swarm', label: 'Drone Swarm', role: 'Seeker drones that lock onto machines near the crosshair', template: SWARM_HIVE, socketPattern: ['system', 'power', 'barrel', 'system'], energy: [2.6, 1.7, 0.35] },
+  launcher: { id: 'launcher', label: 'Launcher', role: 'Rockets that detonate on impact: splash damage around every hit', template: LAUNCHER, socketPattern: ['power', 'barrel', 'system', 'power'], energy: [2.7, 0.95, 0.25] },
+  flamer: { id: 'flamer', label: 'Flamer', role: 'Short-range stream that sweeps several machines and stacks statuses', template: FLAMER, socketPattern: ['system', 'power', 'barrel', 'system'], energy: [2.9, 1.2, 0.2] },
 };
 
 export const SOCKET_LABEL: Record<SocketKind, string> = { barrel: 'BARREL', power: 'POWER', system: 'SYSTEM' };
@@ -109,6 +111,8 @@ export const DEFAULT_PARTS: Readonly<Record<WeaponFamily, { barrel: string; mech
   rail: { barrel: 'rb_open', mechanism: 'mc_charge' },
   beam: { barrel: 'be_lens', mechanism: 'mc_beam' },
   swarm: { barrel: 'sw_pod', mechanism: 'mc_swarm' },
+  launcher: { barrel: 'ln_tube', mechanism: 'mc_rocket' },
+  flamer: { barrel: 'fl_nozzle', mechanism: 'mc_spray' },
 };
 
 /** Deterministic default build for weapons created before M3 (stats are left untouched). */
@@ -129,11 +133,11 @@ export function buildMechanism(b: WeaponBuild | undefined): Mechanism | undefine
 
 /** Product of all component effects (pierce summed), plus the barrel-length range factor. */
 export function buildEffects(b: WeaponBuild): Required<ComponentEffects> {
-  const out: Required<ComponentEffects> = { damage: 1, fireRate: 1, heatPerShot: 1, coolRate: 1, range: 1, accuracy: 1, chargeTime: 1, beamWidth: 1, rampMax: 1, pierce: 0, seekCone: 1, drones: 0 };
+  const out: Required<ComponentEffects> = { damage: 1, fireRate: 1, heatPerShot: 1, coolRate: 1, range: 1, accuracy: 1, chargeTime: 1, beamWidth: 1, rampMax: 1, pierce: 0, seekCone: 1, drones: 0, splash: 1, spray: 1, targets: 0 };
   for (const c of buildComponents(b)) {
     for (const k of Object.keys(c.effects) as (keyof ComponentEffects)[]) {
       const v = c.effects[k]!;
-      if (k === 'pierce' || k === 'drones') out[k] += v;
+      if (k === 'pierce' || k === 'drones' || k === 'targets') out[k] += v;
       else out[k] *= v;
     }
   }

@@ -1,3 +1,4 @@
+import type { CondId } from './conditions';
 /**
  * Combat stat block. Every gameplay system reads the computed block (never item data),
  * so equipment, future run upgrades and set bonuses only contribute StatModifiers.
@@ -138,13 +139,16 @@ export interface StatModifier {
   op: StatOp;
   value: number;
   source?: string;
+  /** Conditional affix: counts only while this condition is active (combat/conditions.ts). */
+  cond?: CondId;
 }
 
 export function isStatKey(k: unknown): k is StatKey {
   return typeof k === 'string' && Object.prototype.hasOwnProperty.call(STAT_DEFS, k);
 }
 
-export function computeStats(mods: readonly StatModifier[], base: Readonly<CombatStats> = BASE_STATS): CombatStats {
+/** `active`: conditions that hold right now; conditional modifiers whose condition is not active are skipped. */
+export function computeStats(mods: readonly StatModifier[], base: Readonly<CombatStats> = BASE_STATS, active?: ReadonlySet<CondId>): CombatStats {
   const flat = {} as Record<StatKey, number>;
   const pct = {} as Record<StatKey, number>;
   const mul = {} as Record<StatKey, number>;
@@ -155,6 +159,7 @@ export function computeStats(mods: readonly StatModifier[], base: Readonly<Comba
   }
   for (const m of mods) {
     if (!isStatKey(m.stat) || !Number.isFinite(m.value)) continue;
+    if (m.cond && !active?.has(m.cond)) continue;
     if (m.op === 'add') flat[m.stat] += m.value;
     else if (m.op === 'pct') pct[m.stat] += m.value;
     else if (m.op === 'mul') mul[m.stat] *= 1 + m.value;

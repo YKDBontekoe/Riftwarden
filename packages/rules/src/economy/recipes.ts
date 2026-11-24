@@ -69,6 +69,8 @@ export const RECIPES: readonly Recipe[] = [
   item('w_rail', 'Railgun', 'weapons', { kind: 'item', category: 'weapon', family: 'rail' }, 1.25, 'Any railgun chassis (lancer, siege or striker) with rolled components.'),
   item('w_beam', 'Beam Emitter', 'weapons', { kind: 'item', category: 'weapon', family: 'beam' }, 1.25, 'Any emitter chassis (prism, lattice or focus) with rolled components.'),
   item('w_swarm', 'Drone Swarm', 'weapons', { kind: 'item', category: 'weapon', family: 'swarm' }, 1.3, 'Any hive chassis (seeker, brood or wasp) with rolled components.'),
+  item('w_launcher', 'Launcher', 'weapons', { kind: 'item', category: 'weapon', family: 'launcher' }, 1.3, 'Any launcher chassis (rocket, siege mortar or hornet) with rolled components.'),
+  item('w_flamer', 'Flamer', 'weapons', { kind: 'item', category: 'weapon', family: 'flamer' }, 1.3, 'Any flamer chassis (projector, inferno or needle) with rolled components.'),
   item('d_armor', 'Armor', 'defense', { kind: 'item', category: 'armor' }, 1, 'Hull plating: armor rating, hull and resistance.'),
   item('d_shield', 'Shield', 'defense', { kind: 'item', category: 'shield' }, 1, 'Energy barrier projector.'),
   item('s_reactor', 'Reactor', 'systems', { kind: 'item', category: 'reactor' }, 1, 'Drone power plant: cooling, heat efficiency, tactical recharge.'),

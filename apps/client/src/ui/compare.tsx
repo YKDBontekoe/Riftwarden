@@ -1,6 +1,6 @@
-import { type ReactNode, useId, useMemo, useSyncExternalStore } from 'react';
+import { createContext, type ReactNode, useContext, useId, useMemo, useSyncExternalStore } from 'react';
 import { fmtNum, type StatKey, STAT_DEFS } from '@riftwarden/rules/combat/stats';
-import { COMPARISON_PRIORITIES, type ComparisonPriority, type LoadoutScore, loadoutScore, pctText, SCORE_HELP, SCORE_KEYS, SCORE_LABEL, SCORE_UNIT, type ScoreDelta, type ScoreKey, statSources, type SwapImpact, VERDICT_LABEL } from '@riftwarden/rules/loot/loadoutScore';
+import { COMPARISON_PRIORITIES, type ComparisonPriority, type LoadoutScore, loadoutScore, pctText, type ScoreContext, SCORE_HELP, SCORE_KEYS, SCORE_LABEL, SCORE_UNIT, type ScoreDelta, type ScoreKey, statSources, type SwapImpact, VERDICT_LABEL } from '@riftwarden/rules/loot/loadoutScore';
 import { rarity } from '@riftwarden/rules/loot/rarity';
 import type { ItemInstance } from '@riftwarden/rules/loot/types';
 import { STAT_HELP } from './statHelp';
@@ -58,8 +58,13 @@ export function ComparisonPriorityPicker() {
   );
 }
 
+/** The build around the gear for every score and verdict below it (HQ: tree + mastery; arena: + run, faction). */
+export const ScoreCtx = createContext<ScoreContext>({});
+export const useScoreContext = (): ScoreContext => useContext(ScoreCtx);
+
 export function useScore(equipped: readonly (ItemInstance | null)[]): LoadoutScore {
-  return useMemo(() => loadoutScore(equipped), [equipped]);
+  const ctx = useScoreContext();
+  return useMemo(() => loadoutScore(equipped, ctx), [equipped, ctx]);
 }
 
 const short: Record<ScoreKey, string> = { dps: 'DPS', ehp: 'EHP', mobility: 'MOV', towers: 'TWR' };

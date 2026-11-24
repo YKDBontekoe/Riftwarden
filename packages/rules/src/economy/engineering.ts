@@ -1,7 +1,7 @@
 import { mulberry32 } from '../combat/damage';
 import { type AffixDef, affixDef, affixPool, MAX_TIER, TIER_MULT } from '../loot/affixes';
 import { baseDef } from '../loot/bases';
-import { groupOfStat, hashSeed, levelScale, maxTierFor, pickWeighted, qualityRoll, rollAffix, rollTier } from '../loot/generate';
+import { groupOfStat, groupsOfStat, hashSeed, levelScale, maxTierFor, pickWeighted, qualityRoll, rollAffix, rollTier } from '../loot/generate';
 import { rarity } from '../loot/rarity';
 import type { ItemInstance, RolledAffix, WeaponRoll } from '../loot/types';
 import { buildEffects, FAMILIES, isValidBuild, type WeaponBuild } from '../weapons/build';
@@ -38,7 +38,7 @@ export function affixEngineerable(item: ItemInstance): EngineeringCheck {
 
 /** Groups blocked for a replacement at `index`: implicit stats and every other affix. */
 function blockedGroups(item: ItemInstance, except: ReadonlySet<number>): Set<string> {
-  const used = new Set<string>(item.base.map((s) => groupOfStat(s.stat)));
+  const used = new Set<string>(item.base.flatMap((s) => groupsOfStat(s.stat)));
   item.affixes.forEach((a, i) => {
     if (except.has(i)) return;
     const d = affixDef(a.id);
@@ -204,6 +204,11 @@ export function swapComponent(item: ItemInstance, slot: ComponentSlot, component
   if (build.family === 'swarm') {
     weapon.drones = clampTo(Math.round((w.drones ?? t.drones) + (n.drones - o.drones)), 1, 12);
     weapon.seekCone = clampTo(Math.round((w.seekCone ?? t.seekCone) * ratio('seekCone') * 1000) / 1000, 0.02, 1);
+  }
+  if (build.family === 'launcher') weapon.splash = clampTo(r2((w.splash ?? t.splash) * ratio('splash')), 0.5, 12);
+  if (build.family === 'flamer') {
+    weapon.spray = clampTo(Math.round((w.spray ?? t.spray) * ratio('spray') * 1000) / 1000, 0.02, 1);
+    weapon.targets = clampTo(Math.round((w.targets ?? t.targets) + (n.targets - o.targets)), 1, 8);
   }
   if (!(weapon.damage > 0)) return null;
   return { build, weapon };

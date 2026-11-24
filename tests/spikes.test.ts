@@ -27,7 +27,7 @@ describe('codex', () => {
     bankRewards(d, 'rc', 5, { ...emptyRewards(), items: [w] });
     expect(d.codex).toEqual(expect.arrayContaining(['rarity:epic', 'family:rail']));
     expect(d.resources.shards).toBe(before + 1 + 1);
-    expect(CODEX.length).toBe(4 + 5 + UNIQUES.length);
+    expect(CODEX.length).toBe(6 + 5 + UNIQUES.length);
     const back = parseSave(serializeSave(d));
     expect(back.ok && back.data.codex).toEqual(d.codex);
   });

@@ -24,10 +24,10 @@ export interface CodexEntry {
   shards: number;
 }
 
-const FAMILY_LABEL: Record<WeaponFamily, string> = { plasma: 'Plasma Repeater', rail: 'Railgun', beam: 'Beam Emitter', swarm: 'Drone Swarm' };
+const FAMILY_LABEL: Record<WeaponFamily, string> = { plasma: 'Plasma Repeater', rail: 'Railgun', beam: 'Beam Emitter', swarm: 'Drone Swarm', launcher: 'Launcher', flamer: 'Flamer' };
 
 export const CODEX: readonly CodexEntry[] = [
-  ...(['plasma', 'rail', 'beam', 'swarm'] as WeaponFamily[]).map((f) => ({ id: `family:${f}`, kind: 'family' as const, name: FAMILY_LABEL[f], hint: f === 'plasma' ? 'Your starting family.' : 'Opens on the unlock track; then drops anywhere.', shards: 1 })),
+  ...(['plasma', 'rail', 'beam', 'swarm', 'launcher', 'flamer'] as WeaponFamily[]).map((f) => ({ id: `family:${f}`, kind: 'family' as const, name: FAMILY_LABEL[f], hint: f === 'plasma' ? 'Your starting family.' : 'Opens on the unlock track; then drops anywhere.', shards: 1 })),
   ...RARITIES.filter((r) => r.index >= 2).map((r) => ({
     id: `rarity:${r.id}`,
     kind: 'rarity' as const,

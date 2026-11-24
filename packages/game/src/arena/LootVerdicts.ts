@@ -2,7 +2,7 @@
 // the build-aware swap verdict against the slot it would fill, and the item level against the level's baseline.
 // Computed once per targeted item (cached by uid), so the 20 Hz HUD never re-scores a loadout.
 import { bestKey, bestPowers, isNewBest, levelDelta } from '@riftwarden/rules/loot/feedback';
-import { swapImpact, type Verdict } from '@riftwarden/rules/loot/loadoutScore';
+import { type ScoreContext, swapImpact, type Verdict } from '@riftwarden/rules/loot/loadoutScore';
 import type { ItemInstance } from '@riftwarden/rules/loot/types';
 
 export interface LootVerdict {
@@ -21,6 +21,8 @@ export interface LootVerdictHost {
   replaced(item: ItemInstance): ItemInstance | null;
   /** Drop baseline item level of a wave on this level. */
   baseline(wave: number): number;
+  /** The build around the gear (tree, run upgrades, mastery, sector faction) for build-aware verdicts. */
+  scoreContext(): ScoreContext;
 }
 
 export class LootVerdicts {
@@ -40,7 +42,7 @@ export class LootVerdicts {
     for (const [k, v] of bestPowers(this.h.runItems().filter((i) => i.uid !== item.uid))) owned.set(k, Math.max(owned.get(k) ?? 0, v));
     const v: LootVerdict = {
       newBest: isNewBest(item, owned),
-      verdict: item.category === 'module' ? null : swapImpact(this.h.equippedList(), item, this.h.replaced(item), undefined, 'build').verdict,
+      verdict: item.category === 'module' ? null : swapImpact(this.h.equippedList(), item, this.h.replaced(item), undefined, 'build', undefined, this.h.scoreContext()).verdict,
       levelDelta: levelDelta(item.level, this.h.baseline(droppedWave)),
     };
     if (this.cache.size > 64) this.cache.clear();

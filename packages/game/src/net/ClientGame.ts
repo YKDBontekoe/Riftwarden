@@ -4,6 +4,9 @@ import { reachable } from '@riftwarden/rules/war/world';
 import type { WarState } from '@riftwarden/rules/war/state';
 import { towerRefund } from '@riftwarden/rules/runmap/carry';
 import { traceShot } from '../arena/shotTrace';
+import { flameFx, rocketFx } from '../arena/PlayerCombat';
+import { LAUNCHER } from '@riftwarden/rules/data/defs';
+
 import { hasLost, LIMB_IDS } from '@riftwarden/rules/enemies/limbs';
 import { detachLimb } from '../enemies/limbRuntime';
 import type { WeaponSlot } from '../arena/WeaponSlots';
@@ -44,6 +47,9 @@ import { poundBlast } from '@riftwarden/rules/player/movement';
 import type { Kit } from '../visuals/kit';
 import type { Palette } from '../visuals/materials';
 import { BLEND_S, blendStep, SNAP_M } from '@riftwarden/rules/net/lagComp';
+
+/** Rocket glow of other wardens' launchers (their element is not replicated). */
+const REMOTE_ROCKET = new Color3(2.7, 0.95, 0.25);
 
 /** Connection used by the replica (implemented by NetClient). */
 export interface NetLink {
@@ -547,6 +553,7 @@ export class ClientGame extends Game {
     this.hazards?.decay(hdt, this.hostileT);
     this.hazards?.affectPlayer(0);
     this.player.update(dt, input, this.stats.moveSpeedMult * (this.hazards?.playerSpeed ?? 1), controls);
+    this.tickConditions();
     this.blendCorrection(dt);
     if (this.player.dashedThisFrame) {
       this.player.dashedThisFrame = false;
@@ -598,7 +605,7 @@ export class ClientGame extends Game {
     if (this.inputT <= 0 || this.pendingShots.length >= 8) {
       this.inputT = 1 / INPUT_HZ;
       const p = this.player.position;
-      const fl = (this.player.dashing ? 1 : 0) | (this.player.sprinting ? 2 : 0) | (trigger ? 4 : 0) | (this.construction.active ? 8 : 0) | (this.dashFlag ? 16 : 0);
+      const fl = (this.player.dashing ? 1 : 0) | (this.player.sprinting ? 2 : 0) | (trigger ? 4 : 0) | (this.construction.active ? 8 : 0) | (this.dashFlag ? 16 : 0) | (this.player.grounded ? 0 : 32);
       this.dashFlag = false;
       this.link.send({ t: 'input', seq: ++this.seq, p: [round2(p.x), round2(p.y), round2(p.z)], yaw: round3(this.player.yaw), pitch: round3(this.player.pitch), sp: round2(this.player.speed), fl, heat: round2(this.weapon.heat / 100), shots: this.pendingShots.length ? this.pendingShots : undefined });
       this.pendingShots = [];
@@ -907,7 +914,10 @@ export class ClientGame extends Game {
       case 'u': {
         const payload = dec(ev[2]);
         // Personal kill confirmations keep the local (client-predicted) drone's dash topped up, as in single player.
-        if (ev[1] === 'hit' && payload === 'kill') this.player.refundDash(MOVE.killDashRefund);
+        if (ev[1] === 'hit' && payload === 'kill') {
+          this.player.refundDash(MOVE.killDashRefund);
+          this.conditions.note('kill', this.runTime);
+        }
         (uiEvents.emit as (k: string, v: unknown) => void)(ev[1], payload);
         return;
       }
@@ -1137,6 +1147,16 @@ export class ClientGame extends Game {
     r.rig.muzzle.computeWorldMatrix(true);
     const from = r.rig.muzzle.getAbsolutePosition().clone();
     const a = this.panFor(from);
+    if (family === 'launcher') {
+      rocketFx(this.wfx, this.fx, from, { point: to, normal: null, target: 'surface', enemyId: null }, LAUNCHER.boltSpeed, { splash: LAUNCHER.splash, cluster: false, element: 'thermal', color: REMOTE_ROCKET });
+      sfx.play('rocketLaunch', { volume: a.volume * 0.5, pan: a.pan });
+      return;
+    }
+    if (family === 'flamer') {
+      flameFx(this.fx, from, to, 'thermal');
+      if (Math.random() < 0.5) sfx.play('flame', { volume: a.volume * 0.4, pan: a.pan });
+      return;
+    }
     if (family === 'plasma') this.wfx.bolt(from, to, 140, 0.3, null);
     else if (family === 'swarm') {
       const target = ev[4] === undefined ? undefined : this.byNet.get(ev[4]);

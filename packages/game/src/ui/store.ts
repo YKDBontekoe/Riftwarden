@@ -1,3 +1,4 @@
+import type { CondHudRow } from '@riftwarden/rules/combat/conditions';
 import type { AbilityHudRow } from '@riftwarden/rules/abilities/defs';
 import type { MoveHud } from '../arena/Movement';
 import type { ArenaLayout } from '@riftwarden/rules/world/layout';
@@ -9,7 +10,7 @@ import type { RunResult } from '@riftwarden/rules/progression/run';
  * report after returning). Arena: playing, checkpoint (bank/continue/return choice),
  * defeat. Shared: loading, transit (scene swap), paused.
  */
-export type Screen = 'loading' | 'menu' | 'home' | 'terminal' | 'summary' | 'transit' | 'playing' | 'paused' | 'checkpoint' | 'defeat' | 'inventory' | 'upgrade' | 'build' | 'towers' | 'dev' | 'construct' | 'runmap' | 'station';
+export type Screen = 'loading' | 'menu' | 'home' | 'terminal' | 'summary' | 'transit' | 'playing' | 'paused' | 'checkpoint' | 'defeat' | 'inventory' | 'upgrade' | 'build' | 'towers' | 'dev' | 'construct' | 'runmap' | 'station' | 'unlock';
 export type Location = 'home' | 'arena';
 import type { TerminalId } from '@riftwarden/rules/home/terminals';
 export type { TerminalId };
@@ -147,6 +148,9 @@ export interface LootTargetInfo {
   verdict?: string | null;
   /** Item levels above (+) or below (-) what this wave usually drops on this Rift Level. */
   levelDelta?: number;
+  /** Set name and the pieces worn if this were equipped (set gear only). */
+  set?: string;
+  setPieces?: number;
 }
 
 /** M7 co-op HUD state (teammates, votes, offers, link quality). */
@@ -178,6 +182,8 @@ export interface HudState {
   lastRun: RunResult | null;
   /** Staged unlocks that opened recently (HQ toast; newest last). */
   unlocks?: { id: string; label: string; blurb: string; at: number }[];
+  /** Staged unlocks waiting for the pausing NEW SYSTEM ONLINE card (HQ walk or arena checkpoint; oldest first). */
+  unlockCard?: { id: string; label: string; blurb: string; kind: string }[];
   wave: number;
   phase: WavePhase;
   phaseTimer: number;
@@ -207,6 +213,8 @@ export interface HudState {
   abilities: AbilityHudRow[];
   /** Movement kit: current state, grapple / pound cooldowns (seconds). */
   moves: MoveHud;
+  /** Conditions the loadout's conditional affixes need, and whether each holds (empty without conditional gear). */
+  conds: CondHudRow[];
   heat: number; // 0..1
   overheated: boolean;
   /** Rail charge / cycle progress 0..1 (0 for other mechanisms): reticle charge arc. */
@@ -269,6 +277,7 @@ export const initialHud: HudState = {
   weaponAff: 0,
   abilities: [],
   moves: { state: '', grapple: 0, grappleMax: 1, pound: 0, poundMax: 1 },
+  conds: [],
   heat: 0,
   overheated: false,
   charge: 0,

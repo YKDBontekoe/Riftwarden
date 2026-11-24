@@ -1,3 +1,4 @@
+import type { CondId } from '../combat/conditions';
 import type { StatKey, StatOp } from '../combat/stats';
 import type { Category } from './types';
 
@@ -23,6 +24,8 @@ export interface AffixDef {
   group: string;
   /** Naming theme: adjective used when this is the item's strongest affix. */
   adjective: string;
+  /** Conditional affix: the stat only counts while this condition holds (bigger numbers to compensate). */
+  cond?: CondId;
 }
 
 /** Tier multipliers applied to an affix range (tier 1..5). Ranges overlap on purpose. */
@@ -58,6 +61,13 @@ export const AFFIXES: readonly AffixDef[] = [
   { id: 'apower', stat: 'abilityPowerMult', op: 'pct', range: [0.06, 0.12], scaling: 'pct', weights: { ability: 10, ultimate: 9, processor: 2 }, group: 'apower', adjective: 'Volatile' },
   { id: 'acool', stat: 'abilityCooldownMult', op: 'pct', range: [-0.04, -0.08], scaling: 'none', weights: { ability: 9, reactor: 2, accessory: 2 }, group: 'acool', adjective: 'Rapid-Cycle' },
   { id: 'aradius', stat: 'abilityRadiusMult', op: 'pct', range: [0.04, 0.08], scaling: 'none', weights: { ability: 6, ultimate: 6 }, group: 'aradius', adjective: 'Wide-Field' },
+  // ---- conditional (M11): stronger numbers that only count while the condition holds
+  { id: 'c_airdmg', stat: 'weaponDamageMult', op: 'pct', range: [0.1, 0.18], scaling: 'pct', weights: { weapon: 3, accessory: 3, module: 3 }, group: 'c_airdmg', adjective: 'Skyborne', cond: 'airborne' },
+  { id: 'c_dashrate', stat: 'fireRateMult', op: 'pct', range: [0.08, 0.14], scaling: 'none', weights: { weapon: 3, accessory: 4 }, group: 'c_dashrate', adjective: 'Slipstream', cond: 'dash' },
+  { id: 'c_swapdmg', stat: 'weaponDamageMult', op: 'pct', range: [0.14, 0.24], scaling: 'pct', weights: { weapon: 3, processor: 2 }, group: 'c_swapdmg', adjective: 'Quickdraw', cond: 'swap' },
+  { id: 'c_lowresist', stat: 'damageResist', op: 'add', range: [0.04, 0.07], scaling: 'none', weights: { armor: 3, shield: 3 }, group: 'c_lowresist', adjective: 'Last-Stand', cond: 'lowhull' },
+  { id: 'c_killmove', stat: 'moveSpeedMult', op: 'pct', range: [0.06, 0.1], scaling: 'none', weights: { accessory: 3, armor: 2 }, group: 'c_killmove', adjective: 'Bloodrush', cond: 'kill' },
+  { id: 'c_killcrit', stat: 'critChance', op: 'add', range: [0.04, 0.07], scaling: 'none', weights: { processor: 3, weapon: 2 }, group: 'c_killcrit', adjective: 'Predator', cond: 'kill' },
   { id: 'ucharge', stat: 'ultChargeMult', op: 'pct', range: [0.05, 0.1], scaling: 'none', weights: { ultimate: 10, processor: 2, ability: 3 }, group: 'ucharge', adjective: 'Surging' },
 ];
 

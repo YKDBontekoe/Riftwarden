@@ -16,7 +16,7 @@ import type { EnemyKind } from '../data/defs';
 import type { EliteModId } from '../survival/elites';
 
 export type DamageElement = 'kinetic' | 'thermal' | 'electric' | 'cryo' | 'corrosive' | 'void';
-export type WeaponFamilyId = 'plasma' | 'rail' | 'beam' | 'swarm';
+export type WeaponFamilyId = 'plasma' | 'rail' | 'beam' | 'swarm' | 'launcher' | 'flamer';
 
 export const ELEMENTS: readonly DamageElement[] = ['kinetic', 'thermal', 'electric', 'cryo', 'corrosive', 'void'];
 
@@ -113,12 +113,17 @@ export const FAMILY_ELEMENTS: Record<WeaponFamilyId, Record<Exclude<DamageElemen
   rail: { thermal: 0.6, electric: 1, cryo: 0.8, corrosive: 0.6, void: 1.4 },
   beam: { thermal: 1.4, electric: 1.2, cryo: 1, corrosive: 0.8, void: 0.5 },
   swarm: { thermal: 0.8, electric: 1.4, cryo: 0.7, corrosive: 1.4, void: 0.6 },
+  launcher: { thermal: 1.4, electric: 0.8, cryo: 0.6, corrosive: 1.2, void: 0.7 },
+  flamer: { thermal: 2.2, electric: 0.5, cryo: 1.6, corrosive: 1.2, void: 0.2 },
 };
+
+/** Families that never roll kinetic (the stream is the element): the kinetic draw is still consumed. */
+const ALWAYS_ELEMENTAL: readonly WeaponFamilyId[] = ['flamer'];
 
 /** Roll a weapon element from its own random stream (so other item rolls do not shift). */
 export function rollElement(family: WeaponFamilyId, rarityIndex: number, rand: () => number): DamageElement {
   const k = KINETIC_CHANCE[Math.max(0, Math.min(KINETIC_CHANCE.length - 1, rarityIndex | 0))];
-  if (rand() < k) return 'kinetic';
+  if (rand() < k && !ALWAYS_ELEMENTAL.includes(family)) return 'kinetic';
   const w = FAMILY_ELEMENTS[family] ?? FAMILY_ELEMENTS.plasma;
   const ids = Object.keys(w) as (keyof typeof w)[];
   let total = 0;

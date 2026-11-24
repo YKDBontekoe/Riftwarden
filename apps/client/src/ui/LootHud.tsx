@@ -1,3 +1,4 @@
+import { ScoreCtx } from './compare';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { BoundKey } from './hud/widgets';
 import { fmtNum } from '@riftwarden/rules/combat/stats';
@@ -31,6 +32,11 @@ export function LootPrompt() {
           {!!t.levelDelta && <span className={t.levelDelta > 0 ? 'text-ok' : 'text-faint'} title="Item levels against what this wave usually drops on this Rift Level"> ({t.levelDelta > 0 ? '+' : ''}{t.levelDelta} vs RL)</span>}
         </div>
         <b>{t.name}</b>
+        {t.set && (
+          <span className="lp-set" data-testid="lp-set">
+            SET · {t.set.toUpperCase()} · {t.setPieces}/4 IF EQUIPPED
+          </span>
+        )}
         {(t.newBest || t.verdict === 'upgrade') && (
           <span className="flex gap-[6px] mt-[2px]" data-testid="lp-tags">
             {t.newBest && <em className="not-italic font-mono text-[10px] tracking-[0.14em] px-[6px] py-[1px] bg-orange text-[#1d1410]" data-testid="lp-newbest">NEW BEST</em>}
@@ -188,6 +194,9 @@ export function ArenaInventory({ game }: { game: Game }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [game]);
   const run = game.cfg.run;
+  // Build-aware verdicts in the arena: tree, run upgrades, node effects, mastery and the sector faction.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const scoreCtx = useMemo(() => game.scoreContext(), [game, version]);
   const refresh = () => force((n) => n + 1);
   const unsecured = run.unsecured.items.length;
   return (
@@ -206,6 +215,7 @@ export function ArenaInventory({ game }: { game: Game }) {
           </button>
         </div>
         <div className="term-body">
+          <ScoreCtx.Provider value={scoreCtx}>
           <InventoryView
             entries={entries}
             equipped={equipped}
@@ -245,6 +255,7 @@ export function ArenaInventory({ game }: { game: Game }) {
               </div>
             }
           />
+          </ScoreCtx.Provider>
         </div>
       </div>
     </div>

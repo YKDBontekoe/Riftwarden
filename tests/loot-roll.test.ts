@@ -19,7 +19,7 @@ function reference(src: DropSource, wave: number, rand: () => number, mult: numb
       unique = true;
       return generateUnique(u, { uid: `${prefix}.${++counter.n}`, seed: d.seed, level: d.level, source: origin });
     }
-    return generateItem({ uid: `${prefix}.${++counter.n}`, seed: d.seed, level: d.level, rarity: d.rarity, category: d.category, baseId: d.baseId, allowExclusive: d.baseId ? [d.baseId] : [], source: origin });
+    return generateItem({ uid: `${prefix}.${++counter.n}`, seed: d.seed, level: d.level, rarity: d.rarity, category: d.category, baseId: d.baseId, allowExclusive: d.baseId ? [d.baseId] : [], source: origin, dropSource: d.source });
   });
 }
 
