@@ -45,7 +45,7 @@ async function waitFor(fn, ms, what) {
 }
 
 /** `databaseUrl`: use (and keep) this database instead of a fresh throwaway one (development). */
-export async function startStack({ port = 8799, simEnv = {}, gatewayEnv = {}, databaseUrl = null } = {}) {
+export async function startStack({ port = 8799, simEnv = {}, gatewayEnv = {}, workerEnv = {}, databaseUrl = null } = {}) {
   if (!databaseUrl && !process.env.RIFT_TEST_DATABASE_URL) throw new Error('Set RIFT_TEST_DATABASE_URL to a PostgreSQL test database');
   if (!process.env.RIFT_TEST_REDIS_URL) throw new Error('Set RIFT_TEST_REDIS_URL to a Redis test instance');
   // A leftover stack (a crashed suite) would answer our health checks with its own database: refuse.
@@ -65,7 +65,7 @@ export async function startStack({ port = 8799, simEnv = {}, gatewayEnv = {}, da
   const simAddr = `127.0.0.1:${port + 2}`;
   // RIFT_WORKER_BUNDLE=1 runs the production bundle (node apps/worker/build.mjs) instead of the sources.
   const entry = process.env.RIFT_WORKER_BUNDLE ? ['apps/worker/dist/main.mjs'] : ['--import', 'tsx', 'apps/worker/src/main.ts'];
-  const worker = (role, listen, env = {}) => proc(role, process.execPath, entry, { RIFT_WORKER_ROLE: role, RIFT_WORKER_LISTEN: listen, RIFT_TEST: '1', ...env });
+  const worker = (role, listen, env = {}) => proc(role, process.execPath, entry, { RIFT_WORKER_ROLE: role, RIFT_WORKER_LISTEN: listen, RIFT_TEST: '1', ...workerEnv, ...env });
   const s = {
     url: `http://127.0.0.1:${port}`,
     ws: `ws://127.0.0.1:${port}/session`,
