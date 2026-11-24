@@ -1,3 +1,4 @@
+import { bestFinds } from '../loot/feedback';
 import { addMastery, masteryTotal, type MasteryGain } from './mastery';
 import type { ItemInstance } from './items';
 import { isCheckpointWave } from './tiers';
@@ -80,7 +81,10 @@ export interface RunResult {
   xpLost?: number;
   /** Names of lost / secured items for the summary screens (capped). */
   lostItems?: ItemBrief[];
+  /** Best secured finds first (up to 12). */
   securedItems?: ItemBrief[];
+  /** Loadout power at the start of the run (`progression/riftLevel` gearPower). */
+  powerAtStart?: number;
   checkpoints: number;
   endedAt: number;
   /** Filled by the profile when the run is recorded. */
@@ -141,6 +145,8 @@ export class RunLedger {
   lootJournal: import('./runRules').LootRecord[] = [];
   /** Bad-luck protection: drops since the last legendary or better on this run (loot/roll `nextPity`). */
   pity = 0;
+  /** Loadout power when the run started (run recap: power gained); set by the arena. */
+  powerAtStart?: number;
   /** Items secured before a resume (the items themselves are in the save). */
   private securedBefore = 0;
 
@@ -350,7 +356,9 @@ export class RunLedger {
       masterySecured: addMastery(undefined, this.secured.mastery),
       masteryKept: addMastery(undefined, this.unsecured.mastery, outcome === 'returned' ? 1 : XP.keepOnLoss),
       lostItems: this.unsecured.items.slice(0, 12).map(brief),
-      securedItems: this.secured.items.slice(0, 12).map(brief),
+      // The best finds first (run recap), not the first ones picked up.
+      securedItems: bestFinds(this.secured.items, 12).map(brief),
+      powerAtStart: this.powerAtStart,
       checkpoints: this.checkpoints,
       endedAt: now,
       itemsCollected: this.itemsCollected,

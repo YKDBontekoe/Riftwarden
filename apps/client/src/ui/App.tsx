@@ -1,3 +1,5 @@
+import { RunRecap } from './RunRecap';
+import { savePower } from './RiftLevel';
 import { LoadingScreen } from './LoadingScreen';
 import { AccountPanel } from '../account/AccountPanel';
 import { BoundKey } from './hud/widgets';
@@ -406,7 +408,7 @@ export function fmtNum(n: number): string {
   return String(Math.round(n));
 }
 
-export function RunSummary({ result, extra }: { result: RunResult; extra?: { turretsBuilt: number; coresEarned: number } | null }) {
+export function RunSummary({ result, extra, powerAfter }: { result: RunResult; extra?: { turretsBuilt: number; coresEarned: number } | null; powerAfter?: number }) {
   const tier = getTier(result.tier);
   const sv = result.survival;
   const resources = [
@@ -426,6 +428,7 @@ export function RunSummary({ result, extra }: { result: RunResult; extra?: { tur
       {sv?.dev && <div className="record-badge dev">DEVELOPMENT SESSION · NOT RECORD ELIGIBLE · NOTHING BANKED</div>}
       {!sv?.dev && (result.records?.length ?? 0) > 0 && <div className="record-badge"><strong>RL {tier.id} personal record{result.records!.length > 1 ? 's' : ''}</strong> {result.records!.join(' · ')}</div>}
       {!sv?.dev && !result.records && result.newRecord && <div className="record-badge">New personal record · RL {tier.id}</div>}
+      <RunRecap result={result} powerAfter={powerAfter} />
       <div className="result-headline">
         <div><b>{result.wavesCleared}</b><span><FieldIcon name="wave" /> Waves cleared</span></div>
         <div><b>{result.kills.toLocaleString()}</b><span><FieldIcon name="enemy" /> Hostiles destroyed</span></div>
@@ -529,7 +532,7 @@ function SummaryScreen({ flow }: { flow: Flow }) {
           </div>
         </div>
         {!result.survival?.dev && <XpGain gained={(result.xpSecured ?? 0) + (result.xpKept ?? 0)} totalAfter={save.progress.xp} />}
-        <RunSummary result={result} />
+        <RunSummary result={result} powerAfter={savePower(save)} />
         <button className="primary" onClick={() => void flow.home?.takeControl()}>
           CONTINUE
         </button>

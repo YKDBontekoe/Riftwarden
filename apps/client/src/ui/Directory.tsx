@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import { lockReason, STATION_FEATURE } from '@riftwarden/rules/progression/unlocks';
+import { isUnlocked, lockReason, STATION_FEATURE, unlockDef } from '@riftwarden/rules/progression/unlocks';
 import type { Flow } from '../core/Flow';
 import { CURRENCIES, currencyTooltip } from '@riftwarden/rules/economy/currencies';
 import { HQ_STATIONS } from '@riftwarden/rules/home/layout';
@@ -71,6 +71,9 @@ export function StationDirectory({ flow, close }: { flow: Flow; close: () => voi
 }
 
 /** XP gained (this run) with the resulting level and any level-ups. */
+/** Warden level that opens the Neural Lattice (progression/unlocks). */
+const LATTICE_LEVEL = (() => { const u = unlockDef('station:lattice'); return u && 'warden' in u.by ? u.by.warden : 1; })();
+
 export function XpGain({ gained, totalAfter, label = 'WARDEN XP' }: { gained: number; totalAfter: number; label?: string }) {
   const after = levelInfo(totalAfter);
   const before = levelInfo(Math.max(0, totalAfter - gained));
@@ -85,7 +88,7 @@ export function XpGain({ gained, totalAfter, label = 'WARDEN XP' }: { gained: nu
       <div className="xp-bar">
         <i style={{ width: `${Math.round(after.frac * 100)}%` }} />
       </div>
-      {ups > 0 && <small>Spend skill points at the Neural Lattice in the drone bay.</small>}
+      {ups > 0 && <small>{isUnlocked({ progress: { xp: totalAfter }, threat: { unlocked: 1 } }, 'station:lattice') ? 'Spend skill points at the Neural Lattice in the drone bay.' : `Skill points wait for the Neural Lattice (opens at Warden level ${LATTICE_LEVEL}).`}</small>}
     </div>
   );
 }

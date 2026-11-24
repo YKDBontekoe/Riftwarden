@@ -1,5 +1,4 @@
-import { lockedSlots } from '@riftwarden/rules/progression/unlocks';
-import { watchUnlocks } from './unlockWatch';
+import { arenaProgress, watchUnlocks } from './unlockWatch';
 import { type AbstractEngine as Engine } from '@babylonjs/core/Engines/abstractEngine';
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { type Scene } from '@babylonjs/core/scene';
@@ -343,7 +342,7 @@ export class Flow {
         milestones: [...save.milestones],
         tree: { seed: save.progress.tree.seed, allocated: [...save.progress.tree.allocated] },
         locks: save.activeRun?.id === run.id ? save.activeRun.locks : undefined,
-        ...{ lockedSlots: lockedSlots(save), mastery: structuredClone(save.progress.mastery) },
+        ...arenaProgress(save),
         layout,
         tutorial: this.tutorialHost(),
         hooks: {

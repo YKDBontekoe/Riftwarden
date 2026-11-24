@@ -330,7 +330,9 @@ async function profileRows(id) {
       check('S4 malformed messages are rejected safely', err.code === 'malformed');
       // Profile changes go through the account sync (named operations replayed by the rules worker).
       const rep = await bad.sync([{ op: { name: 'refreshMarket', args: [], tx: 'tx_repeat_1' } }, { op: { name: 'refreshMarket', args: [], tx: 'tx_repeat_1' } }]);
-      check('S5 a repeated purchase (same transaction id) is refused', rep.results[0].ok && !rep.results[1].ok, rep.results[1].reason);
+      // A fresh account has not unlocked the Exchange: the rules worker refuses its ops with the reason (transaction-id
+      // de-duplication itself is covered by tests/economy.test.ts).
+      check('S5 staged unlocks are enforced on synced ops (locked Exchange refused with its requirement)', !rep.results[0].ok && /Warden level 2/.test(rep.results[0].reason ?? ''), rep.results[0].reason);
       // Another player's equipment
       const other = await bot('Victim');
       const victimItem = (await profileRows(other.welcome.playerId)).items[0];

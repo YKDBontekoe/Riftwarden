@@ -11,16 +11,16 @@ import { Store } from '@riftwarden/game/ui/store';
 
 const PRIORITY_KEY = 'riftwarden.comparisonPriority';
 const PRIORITY_LABEL: Record<ComparisonPriority, string> = {
-  balanced: 'Balanced', firepower: 'Firepower', survivability: 'Survivability', towers: 'Tower support',
+  build: 'My build', balanced: 'Balanced', firepower: 'Firepower', survivability: 'Survivability', towers: 'Tower support',
 };
 const SCORE_ICON: Record<ScoreKey, FieldIconName> = { dps: 'firepower', ehp: 'survivability', mobility: 'mobility', towers: 'towers' };
 
 function loadPriority(): ComparisonPriority {
   try {
     const saved = localStorage.getItem(PRIORITY_KEY);
-    return COMPARISON_PRIORITIES.find((priority) => priority === saved) ?? 'balanced';
+    return COMPARISON_PRIORITIES.find((priority) => priority === saved) ?? 'build';
   } catch {
-    return 'balanced';
+    return 'build';
   }
 }
 
@@ -50,7 +50,7 @@ export function ComparisonPriorityPicker() {
         {COMPARISON_PRIORITIES.map((option) => (
           <label key={option}>
             <input type="radio" name={name} value={option} checked={option === priority} onChange={() => savePriority(option)} />
-            <span><FieldIcon name={option} />{PRIORITY_LABEL[option]}</span>
+            <span><FieldIcon name={option === 'build' ? 'lattice' : option} />{PRIORITY_LABEL[option]}</span>
           </label>
         ))}
       </div>

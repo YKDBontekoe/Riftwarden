@@ -1,7 +1,9 @@
 // Staged unlocks on the session side: announce features as they open, and the automation switch.
 import { generateMarket } from '@riftwarden/rules/economy/market';
 import { marketProgress } from '@riftwarden/rules/progression/save';
-import { newlyUnlocked, setUnlockAll, unlockAllActive } from '@riftwarden/rules/progression/unlocks';
+import { lockedSlots, newlyUnlocked, setUnlockAll, unlockAllActive } from '@riftwarden/rules/progression/unlocks';
+import { bestPowers } from '@riftwarden/rules/loot/feedback';
+import type { SaveData } from '@riftwarden/rules/progression/save';
 import { sfx } from '@riftwarden/game/audio/Sfx';
 import type { Profile } from '@riftwarden/game/progression/Profile';
 import { hudStore, uiEvents } from '@riftwarden/game/ui/store';
@@ -37,4 +39,9 @@ export function unlockAllForTests(profile: Profile): void {
     d.market = generateMarket(d.profile.id, 0, marketProgress(d), d.market.generatedAt);
     return true;
   });
+}
+
+/** Profile progress an arena needs at deployment: locked slots, mastery and the best owned item per kind. */
+export function arenaProgress(save: SaveData): { lockedSlots: ReturnType<typeof lockedSlots>; mastery: SaveData['progress']['mastery']; ownedBest: Map<string, number> } {
+  return { lockedSlots: lockedSlots(save), mastery: structuredClone(save.progress.mastery), ownedBest: bestPowers(save.items) };
 }

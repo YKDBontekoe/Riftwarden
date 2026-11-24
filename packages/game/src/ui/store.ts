@@ -139,6 +139,12 @@ export interface LootTargetInfo {
   equippedName: string | null;
   equippedLevel: number;
   equippedRarity: string | null;
+  /** Beats every owned item of its kind (weapons: per family). */
+  newBest?: boolean;
+  /** Build-aware swap verdict against the slot it would fill. */
+  verdict?: string | null;
+  /** Item levels above (+) or below (-) what this wave usually drops on this Rift Level. */
+  levelDelta?: number;
 }
 
 /** M7 co-op HUD state (teammates, votes, offers, link quality). */

@@ -1,3 +1,5 @@
+import { gearPower } from '@riftwarden/rules/progression/riftLevel';
+import { type LootVerdictHost, LootVerdicts } from '../arena/LootVerdicts';
 import { baseDef } from '@riftwarden/rules/loot/bases';
 import { killMastery, masteryModifiers, type MasteryState } from '@riftwarden/rules/progression/mastery';
 import '../babylonSideEffects';
@@ -51,7 +53,7 @@ import { scrapValue } from '@riftwarden/rules/loot/economy';
 import { RUN_INCOME } from '@riftwarden/rules/economy/config';
 import { RunInventory } from '@riftwarden/rules/loot/runInventory';
 import type { ItemInstance } from '@riftwarden/rules/loot/types';
-import type { SlotId } from '@riftwarden/rules/progression/items';
+import { SLOT_IDS, type SlotId } from '@riftwarden/rules/progression/items';
 import { Construction } from '../defense/Construction';
 import { type Turret, type TurretContext, TurretManager } from '../defense/Turrets';
 import { type Behavior, type Enemy, type EnemyContext, EnemyManager } from '../enemies/EnemyManager';
@@ -140,6 +142,8 @@ export interface ArenaConfig {
   lockedSlots?: readonly SlotId[];
   /** Weapon-family mastery at deployment (rank damage, perks, finishes). */
   mastery?: MasteryState;
+  /** Best owned item power per kind at deployment (loot/feedback `bestPowers`): NEW BEST on pickups. */
+  ownedBest?: ReadonlyMap<string, number>;
   /** Arena layout for this run (procedural from the run seed); defaults to the classic hand-built arena. */
   layout?: ArenaLayout;
   /** Run map node this arena plays (absent = classic endless run with checkpoint choices). */
@@ -221,6 +225,8 @@ export class Game {
   lootTarget: Pickup | null = null;
   /** Loot placement, landing/pickup presentation and targeting. */
   protected readonly pickups = new LootPickups(this.lootHost());
+  /** NEW BEST / verdict / item level of the targeted pickup (cached per item). */
+  readonly verdicts = new LootVerdicts(this.verdictHost());
   /** Bumped on every inventory/loadout change so UI can refresh without polling. */
   inventoryVersion = 0;
   /** Items granted by the most recent checkpoint cache (checkpoint panel). */
@@ -418,6 +424,7 @@ export class Game {
     this.loot.onLand = (p) => this.pickups.landed(p);
     this.inventory = new RunInventory(cfg.loadout, cfg.run);
     this.inventory.lockedSlots = cfg.lockedSlots ?? [];
+    cfg.run.powerAtStart ??= gearPower(Object.values(cfg.loadout));
     this.weapon.finishFor = (f) => cfg.mastery?.[f]?.finish;
     if (cfg.node?.carry) this.inventory.adoptLoadout(cfg.node.carry.loadout);
     // Every map node rolls its own loot stream (a new arena must not replay the previous node's drops).
@@ -910,6 +917,17 @@ export class Game {
     return p;
   }
 
+  private verdictHost(): LootVerdictHost {
+    const g = this;
+    return {
+      get ownedBest() { return g.cfg.ownedBest ?? new Map<string, number>(); }, // prettier-ignore
+      runItems: () => g.inventory.entries().map((e) => e.item),
+      equippedList: () => SLOT_IDS.map((s) => g.inventory.equipped(s)),
+      replaced: (it) => g.inventory.equipped(g.inventory.targetSlot(it) ?? 'weapon'),
+      baseline: (wave) => lootLevel(g.cfg.tier, wave),
+    };
+  }
+
   private lootHost(): LootHost {
     const g = this;
     return {
@@ -933,7 +951,10 @@ export class Game {
       this.pickups.refused(p);
       return false;
     }
+    const v = this.verdicts.of(p.item, p.droppedWave);
     this.pickups.collected(p);
+    if (v.newBest) uiEvents.emit('alert', { text: `NEW BEST · ${p.item.name.toUpperCase()}`, tone: 'orange' });
+    this.verdicts.reset();
     if (this.lootTarget === p) this.lootTarget = null;
     this.inventoryVersion++;
     return true;
@@ -2212,6 +2233,7 @@ export class Game {
         expiring: lt.expiring,
         cargoFull: this.inventory.cargoFull,
         equipped: cur ? { name: cur.name, level: cur.level, rarity: cur.rarity } : null,
+        ...this.verdicts.of(lt.item, lt.droppedWave),
       });
     }
     hudStore.set({

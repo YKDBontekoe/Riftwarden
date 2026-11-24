@@ -347,6 +347,67 @@ async function openDeploy(p) {
     }
   }
 
+  if (want('G')) {
+    // Loot feedback: NEW BEST + build verdict + item level on the pickup prompt, the run recap on the summary.
+    const { b: b5, p: p5, errs: errs5 } = await launch({});
+    try {
+      await ev(p5, () => window.__rift.flow.enterHq());
+      await waitFor(p5, () => window.__rift.state().location === 'home' && !window.__rift.flow.busy);
+      await ev(p5, () => window.__rift.flow.deploy(1));
+      await waitFor(p5, () => window.__rift.state().location === 'arena' && !window.__rift.flow.busy);
+      const g1 = await ev(p5, async () => {
+        const r = window.__rift;
+        const g = r.game;
+        g.setScreen('playing');
+        // A much better weapon right in front of the drone.
+        const uid = r.spawnLoot({ rarity: 'epic', category: 'weapon', baseId: 'plasma_repeater', level: 9 });
+        const p = g.loot.pickups.find((x) => x.item.uid === uid);
+        for (let i = 0; i < 120 && !g.loot.landed(p); i++) r.advance(1 / 30);
+        r.approach(p.id);
+        r.advance(0.3);
+        await new Promise((res) => setTimeout(res, 50));
+        return { target: g.lootTarget?.id === p.id, tags: document.querySelector('[data-testid=lp-tags]')?.textContent ?? '', prompt: document.querySelector('.loot-prompt')?.textContent ?? '', uid: p.item.uid };
+      });
+      check('G1 a better pickup is tagged NEW BEST and UPGRADE FOR YOUR BUILD, with its level against the RL', g1.target && /NEW BEST/.test(g1.tags) && /UPGRADE/.test(g1.tags) && /vs RL/.test(g1.prompt), JSON.stringify(g1).slice(0, 220));
+      if (captureScreens) await shot(p5, 'rl-loot-prompt', { frames: 2 });
+      const g2 = await ev(p5, async () => {
+        const r = window.__rift;
+        const g = r.game;
+        g.collectPickup(g.lootTarget);
+        // Clear to the first checkpoint so the find is secured, then extract.
+        const tick = () => new Promise((res) => setTimeout(res, 0));
+        for (let guard = 0; guard < 3000 && g.cfg.run.lastBankedWave < 5; guard++) {
+          if (g.screen === 'upgrade' && g.offer) { g.chooseUpgrade(g.offer[0].id); await tick(); }
+          if (g.screen !== 'playing' && !(g.screen === 'upgrade' && g.offer)) g.setScreen('playing');
+          if (g.waves.phase === 'prep') g.startWave();
+          r.advance(0.5);
+          r.killAll();
+        }
+        // Equip the find during the next preparation phase (equipment changes are prep-only).
+        for (let i = 0; i < 80 && !g.equipAllowed; i++) r.advance(0.25);
+        const eq = g.equip(g.cfg.run.secured.items.concat(g.cfg.run.unsecured.items).find((i) => i.rarity === 'epic' && i.category === 'weapon')?.uid ?? '');
+        return { banked: g.cfg.run.lastBankedWave, eq };
+      });
+      const back = await ev(p5, async () => {
+        const r = window.__rift;
+        for (let i = 0; i < 40 && !r.game.canReturnHome; i++) r.advance(0.25);
+        const ok = await r.flow.returnHome();
+        return { ok, screen: r.state().screen };
+      });
+      if (!back.ok) throw new Error('extraction refused ' + JSON.stringify(back));
+      await p5.waitForSelector('[data-testid=run-recap]', { timeout: 60000 });
+      const g3 = await ev(p5, () => ({ recap: document.querySelector('[data-testid=run-recap]')?.textContent ?? '' }));
+      check('G2 the run summary recaps the best find, the power gained and the mastery earned', g2.banked === 5 && g2.eq && /BEST FIND/.test(g3.recap) && /LOADOUT POWER/.test(g3.recap) && /Mastery/.test(g3.recap), g3.recap.slice(0, 200));
+      if (captureScreens) await shot(p5, 'rl-run-recap', { frames: 1 });
+      const bad5 = errs5.filter((e) => !/compil(e|ing) effect|Trying next fallback|BJS - \[[\d:]+\]: (Uniforms|Attributes|Defines|Error: (VERTEX|FRAGMENT))|GPU stall|favicon/.test(e));
+      check('G3 no runtime errors in the loot feedback flow', bad5.length === 0, bad5.slice(0, 3).join(' | '));
+    } catch (e) {
+      check('G no exception', false, e.stack || String(e));
+    } finally {
+      await b5.close();
+    }
+  }
+
   const bad = errs.filter((e) => !/compil(e|ing) effect|Trying next fallback|BJS - \[[\d:]+\]: (Uniforms|Attributes|Defines|Error: (VERTEX|FRAGMENT))|GPU stall|favicon/.test(e));
   check('Z no runtime errors', bad.length === 0, bad.slice(0, 3).join(' | '));
   console.log(`\n${stats.passes} passed, ${stats.failures} failed (${Math.round((Date.now() - t0) / 1000)} s)`);
