@@ -1,6 +1,7 @@
 import { keyLabel } from '@riftwarden/game/core/settings';
 import { useHud } from './useHud';
-import { type ReactNode, useEffect } from 'react';
+import { createContext, type ReactNode, useContext, useEffect } from 'react';
+import { RESOURCE_KEYS, type ResourceKey } from '@riftwarden/rules/economy/config';
 import { stationInfo } from '@riftwarden/rules/home/stationInfo';
 import { CURRENCIES, currencyTooltip } from '@riftwarden/rules/economy/currencies';
 import { stationArtwork } from '@riftwarden/game/visuals/fieldArtwork';
@@ -8,11 +9,16 @@ import { FieldArt } from './FieldArt';
 import { FieldIcon, STATION_ICON } from './FieldIcon';
 import { CurrencyIcon } from './inventory/thumbs';
 
+/** Currencies the warden can see (staged unlocks); null = all. Provided by TerminalHost. */
+export const ShellCurrencies = createContext<readonly ResourceKey[] | null>(null);
+
 /** Terminal window frame shared by every HQ station. E / Esc close it (not while typing). */
 export function Shell({ code, title, sub, close, children, accent = 'cyan', wide }: { code: string; title: string; sub: string; close: () => void; children: ReactNode; accent?: 'cyan' | 'amber' | 'violet'; wide?: boolean }) {
   const useCode = useHud(s => s.bindings.use);
   const terminal = useHud((s) => s.terminal);
   const info = stationInfo(terminal);
+  const visible = useContext(ShellCurrencies);
+  const uses = info ? info.uses.filter((k) => !visible || !(RESOURCE_KEYS as readonly string[]).includes(k) || visible.includes(k as ResourceKey)) : [];
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.repeat) return;
@@ -42,10 +48,10 @@ export function Shell({ code, title, sub, close, children, accent = 'cyan', wide
         {info && (
           <div className="term-purpose" data-testid="term-purpose">
             <span>{info.purpose}</span>
-            {info.uses.length > 0 && (
+            {uses.length > 0 && (
               <span className="term-uses">
                 USES
-                {info.uses.map((k) => (
+                {uses.map((k) => (
                   <i key={k} className={CURRENCIES[k].cls} title={currencyTooltip(k)}>
                     <CurrencyIcon k={k} /> {CURRENCIES[k].name}
                   </i>

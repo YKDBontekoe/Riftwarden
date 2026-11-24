@@ -7,6 +7,8 @@ import type { ScoreContext } from '@riftwarden/rules/loot/loadoutScore';
 import { treeModifiers } from '@riftwarden/rules/progression/skilltree';
 import { useSave } from './App';
 import { ScoreCtx } from './compare';
+import { ShellCurrencies } from './shell';
+import { visibleCurrencies } from '@riftwarden/rules/progression/unlocks';
 import { useHud } from './useHud';
 import { ArchitectTerminal } from './Construction';
 import { SkillTreeTerminal } from './SkillTree';
@@ -18,7 +20,12 @@ export function TerminalHost({ flow, home }: { flow: Flow; home: HomeBase }) {
   const save = useSave(flow);
   // Build-aware verdicts in every terminal: the warden's skill tree and weapon mastery (no sector faction at home).
   const ctx = useMemo<ScoreContext>(() => ({ extra: treeModifiers(save.progress.tree.seed, save.progress.tree.allocated), mastery: save.progress.mastery, faction: null }), [save.progress.tree, save.progress.mastery]);
-  return <ScoreCtx.Provider value={ctx}>{terminal(id, flow, home)}</ScoreCtx.Provider>;
+  const shown = useMemo(() => visibleCurrencies(save), [save]);
+  return (
+    <ScoreCtx.Provider value={ctx}>
+      <ShellCurrencies.Provider value={shown}>{terminal(id, flow, home)}</ShellCurrencies.Provider>
+    </ScoreCtx.Provider>
+  );
 }
 
 function terminal(id: string | null, flow: Flow, home: HomeBase) {

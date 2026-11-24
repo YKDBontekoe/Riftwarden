@@ -41,6 +41,7 @@ function engEntries(save: SaveData): EngEntry[] {
 }
 
 /** Feature each workshop tab needs (staged unlocks). */
+const TAB_SUB: Record<Tab, string> = { modules: 'Modules', affixes: 'Affix recalibration', enhance: 'Enhancement', components: 'Component engineering', towers: 'Tower tech', mastery: 'Mastery' };
 const TAB_FEATURE: Record<Tab, string> = { modules: 'station:modules', affixes: 'workshop:affixes', enhance: 'workshop:enhance', components: 'workshop:components', towers: 'workshop:towers', mastery: '' };
 
 export function EngineeringTerminal({ flow, close }: { flow: Flow; close: () => void }) {
@@ -49,8 +50,10 @@ export function EngineeringTerminal({ flow, close }: { flow: Flow; close: () => 
   const [tab, setTab] = useState<Tab>(() => (['modules', 'enhance', 'affixes', 'components', 'towers'] as Tab[]).find((t) => !lockReason(save, TAB_FEATURE[t])) ?? 'mastery');
   const [selW, setSelW] = useState<string | null>(() => save.loadout.weapon);
   const locked = lockReason(save, TAB_FEATURE[tab]);
+  // The subtitle names only the benches that are online (staged unlocks).
+  const sub = (Object.keys(TAB_FEATURE) as Tab[]).filter((t) => !lockReason(save, TAB_FEATURE[t])).map((t) => TAB_SUB[t]).join(' · ');
   return (
-    <Shell code="WS-04" title="ENGINEERING WORKSHOP" sub="Modules · affix recalibration · enhancement · component engineering · mastery" close={close} accent="amber" wide>
+    <Shell code="WS-04" title="ENGINEERING WORKSHOP" sub={sub} close={close} accent="amber" wide>
       <div className="market-head">
         <div className="tabs term-tabs">
           {(

@@ -16,7 +16,7 @@ export const STATION_INFO: Record<string, StationInfo> = {
   command: { name: 'Command Console', purpose: 'Your service record, survival records, milestones and a directory of every station.', uses: ['xp'] },
   loadout: { name: 'Drone Configuration', purpose: 'Equip gear into your loadout slots, compare stats and save presets. More slots open with Warden levels.', uses: [] },
   storage: { name: 'Storage', purpose: 'Everything you own that is not equipped. Buy extra bays here.', uses: ['salvage'] },
-  workshop: { name: 'Workshop', purpose: 'Improve a weapon you own: install modules, reroll affixes, enhance, swap components, research towers, ascend exotics.', uses: ['salvage', 'components', 'credits', 'shards'] },
+  workshop: { name: 'Workshop', purpose: 'Improve the gear you own: weapon mastery first; modules, enhancement, affix rerolls, refits, tower tech and ascension open as you progress.', uses: ['salvage', 'components', 'credits', 'shards'] },
   fabricate: { name: 'Fabricator', purpose: 'Craft the slot and family you want. Higher grades open with Rift Levels; masterwork and apex cost rift shards.', uses: ['salvage', 'components', 'credits', 'shards'] },
   merchant: { name: 'Exchange', purpose: 'Buy equipment from the rotating stock or sell your own for credits.', uses: ['credits'] },
   modules: { name: 'Broker', purpose: 'Buy weapon modules and trade materials between currencies.', uses: ['credits', 'salvage', 'components'] },
