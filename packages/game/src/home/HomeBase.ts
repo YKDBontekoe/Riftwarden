@@ -1,6 +1,7 @@
 import { lockReason, STATION_FEATURE, stationForUnlock, unlockAllActive } from '@riftwarden/rules/progression/unlocks';
 import '../babylonSideEffects';
 import { stationInfo } from '@riftwarden/rules/home/stationInfo';
+import { blueprintHolo, consoleDesk, latticeHolo } from './stationProps';
 import { drawOfflineScreen, drawStationScreen, loadStationIllustrations, OFFLINE_GLOW } from './stationScreens';
 import { levelForXp } from '@riftwarden/rules/progression/level';
 import { freePoints } from '@riftwarden/rules/progression/skilltree';
@@ -57,7 +58,6 @@ import { ATRIUM_BED, SURVEY_DESK, areaAt, HQ_PORTALS, HQ_ROOMS, HQ_SPAWN, HQ_STA
 import {
   type Animator,
   commandTable,
-  consoleDesk,
   drawScreenFrame,
   droneCradle,
   launchRing,
@@ -264,6 +264,7 @@ export class HomeBase {
       collider: (x0, y0, z0, x1, y1, z1) => builder.collider(x0, y0, z0, x1, y1, z1),
       animators: this.animators,
       pulse: (id) => this.pulses.get(id) ?? 0,
+      stationOff: (id) => !!this.stationLock(id),
     };
     this.readOnly = !!hooks.hostBase?.();
     const save = this.layoutSave();
@@ -375,10 +376,12 @@ export class HomeBase {
       const st = base;
       switch (st.id) {
         case 'architect':
-        case 'lattice':
+        case 'lattice': {
           screen = makeScreen(this.scene, st.id);
-          consoleDesk(ctx, st, screen, 1.6);
+          const desk = consoleDesk(ctx, st, screen, 1.6);
+          (st.id === 'lattice' ? latticeHolo : blueprintHolo)(ctx, st, desk, 1.6);
           break;
+        }
         case 'deploy':
           screen = makeScreen(this.scene, st.id);
           consoleDesk(ctx, st, screen, 1.7);

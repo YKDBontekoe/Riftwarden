@@ -10,7 +10,8 @@ import type { Shape } from '../visuals/kit';
 import { unlit } from '../visuals/materials';
 import { flareSprite } from '../visuals/textures';
 import type { Station } from '@riftwarden/rules/home/layout';
-import { consoleDesk, planeBuilder, type PropCtx, type ScreenTex } from './props';
+import { planeBuilder, type PropCtx, type ScreenTex } from './props';
+import { consoleDesk } from './stationProps';
 
 /**
  * M4 station rigs: equipment exchange, module broker, reclamation press and the
@@ -58,6 +59,7 @@ export function equipmentExchange(ctx: EconCtx, st: Station, screen: ScreenTex):
   const { kit, M, scene } = ctx;
   warmTemplates(ctx, [...new Set([...Object.values(GLYPH).map((g) => g.shape), 'box', 'torusThin'] as Shape[])]);
   consoleDesk(ctx, st, screen, 1.8);
+  const bayLight = ctx.stationOff?.(st.id) ? M.graphite : (M.accents?.market ?? M.cyanDim);
   const wallZ = 7.62;
   const root = kit.node('exchangeWall', null, [st.pos[0], 0, wallZ]);
   // Back board, trims and header strip
@@ -73,6 +75,10 @@ export function equipmentExchange(ctx: EconCtx, st: Station, screen: ScreenTex):
       const y = row === 0 ? 3.35 : 1.85;
       const bay = kit.node('bay', root, [x, y, 0]);
       kit.part('box', M.screenFrame, bay, { pos: [0, 0, 0.02], scale: [1.7, 1.2, 0.08] });
+      kit.part('box', M.graphite, bay, { pos: [0, 0, -0.03], scale: [1.5, 1.0, 0.02] });
+      for (const s of [-1, 1]) kit.part('box', bayLight, bay, { pos: [s * 0.74, 0, -0.05], scale: [0.012, 0.96, 0.012], shadow: false });
+      kit.part('box', bayLight, bay, { pos: [0, 0.49, -0.05], scale: [1.46, 0.012, 0.012], shadow: false });
+      kit.part('cyl8', M.metal, bay, { pos: [0, -0.5, -0.16], scale: [0.5, 0.05, 0.3] });
       for (const s of [-1, 1]) kit.part('box', M.white, bay, { pos: [s * 0.88, 0, -0.08], scale: [0.06, 1.28, 0.26] });
       kit.part('box', M.white, bay, { pos: [0, -0.62, -0.1], scale: [1.82, 0.06, 0.32] });
       const glyph = kit.node('bayGlyph', bay, [0, 0.05, -0.22]);
@@ -191,10 +197,18 @@ export function moduleBroker(ctx: EconCtx, st: Station, screen: ScreenTex): { up
       exParts = [];
       const crates = exchange.find((o) => o.id === 'salvage_crate')?.left ?? 0;
       const cells = exchange.find((o) => o.id === 'component_cell')?.left ?? 0;
-      for (let i = 0; i < crates; i++) exParts.push(kit.part('box', i % 2 ? M.white : M.metal, ex, { pos: [-0.5, 0.65 + i * 0.42, 0], scale: [0.8, 0.36, 0.7] }));
+      // Salvage crates: ribbed bodies with an amber band; component cells: capped capsules with a lit window.
+      for (let i = 0; i < crates; i++) {
+        const y = 0.63 + i * 0.42;
+        exParts.push(kit.part('box', M.metal, ex, { pos: [-0.5, y, 0], scale: [0.78, 0.34, 0.66] }));
+        for (const dx of [-0.36, 0, 0.36]) exParts.push(kit.part('box', M.graphite, ex, { pos: [-0.5 + dx, y, 0], scale: [0.05, 0.36, 0.69] }));
+        exParts.push(kit.part('box', M.amberDim, ex, { pos: [-0.5, y + 0.06, 0.34], scale: [0.6, 0.05, 0.01] }));
+      }
       for (let i = 0; i < cells; i++) {
-        exParts.push(kit.part('cyl', M.graphite, ex, { pos: [0.5, 0.75 + i * 0.6, 0], scale: [0.3, 0.5, 0.3] }));
-        exParts.push(kit.part('cyl', M.cyan, ex, { pos: [0.5, 0.75 + i * 0.6, 0], scale: [0.2, 0.52, 0.2] }));
+        const y = 0.78 + i * 0.6;
+        exParts.push(kit.part('cyl', M.graphite, ex, { pos: [0.5, y, 0], scale: [0.26, 0.42, 0.26] }));
+        exParts.push(kit.part('cyl', M.cyan, ex, { pos: [0.5, y, 0.02], scale: [0.18, 0.3, 0.24] }));
+        for (const dy of [-0.23, 0.23]) exParts.push(kit.part('cyl8', M.white, ex, { pos: [0.5, y + dy, 0], scale: [0.32, 0.07, 0.32] }));
       }
     },
   };
@@ -243,12 +257,17 @@ export function reclamation(ctx: EconCtx, st: Station, screen: ScreenTex): { upd
   ctx.collider(px - 0.7, 0, 1.8, px + 0.7, 1.0, 6.2);
   // Material bins along the south wall: salvage hopper (fill level) and a component locker (lit cells).
   const hop = kit.node('salvageHopper', null, [-29.6, 0, -5.9]);
-  kit.part('box', M.graphite, hop, { pos: [0, 0.1, 0], scale: [2.4, 0.2, 1.6] });
+  kit.part('box', M.graphite, hop, { pos: [0, 0.1, 0], scale: [2.5, 0.2, 1.7] });
+  // Steel bin with ribbed walls, corner posts and a hazard-striped lip.
   for (const s of [-1, 1]) {
-    kit.part('box', M.white, hop, { pos: [s * 1.15, 0.85, 0], scale: [0.1, 1.5, 1.6] });
-    kit.part('box', M.white, hop, { pos: [0, 0.85, s * 0.75], scale: [2.4, 1.5, 0.1] });
+    kit.part('box', M.metal, hop, { pos: [s * 1.15, 0.85, 0], scale: [0.08, 1.4, 1.5] });
+    kit.part('box', M.metal, hop, { pos: [0, 0.85, s * 0.75], scale: [2.3, 1.4, 0.08] });
+    for (const x of [-0.75, 0, 0.75]) kit.part('box', M.graphite, hop, { pos: [x, 0.85, s * 0.8], scale: [0.08, 1.36, 0.05] });
+    for (const zz of [-0.4, 0.4]) kit.part('box', M.graphite, hop, { pos: [s * 1.2, 0.85, zz], scale: [0.05, 1.36, 0.08] });
+    for (const t of [-1, 1]) kit.part('box', M.white, hop, { pos: [s * 1.17, 0.82, t * 0.77], scale: [0.14, 1.64, 0.14] });
   }
-  kit.part('box', M.amber, hop, { pos: [0, 1.62, 0.81], scale: [2.0, 0.03, 0.02] });
+  for (let i = 0; i < 10; i++) kit.part('box', i % 2 ? M.graphite : M.amber, hop, { pos: [-1.08 + i * 0.24, 1.58, 0.8], scale: [0.24, 0.07, 0.05] });
+  kit.part('box', M.white, hop, { pos: [0, 1.58, -0.8], scale: [2.4, 0.07, 0.05] });
   const fill = kit.node('hopperFill', hop, [0, 0.2, 0]);
   kit.part('box', M.metal, fill, { pos: [0, 0.5, 0], scale: [2.1, 1, 1.3] });
   ctx.collider(-30.9, 0, -6.8, -28.3, 1.7, -5.0);

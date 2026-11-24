@@ -116,6 +116,15 @@ export function drawStationScreen(id: string, s: ScreenTex, save: Readonly<SaveD
       screenLine(s, 250, 'RINGS OPEN', String(ringsAt(info.level)), '#cdd9df');
       break;
     }
+    case 'architect': {
+      const st = save.base.structure;
+      drawScreenFrame(s, 'ARCHITECT', '#9ad8ff');
+      screenLine(s, 100, 'FLOOR CELLS', String(Object.keys(st?.floors ?? {}).length), '#cdd9df');
+      screenLine(s, 150, 'WALLS & DOORS', String(Object.keys(st?.edges ?? {}).length), '#cdd9df');
+      screenLine(s, 200, 'PLACED OBJECTS', String(save.base.placeables.length), '#cdd9df');
+      screenLine(s, 250, 'BLUEPRINTS', String(save.base.blueprints?.length ?? 0), '#ffd59a');
+      break;
+    }
     case 'salvage':
       drawScreenFrame(s, 'RECLAMATION', '#ffb547');
       screenLine(s, 100, 'SALVAGE', String(save.resources.salvage), '#ffb547');
