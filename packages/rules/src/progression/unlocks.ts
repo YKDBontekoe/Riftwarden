@@ -31,8 +31,10 @@ export const UNLOCKS: readonly UnlockDef[] = [
   { id: 'family:beam', label: 'Beam family', kind: 'family', by: { warden: 6 }, blurb: 'Continuous emitters whose damage ramps on one target.' },
   { id: 'slot:ultimate', label: 'Ultimate slot', kind: 'slot', by: { warden: 7 }, blurb: 'Ultimates (orbital lance, overdrive) start dropping; charge them by dealing damage.' },
   { id: 'station:lattice', label: 'Neural Lattice', kind: 'station', by: { warden: 8 }, blurb: 'Spend skill points on your endless procedural skill tree.' },
+  { id: 'family:launcher', label: 'Launcher family', kind: 'family', by: { warden: 9 }, blurb: 'Rockets that detonate on impact and splash everything around the hit.' },
   { id: 'station:fabricate', label: 'Fabricator', kind: 'station', by: { warden: 10 }, blurb: 'Craft the slot and family you want. Higher grades open with Rift Levels.' },
   { id: 'family:swarm', label: 'Drone Swarm family', kind: 'family', by: { warden: 12 }, blurb: 'Hives of seeker drones that lock onto targets around the crosshair.' },
+  { id: 'family:flamer', label: 'Flamer family', kind: 'family', by: { warden: 11 }, blurb: 'Short-range streams that sweep several machines at once and stack burn, chill or corrosion.' },
   { id: 'station:architect', label: 'HQ construction', kind: 'station', by: { warden: 14 }, blurb: 'Expand and decorate the HQ; facilities give real bonuses.' },
   { id: 'workshop:enhance', label: 'Enhancement', kind: 'system', by: { rl: 2 }, blurb: 'Raise an item\'s power level by level at the workshop.' },
   { id: 'station:modules', label: 'Weapon modules', kind: 'station', by: { rl: 3 }, blurb: 'Modules drop and the Broker opens; install them in weapon sockets.' },
@@ -107,7 +109,7 @@ export function visibleCurrencies(d: UnlockProgress & { resources: Readonly<Reco
 
 // ------------------------------------------------------------------ what the locks mean for loot, slots and ops
 
-const FAMILY_UNLOCK: Partial<Record<WeaponFamily, string>> = { rail: 'family:rail', beam: 'family:beam', swarm: 'family:swarm' };
+const FAMILY_UNLOCK: Partial<Record<WeaponFamily, string>> = { rail: 'family:rail', beam: 'family:beam', swarm: 'family:swarm', launcher: 'family:launcher', flamer: 'family:flamer' };
 
 /** Weapon families that cannot drop / be crafted / be sold to this warden yet. */
 export function lockedFamilies(d: UnlockProgress): WeaponFamily[] {
@@ -132,7 +134,7 @@ export const lockedFamiliesOf = (locks: readonly string[] | undefined): WeaponFa
 export const lockedCategoriesOf = (locks: readonly string[] | undefined): Category[] => (locks ?? []).filter((l) => l.startsWith('cat:')).map((l) => l.slice(4) as Category);
 
 /** Every lock id that can appear in `lootLocks` (server validation of recorded locks). */
-export const ALL_LOOT_LOCKS: readonly string[] = ['cat:module', 'cat:ultimate', 'family:beam', 'family:rail', 'family:swarm', ...ALL_COMPONENT_LOCKS];
+export const ALL_LOOT_LOCKS: readonly string[] = ['cat:module', 'cat:ultimate', 'family:beam', 'family:flamer', 'family:launcher', 'family:rail', 'family:swarm', ...ALL_COMPONENT_LOCKS];
 
 const SLOT_UNLOCK: Partial<Record<SlotId, string>> = { ability2: 'slot:ability2', weapon2: 'slot:weapon2', accessory2: 'slot:accessory2', ultimate: 'slot:ultimate' };
 

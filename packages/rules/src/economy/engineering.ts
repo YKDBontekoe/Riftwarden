@@ -205,6 +205,11 @@ export function swapComponent(item: ItemInstance, slot: ComponentSlot, component
     weapon.drones = clampTo(Math.round((w.drones ?? t.drones) + (n.drones - o.drones)), 1, 12);
     weapon.seekCone = clampTo(Math.round((w.seekCone ?? t.seekCone) * ratio('seekCone') * 1000) / 1000, 0.02, 1);
   }
+  if (build.family === 'launcher') weapon.splash = clampTo(r2((w.splash ?? t.splash) * ratio('splash')), 0.5, 12);
+  if (build.family === 'flamer') {
+    weapon.spray = clampTo(Math.round((w.spray ?? t.spray) * ratio('spray') * 1000) / 1000, 0.02, 1);
+    weapon.targets = clampTo(Math.round((w.targets ?? t.targets) + (n.targets - o.targets)), 1, 8);
+  }
   if (!(weapon.damage > 0)) return null;
   return { build, weapon };
 }

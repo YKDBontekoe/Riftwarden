@@ -16,6 +16,7 @@ import { heatMetal, weaponGlow, type WeaponMaterials, weaponMaterials } from './
 import { moduleTypeDef, type ModuleVisual } from '@riftwarden/rules/weapons/modules';
 import { alongX, alongZ, copyVd, cylX, cylZ, lathe, tubeZ } from './shapes';
 import { uniqueHardware } from './signatureHardware';
+import { flamerBarrel, flamerChassis, launcherBarrel, launcherChassis } from './heavyModels';
 import { swarmBarrel, swarmChassis } from './swarmModel';
 
 /**
@@ -853,9 +854,10 @@ export function buildWeaponModel(scene: Scene, build: WeaponBuild, installed: (I
   const c: Ctx = { mount: opts.mount !== false, a, M, shell: M.shell(build.finish), trim: rarityIndex >= 2 ? M.trim(build.finish) : M.satin, energy, chargeGlow, heat, b: build, rarity: rarityIndex, rig };
   rig.slide = a.node('slide', root);
 
-  const mounts = build.family === 'rail' ? railChassis(c) : build.family === 'beam' ? beamChassis(c) : build.family === 'swarm' ? swarmChassis(c) : plasmaChassis(c);
+  const f = build.family;
+  const mounts = f === 'rail' ? railChassis(c) : f === 'beam' ? beamChassis(c) : f === 'swarm' ? swarmChassis(c) : f === 'launcher' ? launcherChassis(c) : f === 'flamer' ? flamerChassis(c) : plasmaChassis(c);
   hardpoint(c, mounts);
-  const front = build.family === 'swarm' ? swarmBarrel(c, mounts) : barrel(c, mounts);
+  const front = f === 'swarm' ? swarmBarrel(c, mounts) : f === 'launcher' ? launcherBarrel(c, mounts) : f === 'flamer' ? flamerBarrel(c, mounts) : barrel(c, mounts);
   core(c, mounts);
   cooling(c, mounts);
   uniqueHardware(c, mounts, front, opts.uniqueId);

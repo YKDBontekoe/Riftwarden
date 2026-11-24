@@ -1,9 +1,9 @@
 import type { DamageElement } from '../combat/elements';
 /** Data-driven content definitions. */
 
-export type WeaponFamily = 'plasma' | 'rail' | 'beam' | 'swarm';
+export type WeaponFamily = 'plasma' | 'rail' | 'beam' | 'swarm' | 'launcher' | 'flamer';
 /** How the trigger turns into shots. Each family supports a fixed subset (see weapons/families.ts). */
-export type Mechanism = 'auto' | 'burst' | 'charge' | 'cycle' | 'beam' | 'scatter' | 'pulse' | 'swarm' | 'salvo';
+export type Mechanism = 'auto' | 'burst' | 'charge' | 'cycle' | 'beam' | 'scatter' | 'pulse' | 'swarm' | 'salvo' | 'rocket' | 'cluster' | 'spray' | 'jet';
 
 export interface WeaponDef {
   id: string;
@@ -44,9 +44,15 @@ export interface WeaponDef {
   drones: number;
   /** Swarm: lock cone (tangent of the half-angle around the crosshair). */
   seekCone: number;
+  /** Launcher: blast radius around the impact (m). */
+  splash: number;
+  /** Flamer: spray cone (tangent of the half-angle around the aim). */
+  spray: number;
+  /** Flamer: machines one tick can reach. */
+  targets: number;
 }
 
-const WEAPON_DEFAULTS = { burstCount: 3, chargeTime: 0.8, pierce: 0, beamWidth: 0, rampMax: 1, rampTime: 1, boltSpeed: 130, element: 'kinetic' as DamageElement, drones: 0, seekCone: 0 };
+const WEAPON_DEFAULTS = { burstCount: 3, chargeTime: 0.8, pierce: 0, beamWidth: 0, rampMax: 1, rampTime: 1, boltSpeed: 130, element: 'kinetic' as DamageElement, drones: 0, seekCone: 0, splash: 0, spray: 0, targets: 0 };
 
 export const PLASMA_REPEATER: WeaponDef = {
   ...WEAPON_DEFAULTS,
@@ -113,6 +119,59 @@ export const BEAM_EMITTER: WeaponDef = {
   beamWidth: 0.35,
   rampMax: 2.2,
   rampTime: 1.6,
+};
+
+/**
+ * Rocket launcher: one rocket per shot that detonates where it strikes (machine or surface). A direct hit takes the
+ * full damage; the blast reaches everything within `splash` with falloff. The rocket flies at `boltSpeed` and the
+ * damage lands when it arrives.
+ */
+export const LAUNCHER: WeaponDef = {
+  ...WEAPON_DEFAULTS,
+  id: 'launcher',
+  name: 'LAUNCHER',
+  family: 'launcher',
+  mechanism: 'rocket',
+  damage: 52,
+  fireRate: 1.35,
+  range: 95,
+  heatPerShot: 17,
+  coolRate: 38,
+  coolDelay: 0.45,
+  overheatRecover: 35,
+  spreadMin: 0.003,
+  spreadMax: 0.02,
+  spreadPerShot: 0.006,
+  spreadRecover: 0.06,
+  recoilPitch: 0.022,
+  boltSpeed: 62,
+  splash: 3.4,
+};
+
+/**
+ * Flamer: a continuous short-range stream that reaches up to `targets` machines inside its cone per tick (line of
+ * sight from the eye), building statuses fast. Leans thermal, cryo and corrosive (a cryo flamer is a frost spray).
+ */
+export const FLAMER: WeaponDef = {
+  ...WEAPON_DEFAULTS,
+  id: 'flamer',
+  name: 'FLAMER',
+  family: 'flamer',
+  mechanism: 'spray',
+  damage: 6.5,
+  fireRate: 12,
+  range: 13,
+  heatPerShot: 1.05,
+  coolRate: 46,
+  coolDelay: 0.3,
+  overheatRecover: 25,
+  spreadMin: 0,
+  spreadMax: 0,
+  spreadPerShot: 0,
+  spreadRecover: 0,
+  recoilPitch: 0.0004,
+  spray: 0.2,
+  targets: 4,
 };
 
 /**

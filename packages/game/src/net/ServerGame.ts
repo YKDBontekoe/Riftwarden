@@ -554,11 +554,15 @@ export class ServerGame extends Game {
     const thermal = 1 + st.heatDamage * Math.max(0, Math.min(1, s.h));
     const power = def.family === 'rail' ? Math.max(0.3, Math.min(1, s.pw)) : 1;
     let dmg = def.damage * DAMAGE_PACE * st.weaponDamageMult * power * thermal;
-    const maxHits = def.family === 'rail' ? 1 + def.pierce + Math.floor(st.pierce) : def.family === 'beam' || def.family === 'swarm' ? 1 : 1 + Math.floor(st.pierce);
+    const maxHits = def.family === 'rail' ? 1 + def.pierce + Math.floor(st.pierce) : def.family === 'flamer' ? Math.max(1, def.targets) : def.family === 'beam' || def.family === 'swarm' || def.family === 'launcher' ? 1 : 1 + Math.floor(st.pierce);
+    if (def.family === 'launcher') {
+      this.launchClaim(a, s, o, range, dmg);
+      return;
+    }
     this.as(a, () => {
       this.director.bus.emit({ type: 'fire', chain: this.director.bus.newChain(), source: { kind: 'weapon', id: def.family }, value: 1 });
       const end = s.hits.length ? [s.hits[0][2], s.hits[0][3], s.hits[0][4]] : arr(o.add(new Vector3(s.d[0], s.d[1], s.d[2]).scale(Math.min(range, 60))));
-      if (def.family !== 'swarm' && (def.family !== 'beam' || (this.clock * 15) % 3 < 1)) this.rec.pushExcept(['shot', a.id, def.family, end], a.id);
+      if (def.family !== 'swarm' && ((def.family !== 'beam' && def.family !== 'flamer') || (this.clock * 15) % 3 < 1)) this.rec.pushExcept(['shot', a.id, def.family, end], a.id);
       let n = 0;
       for (const h of s.hits) {
         if (n >= maxHits) break;
@@ -608,6 +612,45 @@ export class ServerGame extends Game {
       t.trail.push(this.clock, c.x, c.y, c.z);
     }
     for (const id of this.trails.keys()) if (!live.has(id)) this.trails.delete(id);
+  }
+
+  /**
+   * Launcher claim: a claimed direct hit is validated like any hit; otherwise the server finds the impact itself
+   * (level raycast along the claimed direction). The rocket detonates on arrival in the shooter's context.
+   */
+  private launchClaim(a: Avatar, s: ShotClaim, o: Vector3, range: number, dmg: number): void {
+    const dir = new Vector3(s.d[0], s.d[1], s.d[2]);
+    if (!(dir.length() > 0.5)) return this.reject('shots', 'dir');
+    dir.normalize();
+    let at: Vector3 | null = null;
+    let direct: Enemy | null = null;
+    let weak = false;
+    const h = s.hits[0];
+    if (h) {
+      const e = this.enemies.active.find((x) => x.id === h[0]);
+      const point = new Vector3(h[2], h[3], h[4]);
+      const bad = !e ? 'hit-unknown' : !e.alive ? 'hit-dead' : this.invalidHit(e, o, point, range);
+      if (bad || !e) this.reject('hits', bad ?? 'hit-unknown');
+      else {
+        at = point;
+        direct = e;
+        weak = h[1] === 1 && this.weakAt(e, point);
+      }
+    }
+    at ??= this.ordnanceCtx.ray(o, o.add(dir.scale(range)));
+    if (!at) return;
+    this.rec.pushExcept(['shot', a.id, 'launcher', arr(at)], a.id);
+    this.as(a, () => {
+      this.director.bus.emit({ type: 'fire', chain: this.director.bus.newChain(), source: { kind: 'weapon', id: 'launcher' }, value: 1 });
+      this.combat.launch(at, direct, weak, dmg, o, a.weaponDef, (fn) => {
+        if (a.left || !this.avatars.includes(a)) return;
+        this.as(a, () => {
+          const before = this.director.dealt.player;
+          fn();
+          a.damage += this.director.dealt.player - before;
+        });
+      });
+    });
   }
 
   private invalidHit(e: Enemy, o: Vector3, p: Vector3, range: number): string | null {

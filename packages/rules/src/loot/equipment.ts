@@ -78,6 +78,9 @@ export function weaponDefFor(item: ItemInstance | null | undefined): WeaponDef |
     rampMax: w.rampMax ?? t.rampMax,
     drones: w.drones ?? t.drones,
     seekCone: w.seekCone ?? t.seekCone,
+    splash: w.splash ?? t.splash,
+    spray: w.spray ?? t.spray,
+    targets: w.targets ?? t.targets,
     element: w.element ?? 'kinetic',
   };
 }
@@ -158,6 +161,11 @@ export function weaponSummary(w: WeaponDef, stats: CombatStats = BASE_STATS) {
     beamWidth: w.beamWidth,
     /** Swarm lock cone half-angle in degrees (0 for other families). */
     lockCone: w.family === 'swarm' ? (Math.atan(w.seekCone) * 180) / Math.PI : 0,
+    /** Launcher blast radius (m, 0 for other families). */
+    splash: w.family === 'launcher' ? w.splash : 0,
+    /** Flamer spray cone half-angle in degrees and machines reached per tick (0 for other families). */
+    sprayCone: w.family === 'flamer' ? (Math.atan(w.spray) * 180) / Math.PI : 0,
+    targets: w.family === 'flamer' ? Math.max(1, w.targets) : 0,
     /** Seconds of continuous fire from cold to overheat. */
     sustain: (100 / Math.max(0.01, heat)) / (w.mechanism === 'charge' || w.mechanism === 'salvo' ? 1 / cycle : rate),
   };
@@ -179,11 +187,14 @@ export function compareItems(a: ItemInstance, b: ItemInstance | null): CompareRo
     const same = !wb || wb.family === wa.family;
     add('w.dps', 'Sustained DPS', sa.dps, sb?.dps, 'higher');
     rows.push({ key: 'w.element', label: 'Element', a: ELEMENT_INFO[wa.element].name, b: wb ? ELEMENT_INFO[wb.element].name : '', verdict: 0 });
-    add('w.damage', wa.family === 'beam' ? 'Damage / tick' : wa.family === 'swarm' ? 'Damage / drone' : 'Damage / shot', sa.damage, same ? sb?.damage : undefined, 'higher');
+    add('w.damage', wa.family === 'beam' || wa.family === 'flamer' ? 'Damage / tick' : wa.family === 'swarm' ? 'Damage / drone' : wa.family === 'launcher' ? 'Direct hit' : 'Damage / shot', sa.damage, same ? sb?.damage : undefined, 'higher');
     add('w.rate', wa.family === 'beam' ? 'Tick rate' : 'Fire rate', sa.rate, same ? sb?.rate : undefined, 'higher', (v) => `${fmtNum(v)}/s`);
     add('w.range', 'Range', sa.range, sb?.range, 'higher', (v) => `${fmtNum(v)} m`);
     add('w.sustain', 'Fire time to overheat', sa.sustain, sb?.sustain, 'higher', (v) => `${fmtNum(v)} s`);
     add('w.cool', 'Cooling', sa.cool, sb?.cool, 'higher', (v) => `${fmtNum(v)}/s`);
+    if (wa.family === 'launcher' && same) add('w.splash', 'Blast radius', sa.splash, sb?.splash, 'higher', (v) => `${fmtNum(v)} m`);
+    if (wa.family === 'flamer' && same) add('w.targets', 'Machines per tick', sa.targets, sb?.targets, 'higher', (v) => String(v));
+    if (wa.family === 'flamer' && same) add('w.spray', 'Spray cone', sa.sprayCone, sb?.sprayCone, 'higher', (v) => `${fmtNum(v)}°`);
     if (wa.family === 'rail' && same) add('w.pierce', 'Pierce', sa.pierce, sb?.pierce, 'higher', (v) => `${v} targets`);
     if (wa.family === 'rail' && wa.mechanism === 'charge' && same) add('w.charge', 'Charge time', sa.chargeTime, sb?.chargeTime, 'lower', (v) => `${fmtNum(v)} s`);
     if (wa.family === 'swarm' && same) add('w.drones', 'Drones / launch', sa.projectiles, sb?.projectiles, 'higher', (v) => String(v));

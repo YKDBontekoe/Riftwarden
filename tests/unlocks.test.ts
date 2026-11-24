@@ -7,8 +7,9 @@ const at = (warden: number, rl = 1) => ({ progress: { xp: xpForLevel(warden) }, 
 
 describe('unlock track', () => {
   it('a new warden starts with plasma only; families open with Warden levels', () => {
-    expect(lockedFamilies(at(1))).toEqual(['rail', 'beam', 'swarm']);
-    expect(lockedFamilies(at(3))).toEqual(['beam', 'swarm']);
+    expect(lockedFamilies(at(1))).toEqual(['rail', 'beam', 'swarm', 'launcher', 'flamer']);
+    expect(lockedFamilies(at(3))).toEqual(['beam', 'swarm', 'launcher', 'flamer']);
+    expect(lockedFamilies(at(9))).toEqual(['swarm', 'flamer']);
     expect(lockedFamilies(at(12))).toEqual([]);
     expect(lockedCategories(at(1))).toEqual(['ultimate', 'module']);
     expect(lockedCategories(at(7, 3))).toEqual([]);

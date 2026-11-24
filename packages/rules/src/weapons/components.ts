@@ -29,6 +29,12 @@ export interface ComponentEffects {
   seekCone?: number;
   /** Swarm: additive seeker drones per launch. */
   drones?: number;
+  /** Launcher: blast radius multiplier. */
+  splash?: number;
+  /** Flamer: spray cone multiplier (higher = wider). */
+  spray?: number;
+  /** Flamer: additive machines reached per tick. */
+  targets?: number;
 }
 
 export interface ComponentDef {
@@ -45,7 +51,7 @@ export interface ComponentDef {
   mechanism?: Mechanism;
 }
 
-const ALL: readonly WeaponFamily[] = ['plasma', 'rail', 'beam', 'swarm'];
+const ALL: readonly WeaponFamily[] = ['plasma', 'rail', 'beam', 'swarm', 'launcher', 'flamer'];
 
 export const COMPONENTS: readonly ComponentDef[] = [
   // ---------------------------------------------------------------- barrels / emitters
@@ -62,6 +68,14 @@ export const COMPONENTS: readonly ComponentDef[] = [
   { id: 'sw_twin', slot: 'barrel', name: 'Twin Racks', blurb: 'Two stacked launch racks that fire alternately.', families: ['swarm'], weight: 7, effects: { fireRate: 1.14, damage: 0.92, heatPerShot: 1.04 } },
   { id: 'sw_hive', slot: 'barrel', name: 'Hive Cluster', blurb: 'Dense honeycomb cluster: one more drone per launch, each a little weaker.', families: ['swarm'], weight: 6, effects: { drones: 1, damage: 0.8, heatPerShot: 1.1 } },
   { id: 'sw_uplink', slot: 'barrel', name: 'Long Uplink', blurb: 'Pod with a tracking mast: drones lock from further off the crosshair and fly further.', families: ['swarm'], weight: 7, effects: { seekCone: 1.45, range: 1.25, damage: 0.95 } },
+  { id: 'ln_tube', slot: 'barrel', name: 'Launch Tube', blurb: 'Single armoured launch tube with a blast deflector.', families: ['launcher'], weight: 10, effects: {} },
+  { id: 'ln_twin', slot: 'barrel', name: 'Twin Tubes', blurb: 'Two tubes side by side that fire alternately.', families: ['launcher'], weight: 7, effects: { fireRate: 1.18, damage: 0.9, heatPerShot: 1.06 } },
+  { id: 'ln_long', slot: 'barrel', name: 'Guided Tube', blurb: 'Long tube with a guidance collar: straighter, faster rockets, tighter blasts.', families: ['launcher'], weight: 7, effects: { range: 1.3, accuracy: 0.6, damage: 1.05, splash: 0.9 } },
+  { id: 'ln_wide', slot: 'barrel', name: 'Thermobaric Bore', blurb: 'Wide bore for fuel-air rockets: a much larger blast.', families: ['launcher'], weight: 6, effects: { splash: 1.35, damage: 0.9, heatPerShot: 1.08 } },
+  { id: 'fl_nozzle', slot: 'barrel', name: 'Spray Nozzle', blurb: 'Ribbed nozzle with a pilot igniter.', families: ['flamer'], weight: 10, effects: {} },
+  { id: 'fl_fan', slot: 'barrel', name: 'Fan Manifold', blurb: 'Flattened manifold: a wide sheet that reaches one more machine.', families: ['flamer'], weight: 6, effects: { spray: 1.4, targets: 1, damage: 0.88, range: 0.9 } },
+  { id: 'fl_lance', slot: 'barrel', name: 'Lance Nozzle', blurb: 'Long narrow nozzle: a tighter, longer stream.', families: ['flamer'], weight: 7, effects: { spray: 0.7, range: 1.3, damage: 1.08 } },
+  { id: 'fl_twin', slot: 'barrel', name: 'Twin Igniters', blurb: 'Two igniters feeding one stream: hotter, hungrier.', families: ['flamer'], weight: 7, effects: { damage: 1.15, heatPerShot: 1.12 } },
   // ---------------------------------------------------------------- energy cores
   { id: 'co_cell', slot: 'core', name: 'Plasma Cell', blurb: 'Side-loaded energy cell behind a glass window.', families: ALL, weight: 10, effects: {} },
   { id: 'co_ring', slot: 'core', name: 'Toroid Chamber', blurb: 'Ring-shaped containment chamber that sheds heat well.', families: ALL, weight: 8, effects: { coolRate: 1.1, damage: 0.97 } },
@@ -81,6 +95,10 @@ export const COMPONENTS: readonly ComponentDef[] = [
   { id: 'mc_pulse', slot: 'mechanism', name: 'Pulse Capacitor', blurb: 'Discharges the emitter as detonating pulses: splash damage around the impact, no ramp.', families: ['beam'], weight: 6, mechanism: 'pulse', effects: { damage: 8.5, fireRate: 0.095, heatPerShot: 6.2, range: 1.15 } },
   { id: 'mc_swarm', slot: 'mechanism', name: 'Hive Release', blurb: 'Launches seeker drones continuously while the trigger is held.', families: ['swarm'], weight: 10, mechanism: 'swarm', effects: {} },
   { id: 'mc_salvo', slot: 'mechanism', name: 'Salvo Lock', blurb: 'Hold to paint locks, release to launch a salvo: up to three times the drones at full lock.', families: ['swarm'], weight: 6, mechanism: 'salvo', effects: { damage: 1.12, fireRate: 0.5 } },
+  { id: 'mc_rocket', slot: 'mechanism', name: 'Rocket Feed', blurb: 'Fires rockets while the trigger is held; each detonates where it strikes.', families: ['launcher'], weight: 10, mechanism: 'rocket', effects: {} },
+  { id: 'mc_cluster', slot: 'mechanism', name: 'Cluster Payload', blurb: 'Rockets split on impact: the main blast plus three bomblets around it.', families: ['launcher'], weight: 6, mechanism: 'cluster', effects: { damage: 0.8, splash: 0.9, fireRate: 0.85 } },
+  { id: 'mc_spray', slot: 'mechanism', name: 'Pressure Spray', blurb: 'Continuous stream while held: sweeps every machine in the cone.', families: ['flamer'], weight: 10, mechanism: 'spray', effects: {} },
+  { id: 'mc_jet', slot: 'mechanism', name: 'Jet Valve', blurb: 'Focused jet: longer reach and more damage, fewer machines at once.', families: ['flamer'], weight: 6, mechanism: 'jet', effects: { spray: 0.5, targets: -2, range: 1.4, damage: 1.35 } },
   { id: 'mc_beam', slot: 'mechanism', name: 'Continuous Emitter', blurb: 'Sustained beam; damage ramps up while held on one target.', families: ['beam'], weight: 10, mechanism: 'beam', effects: {} },
   // ---------------------------------------------------------------- visual attachments
   { id: 'at_sight', slot: 'attachment', name: 'Holo Sight', blurb: 'Holographic sight housing.', families: ALL, weight: 8, effects: { accuracy: 0.94 } },
@@ -112,6 +130,9 @@ const EFFECT_LABEL: Record<keyof ComponentEffects, [string, 'mult' | 'add', 'hig
   pierce: ['pierce', 'add', 'higher'],
   seekCone: ['lock cone', 'mult', 'higher'],
   drones: ['drones per launch', 'add', 'higher'],
+  splash: ['blast radius', 'mult', 'higher'],
+  spray: ['spray cone', 'mult', 'higher'],
+  targets: ['machines per tick', 'add', 'higher'],
 };
 
 /** Human readable effects, e.g. [{text:'+12% fire rate', good:true}]. */

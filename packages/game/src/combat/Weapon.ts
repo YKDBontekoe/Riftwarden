@@ -37,6 +37,9 @@ export interface ShotRequest {
   seek?: number;
   /** Swarm: which lock candidate (nearest the crosshair first) this drone takes, so a launch spreads over targets. */
   seekIndex?: number;
+  /** Flamer: spray cone (tangent of the half-angle); every machine in it (up to `targets`, in sight) is struck. */
+  cone?: number;
+  targets?: number;
 }
 
 export type ShotTarget = 'enemy' | 'shield' | 'surface' | 'none';
@@ -361,7 +364,8 @@ export class Weapon {
     this.flashMeshes[2].rotation.z = Math.random() * Math.PI;
     this.light.position.copyFrom(from);
     this.light.intensity = feel.light;
-    if (swarm) sfx.play('swarmLaunch', { pitch: (d.mechanism === 'salvo' ? 0.85 : 1) * (0.95 + Math.random() * 0.1), volume: Math.min(1.2, 0.55 + 0.08 * proj) });
+    if (d.family === 'launcher') sfx.play('rocketLaunch', { pitch: (d.mechanism === 'cluster' ? 0.88 : 1) * (0.95 + Math.random() * 0.1), volume: 0.85 });
+    else if (swarm) sfx.play('swarmLaunch', { pitch: (d.mechanism === 'salvo' ? 0.85 : 1) * (0.95 + Math.random() * 0.1), volume: Math.min(1.2, 0.55 + 0.08 * proj) });
     else if (d.mechanism === 'pulse') sfx.play('railFire', { pitch: 1.5, volume: 0.7 });
     else if (scatter) {
       sfx.play('shoot', { pitch: 0.62, volume: 1 });
@@ -387,6 +391,8 @@ export class Weapon {
       case 'scatter':
       case 'pulse':
       case 'swarm':
+      case 'rocket':
+      case 'cluster':
         if (trigger && ready && this.cooldown <= 0) {
           this.cooldown = Math.max(0, this.cooldown) + 1 / rate;
           this.fireShot(stats, shoot, fx, 1, 1);
@@ -438,6 +444,38 @@ export class Weapon {
           this.charge = Math.max(0, this.charge - dt * 3);
           if (this.charge === 0) this.chargeSfx = false;
         }
+        break;
+      }
+      case 'spray':
+      case 'jet': {
+        // Flamer: continuous ticks; each reaches every machine in the cone (up to `targets`).
+        const on = trigger && ready;
+        if (on) {
+          active = 1;
+          this.beamTick -= dt;
+          const tick = 1 / rate;
+          let guard = 0;
+          while (this.beamTick <= 0 && guard++ < 8) {
+            this.beamTick += tick;
+            const thermal = 1 + stats.heatDamage * (this.heat / 100);
+            const origin = this.player.camera.position.clone();
+            const out = normalize(shoot({ origin, dir: this.aimDir(stats), range: this.range(stats), damage: d.damage * DAMAGE_PACE * stats.weaponDamageMult * thermal, family: d.family, pierce: 0, width: 0, cone: d.spray, targets: Math.max(1, d.targets) }));
+            fx.shot(d.family, this.muzzleWorld(this.tmpPos).clone(), out, 1, 0);
+            if (this.shotsFired % 2 === 0) sfx.play('flame', { pitch: d.mechanism === 'jet' ? 1.35 : 1 });
+            this.heat += (d.heatPerShot * HEAT_PACE.gain) / stats.heatEfficiency;
+            this.shotsFired++;
+            this.sinceShot = 0;
+            fired = true;
+            if (this.heat >= 100) {
+              this.heat = 100;
+              this.overheated = true;
+              sfx.play('overheat');
+              break;
+            }
+          }
+          this.player.recoil += d.recoilPitch * dt * 20 * stats.spreadMult;
+        } else this.beamTick = 0;
+        this.beaming = on && !this.overheated;
         break;
       }
       case 'beam': {

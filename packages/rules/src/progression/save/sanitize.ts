@@ -205,6 +205,9 @@ export function sanitizeItem(v: unknown, repairs: string[] = [], nested = false,
       opt('rampMax', 1, 10);
       opt('drones', 1, 12);
       opt('seekCone', 0.02, 1);
+      opt('splash', 0.5, 12);
+      opt('spray', 0.02, 1);
+      opt('targets', 1, 8);
       if (isDamageElement(w.element)) item.weapon.element = w.element;
     }
     const family: WeaponFamily = base?.weapon?.family ?? 'plasma';

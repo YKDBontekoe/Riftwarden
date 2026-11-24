@@ -23,7 +23,7 @@ import type { SaveData } from '@riftwarden/rules/progression/save';
 import { uiEvents } from '@riftwarden/game/ui/store';
 import { sfx } from '@riftwarden/game/audio/Sfx';
 
-const FAMILY_UNLOCK: Record<WeaponFamily, string | null> = { plasma: null, rail: 'family:rail', beam: 'family:beam', swarm: 'family:swarm' };
+const FAMILY_UNLOCK: Record<WeaponFamily, string | null> = { plasma: null, rail: 'family:rail', beam: 'family:beam', swarm: 'family:swarm', launcher: 'family:launcher', flamer: 'family:flamer' };
 
 const pct = (v: number) => `${v > 0 ? '+' : ''}${Math.round(v * 1000) / 10}%`;
 function perkText(p: PerkDef): string {

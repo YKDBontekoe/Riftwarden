@@ -9,7 +9,7 @@ import type { Finish } from '../weapons/build';
 /** The standard paints (weapons/build FINISHES). */
 const PAINTS: readonly Finish[] = ['arctic', 'gunmetal', 'sand', 'slate'];
 
-export const MASTERY_FAMILIES: readonly WeaponFamily[] = ['plasma', 'rail', 'beam', 'swarm'];
+export const MASTERY_FAMILIES: readonly WeaponFamily[] = ['plasma', 'rail', 'beam', 'swarm', 'launcher', 'flamer'];
 export const MAX_RANK = 50;
 export const PERK_EVERY = 5;
 
@@ -76,6 +76,8 @@ export const COMPONENT_RANKS: Readonly<Record<WeaponFamily, readonly (readonly [
   rail: [['mc_cycle', 5], ['rb_quad', 10], ['co_prism', 20]],
   beam: [['mc_pulse', 5], ['be_ring', 10], ['co_prism', 20]],
   swarm: [['mc_salvo', 5], ['sw_hive', 10], ['co_prism', 20]],
+  launcher: [['mc_cluster', 5], ['ln_wide', 10], ['co_prism', 20]],
+  flamer: [['mc_jet', 5], ['fl_fan', 10], ['co_prism', 20]],
 };
 
 /** Every mastery component lock id (`comp:<family>:<component>`). */
@@ -110,7 +112,7 @@ export const FINISH_RANKS: readonly (readonly [Finish, number])[] = [
 export const finishesAt = (rank: number): Finish[] => FINISH_RANKS.filter(([, r]) => rank >= r).map(([f]) => f);
 
 const TITLE = ['Initiate', 'Adept', 'Expert', 'Veteran', 'Master', 'Grandmaster'];
-export const FAMILY_NAME: Record<WeaponFamily, string> = { plasma: 'Plasma', rail: 'Railgun', beam: 'Beam', swarm: 'Swarm' };
+export const FAMILY_NAME: Record<WeaponFamily, string> = { plasma: 'Plasma', rail: 'Railgun', beam: 'Beam', swarm: 'Swarm', launcher: 'Launcher', flamer: 'Flamer' };
 export const masteryTitle = (f: WeaponFamily, rank: number): string => `${FAMILY_NAME[f]} ${TITLE[Math.min(5, Math.floor(rank / 10))]}`;
 
 // ------------------------------------------------------------------ perks (pick one of two every 5 ranks)
@@ -144,6 +146,16 @@ export const PERKS: Readonly<Record<WeaponFamily, readonly (readonly [PerkDef, P
     [{ name: 'Brood Tuning', stat: 'fireRateMult', op: 'pct', value: 0.03 }, { name: 'Wide Uplink', stat: 'rangeMult', op: 'pct', value: 0.05 }],
     [{ name: 'Sting Payload', stat: 'weaponDamageMult', op: 'pct', value: 0.025 }, { name: 'Hunter Logic', stat: 'eliteDamageMult', op: 'pct', value: 0.04 }],
     [{ name: 'Swarm Heat Sink', stat: 'heatEfficiency', op: 'pct', value: 0.05 }, { name: 'Corrosive Brood', stat: 'elementalPower', op: 'pct', value: 0.04 }],
+  ],
+  launcher: [
+    [{ name: 'Fast Loader', stat: 'fireRateMult', op: 'pct', value: 0.03 }, { name: 'Shaped Charge', stat: 'eliteDamageMult', op: 'pct', value: 0.04 }],
+    [{ name: 'Dense Warheads', stat: 'weaponDamageMult', op: 'pct', value: 0.025 }, { name: 'Long Burn Motors', stat: 'rangeMult', op: 'pct', value: 0.05 }],
+    [{ name: 'Blast Shielding', stat: 'heatEfficiency', op: 'pct', value: 0.05 }, { name: 'Incendiary Fill', stat: 'elementalPower', op: 'pct', value: 0.04 }],
+  ],
+  flamer: [
+    [{ name: 'Rich Mixture', stat: 'elementalPower', op: 'pct', value: 0.04 }, { name: 'Pressure Pump', stat: 'rangeMult', op: 'pct', value: 0.05 }],
+    [{ name: 'Hot Feed', stat: 'weaponDamageMult', op: 'pct', value: 0.025 }, { name: 'Recirculator', stat: 'coolRateMult', op: 'pct', value: 0.05 }],
+    [{ name: 'Fuel Economy', stat: 'heatEfficiency', op: 'pct', value: 0.05 }, { name: 'Close Quarters', stat: 'damageResist', op: 'add', value: 0.008 }],
   ],
 };
 

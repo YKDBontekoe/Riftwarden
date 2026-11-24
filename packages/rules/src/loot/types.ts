@@ -55,6 +55,10 @@ export interface WeaponRoll {
   /** Swarm: drones per launch and lock cone (absent on other families). */
   drones?: number;
   seekCone?: number;
+  /** Launcher: blast radius (m). Flamer: spray cone and machines per tick (absent on other families). */
+  splash?: number;
+  spray?: number;
+  targets?: number;
   /** Damage element (absent on pre-element weapons = kinetic). */
   element?: DamageElement;
 }

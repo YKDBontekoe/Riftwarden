@@ -1,5 +1,5 @@
 import type { StatKey, StatOp } from '../combat/stats';
-import { BEAM_EMITTER, PLASMA_REPEATER, RAILGUN, SWARM_HIVE, type WeaponDef, type WeaponFamily } from '../data/defs';
+import { BEAM_EMITTER, FLAMER, LAUNCHER, PLASMA_REPEATER, RAILGUN, SWARM_HIVE, type WeaponDef, type WeaponFamily } from '../data/defs';
 import type { Scaling } from './affixes';
 import type { Category } from './types';
 import type { AbilityKind } from '../abilities/defs';
@@ -173,6 +173,68 @@ export const BASES: readonly BaseDef[] = [
     weight: 5,
     implicit: [{ stat: 'fireRateMult', op: 'pct', range: [0.04, 0.08], scaling: 'none' }],
     weapon: { family: 'swarm', template: SWARM_HIVE, damage: [6.6, 7.4], fireRate: [4.6, 5.0], heatPerShot: [5.2, 5.8], coolRate: [50, 56] },
+    icon: 'rifle',
+  },
+  // ---------------------------------------------------------------- weapons: launchers
+  {
+    id: 'launcher_tube',
+    category: 'weapon',
+    name: 'Rocket Launcher',
+    blurb: 'Shoulder-mounted tube: rockets detonate on impact and splash everything nearby.',
+    weight: 8,
+    implicit: [],
+    weapon: { family: 'launcher', template: LAUNCHER, damage: [49, 55], fireRate: [1.28, 1.42], heatPerShot: [16, 18], coolRate: [36, 40] },
+    icon: 'rifle',
+  },
+  {
+    id: 'launcher_siege',
+    category: 'weapon',
+    name: 'Siege Mortar',
+    blurb: 'Heavy launcher: slow, crushing rockets that hit elites hard.',
+    weight: 5,
+    implicit: [{ stat: 'eliteDamageMult', op: 'pct', range: [0.06, 0.1], scaling: 'none' }],
+    weapon: { family: 'launcher', template: LAUNCHER, damage: [74, 82], fireRate: [0.92, 1.02], heatPerShot: [22, 25], coolRate: [34, 38] },
+    icon: 'rifle',
+  },
+  {
+    id: 'launcher_hornet',
+    category: 'weapon',
+    name: 'Hornet Launcher',
+    blurb: 'Light launcher: quick, small rockets that run cool.',
+    weight: 5,
+    implicit: [{ stat: 'fireRateMult', op: 'pct', range: [0.04, 0.08], scaling: 'none' }],
+    weapon: { family: 'launcher', template: LAUNCHER, damage: [33, 37], fireRate: [2.0, 2.2], heatPerShot: [11, 12.5], coolRate: [42, 46] },
+    icon: 'rifle',
+  },
+  // ---------------------------------------------------------------- weapons: flamers
+  {
+    id: 'flamer_torch',
+    category: 'weapon',
+    name: 'Flame Projector',
+    blurb: 'Pressurised projector: a short cone that reaches four machines at once.',
+    weight: 8,
+    implicit: [],
+    weapon: { family: 'flamer', template: FLAMER, damage: [6.1, 6.9], fireRate: [11.6, 12.4], heatPerShot: [1.0, 1.1], coolRate: [44, 48] },
+    icon: 'rifle',
+  },
+  {
+    id: 'flamer_inferno',
+    category: 'weapon',
+    name: 'Inferno Pack',
+    blurb: 'Heavy pack-fed flamer: more fuel per tick and stronger statuses.',
+    weight: 5,
+    implicit: [{ stat: 'elementalPower', op: 'pct', range: [0.08, 0.14], scaling: 'none' }],
+    weapon: { family: 'flamer', template: FLAMER, damage: [8.2, 9.2], fireRate: [10.6, 11.4], heatPerShot: [1.3, 1.45], coolRate: [42, 46] },
+    icon: 'rifle',
+  },
+  {
+    id: 'flamer_needle',
+    category: 'weapon',
+    name: 'Needle Torch',
+    blurb: 'Light torch: a quick-cycling stream that sheds heat fast.',
+    weight: 5,
+    implicit: [{ stat: 'coolRateMult', op: 'pct', range: [0.06, 0.1], scaling: 'none' }],
+    weapon: { family: 'flamer', template: FLAMER, damage: [4.8, 5.4], fireRate: [14.5, 15.5], heatPerShot: [0.8, 0.9], coolRate: [50, 56] },
     icon: 'rifle',
   },
   // ---------------------------------------------------------------- armor

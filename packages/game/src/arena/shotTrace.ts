@@ -41,6 +41,15 @@ export function traceShot(scene: Scene, enemies: readonly Enemy[], r: ShotReques
     const lock = seekLock(scene, enemies, r, accept);
     if (lock) return { struck: [lock], wall: null };
   }
+  if (r.cone && r.cone > 0) {
+    // Flamer: every machine in the cone (nearest the aim first, in sight), up to `targets`; the wall only ends the stream.
+    const struck = coneCandidates(scene, enemies, r, r.cone, accept, Math.max(1, r.targets ?? 1)).map((k) => strikeNear(k.e, r.origin));
+    RAY.origin.copyFrom(r.origin);
+    RAY.direction.copyFrom(r.dir);
+    RAY.length = r.range;
+    const wall = scene.pickWithRay(RAY, (m: AbstractMesh) => !!m.metadata?.surface && m.isEnabled(), false);
+    return { struck, wall: wall?.hit ? wall : null };
+  }
   RAY.origin.copyFrom(r.origin);
   RAY.direction.copyFrom(r.dir);
   RAY.length = r.range;
@@ -102,6 +111,16 @@ const C = new Vector3();
  * (seekers never claim weakpoints).
  */
 export function seekLock(scene: Scene, enemies: readonly Enemy[], r: ShotRequest, accept: (e: Enemy) => boolean = () => true, max = 6): ShotStrike | null {
+  const visible = coneCandidates(scene, enemies, r, r.seek ?? 0, accept, max);
+  if (!visible.length) return null;
+  return strikeNear(visible[(r.seekIndex ?? 0) % visible.length].e, r.origin);
+}
+
+/**
+ * Machines inside the cone around `r.dir` (`cone` = tangent of the half-angle, widened by the body radius), within
+ * range and in line of sight of the origin, ordered by angle off the aim then distance; at most `max`.
+ */
+export function coneCandidates(scene: Scene, enemies: readonly Enemy[], r: ShotRequest, cone: number, accept: (e: Enemy) => boolean, max: number): { e: Enemy; t: number }[] {
   const cands: { e: Enemy; a: number; t: number }[] = [];
   for (const e of enemies) {
     if (!e.alive || e.hidden || !accept(e)) continue;
@@ -116,10 +135,10 @@ export function seekLock(scene: Scene, enemies: readonly Enemy[], r: ShotRequest
     const pz = dz - r.dir.z * t;
     const off = Math.sqrt(px * px + py * py + pz * pz);
     const a = Math.max(0, off - e.def.bodyR * e.def.scale) / t;
-    if (a > r.seek!) continue;
+    if (a > cone) continue;
     cands.push({ e, a, t });
   }
-  if (!cands.length) return null;
+  if (!cands.length) return [];
   cands.sort((x, y) => x.a - y.a || x.t - y.t);
   const visible: { e: Enemy; t: number }[] = [];
   for (const k of cands) {
@@ -134,10 +153,12 @@ export function seekLock(scene: Scene, enemies: readonly Enemy[], r: ShotRequest
     if (block?.hit) continue;
     visible.push(k);
   }
-  if (!visible.length) return null;
-  const pick = visible[(r.seekIndex ?? 0) % visible.length];
-  const centre = pick.e.center(new Vector3());
-  // Strike point on the near side of the body (claims are validated against the body).
-  const back = centre.subtract(r.origin).normalize().scaleInPlace(pick.e.def.bodyR * pick.e.def.scale * 0.6);
-  return { enemy: pick.e, point: centre.subtractInPlace(back), weak: false, assisted: false };
+  return visible;
+}
+
+/** Strike point on the near side of the body (claims are validated against the body). Never a weakpoint. */
+function strikeNear(e: Enemy, origin: Vector3): ShotStrike {
+  const centre = e.center(new Vector3());
+  const back = centre.subtract(origin).normalize().scaleInPlace(e.def.bodyR * e.def.scale * 0.6);
+  return { enemy: e, point: centre.subtractInPlace(back), weak: false, assisted: false };
 }

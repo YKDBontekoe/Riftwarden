@@ -108,7 +108,7 @@ export function ItemDetail({ item, status, stage = true }: { item: ItemInstance;
   );
 }
 
-const MECH_LABEL: Record<string, string> = { auto: 'AUTOMATIC', burst: '3-ROUND BURST', charge: 'CHARGE & RELEASE', cycle: 'AUTO-CYCLE', beam: 'CONTINUOUS BEAM', scatter: 'SCATTER', pulse: 'PULSE', swarm: 'HIVE RELEASE', salvo: 'SALVO LOCK' };
+const MECH_LABEL: Record<string, string> = { auto: 'AUTOMATIC', burst: '3-ROUND BURST', charge: 'CHARGE & RELEASE', cycle: 'AUTO-CYCLE', beam: 'CONTINUOUS BEAM', scatter: 'SCATTER', pulse: 'PULSE', swarm: 'HIVE RELEASE', salvo: 'SALVO LOCK', rocket: 'ROCKET FEED', cluster: 'CLUSTER PAYLOAD', spray: 'PRESSURE SPRAY', jet: 'JET VALVE' };
 
 /** Weapon readout: family, firing mechanism, effective numbers, generated components and sockets. */
 export function WeaponBlock({ item, compact }: { item: ItemInstance; compact?: boolean }) {
@@ -124,7 +124,7 @@ export function WeaponBlock({ item, compact }: { item: ItemInstance; compact?: b
           {fam.label.toUpperCase()} · {MECH_LABEL[w.mechanism] ?? w.mechanism} <ElementTag element={w.element} long />
         </div>
         <div className="id-row">
-          <span>{w.mechanism === 'pulse' ? 'Damage / pulse (splash 60%) · pulses/s' : w.mechanism === 'scatter' ? 'Damage / pellet ×7 · shots/s' : w.mechanism === 'salvo' ? 'Damage / drone · salvos/s' : w.family === 'swarm' ? 'Damage / drone · launches/s' : w.family === 'beam' ? 'Damage / tick · ticks/s' : w.family === 'rail' && w.mechanism === 'charge' ? 'Damage (full charge) · cycle' : 'Damage / shot · fire rate'}</span>
+          <span>{w.mechanism === 'pulse' ? 'Damage / pulse (splash 60%) · pulses/s' : w.mechanism === 'scatter' ? 'Damage / pellet ×7 · shots/s' : w.mechanism === 'salvo' ? 'Damage / drone · salvos/s' : w.family === 'swarm' ? 'Damage / drone · launches/s' : w.family === 'launcher' ? 'Direct hit (blast 75%) · rockets/s' : w.family === 'flamer' ? 'Damage / tick per machine · ticks/s' : w.family === 'beam' ? 'Damage / tick · ticks/s' : w.family === 'rail' && w.mechanism === 'charge' ? 'Damage (full charge) · cycle' : 'Damage / shot · fire rate'}</span>
           <b>
             {fmtNum(w.damage)} · {fmtNum(w.fireRate)}/s
           </b>
@@ -138,7 +138,7 @@ export function WeaponBlock({ item, compact }: { item: ItemInstance; compact?: b
           <b>{fmtNum(w.range)} m</b>
         </div>
         <div className="id-row">
-          <span>Heat / {w.family === 'beam' ? 'tick' : 'shot'} · fire time to overheat</span>
+          <span>Heat / {w.family === 'beam' || w.family === 'flamer' ? 'tick' : 'shot'} · fire time to overheat</span>
           <b>
             {fmtNum(ws.heat)}% · {fmtNum(ws.sustain)} s
           </b>
@@ -161,6 +161,20 @@ export function WeaponBlock({ item, compact }: { item: ItemInstance; compact?: b
             <span>{w.mechanism === 'salvo' ? 'Drones (tap → full lock) · lock cone' : 'Drones / launch · lock cone'}</span>
             <b>
               {w.mechanism === 'salvo' ? `${Math.max(1, Math.round(w.drones * 0.6))} → ${w.drones * 3}` : w.drones} · {fmtNum(ws.lockCone)}°
+            </b>
+          </div>
+        )}
+        {w.family === 'launcher' && (
+          <div className="id-row">
+            <span>{w.mechanism === 'cluster' ? 'Blast radius · three bomblets' : 'Blast radius'}</span>
+            <b>{fmtNum(ws.splash)} m</b>
+          </div>
+        )}
+        {w.family === 'flamer' && (
+          <div className="id-row">
+            <span>Spray cone · machines per tick</span>
+            <b>
+              {fmtNum(ws.sprayCone)}° · {ws.targets}
             </b>
           </div>
         )}

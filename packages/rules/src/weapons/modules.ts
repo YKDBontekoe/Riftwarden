@@ -21,7 +21,7 @@ export interface ModuleTypeDef {
   legacy?: boolean;
 }
 
-const ALL: readonly WeaponFamily[] = ['plasma', 'rail', 'beam', 'swarm'];
+const ALL: readonly WeaponFamily[] = ['plasma', 'rail', 'beam', 'swarm', 'launcher', 'flamer'];
 
 export const MODULE_TYPES: readonly ModuleTypeDef[] = [
   { type: 'amp', name: 'Damage Amplifier', socket: 'power', families: ALL, visual: 'collar', blurb: 'Raises weapon damage.' },

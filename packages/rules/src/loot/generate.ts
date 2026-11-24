@@ -174,6 +174,11 @@ export function generateItem(spec: GenSpec): ItemInstance {
         weapon.drones = t.drones + e.drones;
         weapon.seekCone = Math.round(t.seekCone * e.seekCone * 1000) / 1000;
       }
+      if (w.family === 'launcher') weapon.splash = Math.round(t.splash * e.splash * 100) / 100;
+      if (w.family === 'flamer') {
+        weapon.spray = Math.round(t.spray * e.spray * 1000) / 1000;
+        weapon.targets = Math.max(1, t.targets + e.targets);
+      }
       if (w.family === 'beam') {
         weapon.beamWidth = Math.round(t.beamWidth * e.beamWidth * 100) / 100;
         weapon.rampMax = Math.round(t.rampMax * e.rampMax * 100) / 100;
