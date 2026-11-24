@@ -69,12 +69,31 @@ function mix(x: number): number {
   return (h ^ (h >>> 16)) >>> 0;
 }
 
-/** The set an item of this seed / rarity / category belongs to, or null (seed-decided). */
-export function setFor(seed: number, rarityIndex: number, category: Category): SetId | null {
+/**
+ * Target farming: drop sources (`DROP_SOURCES` ids) that favour a set. A drop from one of them belongs to a set at
+ * `SET_FARM_CHANCE`, and to the favoured set `SET_FARM_BIAS` of the time.
+ */
+export const SET_SOURCES: Readonly<Record<SetId, readonly string[]>> = {
+  bastion: ['bulwark', 'enforcer', 'crawler', 'burrower', 'colossus'],
+  deadeye: ['marksman', 'artillery', 'skimmer', 'hvt'],
+  conflux: ['elite', 'eliteCache', 'jammer', 'overseer'],
+  architect: ['engineer', 'sapper', 'checkpoint'],
+};
+export const SET_FARM_CHANCE = 0.4;
+export const SET_FARM_BIAS = 0.7;
+
+/** The set a drop source favours, or null. */
+export const favouredSet = (source: string | undefined): SetId | null => (source ? SET_IDS.find((id) => SET_SOURCES[id].includes(source)) ?? null : null);
+
+/** The set an item of this seed / rarity / category (and drop source) belongs to, or null (seed-decided). */
+export function setFor(seed: number, rarityIndex: number, category: Category, source?: string): SetId | null {
   if (rarityIndex < SET_MIN_RARITY || !SET_CATEGORIES.includes(category)) return null;
   const h = mix(seed >>> 0);
-  if (h / 2 ** 32 >= SET_CHANCE) return null;
-  return SET_IDS[mix(h) % SET_IDS.length];
+  const fav = favouredSet(source);
+  if (h / 2 ** 32 >= (fav ? SET_FARM_CHANCE : SET_CHANCE)) return null;
+  const pick = mix(h);
+  if (fav && mix(pick) / 2 ** 32 < SET_FARM_BIAS) return fav;
+  return SET_IDS[pick % SET_IDS.length];
 }
 
 /** Equipped pieces per set (distinct items). */

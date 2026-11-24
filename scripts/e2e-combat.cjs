@@ -868,6 +868,41 @@ async function deploy(p) {
         return { after, later: [...g.conditions.active] };
       });
       check('J2 a dash opens the 2 s dash window, which then closes', j2.after.includes('dash') && !j2.later.includes('dash'), JSON.stringify(j2));
+      // The HUD lists the conditions the gear needs and lights the ones that hold.
+      const j3 = await ev(p, async () => {
+        const R = window.__rift;
+        const g = R.game;
+        const chips = () => [...document.querySelectorAll('[data-testid=cond-row] .cond-chip')].map((c) => `${c.getAttribute('data-cond')}:${c.classList.contains('on') ? 1 : 0}`);
+        R.advance(0.3);
+        await new Promise((r) => setTimeout(r, 120));
+        const ground = chips();
+        g.input.simulateKey('Space', true);
+        R.advance(0.12);
+        g.input.simulateKey('Space', false);
+        R.advance(0.12);
+        await new Promise((r) => setTimeout(r, 120));
+        const air = chips();
+        R.advance(2.5);
+        return { ground, air };
+      });
+      check('J3 the HUD shows the AIRBORNE chip, lit only while airborne', j3.ground.join() === 'airborne:0' && j3.air.join() === 'airborne:1', JSON.stringify(j3));
+      // Set gear in the arena: a teal hexagon marker on the pickup and the set line on the prompt.
+      const j4 = await ev(p, async () => {
+        const R = window.__rift;
+        const g = R.game;
+        const plain = g.loot.pickups.length;
+        R.spawnLoot({ category: 'armor', rarity: 'rare', set: 'bastion', x: g.player.position.x, z: g.player.position.z + 6 });
+        R.advance(2);
+        const pk = g.loot.pickups[g.loot.pickups.length - 1];
+        const ticks = pk.root.getChildMeshes().filter((m) => m.material && m.material.name === 'lootSetGlow').length;
+        R.approach(pk.id);
+        R.advance(0.3);
+        await new Promise((r) => setTimeout(r, 150));
+        const line = document.querySelector('[data-testid=lp-set]')?.textContent ?? '';
+        return { plain, ticks, line };
+      });
+      await H.shot(p, 'set-pickup', { frames: 2 });
+      check('J4 set gear shows its hexagon marker and the set line on the pickup prompt', j4.ticks === 6 && /BASTION PROTOCOL/.test(j4.line) && /1\/4/.test(j4.line), JSON.stringify(j4));
       await ev(p, () => window.__rift.flow.abandonRun());
       await H.waitFor(p, () => window.__rift.state().location === 'home' && !window.__rift.state().busy);
     }

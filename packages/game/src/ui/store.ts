@@ -1,3 +1,4 @@
+import type { CondHudRow } from '@riftwarden/rules/combat/conditions';
 import type { AbilityHudRow } from '@riftwarden/rules/abilities/defs';
 import type { MoveHud } from '../arena/Movement';
 import type { ArenaLayout } from '@riftwarden/rules/world/layout';
@@ -147,6 +148,9 @@ export interface LootTargetInfo {
   verdict?: string | null;
   /** Item levels above (+) or below (-) what this wave usually drops on this Rift Level. */
   levelDelta?: number;
+  /** Set name and the pieces worn if this were equipped (set gear only). */
+  set?: string;
+  setPieces?: number;
 }
 
 /** M7 co-op HUD state (teammates, votes, offers, link quality). */
@@ -209,6 +213,8 @@ export interface HudState {
   abilities: AbilityHudRow[];
   /** Movement kit: current state, grapple / pound cooldowns (seconds). */
   moves: MoveHud;
+  /** Conditions the loadout's conditional affixes need, and whether each holds (empty without conditional gear). */
+  conds: CondHudRow[];
   heat: number; // 0..1
   overheated: boolean;
   /** Rail charge / cycle progress 0..1 (0 for other mechanisms): reticle charge arc. */
@@ -271,6 +277,7 @@ export const initialHud: HudState = {
   weaponAff: 0,
   abilities: [],
   moves: { state: '', grapple: 0, grappleMax: 1, pound: 0, poundMax: 1 },
+  conds: [],
   heat: 0,
   overheated: false,
   charge: 0,

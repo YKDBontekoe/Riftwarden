@@ -74,3 +74,26 @@ describe('conditional modifiers', () => {
     expect([...seen].sort()).toEqual([...conds].sort());
   });
 });
+
+describe('condition presentation', () => {
+  it('HUD rows list the conditions the gear needs and light the active ones', async () => {
+    const { condHud, condIdsOf } = await import('@riftwarden/rules/combat/conditions');
+    const mods: StatModifier[] = [{ stat: 'critChance', op: 'add', value: 0.1, cond: 'kill' }, { stat: 'moveSpeedMult', op: 'pct', value: 0.1, cond: 'airborne' }, { stat: 'critChance', op: 'add', value: 0.1 }];
+    expect(condIdsOf(mods)).toEqual(['airborne', 'kill']);
+    expect(condHud(condIdsOf(mods), new Set(['kill'])).map((r) => [r.id, r.on])).toEqual([['airborne', false], ['kill', true]]);
+    expect(condIdsOf(mods.slice(2))).toEqual([]);
+  });
+
+  it('the comparison table keeps a conditional affix apart from the plain stat and names its condition', async () => {
+    const { compareItems } = await import('@riftwarden/rules/loot/equipment');
+    const a = generateItem({ uid: 'cmpA', seed: 7, level: 20, rarity: 'rare', category: 'processor', source: 'test', now: 1 });
+    const b = generateItem({ uid: 'cmpB', seed: 8, level: 20, rarity: 'rare', category: 'processor', source: 'test', now: 1 });
+    a.affixes = [{ id: 'c_airdmg', stat: 'weaponDamageMult', op: 'pct', value: 0.3, tier: 3, roll: 1 }];
+    b.affixes = [{ id: 'dmg', stat: 'weaponDamageMult', op: 'pct', value: 0.1, tier: 3, roll: 1 }];
+    const rows = compareItems(a, b).filter((r) => r.key.startsWith('weaponDamageMult'));
+    expect(rows.length).toBe(2);
+    const cond = rows.find((r) => r.label.includes(CONDITIONS.airborne.text))!;
+    expect(cond.a).not.toBe('');
+    expect(cond.b).toBe('');
+  });
+});

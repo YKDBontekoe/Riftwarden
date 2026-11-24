@@ -1,5 +1,5 @@
 import type { ScoreContext } from '@riftwarden/rules/loot/loadoutScore';
-import { ConditionTracker, hasConditional } from '@riftwarden/rules/combat/conditions';
+import { condHud, type CondId, condIdsOf, ConditionTracker, hasConditional } from '@riftwarden/rules/combat/conditions';
 import type { SeasonRuleId } from '@riftwarden/rules/progression/seasons';
 import { PINNACLE, pinnacleBoss } from '@riftwarden/rules/progression/spikes';
 import { gearPower } from '@riftwarden/rules/progression/riftLevel';
@@ -198,6 +198,8 @@ export class Game {
   private condDashing = false;
   /** The stat block holds conditional modifiers (otherwise condition changes skip the rebuild). */
   protected condMods = false;
+  /** Conditions the stat block depends on (HUD chips). */
+  protected condIds: CondId[] = [];
   /** Extra modifiers (debug); equipment, run upgrades and temporary buffs are composed in rebuildStats. */
   modifiers: StatModifier[] = [];
   stats: CombatStats = { ...BASE_STATS };
@@ -844,6 +846,7 @@ export class Game {
     this.gearEffects = gearUniques(this.inventory.equippedItems(this.weaponSlots.inactive));
     const mods = [...equipmentModifiers(this.inventory.equippedItems(this.weaponSlots.inactive)), ...this.treeMods, ...masteryModifiers(this.cfg.mastery, this.handFamily()), ...this.modifiers, ...this.director.build.modifiers(), ...this.director.buffModifiers(), ...(this.node?.mods() ?? [])];
     this.condMods = hasConditional(mods);
+    this.condIds = condIdsOf(mods);
     Object.assign(this.stats, computeStats(mods, undefined, this.conditions.active));
     this.player.applyStats(this.stats, this.attackerScale);
     this.tactical.rechargeMult = this.stats.tacticalRechargeMult;
@@ -2278,6 +2281,7 @@ export class Game {
         expiring: lt.expiring,
         cargoFull: this.inventory.cargoFull,
         equipped: cur ? { name: cur.name, level: cur.level, rarity: cur.rarity } : null,
+        worn: this.inventory.equippedItems(),
         ...this.verdicts.of(lt.item, lt.droppedWave),
       });
     }
@@ -2308,6 +2312,7 @@ export class Game {
       holster: this.holsterHud(),
       abilities: this.abilities.hud(),
       moves: this.movement.hud(),
+      conds: condHud(this.condIds, this.conditions.active),
       heat: this.weapon.heat / 100,
       overheated: this.weapon.overheated,
       charge: this.weapon.def.mechanism === 'charge' || this.weapon.def.mechanism === 'cycle' || this.weapon.def.mechanism === 'salvo' ? this.weapon.charge : 0,

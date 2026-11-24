@@ -117,3 +117,16 @@ describe('Launcher + Flamer around the game', () => {
     expect(frows).toEqual(expect.arrayContaining(['w.targets', 'w.spray']));
   });
 });
+
+describe('pack DPS readout', () => {
+  it('area weapons count the machines they reach; single-target weapons do not', async () => {
+    const { packFactor, PACK_SIZE } = await import('@riftwarden/rules/loot/equipment');
+    expect(packFactor({ family: 'plasma', mechanism: 'auto', targets: 0 }, 0)).toBe(1);
+    expect(packFactor({ family: 'launcher', mechanism: 'rocket', targets: 0 }, 0)).toBeGreaterThan(1.8);
+    expect(packFactor({ family: 'launcher', mechanism: 'cluster', targets: 0 }, 0)).toBeGreaterThan(packFactor({ family: 'launcher', mechanism: 'rocket', targets: 0 }, 0));
+    expect(packFactor({ family: 'flamer', mechanism: 'spray', targets: 5 }, 0)).toBe(PACK_SIZE);
+    expect(packFactor({ family: 'flamer', mechanism: 'jet', targets: 1 }, 0)).toBe(1);
+    expect(packFactor({ family: 'rail', mechanism: 'cycle', targets: 0 }, 1)).toBeCloseTo(1.85);
+    expect(packFactor({ family: 'rail', mechanism: 'cycle', targets: 0 }, 9)).toBeCloseTo(1 + 0.85 + 0.85 ** 2);
+  });
+});

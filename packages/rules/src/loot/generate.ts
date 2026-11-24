@@ -111,6 +111,8 @@ export interface GenSpec {
   excludeFamilies?: readonly string[];
   /** Loot locks (`comp:<family>:<id>`): weapon components the warden has not mastered never roll. */
   componentLocks?: readonly string[];
+  /** Drop source id (`DROP_SOURCES`): sources that favour a set raise its odds (target farming). */
+  dropSource?: string;
 }
 
 export function pickBase(category: Category, rand: () => number, allowExclusive: readonly string[] = [], excludeFamilies: readonly string[] = []): BaseDef {
@@ -244,7 +246,7 @@ export function generateItem(spec: GenSpec): ItemInstance {
   item.name = nameItem(item, base, mulberry32((spec.seed ^ 0x9e3779b9) >>> 0));
   item.signature = rollSignature(item);
   // Sets: seed-decided (no stream draw); starter-grade and repaired kit never belongs to one.
-  const set = fixed === undefined ? setFor(spec.seed, r.index, base.category) : null;
+  const set = fixed === undefined ? setFor(spec.seed, r.index, base.category, spec.dropSource) : null;
   if (set) item.set = set;
   return item;
 }

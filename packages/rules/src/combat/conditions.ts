@@ -10,6 +10,8 @@ export interface CondDef {
   id: CondId;
   /** Suffix after the stat text: "+12% weapon damage while airborne". */
   text: string;
+  /** Short HUD tag. */
+  tag: string;
   /** Seconds a triggered condition stays active (event conditions). */
   window?: number;
   /** Expected share of fight time it is active (loadout scoring). */
@@ -17,11 +19,11 @@ export interface CondDef {
 }
 
 export const CONDITIONS: Readonly<Record<CondId, CondDef>> = {
-  airborne: { id: 'airborne', text: 'while airborne', uptime: 0.3 },
-  dash: { id: 'dash', text: 'for 2 s after a dash', window: 2, uptime: 0.3 },
-  swap: { id: 'swap', text: 'for 3 s after a weapon swap', window: 3, uptime: 0.15 },
-  lowhull: { id: 'lowhull', text: 'below 40% hull', uptime: 0.15 },
-  kill: { id: 'kill', text: 'for 3 s after a kill', window: 3, uptime: 0.45 },
+  airborne: { id: 'airborne', tag: 'AIRBORNE', text: 'while airborne', uptime: 0.3 },
+  dash: { id: 'dash', tag: 'DASH', text: 'for 2 s after a dash', window: 2, uptime: 0.3 },
+  swap: { id: 'swap', tag: 'SWAP', text: 'for 3 s after a weapon swap', window: 3, uptime: 0.15 },
+  lowhull: { id: 'lowhull', tag: 'LAST STAND', text: 'below 40% hull', uptime: 0.15 },
+  kill: { id: 'kill', tag: 'KILL', text: 'for 3 s after a kill', window: 3, uptime: 0.45 },
 };
 
 /** Hull fraction under which `lowhull` holds. */
@@ -73,3 +75,15 @@ export function expectedModifiers(mods: readonly StatModifier[]): StatModifier[]
 }
 
 export const hasConditional = (mods: readonly StatModifier[]): boolean => mods.some((m) => !!m.cond);
+
+/** Conditions the modifiers depend on, in COND_IDS order (HUD: which conditions to show). */
+export const condIdsOf = (mods: readonly StatModifier[]): CondId[] => COND_IDS.filter((c) => mods.some((m) => m.cond === c));
+
+/** HUD rows: every condition the loadout uses and whether it holds right now. */
+export const condHud = (ids: readonly CondId[], active: ReadonlySet<CondId>): CondHudRow[] => ids.map((id) => ({ id, tag: CONDITIONS[id].tag, on: active.has(id) }));
+
+export interface CondHudRow {
+  id: CondId;
+  tag: string;
+  on: boolean;
+}

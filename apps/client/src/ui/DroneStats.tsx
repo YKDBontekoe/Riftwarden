@@ -60,6 +60,7 @@ export function DroneStats({ equipped }: { equipped: Record<SlotId, ItemInstance
             <S k="DAMAGE / SHOT" v={fmtNum(ws.damage)} tone={d('weaponDamageMult')} stats={['weaponDamageMult']} />
             <S k="FIRE RATE" v={`${fmtNum(ws.rate)}/s`} tone={d('fireRateMult')} stats={['fireRateMult']} />
             <S k="EXPECTED DPS (CRITS)" v={fmtNum(ws.dps)} note="Sustained damage per second including crit chance and damage." />
+            {ws.packDps > ws.dps * 1.05 && <S k="PACK DPS (3 MACHINES)" v={fmtNum(ws.packDps)} note="Damage per second against three machines standing together (blast, spray cone or pierce)." />}
             <S k="RANGE" v={`${fmtNum(ws.range)} m`} tone={d('rangeMult')} stats={['rangeMult']} />
             <S k="HEAT / SHOT" v={`${fmtNum(ws.heat)}%`} tone={d('heatEfficiency')} stats={['heatEfficiency']} />
             <S k="SHOTS TO OVERHEAT" v={String(ws.shotsToOverheat)} tone={d('heatEfficiency')} stats={['heatEfficiency']} />

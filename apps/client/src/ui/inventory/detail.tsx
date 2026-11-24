@@ -1,12 +1,13 @@
 import { CONDITIONS } from '@riftwarden/rules/combat/conditions';
 import { createContext, useContext } from 'react';
-import { SETS, setCounts } from '@riftwarden/rules/loot/sets';
+import { SET_SOURCES, SETS, setCounts } from '@riftwarden/rules/loot/sets';
+import { DROP_SOURCES } from '@riftwarden/rules/loot/drops';
 import { signatureDef } from '@riftwarden/rules/loot/signatures';
 import { ElementTag } from '../ElementTag';
 import { formatModifier, STAT_DEFS } from '@riftwarden/rules/combat/stats';
 import { affixDef } from '@riftwarden/rules/loot/affixes';
 import { baseDef } from '@riftwarden/rules/loot/bases';
-import { weaponDefFor, weaponSummary } from '@riftwarden/rules/loot/equipment';
+import { PACK_SIZE, weaponDefFor, weaponSummary } from '@riftwarden/rules/loot/equipment';
 import { STAT_HELP } from '../statHelp';
 import { rarity } from '@riftwarden/rules/loot/rarity';
 import { uniqueDef, uniqueSourceText } from '@riftwarden/rules/loot/uniques';
@@ -139,6 +140,12 @@ export function WeaponBlock({ item, compact }: { item: ItemInstance; compact?: b
           <span>Sustained DPS (base)</span>
           <b>{fmtNum(ws.dps)}</b>
         </div>
+        {ws.packDps > ws.dps * 1.05 && (
+          <div className="id-row" title={`Damage per second against ${PACK_SIZE} machines standing together (blast, cone or pierce)`} data-testid="pack-dps">
+            <span>Pack DPS ({PACK_SIZE} machines)</span>
+            <b>{fmtNum(ws.packDps)}</b>
+          </div>
+        )}
         <div className="id-row">
           <span>Range</span>
           <b>{fmtNum(w.range)} m</b>
@@ -272,6 +279,9 @@ function SetBlock({ item }: { item: ItemInstance }) {
       ))}
       {known && withThis > worn && <div className="faint small">Equipping it brings the set to {withThis}/4.</div>}
       <div className="faint small">{set.blurb}</div>
+      <div className="faint small" data-testid="set-sources">
+        Drops more often from: {SET_SOURCES[set.id].map((id) => (DROP_SOURCES as Record<string, { label: string }>)[id]?.label ?? id).join(', ')}.
+      </div>
     </div>
   );
 }

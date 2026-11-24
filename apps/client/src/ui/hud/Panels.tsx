@@ -215,6 +215,7 @@ export function PlayerPanel() {
         </div>
       </div>
       <MoveRow />
+      <CondRow />
     </div>
   );
 }
@@ -244,6 +245,24 @@ function MoveRow() {
       <MoveChip label="POUND" action="slide" kind="pound" />
       {state === 'slide' && <b className="mv-state">SLIDE</b>}
       {state === 'wall' && <b className="mv-state">WALL-RUN</b>}
+    </div>
+  );
+}
+
+/** Conditional affixes: one chip per condition the gear uses, lit while it holds (nothing without conditional gear). */
+function CondRow() {
+  const key = useHud((s) => s.conds.map((c) => `${c.id}:${c.on ? 1 : 0}:${c.tag}`).join(','));
+  if (!key) return null;
+  return (
+    <div className="cond-row flex gap-[5px] items-center mt-[5px] text-[9px] tracking-[0.1em]" data-testid="cond-row">
+      {key.split(',').map((k) => {
+        const [id, on, tag] = k.split(':');
+        return (
+          <span key={id} className={`cond-chip ${on === '1' ? 'on' : ''}`} data-cond={id} title={on === '1' ? 'Conditional affixes active' : 'Conditional affixes waiting for this condition'}>
+            {tag}
+          </span>
+        );
+      })}
     </div>
   );
 }

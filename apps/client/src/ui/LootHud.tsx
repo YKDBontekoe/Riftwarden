@@ -32,6 +32,11 @@ export function LootPrompt() {
           {!!t.levelDelta && <span className={t.levelDelta > 0 ? 'text-ok' : 'text-faint'} title="Item levels against what this wave usually drops on this Rift Level"> ({t.levelDelta > 0 ? '+' : ''}{t.levelDelta} vs RL)</span>}
         </div>
         <b>{t.name}</b>
+        {t.set && (
+          <span className="lp-set" data-testid="lp-set">
+            SET · {t.set.toUpperCase()} · {t.setPieces}/4 IF EQUIPPED
+          </span>
+        )}
         {(t.newBest || t.verdict === 'upgrade') && (
           <span className="flex gap-[6px] mt-[2px]" data-testid="lp-tags">
             {t.newBest && <em className="not-italic font-mono text-[10px] tracking-[0.14em] px-[6px] py-[1px] bg-orange text-[#1d1410]" data-testid="lp-newbest">NEW BEST</em>}

@@ -74,3 +74,29 @@ describe('item sets', () => {
     expect(sanitizeItem(JSON.parse(JSON.stringify(w)))!.set).toBeUndefined();
   });
 });
+
+describe('set target farming', () => {
+  it('favoured sources drop their set far more often; other sources keep the plain odds', async () => {
+    const { DROP_SOURCES } = await import('@riftwarden/rules/loot/drops');
+    const { favouredSet, SET_SOURCES } = await import('@riftwarden/rules/loot/sets');
+    for (const id of SET_IDS) for (const src of SET_SOURCES[id]) {
+      expect(src in DROP_SOURCES, src).toBe(true);
+      expect(favouredSet(src)).toBe(id);
+    }
+    const N = 4000;
+    const count = (source: string | undefined, set: string) => {
+      let n = 0;
+      for (let s = 1; s <= N; s++) if (setFor(s, 3, 'armor', source) === set) n++;
+      return n / N;
+    };
+    // Unfavoured sources: unchanged from the plain roll (no shift for existing seeds).
+    for (let s = 1; s <= 500; s++) expect(setFor(s, 3, 'armor', 'walker')).toBe(setFor(s, 3, 'armor'));
+    expect(count('bulwark', 'bastion')).toBeGreaterThan(count(undefined, 'bastion') * 4);
+    expect(count('marksman', 'deadeye')).toBeGreaterThan(0.25);
+    // Generated items carry it through the drop source.
+    const it = (s: number) => generateItem({ uid: `f${s}`, seed: s, level: 20, rarity: 'epic', category: 'armor', source: 'run', dropSource: 'enforcer', now: 1 });
+    let bastion = 0;
+    for (let s = 1; s < 300; s++) if (it(s).set === 'bastion') bastion++;
+    expect(bastion).toBeGreaterThan(60);
+  });
+});

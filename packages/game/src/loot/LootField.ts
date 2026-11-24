@@ -29,6 +29,9 @@ import { HOLO_HEIGHT, isExpired } from '@riftwarden/rules/loot/lifetime';
 const FLIGHT = 0.6;
 /** Rarity rim thickness (metres). */
 const RIM_WIDTH = 0.009;
+/** HDR teal of the set-gear marker (matches the SET tags in the UI). */
+const SET_GLOW: [number, number, number] = [0.35, 1.7, 1.2];
+
 /** Height where the rarity beam starts (above the hovering model). */
 const BEAM_BASE = 1.45;
 
@@ -66,6 +69,8 @@ export class LootField {
   private nextId = 1;
   private templates = new Map<string, { model: ItemModel; rims: Map<RarityId, Mesh> }>();
   private rims = new Map<RarityId, PBRMaterial>();
+  /** Set gear: a teal hexagon of ground ticks around the ring (one shared material). */
+  private setGlow: PBRMaterial;
   private moteTex: Texture | null = null;
   /** Detailed models built (tests). */
   detailedBuilds = 0;
@@ -97,6 +102,8 @@ export class LootField {
     // Compile every loot shader up front (instanced variant), so the first drop of each
     // rarity neither hitches nor appears without its beam while the shader compiles.
     const jobs: Promise<void>[] = [];
+    this.setGlow = unlit(scene, 'lootSetGlow', SET_GLOW);
+    jobs.push(this.setGlow.forceCompilationAsync(kit.template('box', this.setGlow), { useInstances: true }).catch(() => {}));
     for (const r of RARITIES) {
       for (const [shape, mat] of [
         ['torusThin', this.glow.get(r.id)!],
@@ -144,6 +151,10 @@ export class LootField {
       const turn = Math.PI * i / 2 + Math.PI / 4;
       const radius = item.uniqueId ? 0.8 : 0.66;
       k.part('box', glow, root, { pos: [Math.sin(turn) * radius, 0.06, Math.cos(turn) * radius], rot: [0, turn, 0], scale: [0.29, 0.025, 0.065], shadow: false });
+    }
+    if (item.set) for (let i = 0; i < 6; i++) {
+      const turn = (Math.PI * i) / 3;
+      k.part('box', this.setGlow, root, { pos: [Math.sin(turn) * 1.02, 0.07, Math.cos(turn) * 1.02], rot: [0, turn + Math.PI / 2, 0], scale: [0.42, 0.03, 0.05], shadow: false });
     }
     let halo2: AbstractMesh | null = null;
     if (r.id === 'ascended') {
