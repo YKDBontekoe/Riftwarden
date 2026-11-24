@@ -5,7 +5,8 @@ import { stationInfo } from '@riftwarden/rules/home/stationInfo';
 import { CURRENCIES, currencyTooltip } from '@riftwarden/rules/economy/currencies';
 import { stationArtwork } from '@riftwarden/game/visuals/fieldArtwork';
 import { FieldArt } from './FieldArt';
-import { CURRENCY_ICON, FieldIcon, STATION_ICON } from './FieldIcon';
+import { FieldIcon, STATION_ICON } from './FieldIcon';
+import { CurrencyIcon } from './inventory/thumbs';
 
 /** Terminal window frame shared by every HQ station. E / Esc close it (not while typing). */
 export function Shell({ code, title, sub, close, children, accent = 'cyan', wide }: { code: string; title: string; sub: string; close: () => void; children: ReactNode; accent?: 'cyan' | 'amber' | 'violet'; wide?: boolean }) {
@@ -46,7 +47,7 @@ export function Shell({ code, title, sub, close, children, accent = 'cyan', wide
                 USES
                 {info.uses.map((k) => (
                   <i key={k} className={CURRENCIES[k].cls} title={currencyTooltip(k)}>
-                    <FieldIcon name={CURRENCY_ICON[k]} /> {CURRENCIES[k].name}
+                    <CurrencyIcon k={k} /> {CURRENCIES[k].name}
                   </i>
                 ))}
               </span>

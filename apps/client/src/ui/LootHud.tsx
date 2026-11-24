@@ -2,12 +2,12 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'reac
 import { BoundKey } from './hud/widgets';
 import { fmtNum } from '@riftwarden/rules/combat/stats';
 import type { Game } from '@riftwarden/game/core/Game';
-import { rarity } from '@riftwarden/rules/loot/rarity';
-import { CATEGORY_LABEL } from '@riftwarden/rules/loot/types';
+import { rarity, type RarityId } from '@riftwarden/rules/loot/rarity';
+import { type Category, CATEGORY_LABEL } from '@riftwarden/rules/loot/types';
 import type { ItemInstance } from '@riftwarden/rules/loot/types';
 import { type SlotId, SLOTS } from '@riftwarden/rules/progression/items';
 import { getTier } from '@riftwarden/rules/progression/tiers';
-import { type InvEntry, InventoryView, RarityLegend } from './items';
+import { type InvEntry, InventoryView, ItemGlyph, RarityLegend } from './items';
 import { hudStore, type LootEvent, uiEvents } from '@riftwarden/game/ui/store';
 import { useHud } from './useHud';
 import { FieldIcon, itemIcon } from './FieldIcon';
@@ -24,7 +24,7 @@ export function LootPrompt() {
   return (
     <div key={t.uid} className={`loot-prompt r-${r.id}`} style={{ ['--rc' as string]: r.color }}>
       <BoundKey action="use" />
-      {t.uniqueId && <FieldArt name={`unique-${t.uniqueId}`} className="loot-portrait" />}
+      {t.uniqueId ? <FieldArt name={`unique-${t.uniqueId}`} className="loot-portrait" /> : t.defId && <ItemGlyph item={{ defId: t.defId, category: t.category as Category, rarity: t.rarity as RarityId }} size={46} portrait={false} />}
       <div>
         <div className="lp-rarity"><FieldIcon name={itemIcon(t.category)} />{' '}
           {r.label.toUpperCase()} · {cat(t.category)} · LV {fmtNum(t.level)}

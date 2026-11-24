@@ -52,7 +52,7 @@ export function ItemCard({ e, selected, onSelect, onHover, impact, right, check,
     >
       <i className="absolute left-[0] top-[0] bottom-[0] w-[3px] [background:var(--rc)] [box-shadow:0_0_10px_var(--rc)]" />
       {check !== undefined && <i className={`ic-check ${check ? 'on' : ''}`} />}
-      <ItemGlyph item={it} />
+      <ItemGlyph item={it} size={38} />
       <span className="ic-main">
         <b>
           {itemTitle(it)}

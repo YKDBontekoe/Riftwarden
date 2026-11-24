@@ -531,7 +531,8 @@ const savedItems = (p) => p.evaluate(() => JSON.parse(JSON.stringify(window.__ri
     await deploy(p);
     await p.evaluate(() => {
       const R = window.__rift;
-      for (let i = 0; i < 6; i++) R.spawnLoot({ rarity: ['common', 'rare', 'epic', 'legendary', 'exotic', 'uncommon'][i], category: 'armor', x: -6 + i * 2, z: -12 });
+      // Fixed base: each base's 3D model has its own mesh count, so a random base would vary the count.
+      for (let i = 0; i < 6; i++) R.spawnLoot({ rarity: ['common', 'rare', 'epic', 'legendary', 'exotic', 'uncommon'][i], category: 'armor', baseId: 'kinetic_plating', x: -6 + i * 2, z: -12 });
       R.advance(1);
       R.render(1);
     });
