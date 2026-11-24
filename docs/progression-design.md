@@ -246,3 +246,15 @@ player who climbs once their gear matches the next level) drove these changes fr
 - **Fresh start**: save v11 (`MIGRATIONS[10]`) rebuilds a default profile deterministically from the old document's id
   and times (identity, callsign, tutorial kept); the deploy terminal explains it once.
 - **Automation**: `?test` keeps every unlock open (`setUnlockAll`); `?test&locks` uses the real track.
+- **Mastery** (as proposed): XP per weapon kill (normal 6, elite 30, HVT 120, boss 300); ranks 1-50 with
+  `xp(r) = 300 + 90r`; +0.5%/rank damage soft-capped toward 15% (+12% at 50); components unlock at ranks 5/10/20 (scatter
+  choke / cycler / pulse / salvo, long shroud / quad rails / resonator rings / hive cluster, prism core); finishes at
+  10/20/30/40/50; perks every 5 ranks (pairs per family, +10%/tier, free to change). Co-op: +10% XP per other warden
+  (max +30%), +1% damage per warden sharing the family (from 2), aura +0.2% per teammate perk tier (cap 3%).
+- **Loot feedback**: 'My build' priority is the default; NEW BEST compares item power per kind (weapons per family).
+- **Spikes**: codex 24 entries (4 families, 5 rarities, 15 uniques; first-find shards 1-10); breakthroughs at RL
+  5/10/15...; pinnacle keys from RL 8 (1.2% + 0.6%/modifier per elite, or 20 shards), pinnacle run = boss on wave 1,
+  +50% hull, +30% luck, 2 legendary-floor rolls; war caches = item at the unlocked level + shards.
+- **Seasons**: calendar months from November 2026; rules rotate Key Rush / Mastery Fever / Bountiful Rift / Rapid
+  Climb; seasonal ladder needs one checkpoint fewer (two under Rapid Climb); 12-goal journey (titles at 6 and 12);
+  rollover on the first load after the month ends; boards = top 50 by RL or deepest wave, seasonal and all time.
