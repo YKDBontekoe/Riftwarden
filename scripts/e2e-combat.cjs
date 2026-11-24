@@ -898,8 +898,14 @@ async function deploy(p) {
         R.approach(pk.id);
         R.advance(0.3);
         await new Promise((r) => setTimeout(r, 150));
-        const line = document.querySelector('[data-testid=lp-set]')?.textContent ?? '';
-        return { plain, ticks, line };
+        let line = '';
+        for (let i = 0; i < 20 && !line; i++) {
+          R.advance(0.1);
+          await new Promise((r) => setTimeout(r, 100));
+          line = document.querySelector('[data-testid=lp-set]')?.textContent ?? '';
+        }
+        const t = g.lootTarget;
+        return { plain, ticks, line, screen: R.state().screen, target: t ? t.item.uid === pk.item.uid : null, landed: g.loot.landed(pk), cargoFull: g.inventory.cargoFull };
       });
       await H.shot(p, 'set-pickup', { frames: 2 });
       check('J4 set gear shows its hexagon marker and the set line on the pickup prompt', j4.ticks === 6 && /BASTION PROTOCOL/.test(j4.line) && /1\/4/.test(j4.line), JSON.stringify(j4));
