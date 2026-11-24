@@ -1,7 +1,7 @@
 // Staged unlocks on the session side: announce features as they open, and the automation switch.
 import { generateMarket } from '@riftwarden/rules/economy/market';
 import { marketProgress } from '@riftwarden/rules/progression/save';
-import { lockedSlots, newlyUnlocked, setUnlockAll, unlockAllActive } from '@riftwarden/rules/progression/unlocks';
+import { lockedSlots, newlyUnlocked, setUnlockAll, unlockAllActive, unlockDef, type UnlockDef } from '@riftwarden/rules/progression/unlocks';
 import { bestPowers } from '@riftwarden/rules/loot/feedback';
 import { ruleOf } from '@riftwarden/rules/progression/seasons';
 export { pinnacleBlocker } from '@riftwarden/rules/progression/spikes';
@@ -11,16 +11,22 @@ import { sfx } from '@riftwarden/game/audio/Sfx';
 import type { Profile } from '@riftwarden/game/progression/Profile';
 import { hudStore, uiEvents } from '@riftwarden/game/ui/store';
 
-/** Banner as soon as features open, plus an HQ toast until seen. A profile switch (sign-in) only resets. */
+/**
+ * Features that open queue the pausing NEW SYSTEM ONLINE card (`UnlockCard`): shown at the next arena checkpoint or
+ * as soon as the warden walks the HQ. The queue survives a reload (per profile). Codex finds and breakthroughs keep
+ * the HQ toast. A profile switch (sign-in) only loads that profile's queue.
+ */
 export function watchUnlocks(profile: Profile): void {
   const snap = () => {
     const s = profile.save;
     return { id: s.profile.id, progress: { xp: s.progress.xp }, threat: { unlocked: s.threat.unlocked }, codex: s.codex?.length ?? 0, bt: [...(s.breakthroughs ?? [])] };
   };
   let prev = snap();
+  loadCard(prev.id);
   profile.store.subscribe(() => {
     const next = snap();
     const same = next.id === prev.id;
+    if (!same) loadCard(next.id);
     const opened = same ? newlyUnlocked(prev, next) : [];
     const codex = same && next.codex > prev.codex ? CODEX.filter((c) => (profile.save.codex ?? []).slice(prev.codex).includes(c.id)) : [];
     const bt = same ? next.bt.filter((x) => !prev.bt.includes(x)) : [];
@@ -32,11 +38,46 @@ export function watchUnlocks(profile: Profile): void {
     }
     if (codex.length) pushToast(codex.map((c) => ({ id: c.id, label: `Codex: ${c.name}`, blurb: c.shards ? `First find · +${c.shards} rift shards` : 'First find recorded in the codex', at: at0 })));
     if (!opened.length || unlockAllActive()) return;
-    const at = Date.now();
-    uiEvents.emit('banner', { title: opened.length === 1 ? `UNLOCKED · ${opened[0].label.toUpperCase()}` : `${opened.length} NEW UNLOCKS`, sub: opened.length === 1 ? opened[0].blurb : opened.map((u) => u.label).join(' · '), tone: 'cyan' });
     sfx.play('chargeReady');
-    pushToast(opened.map((u) => ({ id: u.id, label: u.label, blurb: u.blurb, at })));
+    queueCard(next.id, opened);
   });
+}
+
+const cardKey = (profileId: string) => `riftwarden.unlockCard.${profileId}`;
+const cardEntry = (u: UnlockDef) => ({ id: u.id, label: u.label, blurb: u.blurb, kind: u.kind });
+
+function loadCard(profileId: string): void {
+  let ids: string[] = [];
+  try {
+    const raw = JSON.parse(localStorage.getItem(cardKey(profileId)) ?? '[]') as unknown;
+    if (Array.isArray(raw)) ids = raw.filter((x): x is string => typeof x === 'string');
+  } catch {
+    ids = [];
+  }
+  const defs = unlockAllActive() ? [] : ids.map((id) => unlockDef(id)).filter((u): u is UnlockDef => !!u);
+  hudStore.set({ unlockCard: defs.map(cardEntry) });
+}
+
+function saveCard(profileId: string, ids: readonly string[]): void {
+  try {
+    if (ids.length) localStorage.setItem(cardKey(profileId), JSON.stringify(ids));
+    else localStorage.removeItem(cardKey(profileId));
+  } catch {
+    // Storage blocked: the card still shows this session.
+  }
+}
+
+function queueCard(profileId: string, opened: readonly UnlockDef[]): void {
+  const list = [...(hudStore.get().unlockCard ?? [])];
+  for (const u of opened) if (!list.some((x) => x.id === u.id)) list.push(cardEntry(u));
+  hudStore.set({ unlockCard: list });
+  saveCard(profileId, list.map((x) => x.id));
+}
+
+/** The warden acknowledged the card: clear the queue (and its stored copy). */
+export function ackUnlockCard(profileId: string): void {
+  hudStore.set({ unlockCard: [] });
+  saveCard(profileId, []);
 }
 
 function pushToast(entries: NonNullable<ReturnType<typeof hudStore.get>['unlocks']>): void {

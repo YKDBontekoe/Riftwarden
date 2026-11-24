@@ -62,11 +62,14 @@ export function EngineeringTerminal({ flow, close }: { flow: Flow; close: () => 
               ['towers', 'TOWER TECH'],
               ['mastery', 'MASTERY'],
             ] as [Tab, string][]
-          ).map(([id, label]) => (
-            <button key={id} className={`${tab === id ? 'on' : ''}${lockReason(save, TAB_FEATURE[id]) ? ' opacity-55' : ''}`} data-tab={id} onClick={() => setTab(id)} title={lockReason(save, TAB_FEATURE[id]) ?? undefined}>
-              {lockReason(save, TAB_FEATURE[id]) ? '⨯ ' : ''}{label}
-            </button>
-          ))}
+          )
+            // Staged unlocks: a tab appears once its system is online (the unlock card announces it).
+            .filter(([id]) => id === tab || !lockReason(save, TAB_FEATURE[id]))
+            .map(([id, label]) => (
+              <button key={id} className={tab === id ? 'on' : ''} data-tab={id} onClick={() => setTab(id)}>
+                {label}
+              </button>
+            ))}
         </div>
         <ResourceBar save={save} compact />
       </div>

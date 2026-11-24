@@ -1,7 +1,7 @@
 // Staged feature unlocks (docs/progression-design.md §5): the track, loot locks, slot locks and the op gate.
 import { describe, expect, it } from 'vitest';
 import { xpForLevel } from '@riftwarden/rules/progression/level';
-import { ALL_LOOT_LOCKS, isUnlocked, lockReason, lockedCategories, lockedFamilies, lootLocks, newlyUnlocked, nextUnlocks, opFeature, slotUnlocked, unlockTrack, UNLOCKS } from '@riftwarden/rules/progression/unlocks';
+import { ALL_LOOT_LOCKS, isUnlocked, lockReason, lockedCategories, lockedFamilies, lootLocks, newlyUnlocked, nextUnlocks, opFeature, slotUnlocked, stationForUnlock, STATION_FEATURE, unlockTrack, UNLOCKS } from '@riftwarden/rules/progression/unlocks';
 
 const at = (warden: number, rl = 1) => ({ progress: { xp: xpForLevel(warden) }, threat: { unlocked: rl } });
 
@@ -43,6 +43,13 @@ describe('unlock track', () => {
     expect(next.every((e) => !e.open)).toBe(true);
     expect(next[0].progress).toBeGreaterThanOrEqual(next[2].progress);
     expect(new Set(UNLOCKS.map((u) => u.id)).size).toBe(UNLOCKS.length);
+  });
+
+  it('every station and workshop unlock powers up a station (unlock card marks it)', () => {
+    for (const u of UNLOCKS.filter((x) => x.kind === 'station' || x.id.startsWith('workshop:'))) expect(stationForUnlock(u.id), u.id).toBeTruthy();
+    for (const [station, feature] of Object.entries(STATION_FEATURE)) expect(stationForUnlock(feature)).toBe(station);
+    expect(stationForUnlock('workshop:affixes')).toBe('workshop');
+    expect(stationForUnlock('family:rail')).toBeNull();
   });
 
   it('reports what a level-up opened', () => {

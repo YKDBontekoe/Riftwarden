@@ -81,6 +81,12 @@ export function lockReason(d: UnlockProgress, id: string): string | null {
   return `${u.label} unlocks at ${requirementText(u)}.`;
 }
 
+/** The HQ station an unlock powers up (stations and workshop systems), or null. */
+export function stationForUnlock(id: string): string | null {
+  for (const [station, feature] of Object.entries(STATION_FEATURE)) if (feature === id) return station;
+  return id.startsWith('workshop:') ? 'workshop' : null;
+}
+
 // ------------------------------------------------------------------ what the locks mean for loot, slots and ops
 
 const FAMILY_UNLOCK: Partial<Record<WeaponFamily, string>> = { rail: 'family:rail', beam: 'family:beam', swarm: 'family:swarm' };

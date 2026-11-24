@@ -9,7 +9,7 @@ import type { RunResult } from '@riftwarden/rules/progression/run';
  * report after returning). Arena: playing, checkpoint (bank/continue/return choice),
  * defeat. Shared: loading, transit (scene swap), paused.
  */
-export type Screen = 'loading' | 'menu' | 'home' | 'terminal' | 'summary' | 'transit' | 'playing' | 'paused' | 'checkpoint' | 'defeat' | 'inventory' | 'upgrade' | 'build' | 'towers' | 'dev' | 'construct' | 'runmap' | 'station';
+export type Screen = 'loading' | 'menu' | 'home' | 'terminal' | 'summary' | 'transit' | 'playing' | 'paused' | 'checkpoint' | 'defeat' | 'inventory' | 'upgrade' | 'build' | 'towers' | 'dev' | 'construct' | 'runmap' | 'station' | 'unlock';
 export type Location = 'home' | 'arena';
 import type { TerminalId } from '@riftwarden/rules/home/terminals';
 export type { TerminalId };
@@ -178,6 +178,8 @@ export interface HudState {
   lastRun: RunResult | null;
   /** Staged unlocks that opened recently (HQ toast; newest last). */
   unlocks?: { id: string; label: string; blurb: string; at: number }[];
+  /** Staged unlocks waiting for the pausing NEW SYSTEM ONLINE card (HQ walk or arena checkpoint; oldest first). */
+  unlockCard?: { id: string; label: string; blurb: string; kind: string }[];
   wave: number;
   phase: WavePhase;
   phaseTimer: number;

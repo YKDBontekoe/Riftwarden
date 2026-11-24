@@ -1,7 +1,7 @@
-import { lockReason, STATION_FEATURE } from '@riftwarden/rules/progression/unlocks';
+import { lockReason, STATION_FEATURE, stationForUnlock, unlockAllActive } from '@riftwarden/rules/progression/unlocks';
 import '../babylonSideEffects';
 import { stationInfo } from '@riftwarden/rules/home/stationInfo';
-import { drawStationScreen, loadStationIllustrations } from './stationScreens';
+import { drawOfflineScreen, drawStationScreen, loadStationIllustrations, OFFLINE_GLOW } from './stationScreens';
 import { levelForXp } from '@riftwarden/rules/progression/level';
 import { freePoints } from '@riftwarden/rules/progression/skilltree';
 import { placeScan } from '../visuals/scannedProps';
@@ -494,12 +494,17 @@ export class HomeBase {
     for (const rig of this.rigs) {
       const s = rig.screen;
       if (!s) continue;
-      drawStationScreen(rig.station.id, s, save);
+      // Staged unlocks: a locked station is powered off (dark screen with what opens it).
+      const lock = this.stationLock(rig.station.id);
+      s.base = lock ? OFFLINE_GLOW : 1;
+      if (this.target !== rig) s.mat.emissiveColor.setAll(s.base);
+      if (lock) drawOfflineScreen(rig.station.title, s, lock);
+      else drawStationScreen(rig.station.id, s, save);
       s.tex.update(false);
     }
-    this.displays.exchange?.update(save.market.equipment);
-    this.displays.broker?.update(save.market.modules, save.market.exchange);
-    this.displays.reclaim?.update(save.resources.salvage, save.resources.components);
+    this.displays.exchange?.update(this.stationLock('merchant') ? [] : save.market.equipment);
+    this.displays.broker?.update(this.stationLock('modules') ? [] : save.market.modules, this.stationLock('modules') ? [] : save.market.exchange);
+    this.displays.reclaim?.update(this.stationLock('salvage') ? 0 : save.resources.salvage, this.stationLock('salvage') ? 0 : save.resources.components);
     if (this.wallScreens) {
       const { left, right } = this.wallScreens;
       drawScreenFrame(left, 'Service record');
@@ -652,6 +657,7 @@ export class HomeBase {
       this.tut.update(dt, input.pressed('F10'));
     }
 
+    if (controls && !this.readOnly && hudStore.get().unlockCard?.length && !unlockAllActive()) this.showUnlocks();
     if (controls && input.pressed('F3')) this.togglePerf();
     this.updateTarget(controls);
     if (controls && this.target && input.pressed('KeyE')) this.openTerminal(this.target.station.id);
@@ -699,13 +705,30 @@ export class HomeBase {
       next = hit?.rig ?? null;
     }
     if (next !== this.target) {
-      this.target?.screen?.mat.emissiveColor.setAll(1);
-      next?.screen?.mat.emissiveColor.setAll(1.6);
+      this.target?.screen?.mat.emissiveColor.setAll(this.target.screen.base);
+      next?.screen?.mat.emissiveColor.setAll(next.screen.base * 1.6);
       if (next) sfx.play('ui', { volume: 0.25, pitch: 1.6 });
       this.target = next;
       this.focus.setTarget(next?.station ?? this.pinged?.station ?? null);
     } else if (!next && this.pinged) this.focus.setTarget(this.pinged.station);
 
+  }
+
+  /** Staged unlocks: pause on the NEW SYSTEM ONLINE card (the warden stops, the pointer is freed for its button). */
+  showUnlocks(): void {
+    if (this.screen !== 'home') return;
+    sfx.play('chargeReady');
+    this.setScreen('unlock');
+    hudStore.set({ prompt: null });
+    this.input.releaseLock();
+  }
+
+  /** The card was acknowledged: mark the first newly powered station and hand control back (inside the click). */
+  async closeUnlocks(opened: readonly string[] = []): Promise<void> {
+    if (this.screen !== 'unlock') return;
+    const station = opened.map(stationForUnlock).find((id) => id && this.rigs.some((r) => r.station.id === id));
+    if (station) this.pingStation(station);
+    await this.takeControl();
   }
 
   /** Station directory: light up a station's floor ring for a few seconds so the player can find it. */

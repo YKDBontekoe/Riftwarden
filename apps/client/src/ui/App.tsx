@@ -15,6 +15,7 @@ import type { RunResult } from '@riftwarden/rules/progression/run';
 import type { SaveData } from '@riftwarden/rules/progression/save';
 import { getTier, nextCheckpoint } from '@riftwarden/rules/progression/tiers';
 import { HomeHud } from './HomeHud';
+import { UnlockCard } from './UnlockCard';
 import { Hud } from './Hud';
 import { useHud } from './useHud';
 import { TerminalHost } from './TerminalHost';
@@ -47,7 +48,7 @@ export function fmtTime(s: number): string {
 }
 
 const ARENA_SCREENS = new Set(['playing', 'paused', 'checkpoint', 'defeat', 'inventory', 'upgrade', 'build', 'towers']);
-const HOME_HUD_SCREENS = new Set(['home', 'terminal', 'paused']);
+const HOME_HUD_SCREENS = new Set(['home', 'terminal', 'paused', 'unlock']);
 
 export function App({ getFlow }: Props) {
   const screen = useHud((s) => s.screen);
@@ -74,6 +75,7 @@ export function App({ getFlow }: Props) {
       {screen === 'defeat' && flow && <DefeatScreen flow={flow} />}
       {screen === 'summary' && flow && <SummaryScreen flow={flow} />}
       {screen === 'construct' && flow && home && <ConstructionPanel key={`cons${flow.transitions}`} flow={flow} />}
+      {flow && ((screen === 'unlock' && location === 'home') || (screen === 'checkpoint' && location === 'arena')) && <UnlockCard flow={flow} />}
       {screen === 'transit' && <LoadingScreen />}
       {flow && <TouchControls flow={flow} />}
       <RotateHint />

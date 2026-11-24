@@ -240,13 +240,19 @@ async function openDeploy(p) {
       check('E5 a fresh warden only finds plasma weapons, no modules or ultimates; rolls journal the locks', e5.n > 50 && !e5.cats.includes('module') && !e5.cats.includes('ultimate') && e5.fams.every((f) => f === 'plasma') && e5.locks?.includes('family:rail') && e5.journal?.includes('cat:module'), JSON.stringify(e5));
       await ev(p3, () => window.__rift.flow.abandonRun());
       await waitFor(p3, () => window.__rift.state().location === 'home' && !window.__rift.flow.busy);
-      // Gaining levels opens features with a banner and an HQ toast (shown once the warden walks the HQ again).
+      // A locked station is powered off: dark OFFLINE screen, dimmed glow, not listed in the directory.
+      const e5b = await ev(p3, () => ({ glow: window.__rift.home.rigs.find((r) => r.station.id === 'fabricate')?.screen?.base, deploy: window.__rift.home.rigs.find((r) => r.station.id === 'deploy')?.screen?.base }));
+      check('E5b locked stations are powered off (dim screen), open ones are lit', e5b.glow < 0.5 && e5b.deploy === 1, JSON.stringify(e5b));
+      // Gaining levels pauses the HQ on the NEW SYSTEM ONLINE card; GOT IT hands control back.
       await ev(p3, () => window.__rift.home.setScreen('home'));
-      await ev(p3, () => window.__rift.profile.mutate((d) => { d.progress.xp = 9000; return true; }));
-      await p3.waitForSelector('[data-testid=unlock-toast]', { timeout: 20000 });
-      const e6 = await ev(p3, () => ({ toast: document.querySelector('[data-testid=unlock-toast]')?.textContent ?? '', lock: window.__rift.home.stationLock('salvage') }));
-      check('E6 level-ups announce what opened (toast) and the station opens', /UNLOCKED/.test(e6.toast) && /Railgun family/.test(e6.toast) && /MORE UNLOCKED/.test(e6.toast) && !e6.lock, JSON.stringify(e6).slice(0, 200));
-      if (captureScreens) await shot(p3, 'rl-unlock-toast', { frames: 2 });
+      await ev(p3, () => { window.__rift.profile.mutate((d) => { d.progress.xp = 9000; return true; }); window.__rift.advance(1 / 30); });
+      await p3.waitForSelector('[data-testid=unlock-card]', { timeout: 20000 });
+      const e6 = await ev(p3, () => ({ card: document.querySelector('[data-testid=unlock-card]')?.textContent ?? '', screen: window.__rift.state().screen, lock: window.__rift.home.stationLock('salvage'), glow: window.__rift.home.rigs.find((r) => r.station.id === 'salvage')?.screen?.base }));
+      if (captureScreens) await shot(p3, 'rl-unlock-card', { frames: 2 });
+      await p3.click('[data-testid=unlock-card-ok]');
+      await waitFor(p3, () => !document.querySelector('[data-testid=unlock-card]') && window.__rift.state().screen === 'home');
+      const e6b = await ev(p3, () => ({ queued: localStorage.getItem(`riftwarden.unlockCard.${window.__rift.profile.save.profile.id}`) }));
+      check('E6 level-ups pause on the unlock card, the station powers up, GOT IT resumes', /NEW SYSTEMS ONLINE/.test(e6.card) && /Railgun family/.test(e6.card) && e6.screen === 'unlock' && !e6.lock && e6.glow === 1 && e6b.queued === null, JSON.stringify({ ...e6, card: e6.card.slice(0, 120), ...e6b }));
       // Deep lattice: frontier view, search highlights.
       await ev(p3, () => window.__rift.profile.mutate((d) => { d.progress.xp = 9e8; return true; }));
       const lv = await ev(p3, async () => {

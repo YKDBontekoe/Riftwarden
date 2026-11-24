@@ -6,7 +6,7 @@ import { rarity } from '@riftwarden/rules/loot/rarity';
 import { fabricationLevel } from '@riftwarden/rules/economy/transactions';
 import { levelInfo, ringsAt } from '@riftwarden/rules/progression/level';
 import { freePoints } from '@riftwarden/rules/progression/skilltree';
-import { drawScreenFrame, screenLine, type ScreenTex } from './props';
+import { drawScreenFrame, MONO_FONT, SCREEN_FONT, screenLine, type ScreenTex } from './props';
 import { fieldArtwork, stationArtwork } from '../visuals/fieldArtwork';
 
 const illustrations = new Map<string, HTMLImageElement>();
@@ -24,6 +24,30 @@ export async function loadStationIllustrations(ids: readonly string[]): Promise<
     }
     return image.decode().catch(() => undefined);
   }));
+}
+
+/** Screen glow of a station that is still locked (powered off). */
+export const OFFLINE_GLOW = 0.22;
+
+/** A station the warden has not unlocked yet: powered off, with what brings it online. */
+export function drawOfflineScreen(title: string, s: ScreenTex, reason: string): void {
+  const { ctx, w, h } = s;
+  ctx.fillStyle = '#07090a';
+  ctx.fillRect(0, 0, w, h);
+  ctx.fillStyle = 'rgba(255,255,255,0.035)';
+  for (let y = 0; y < h; y += 4) ctx.fillRect(0, y, w, 1);
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#5b6064';
+  ctx.font = `700 ${Math.round(h * 0.1)}px ${SCREEN_FONT}`;
+  ctx.fillText(title.toUpperCase(), w / 2, h * 0.32, w - 60);
+  ctx.fillStyle = '#c0703e';
+  ctx.font = `700 ${Math.round(h * 0.13)}px ${MONO_FONT}`;
+  ctx.fillText('OFFLINE', w / 2, h * 0.52);
+  ctx.fillStyle = '#6e7377';
+  ctx.font = `500 ${Math.round(h * 0.065)}px ${SCREEN_FONT}`;
+  ctx.fillText(reason.replace(/\.$/, ''), w / 2, h * 0.72, w - 60);
+  ctx.textAlign = 'left';
 }
 
 export function drawStationScreen(id: string, s: ScreenTex, save: Readonly<SaveData>): void {
