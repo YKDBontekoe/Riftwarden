@@ -22,7 +22,7 @@ export const TIPS = {
     'Hover an item to compare it with your loadout before you equip it.',
     'Locked items can never be sold or dismantled by accident.',
     'The Command Console lists every station; click one to light its floor ring.',
-    'Fabricator grades above Standard need higher threat tiers unlocked.',
+    'Fabricator grades above Standard need higher Rift Levels unlocked.',
     'Research tower blueprints in the workshop: Tower Tech carries over to every run.',
   ],
 } as const;

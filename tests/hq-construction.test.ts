@@ -1,9 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import { runOp } from '@riftwarden/rules/progression/ops';
 import { createDefaultSave, migrate, parseSave, sanitizeSave, SAVE_VERSION, serializeSave } from '@riftwarden/rules/progression/save';
 import { checkEdge, checkFloor, checkFree, checkRemoveFloor, connectedFloors, coreCell, emptyStructure, walkableFloors } from '@riftwarden/rules/home/build/model';
 import { blueprintStatus } from '@riftwarden/rules/home/build/ops';
 import { pieceDef } from '@riftwarden/rules/home/build/catalog';
+import { setUnlockAll } from '@riftwarden/rules/progression/unlocks';
+
+// Legacy rules suites exercise late systems on fresh profiles: staged unlocks are covered by tests/unlocks.test.ts.
+beforeAll(() => setUnlockAll(true));
+afterAll(() => setUnlockAll(false));
 
 const rich = () => {
   const d = createDefaultSave(1);

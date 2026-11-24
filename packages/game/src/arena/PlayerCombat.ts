@@ -50,6 +50,8 @@ export interface CombatHost {
   /** Add a fraction (0..1) of a full ultimate charge to the drone firing right now. */
   chargeUlt(fraction: number): void;
   hitstop(seconds: number, scale: number): void;
+  /** A weapon kill by the drone firing right now (weapon-family mastery XP). */
+  masteryKill(e: Enemy): void;
   /** Re-enter the (overridable) damage entry, used by Arc Conductor jumps. */
   damageEnemy(source: 'player' | 'turret', e: Enemy, base: number, point: Vector3, weak: boolean, turret?: Turret, family?: WeaponFamily | 'arc', from?: Vector3): void;
 }
@@ -218,6 +220,7 @@ export class PlayerCombat {
   kill(e: Enemy): void {
     const heavy = e.elite || e.def.role === 'boss' || e.def.role === 'hvt' || e.def.hp >= 150;
     this.h.hitstop(heavy ? 0.1 : 0.045, heavy ? 0.04 : 0.2);
+    this.h.masteryKill(e);
     const p = this.h.player;
     p.refundDash(MOVE.killDashRefund * (heavy ? 2 : 1));
     p.chain = this.h.runTime - p.chainAt <= KILL_CHAIN_WINDOW ? p.chain + 1 : 1;

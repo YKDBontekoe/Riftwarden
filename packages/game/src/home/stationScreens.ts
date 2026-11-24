@@ -33,7 +33,7 @@ export function drawStationScreen(id: string, s: ScreenTex, save: Readonly<SaveD
     case 'deploy':
       drawScreenFrame(s, 'DEPLOYMENT');
       screenLine(s, 100, 'OPERATION', 'SECTOR 07');
-      screenLine(s, 150, 'THREAT TIER', `${tier.roman} · ${tier.name}`, '#ffb547');
+      screenLine(s, 150, 'RIFT LEVEL', `RL ${tier.id} · ${tier.name}`.slice(0, 24), '#ffb547');
       screenLine(s, 200, 'BEST WAVE', rec ? String(rec.bestWave) : '—');
       screenLine(s, 250, 'LAUNCH RING', 'READY');
       break;

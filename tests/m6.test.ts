@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { THREAT_TIERS, getTier, unlocksNextTier } from '@riftwarden/rules/progression/tiers';
+import { THREAT_TIERS, checkpointsToUnlock, getTier, unlockText, unlocksNextTier } from '@riftwarden/rules/progression/tiers';
 import { SurvivalPlanner, waveBudget, spawnCap, MAX_WAVE_SPAWNS, eliteChance, maxModsFor } from '@riftwarden/rules/survival/plan';
 import { ELITE_IDS, rollMods, validMods } from '@riftwarden/rules/survival/elites';
 import { bossScaling } from '@riftwarden/rules/survival/bosses';
@@ -140,12 +140,18 @@ describe('M6 survival director', () => {
     expect(ELITE_IDS.length).toBeGreaterThanOrEqual(4);
   });
   it('tier unlock rules are configurable', () => {
-    expect(unlocksNextTier(1, 5, 0)).toBe(true);
-    expect(unlocksNextTier(3, 10, 0)).toBe(false);
-    expect(unlocksNextTier(3, 15, 0)).toBe(true);
-    expect(unlocksNextTier(4, 20, 0)).toBe(false);
-    expect(unlocksNextTier(4, 20, 1)).toBe(true);
-    expect(unlocksNextTier(5, 100, 9)).toBe(false);
+    // Rift Levels unlock by checkpoints secured on the level below (a progress bar that lengthens to 8).
+    expect(checkpointsToUnlock(1)).toBe(1);
+    expect(checkpointsToUnlock(2)).toBe(2);
+    expect(checkpointsToUnlock(10)).toBe(6);
+    expect(checkpointsToUnlock(500)).toBe(8);
+    expect(unlocksNextTier(1, 1)).toBe(true);
+    expect(unlocksNextTier(2, 1)).toBe(false);
+    expect(unlocksNextTier(2, 2)).toBe(true);
+    expect(unlocksNextTier(40, 7)).toBe(false);
+    expect(unlocksNextTier(40, 8)).toBe(true);
+    expect(unlocksNextTier(999, 99)).toBe(false);
+    expect(unlockText(11, 2)).toContain('(2/6)');
   });
   it('wave manager runs director waves endlessly', () => {
     const p = new SurvivalPlanner(42, 2);
@@ -232,7 +238,7 @@ describe('M6 survival records', () => {
     delete d5.milestones;
     d5.version = 5;
     d5.records = { '1': { bestWave: 9, bestKills: 50, runs: 3, checkpoints: 1, salvageSecured: 10, longestRun: 100, lastPlayedAt: 1 } };
-    const m = migrate(d5, 5);
+    const m = migrate(d5, 5, 10);
     expect(m.ok).toBe(true);
     const { data } = sanitizeSave(m.data);
     expect(data.version).toBe(SAVE_VERSION);

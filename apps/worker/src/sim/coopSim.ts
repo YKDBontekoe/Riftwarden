@@ -1,3 +1,5 @@
+import type { MasteryState } from '@riftwarden/rules/progression/mastery';
+import { lockedSlots, lootLocks } from '@riftwarden/rules/progression/unlocks';
 import { generateArena } from '@riftwarden/rules/world/arenaGen';
 import { existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -74,6 +76,9 @@ export class CoopSim {
   /** Deploy-time loadouts (profile-owned gear carried by every node) and skill trees. */
   private readonly carried = new Map<string, Partial<Record<SlotId, ItemInstance | null>>>();
   private readonly trees = new Map<string, { seed: number; allocated: readonly string[] }>();
+  private readonly locks = new Map<string, string[]>();
+  private readonly slotLocks = new Map<string, SlotId[]>();
+  private readonly mastery = new Map<string, MasteryState>();
   private traveling = false;
   /** Defense or survival (fixed for the operation). */
   private readonly mode: 'defense' | 'survival';
@@ -131,7 +136,10 @@ export class CoopSim {
       this.trees.set(id, structuredClone(p.data.progress.tree));
       const ledger = new RunLedger(this.runId, this.tier.id, Date.now());
       ledger.survivalMode = this.mode === 'survival';
-      players.push({ id, name, slot: slot++, loadout: structuredClone(loadout), ledger, tree: structuredClone(p.data.progress.tree) });
+      this.locks.set(id, lootLocks(p.data));
+      this.slotLocks.set(id, lockedSlots(p.data));
+      players.push({ id, name, slot: slot++, loadout: structuredClone(loadout), ledger, tree: structuredClone(p.data.progress.tree), locks: this.locks.get(id), lockedSlots: this.slotLocks.get(id), mastery: structuredClone(p.data.progress.mastery) });
+      this.mastery.set(id, structuredClone(p.data.progress.mastery) ?? {});
     }
     this.tech = [...tech];
     this.milestones = [...(milestones ?? [])];
@@ -267,6 +275,9 @@ export class CoopSim {
         loadout: structuredClone(this.carried.get(a.id) ?? {}),
         ledger: a.run,
         tree: this.trees.get(a.id),
+        locks: this.locks.get(a.id),
+        lockedSlots: this.slotLocks.get(a.id),
+        mastery: this.mastery.get(a.id),
         restore: { ...a.inventory.loadout },
         ult: a.abilities.ult,
       }));

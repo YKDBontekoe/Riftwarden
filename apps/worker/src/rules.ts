@@ -10,7 +10,7 @@ export function replayRequest(req: ReplayRequest): ReplayResult {
   const now = req.now || Date.now();
   const entries: LogEntry[] = req.entries.map((e) => {
     const body = (fromDoc(e.body) ?? {}) as Partial<LogEntry>;
-    return { seq: Number(e.seq), at: e.at, op: body.op, run: body.run };
+    return { seq: Number(e.seq), at: e.at, op: body.op, run: body.run, ...(Number.isInteger(body.season) ? { season: body.season } : {}) };
   });
   let doc;
   if (req.doc && req.doc.json.length) doc = openDoc(fromDoc(req.doc), now);

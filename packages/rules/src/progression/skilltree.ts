@@ -134,8 +134,26 @@ function softCap(t: Template): number {
 const CAP: Partial<Record<StatKey, number>> = {};
 for (const b of BRANCHES) for (const t of TEMPLATES[b]) CAP[t.stat] = Math.max(CAP[t.stat] ?? 0, softCap(t));
 
-export const ringScale = (ring: number): number => 1 + 0.15 * (Math.max(1, ring) - 1);
+/** Node value growth per ring: +15% per ring to ring 10, then +5% per ring (the tree never ends; gear stays the main lever). */
+export const ringScale = (ring: number): number => {
+  const r = Math.max(1, ring);
+  return r <= 10 ? 1 + 0.15 * (r - 1) : 2.35 + 0.05 * (r - 10);
+};
 export const KEYSTONE_EVERY = 3;
+/** From this ring a keystone appears every second ring (deep rings lean on choices over raw stats). */
+export const DEEP_KEYSTONES = 20;
+/** From this ring half of the non-keystone nodes are notables. */
+export const DEEP_NOTABLES = 40;
+/** Rings the tree can reveal: one per five Warden levels up to the level cap (effectively endless). */
+export const MAX_RINGS = 2001;
+/** The per-stat soft cap rises 3% per ring of the deepest allocated node, so deep points keep paying. */
+export const capScale = (deepest: number): number => 1 + 0.03 * (Math.max(1, deepest) - 1);
+/** Keystone rules stay bounded however deep the tree goes. */
+export const RULE_CAP = { xpMult: 3, startCores: 600 } as const;
+
+const keystoneRing = (ring: number): boolean => (ring >= DEEP_KEYSTONES ? ring % 2 === 0 : ring % KEYSTONE_EVERY === 0);
+/** Index of a ring's keystone among the keystone rings (cycles through each branch's list). */
+const keystoneIndex = (ring: number): number => (ring < DEEP_KEYSTONES ? Math.floor(ring / KEYSTONE_EVERY) : Math.floor((DEEP_KEYSTONES - 1) / KEYSTONE_EVERY) + Math.floor((ring - DEEP_KEYSTONES) / 2) + 1);
 
 const round = (v: number) => Math.round(v * 10000) / 10000;
 
@@ -157,7 +175,7 @@ function genRing(seed: number, ring: number, prev: TreeNode[]): TreeNode[] {
   const scale = ringScale(ring);
   BRANCHES.forEach((branch, bi) => {
     const n = nodesPerBranch(ring);
-    const keyIdx = ring % KEYSTONE_EVERY === 0 ? Math.floor(n / 2) : -1;
+    const keyIdx = keystoneRing(ring) ? Math.floor(n / 2) : -1;
     const parentsPool = prev.filter((p) => p.branch === branch);
     for (let k = 0; k < n; k++) {
       const jitter = (rand() - 0.5) * 0.35;
@@ -166,11 +184,12 @@ function genRing(seed: number, ring: number, prev: TreeNode[]): TreeNode[] {
       const id = `r${ring}${BRANCH_CODE[branch]}${k}`;
       if (k === keyIdx) {
         const list = KEYSTONES[branch];
-        const ks = list[(Math.floor(ring / KEYSTONE_EVERY) - 1) % list.length];
-        const lvl = 1 + Math.floor((ring / KEYSTONE_EVERY - 1) / list.length) * 0.5;
+        const ki = keystoneIndex(ring);
+        const ks = list[(ki - 1) % list.length];
+        const lvl = 1 + Math.floor((ki - 1) / list.length) * 0.5;
         node = { id, ring, branch, angle, kind: 'keystone', name: ks.name, mods: ks.mods.map((m) => ({ ...m, value: round(m.value * lvl) })), rule: ks.rule && Object.fromEntries(Object.entries(ks.rule).map(([key, v]) => [key, round((v ?? 0) * lvl)])), parents: [] };
       } else {
-        const notable = ring >= 2 && rand() < 0.22;
+        const notable = ring >= 2 && rand() < (ring >= DEEP_NOTABLES ? 0.5 : 0.22);
         const a = pick(rand, TEMPLATES[branch]);
         const mods: TreeMod[] = [{ stat: a.stat, op: a.op, value: round(a.v * scale * (notable ? 1.6 : 1)) }];
         let name = a.name;
@@ -206,7 +225,7 @@ const cache = new Map<string, SkillTree>();
 
 /** Deterministic tree with `rings` rings revealed. */
 export function generateTree(seed: number, rings: number): SkillTree {
-  const r = Math.max(1, Math.min(400, Math.floor(rings)));
+  const r = Math.max(1, Math.min(MAX_RINGS, Math.floor(rings)));
   const key = `${seed >>> 0}:${r}`;
   const hit = cache.get(key);
   if (hit) return hit;
@@ -265,8 +284,9 @@ export function treeModifiers(seed: number, allocated: readonly string[]): StatM
     }
   }
   const out: StatModifier[] = [];
+  const grow = capScale(maxRing(allocated));
   for (const s of sums.values()) {
-    const cap = CAP[s.stat] ?? Math.abs(s.value) * 2;
+    const cap = (CAP[s.stat] ?? Math.abs(s.value) * 2) * grow;
     const eff = s.value >= 0 ? cap * (1 - Math.exp(-s.value / cap)) : s.value; // penalties are never softened
     if (eff !== 0) out.push({ stat: s.stat, op: s.op, value: round(eff), source: 'tree' });
   }
@@ -284,6 +304,8 @@ export function treeRules(seed: number, allocated: readonly string[]): TreeRules
     rules.xpMult += r.xpMult ?? 0;
     rules.startCores += r.startCores ?? 0;
   }
+  rules.xpMult = Math.max(0.1, Math.min(RULE_CAP.xpMult, rules.xpMult));
+  rules.startCores = Math.max(0, Math.min(RULE_CAP.startCores, rules.startCores));
   return rules;
 }
 
@@ -292,7 +314,7 @@ export function maxRing(ids: readonly string[]): number {
   let m = 1;
   for (const id of ids) {
     const r = /^r(\d+)/.exec(id);
-    if (r) m = Math.max(m, Math.min(400, Number(r[1])));
+    if (r) m = Math.max(m, Math.min(MAX_RINGS, Number(r[1])));
   }
   return m;
 }

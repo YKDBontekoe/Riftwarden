@@ -284,7 +284,20 @@ describe('threat tiers', () => {
       expect(b.damageMult).toBeGreaterThan(a.damageMult);
       expect(b.countMult).toBeGreaterThanOrEqual(a.countMult);
     }
-    expect(getTier(99).id).toBe(1);
+    // Rift Levels continue past Apex (generated, memoised) and keep escalating.
+    for (let id = 6; id <= 60; id++) {
+      const a = getTier(id - 1);
+      const b = getTier(id);
+      expect(b.id).toBe(id);
+      expect(b.hpMult).toBeGreaterThan(a.hpMult);
+      expect(b.damageMult).toBeGreaterThan(a.damageMult);
+      expect(b.lootLevelBonus).toBe(a.lootLevelBonus + 10);
+      expect(getTier(id)).toBe(b);
+    }
+    expect(Number.isFinite(getTier(999).hpMult)).toBe(true);
+    expect(getTier(0).id).toBe(1);
+    expect(getTier(1000).id).toBe(1);
+    expect(getTier(2.5).id).toBe(1);
   });
 
   it('tier scaling is applied by the wave generator', () => {

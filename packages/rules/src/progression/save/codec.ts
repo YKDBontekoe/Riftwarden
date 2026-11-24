@@ -23,7 +23,8 @@ export function serializeSave(data: SaveData): string {
 
 export type ParseResult = { ok: true; data: SaveData; repairs: string[]; migratedFrom?: number } | { ok: false; reason: string };
 
-export function parseSave(text: string, now = Date.now()): ParseResult {
+/** `upTo` stops the migration chain early (tests of historical migrations; the result is sanitized as current). */
+export function parseSave(text: string, now = Date.now(), opts: { upTo?: number } = {}): ParseResult {
   let env: Obj;
   try {
     env = obj(JSON.parse(text));
@@ -37,7 +38,7 @@ export function parseSave(text: string, now = Date.now()): ParseResult {
   // Verify against the exact stored text of `data`.
   const idx = text.indexOf('"data":');
   if (typeof env.sum !== 'string' || idx < 0 || checksum(text.slice(idx + 7, text.length - 1)) !== env.sum) return { ok: false, reason: 'checksum mismatch' };
-  const m = migrate(env.data, v);
+  const m = migrate(env.data, v, opts.upTo);
   if (!m.ok) return { ok: false, reason: `no migration from version ${v}` };
   const { data, repairs } = sanitizeSave(m.data, now);
   return { ok: true, data, repairs, migratedFrom: v < SAVE_VERSION ? v : undefined };

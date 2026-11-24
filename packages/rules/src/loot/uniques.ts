@@ -4,7 +4,7 @@ import { STAT_DEFS, type StatKey, type StatOp } from '../combat/stats';
 import { affixDef } from './affixes';
 import { baseDef } from './bases';
 import { flatScale, generateItem, hashSeed, maxTierFor, pctScale, rollAffix } from './generate';
-import { rarity, type RarityId } from './rarity';
+import { RARITY_UNLOCK, rarity, type RarityId } from './rarity';
 import type { ItemInstance, RolledStat } from './types';
 
 /**
@@ -154,10 +154,17 @@ export function uniqueChance(seed: number, id: string): number {
 }
 
 /** The unique a drop of `source` becomes (or null): listed source, matching faction, seed-based chance. */
-export function uniqueForDrop(source: string, seed: number, faction: string | null | undefined): UniqueDef | null {
+/**
+ * The unique a drop turns into (seed-decided), if any. A unique only drops once its rarity is open on the Rift Level
+ * (`RARITY_UNLOCK`: legendary uniques from RL 7, exotic ones from RL 12) and its family/category is unlocked.
+ */
+export function uniqueForDrop(source: string, seed: number, faction: string | null | undefined, rl = 999, locked: { families?: readonly string[]; categories?: readonly string[] } = {}): UniqueDef | null {
   for (const u of UNIQUES) {
     if (!u.drops.sources.includes(source)) continue;
     if (u.drops.faction && u.drops.faction !== faction) continue;
+    if (RARITY_UNLOCK[u.rarity] > rl) continue;
+    const base = baseDef(u.baseId);
+    if (base && (locked.categories?.includes(base.category) || (base.weapon && locked.families?.includes(base.weapon.family)))) continue;
     if (uniqueChance(seed, u.id) < u.drops.chance) return u;
   }
   return null;

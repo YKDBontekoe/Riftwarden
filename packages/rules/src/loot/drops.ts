@@ -1,6 +1,7 @@
 import { ascendDrop } from './ascend';
 import { clampLevel } from './generate';
-import { type RarityId, rollRarity } from './rarity';
+import { lootLevel } from '../progression/tiers';
+import { type RarityId, rollGated } from './rarity';
 import type { Category } from './types';
 
 /**
@@ -26,6 +27,8 @@ export interface DropSource {
   exclusive?: { baseId: string; category: Category; chance: number }[];
   /** Waves up to which `chance` is treated as 1 (first-loot guarantee). */
   guaranteedThroughWave?: number;
+  /** Rift Levels this source opens rarities early by (bosses, caches: 1). See loot/rarity `RARITY_UNLOCK`. */
+  gate?: number;
 }
 
 const ALL: Partial<Record<Category, number>> = { weapon: 3, armor: 3, shield: 2.5, reactor: 2, processor: 2, accessory: 2, module: 1.6, ability: 1.8, ultimate: 0.8 };
@@ -53,8 +56,10 @@ export const DROP_SOURCES = {
     exclusive: [{ baseId: 'bulwark_plating', category: 'armor', chance: 0.5 }],
   },
   wave: { id: 'wave', label: 'Wave cleared', chance: 0.4, rolls: 1, levelBonus: 1, luck: 1.25, categories: ALL, guaranteedThroughWave: 1 },
-  checkpoint: { id: 'checkpoint', label: 'Checkpoint cache', chance: 1, rolls: 2, levelBonus: 3, luck: 1.6, minRarity: 'rare', categories: ALL },
-  boss: { id: 'boss', label: 'Boss', chance: 1, rolls: 3, levelBonus: 5, luck: 2.6, minRarity: 'epic', categories: ALL },
+  checkpoint: { id: 'checkpoint', label: 'Checkpoint cache', chance: 1, rolls: 2, levelBonus: 3, luck: 1.6, minRarity: 'rare', gate: 1, categories: ALL },
+  /** Pinnacle boss (key runs on RL 8+): extra legendary-floor rolls on top of the boss's own table. */
+  pinnacle: { id: 'pinnacle', label: 'Pinnacle boss', chance: 1, rolls: 2, levelBonus: 6, luck: 2.4, minRarity: 'legendary', gate: 1, categories: ALL },
+  boss: { id: 'boss', label: 'Boss', chance: 1, rolls: 3, levelBonus: 5, luck: 2.6, minRarity: 'rare', gate: 1, categories: ALL },
   // ---- M6 archetypes: each favours different categories (soft target farming)
   enforcer: { id: 'enforcer', label: 'Shielded Enforcer', chance: 0.2, rolls: 1, levelBonus: 1, luck: 1.3, categories: { armor: 4, shield: 4, reactor: 1.5, weapon: 1, processor: 1, accessory: 1, module: 1 } },
   jammer: { id: 'jammer', label: 'Jammer Drone', chance: 0.16, rolls: 1, levelBonus: 1, luck: 1.2, categories: { processor: 4, accessory: 3, module: 2.5, reactor: 1, weapon: 1, armor: 0.5, shield: 0.5 } },
@@ -68,16 +73,16 @@ export const DROP_SOURCES = {
   engineer: { id: 'engineer', label: 'Support Engineer', chance: 0.22, rolls: 1, levelBonus: 1, luck: 1.35, categories: { reactor: 4, accessory: 3, module: 3, processor: 1.5, shield: 1, weapon: 0.6, armor: 0.6 } },
   /** Elite modifiers improve drops (luck/chance are raised per modifier in Game.eliteSource). */
   elite: { id: 'elite', label: 'Elite', chance: 0.3, rolls: 1, levelBonus: 2, luck: 1.7, minRarity: 'uncommon', categories: ALL },
-  eliteCache: { id: 'eliteCache', label: 'Elite assault cache', chance: 1, rolls: 2, levelBonus: 3, luck: 2.1, minRarity: 'rare', categories: ALL },
+  eliteCache: { id: 'eliteCache', label: 'Elite assault cache', chance: 1, rolls: 2, levelBonus: 3, luck: 2.1, minRarity: 'rare', gate: 1, categories: ALL },
   /** High-value target: categories are re-weighted toward the announced signal at runtime. */
-  hvt: { id: 'hvt', label: 'Vault Courier', chance: 1, rolls: 2, levelBonus: 4, luck: 2.4, minRarity: 'rare', categories: ALL },
+  hvt: { id: 'hvt', label: 'Vault Courier', chance: 1, rolls: 2, levelBonus: 4, luck: 2.4, minRarity: 'rare', gate: 1, categories: ALL },
   colossus: {
-    id: 'colossus', label: 'Siege Colossus', chance: 1, rolls: 3, levelBonus: 5, luck: 2.6, minRarity: 'epic',
+    id: 'colossus', label: 'Siege Colossus', chance: 1, rolls: 3, levelBonus: 5, luck: 2.6, minRarity: 'rare', gate: 1,
     categories: { armor: 4, weapon: 3, module: 3, shield: 2, reactor: 1.5, processor: 1, accessory: 1 },
     exclusive: [{ baseId: 'colossus_plating', category: 'armor', chance: 0.55 }, { baseId: 'siege_module', category: 'module', chance: 0.6 }],
   },
   overseer: {
-    id: 'overseer', label: 'Overseer Core', chance: 1, rolls: 3, levelBonus: 5, luck: 2.6, minRarity: 'epic',
+    id: 'overseer', label: 'Overseer Core', chance: 1, rolls: 3, levelBonus: 5, luck: 2.6, minRarity: 'rare', gate: 1,
     categories: { processor: 4, module: 3, weapon: 3, reactor: 2, shield: 1.5, accessory: 1.5, armor: 1 },
     exclusive: [{ baseId: 'overseer_logic', category: 'processor', chance: 0.55 }, { baseId: 'prism_module', category: 'module', chance: 0.6 }],
   },
@@ -87,11 +92,16 @@ export type DropSourceId = keyof typeof DROP_SOURCES;
 
 export interface LootContext {
   wave: number;
-  /** Threat tier id (Ascended promotion gate); absent = tier I. */
+  /** Rift Level (rarity gates, Ascended promotion); absent = RL 1. */
   tier?: number;
-  /** Threat tier loot parameters. */
+  /** Item level at wave 1 of the Rift Level (`levelBase`). */
   tierLevelBonus: number;
+  /** Node / act / mode luck (1 on a plain Rift Level). */
   tierLuck: number;
+  /** Ordinary drops since the last legendary or better (bad-luck protection; 0 when absent). */
+  pity?: number;
+  /** Categories the warden has not unlocked (staged unlocks): never picked. */
+  lockedCategories?: readonly Category[];
 }
 
 export interface DropSpec {
@@ -103,19 +113,27 @@ export interface DropSpec {
   seed: number;
 }
 
-/** Item level for a drop: wave + tier bonus + source bonus + a small (-1..+2) variation. */
+/**
+ * Item level for a drop: the Rift Level's base + up to +9 by wave (`lootLevel`) + source bonus + a small (-1..+2)
+ * variation. A deep run on one level never leaps past the next level's gear.
+ */
 export function itemLevelFor(ctx: LootContext, levelBonus: number, rand: () => number): number {
   const variance = Math.floor(rand() * 4) - 1;
-  return clampLevel(Math.max(1, Math.floor(ctx.wave)) + ctx.tierLevelBonus + levelBonus + variance);
+  return clampLevel(lootLevel({ lootLevelBonus: ctx.tierLevelBonus }, ctx.wave) + levelBonus + variance);
 }
 
-/** Rarity luck grows gently with waves (+1.2% per wave) on top of tier and source luck. */
+/** Rarity luck: source x node/act/mode luck, plus up to +25% on deep waves (+0.5% per wave). */
 export function luckFor(source: DropSource, ctx: LootContext): number {
-  return source.luck * ctx.tierLuck * (1 + 0.012 * Math.max(0, ctx.wave - 1));
+  return source.luck * ctx.tierLuck * Math.min(1.25, 1 + 0.005 * Math.max(0, ctx.wave - 1));
 }
 
-function pickCategory(weights: Partial<Record<Category, number>>, rand: () => number): Category {
-  const entries = Object.entries(weights) as [Category, number][];
+/** Rarity index from which a drop resets the bad-luck counter (legendary). */
+export const PITY_RESET = 4;
+
+function pickCategory(weights: Partial<Record<Category, number>>, rand: () => number, locked: readonly Category[] = []): Category {
+  const all = Object.entries(weights) as [Category, number][];
+  const open = locked.length ? all.filter(([c]) => !locked.includes(c)) : all;
+  const entries = open.length ? open : all;
   const total = entries.reduce((s, [, w]) => s + w, 0);
   let x = rand() * total;
   for (const [c, w] of entries) {
@@ -131,13 +149,13 @@ export function rollDrops(source: DropSource, ctx: LootContext, rand: () => numb
   const guaranteed = source.guaranteedThroughWave !== undefined && ctx.wave <= source.guaranteedThroughWave;
   for (let i = 0; i < source.rolls; i++) {
     if (!guaranteed && rand() >= source.chance) continue;
-    const category = pickCategory(source.categories, rand);
+    const category = pickCategory(source.categories, rand, ctx.lockedCategories);
     const ex = source.exclusive?.find((e) => e.category === category);
     const baseId = ex && rand() < ex.chance ? ex.baseId : undefined;
     const level = itemLevelFor(ctx, source.levelBonus, rand);
-    let r = rollRarity(rand, luckFor(source, ctx), source.minRarity);
+    let r = rollGated(rand, ctx.tier ?? 1, luckFor(source, ctx), source.minRarity, source.gate ?? 0, ctx.pity ?? 0);
     const seed = Math.floor(rand() * 4294967296) >>> 0;
-    // Ascended: a rare promotion of exotic drops on deep waves / high tiers (decided by the seed: no extra rand).
+    // Ascended: a rare promotion of exotic drops from RL 12 (decided by the seed: no extra rand).
     if (r === 'exotic' && ascendDrop(seed, ctx.wave, ctx.tier ?? 1)) r = 'ascended';
     out.push({ source: source.id, category, baseId, level, rarity: r, seed });
   }

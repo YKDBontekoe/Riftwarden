@@ -300,7 +300,7 @@ describe('H: save v2 -> v3 migration and sanitising', () => {
   }
 
   it('keeps every item and stat, adds a default build, sets M3 sockets', () => {
-    const r = parseSave(v2Text());
+    const r = parseSave(v2Text(), Date.now(), { upTo: 10 });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.migratedFrom).toBe(2);
@@ -343,7 +343,7 @@ describe('H: save v2 -> v3 migration and sanitising', () => {
     const tampered = JSON.parse(JSON.stringify(d)) as SaveData;
     tampered.items.find((i) => i.uid === w.uid)!.build!.barrel = 'rb_quad';
     const body = JSON.stringify(tampered);
-    const bad = parseSave(`{"v":3,"sum":"${checksum(body)}","data":${body}}`);
+    const bad = parseSave(`{"v":3,"sum":"${checksum(body)}","data":${body}}`, Date.now(), { upTo: 10 });
     expect(bad.ok).toBe(true);
     if (bad.ok) expect(isValidBuild(bad.data.items.find((i) => i.uid === w.uid)!.build!)).toBe(true);
   });

@@ -3,6 +3,7 @@
 //! Game rules never live here: profile documents are stored as JSON owned by `packages/rules`.
 
 pub mod accounts;
+pub mod boards;
 pub mod profiles;
 pub mod war;
 

@@ -14,12 +14,15 @@ import {
 } from '@riftwarden/rules/economy/config';
 import { affixValueRange, rerollPool, swapOptions } from '@riftwarden/rules/economy/engineering';
 import { generateMarket } from '@riftwarden/rules/economy/market';
-import { craftCost, QUALITIES, qualityDef, qualityOdds, RECIPES, recipeDef } from '@riftwarden/rules/economy/recipes';
+import { craftCost, QUALITIES, qualityDef, qualityOdds, RECIPES, recipeDef, unlockedFor } from '@riftwarden/rules/economy/recipes';
+import { merchantStock } from '@riftwarden/rules/runmap/hub';
 import {
   buyExchange,
   buyItem,
   craft,
+  craftCostFor,
   dismantleItems,
+  fabricationLevel,
   enhanceItem,
   findOwned,
   modifyComponent,
@@ -49,6 +52,7 @@ import {
   installModule,
   parseSave,
   recordRun,
+  rotateMarket,
   type SaveData,
   SAVE_KEY,
   SAVE_VERSION,
@@ -88,7 +92,12 @@ describe('M4 economy foundation', () => {
     expect(d.version).toBe(SAVE_VERSION);
     expect(d.resources).toEqual({ salvage: 0, credits: STARTING_CREDITS, components: 0, shards: 0 });
     expect(d.market.equipment.length).toBe(8);
-    expect(d.market.modules.length).toBe(6);
+    // Modules are a staged unlock (RL 3): a fresh warden's broker has no module stock, and no locked families sell.
+    expect(d.market.modules.length).toBe(0);
+    expect(d.market.equipment.every((e) => e.item.category !== 'ultimate' && (!e.item.weapon || baseDef(e.item.defId)!.weapon!.family === 'plasma'))).toBe(true);
+    const open = generateMarket(d.profile.id, 1, { level: 1, tier: 3 });
+    expect(open.modules.length).toBe(6);
+    expect(open.modules.every((e) => e.item.category === 'module')).toBe(true);
     for (const e of [...d.market.equipment, ...d.market.modules]) {
       expect(isValidItem(e.item)).toBe(true);
       expect(rarity(e.item.rarity).index).toBeLessThanOrEqual(3); // never above epic
@@ -132,7 +141,7 @@ describe('M4 economy foundation', () => {
     data.items.push(w);
     data.storage.uids.push(w.uid);
     const body = JSON.stringify(data);
-    const r = parseSave(`{"v":3,"sum":"${checksum(body)}","data":${body}}`);
+    const r = parseSave(`{"v":3,"sum":"${checksum(body)}","data":${body}}`, Date.now(), { upTo: 10 });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.migratedFrom).toBe(3);
@@ -330,6 +339,7 @@ describe('C/D: merchants', () => {
 
   it('refuses purchases without credits or storage space (I)', () => {
     const d = setup([], { credits: 0 });
+    d.market = generateMarket(d.profile.id, 1, { level: 1, tier: 3 });
     const before = snap(d);
     expect(buyItem(d, 'modules', d.market.modules[0].id).ok).toBe(false);
     expect(snap(d)).toBe(before);
@@ -595,8 +605,8 @@ describe('component engineering', () => {
 
 describe('H: fabrication', () => {
   it('crafts a valid item inside the quality window and charges the recipe cost', () => {
-    const d = setup([]);
-    d.threat.unlocked = 3;
+    const d = setup([], { salvage: 1e9, credits: 1e9, components: 1e9, shards: 1e9 });
+    d.threat.unlocked = 12;
     d.storage.capacity = 500;
     for (const recipe of RECIPES.filter((r) => r.output.kind === 'item'))
       for (const q of QUALITIES) {
@@ -615,7 +625,7 @@ describe('H: fabrication', () => {
         if (o.family) expect(baseDef(it.defId)!.weapon!.family).toBe(o.family);
         if (o.moduleBase) expect(it.defId).toBe(o.moduleBase);
         expect(d.storage.uids).toContain(it.uid);
-        for (const k of ['salvage', 'credits', 'components'] as const) expect(d.resources[k]).toBe(before[k] - (res.cost[k] ?? 0));
+        for (const k of ['salvage', 'credits', 'components', 'shards'] as const) expect(d.resources[k]).toBe(before[k] - (res.cost[k] ?? 0));
       }
   });
 
@@ -659,7 +669,7 @@ describe('H: fabrication', () => {
     d.threat.unlocked = 2;
     const r2 = craft(d, 'd_armor', 'standard');
     expect(r1.ok && r1.item!.level).toBe(1);
-    expect(r2.ok && r2.item!.level).toBe(20); // 12 + tier II loot bonus 8
+    expect(r2.ok && r2.item!.level).toBe(16); // RL 2 base 11 + floor((12 - 1) / 2)
   });
 });
 
@@ -724,5 +734,69 @@ describe('run income and transaction persistence', () => {
   it('module bases used by merchants and recipes all exist', () => {
     for (const r of RECIPES) if (r.output.kind === 'item' && r.output.moduleBase) expect(baseDef(r.output.moduleBase)?.category).toBe('module');
     expect(BASES.filter((b) => b.category === 'module' && b.weight > 0 && !b.exclusive).length).toBe(RECIPES.filter((r) => r.group === 'modules').length);
+  });
+});
+
+describe('phase 2: crafting and merchants by Rift Level', () => {
+  it('grades open with Rift Levels and cost shards at the top', () => {
+    const d = setup([], { shards: 0 });
+    const r = RECIPES.find((x) => x.id === 'd_armor')!;
+    const q = (id: string) => QUALITIES.find((x) => x.id === id)!;
+    expect(unlockedFor(r, q('superior'), 2).ok).toBe(false);
+    expect(unlockedFor(r, q('superior'), 3).ok).toBe(true);
+    expect(unlockedFor(r, q('masterwork'), 6).ok).toBe(false);
+    expect(unlockedFor(r, q('masterwork'), 7).ok).toBe(true);
+    const apex = unlockedFor(r, q('apex'), 9);
+    expect(apex.ok ? '' : apex.reason).toBe('Requires Rift Level 10 unlocked');
+    expect(craftCost(r, q('masterwork'), 1).shards).toBe(6);
+    expect(craftCost(r, q('apex'), 81).shards).toBe(44);
+    expect(craftCost(r, q('refined'), 1).shards).toBeUndefined();
+    d.threat.unlocked = 10;
+    const res = craft(d, 'd_armor', 'apex');
+    expect(res.ok).toBe(false);
+    expect(res.ok ? '' : res.reason).toMatch(/shard/i);
+  });
+
+  it('heavy crafts escalate within a market rotation and reset on rotation', () => {
+    const d = setup([], { shards: 1e6 });
+    d.threat.unlocked = 7;
+    d.storage.capacity = 500;
+    const r = RECIPES.find((x) => x.id === 'd_shield')!;
+    const sup = QUALITIES.find((x) => x.id === 'superior')!;
+    const first = craftCostFor(d, r, sup, fabricationLevel(d));
+    expect(craft(d, 'd_shield', 'superior').ok).toBe(true);
+    expect(craft(d, 'd_shield', 'standard').ok).toBe(true);
+    const third = craftCostFor(d, r, sup, fabricationLevel(d));
+    expect(third.credits).toBe(Math.round(first.credits! * 1.25));
+    expect(craft(d, 'd_shield', 'masterwork').ok).toBe(true);
+    expect(craftCostFor(d, r, sup, fabricationLevel(d)).credits).toBe(Math.round(first.credits! * 1.5));
+    rotateMarket(d, 5);
+    expect(craftCostFor(d, r, sup, fabricationLevel(d))).toEqual(first);
+    // The counter survives a save round trip.
+    craft(d, 'd_shield', 'superior');
+    const back = parseSave(serializeSave(d));
+    expect(back.ok && back.data.economy.heavy).toEqual(d.economy.heavy);
+  });
+
+  it('merchants never stock above the Rift Level\'s own drop ceiling', () => {
+    const order = ['common', 'uncommon', 'rare', 'epic', 'legendary', 'exotic', 'ascended'];
+    for (const [rl, top] of [[1, 'rare'], [3, 'epic'], [12, 'legendary']] as const) {
+      let best = 0;
+      let featuredLeg = false;
+      for (let rot = 0; rot < 300; rot++) {
+        const m = generateMarket('pf_merchant', rot, { level: 10 * rl, tier: rl });
+        for (const e of [...m.equipment, ...m.modules]) {
+          best = Math.max(best, order.indexOf(e.item.rarity));
+          if (e.item.rarity === 'legendary') {
+            expect(e.featured).toBe(true);
+            featuredLeg = true;
+          }
+        }
+      }
+      expect(order[best]).toBe(top === 'legendary' && !featuredLeg ? 'epic' : top);
+    }
+    // Map merchants: no epics before RL 3.
+    for (let seed = 1; seed < 400; seed++) for (const it of merchantStock(seed, 10, 1).items) expect(it.rarity).not.toBe('epic');
+    expect([...Array(400).keys()].some((seed) => merchantStock(seed + 1, 10, 3).items.some((it) => it.rarity === 'epic'))).toBe(true);
   });
 });

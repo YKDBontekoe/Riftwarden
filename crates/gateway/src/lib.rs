@@ -3,6 +3,7 @@
 
 pub mod admin;
 pub mod auth;
+pub mod boards;
 pub mod config;
 pub mod coop;
 pub mod error;
@@ -45,11 +46,12 @@ pub fn router(state: State) -> Router {
         .allow_credentials(true)
         .allow_methods([Method::GET, Method::POST, Method::DELETE])
         .allow_headers([header::CONTENT_TYPE]);
-    let traced = Router::new().merge(auth::routes()).merge(session::routes()).merge(war::routes()).layer(cors).layer(
-        TraceLayer::new_for_http()
-            .make_span_with(DefaultMakeSpan::new().level(tracing::Level::INFO))
-            .on_response(DefaultOnResponse::new().level(tracing::Level::INFO)),
-    );
+    let traced =
+        Router::new().merge(auth::routes()).merge(session::routes()).merge(war::routes()).merge(boards::routes()).layer(cors).layer(
+            TraceLayer::new_for_http()
+                .make_span_with(DefaultMakeSpan::new().level(tracing::Level::INFO))
+                .on_response(DefaultOnResponse::new().level(tracing::Level::INFO)),
+        );
     // Health checks (Docker polls every few seconds) stay out of the traces.
     traced.merge(health::routes()).with_state(state)
 }

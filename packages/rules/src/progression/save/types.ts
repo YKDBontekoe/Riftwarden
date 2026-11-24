@@ -5,7 +5,7 @@ import type { RunOutcome } from '../run';
 import { type MarketState } from '../../economy/market';
 import type { RunMapState } from '../../runmap/state';
 
-export const SAVE_VERSION = 10;
+export const SAVE_VERSION = 11;
 export const SAVE_KEY = 'riftwarden.save';
 export const BACKUP_KEY = 'riftwarden.save.bak';
 export const CORRUPT_KEY = 'riftwarden.save.corrupt';
@@ -89,6 +89,10 @@ export interface RunHistoryEntry {
   dev: boolean;
   /** Survival mode run (absent = defense). */
   mode?: 'survival';
+  /** Staged-unlock loot locks at the start of the run (absent = none locked). */
+  locks?: string[];
+  /** A pinnacle run (a key was spent; the pinnacle boss leads wave 1). */
+  pinnacle?: true;
   /** Run map: act reached, nodes completed and the compact path (e.g. "1C", "1E", "1B*"). */
   act?: number;
   nodes?: number;
@@ -111,6 +115,10 @@ export interface ActiveRun {
   nodeBank?: number;
   /** Survival mode run (absent = defense). */
   mode?: 'survival';
+  /** Staged-unlock loot locks at the start of the run (absent = none locked). */
+  locks?: string[];
+  /** A pinnacle run (a key was spent; the pinnacle boss leads wave 1). */
+  pinnacle?: true;
 }
 
 export interface LoadoutPreset {
@@ -185,6 +193,24 @@ export interface SaveData {
   towers: { unlocked: string[] };
   /** Warden levels and the procedural skill tree (level and points are derived from xp). */
   progress: ProgressState;
+  /** Codex entries found (progression/spikes CODEX ids; optional). */
+  codex?: string[];
+  /** Rift Levels whose breakthrough (every 5th level cleared) was granted. */
+  breakthroughs?: number[];
+  /** Pinnacle keys held and pinnacle runs started. */
+  pinnacle?: { keys: number; runs: number };
+  /** Rift War: regions this warden secured sectors in, and regions whose victory cache was claimed. */
+  war?: { fought: number[]; claimed: number[] };
+  /** Seasonal profiles only: the season this document belongs to (absent = the permanent profile). */
+  seasonId?: number;
+  /** The permanent profile's running seasonal profile (a full document; entries tagged with its season apply to it). */
+  seasonal?: { id: number; doc: SaveData };
+  /** Finished seasons (what each one reached; titles are cosmetic). */
+  seasonsDone?: import('../seasons').SeasonArchive[];
+  /** Leaderboard summary kept by the rules when checkpoints bank (boards read it from server documents). */
+  board?: import('../seasons').BoardSummary;
+  /** Set when a migration restarted progression (v11 Rift Levels): the HQ shows a one-time notice. */
+  wiped?: { from: number; at: number };
 }
 
 export interface ProgressState {
@@ -194,6 +220,8 @@ export interface ProgressState {
   tree: { seed: number; allocated: string[] };
   /** Paid respecs so far (respec cost escalates). */
   respecs: number;
+  /** Weapon-family mastery (optional: absent = nothing mastered yet). */
+  mastery?: import('../mastery').MasteryState;
 }
 
 /** Stable 32-bit seed for a profile's skill tree. */
@@ -222,6 +250,8 @@ export interface EconomyState {
   tx: string[];
   /** Fabrication counter (deterministic crafting seeds). */
   crafts: number;
+  /** Superior-or-better crafts in a market rotation (cost escalation; optional, absent = none). */
+  heavy?: { rotation: number; n: number };
   stats: EconomyStats;
 }
 

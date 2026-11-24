@@ -20,6 +20,8 @@ export interface PromptInfo {
   action: string;
   /** What the station is for (station info table). */
   purpose?: string;
+  /** Staged unlocks: why the station cannot be used yet. */
+  locked?: string;
 }
 
 export interface RunHud {
@@ -137,6 +139,12 @@ export interface LootTargetInfo {
   equippedName: string | null;
   equippedLevel: number;
   equippedRarity: string | null;
+  /** Beats every owned item of its kind (weapons: per family). */
+  newBest?: boolean;
+  /** Build-aware swap verdict against the slot it would fill. */
+  verdict?: string | null;
+  /** Item levels above (+) or below (-) what this wave usually drops on this Rift Level. */
+  levelDelta?: number;
 }
 
 /** M7 co-op HUD state (teammates, votes, offers, link quality). */
@@ -166,6 +174,8 @@ export interface HudState {
   run: RunHud | null;
   /** Result of the run that just ended (summary / defeat screens). */
   lastRun: RunResult | null;
+  /** Staged unlocks that opened recently (HQ toast; newest last). */
+  unlocks?: { id: string; label: string; blurb: string; at: number }[];
   wave: number;
   phase: WavePhase;
   phaseTimer: number;
@@ -337,6 +347,8 @@ type EventMap = {
   hit: HitKind;
   damageNumber: DamageNumberEvent;
   banner: BannerEvent;
+  /** Weapon-family mastery XP earned by a kill (HUD float). */
+  mastery: { family: string; xp: number };
   /** severity 0..1; angle = source direction relative to view (radians, 0 = ahead, + = right), null if unknown. */
   hurt: { severity: number; angle: number | null };
   coresGained: number;

@@ -5,7 +5,10 @@ import { rarity } from '@riftwarden/rules/loot/rarity';
 import { ARENA } from '@riftwarden/rules/world/layout';
 import { SLOTS } from '@riftwarden/rules/progression/items';
 import { deployBlocker, equippedItem, type SaveData } from '@riftwarden/rules/progression/save';
-import { CHECKPOINT_INTERVAL, THREAT_TIERS, type ThreatTier, unlockText } from '@riftwarden/rules/progression/tiers';
+import { CHECKPOINT_INTERVAL, getTier, type ThreatTier } from '@riftwarden/rules/progression/tiers';
+import { LevelLootCard, RiftLevelPicker, savePower, UnlockBar, WipeNotice } from '../RiftLevel';
+import { PinnacleCard } from '../Spikes';
+import { SeasonBar } from '../Seasons';
 import { useSave } from '../App';
 import { Shell } from '../shell';
 import { CoopPanel } from '../Coop';
@@ -16,7 +19,7 @@ export function DeployTerminal({ flow, close }: { flow: Flow; close: () => void 
   const save = useSave(flow);
   const [busy, setBusy] = useState(false);
   const [mode, setMode] = useState<'solo' | 'coop'>(flow.net ? 'coop' : 'solo');
-  const selected = THREAT_TIERS.find((t) => t.id === save.threat.selected) ?? THREAT_TIERS[0];
+  const selected = getTier(Math.min(save.threat.selected, save.threat.unlocked));
   const weapon = equippedItem(save, 'weapon');
   const blocker = deployBlocker(save);
   const gearCount = SLOTS.filter((s) => save.loadout[s.id]).length;
@@ -30,6 +33,7 @@ export function DeployTerminal({ flow, close }: { flow: Flow; close: () => void 
   };
   return (
     <Shell code="DP-01" title="DEPLOYMENT" sub="Launch bay · survival operations" close={close} wide>
+      <WipeNotice save={save} />
       <div className="tabs m-[0_0_14px]">
         <button className={mode === 'solo' ? 'on' : ''} data-testid="deploy-solo" onClick={() => setMode('solo')}>
           SOLO OPERATION
@@ -41,6 +45,8 @@ export function DeployTerminal({ flow, close }: { flow: Flow; close: () => void 
       {mode === 'coop' ? (
         <CoopPanel flow={flow} />
       ) : (
+      <>
+      <SeasonBar flow={flow} save={save} />
       <div className={`deploy-grid${flow.mapMode ? ' war' : ''}`}>
         <div className="arena-card">
           <ResumeCard flow={flow} save={save} />
@@ -53,7 +59,7 @@ export function DeployTerminal({ flow, close }: { flow: Flow; close: () => void 
               <li>Each checkpoint banks collected equipment and salvage, awards a cache, and opens a route home.</li>
               <li>Reactor loss costs all unsecured cargo, including newly found gear you equip. Your starting gear stays safe.</li>
               <li>The sealed southern approach opens as the facility evolves. Keep its marked lane clear for machines.</li>
-              <li>Higher tiers increase rewards and enemy strength. Watch for event and boss warnings before a wave.</li>
+              <li>Higher Rift Levels raise item levels, open rarer drops and harden the machines. Watch for event and boss warnings.</li>
             </ul>
           </details>
           <div className="loadout-line">
@@ -63,22 +69,21 @@ export function DeployTerminal({ flow, close }: { flow: Flow; close: () => void 
           {blocker && <div className="deploy-block">{blocker}</div>}
         </div>
         <div className="tier-col">
-          <div className="col-label">SELECT THREAT TIER</div>
-          <div className="flex gap-[5px]" role="group" aria-label="Threat tier">
-            {THREAT_TIERS.map(t => {
-              const locked = t.id > save.threat.unlocked;
-              return <button key={t.id} className={`tier-card ${t.id === selected.id ? 'on' : ''}`} disabled={locked || busy}
-                aria-pressed={t.id === selected.id} aria-label={`Tier ${t.roman}, ${t.name}`}
-                title={locked ? `${t.name} · ${unlockText(t.id)}` : t.name} onClick={() => flow.selectTier(t.id)}>{t.roman}</button>;
-            })}
-          </div>
+          <div className="col-label">SELECT RIFT LEVEL</div>
+          <RiftLevelPicker value={selected.id} unlocked={save.threat.unlocked} power={savePower(save)} disabled={busy} onPick={(rl) => flow.selectTier(rl)} />
+          <PinnacleCard flow={flow} save={save} rl={selected.id} busy={busy} onDeploy={() => {
+            if (busy) return;
+            setBusy(true);
+            void flow.deploy(selected.id, undefined, 'defense', true).then((ok) => !ok && setBusy(false));
+          }} />
           <TierBrief tier={selected} save={save} />
           <button className="primary deploy" disabled={busy || !!blocker} onClick={deploy}>
-            <span>{busy ? 'LAUNCHING…' : `DEPLOY · TIER ${selected.roman}`}</span>
+            <span>{busy ? 'LAUNCHING…' : `DEPLOY · RL ${selected.id}`}</span>
             <span aria-hidden="true">↗</span>
           </button>
         </div>
       </div>
+      </>
       )}
     </Shell>
   );
@@ -104,25 +109,24 @@ function FacilityPlan() {
 
 function TierBrief({ tier, save }: { tier: ThreatTier; save: SaveData }) {
   const record = save.records[String(tier.id)];
-  const next = THREAT_TIERS.find(t => t.id === save.threat.unlocked + 1);
   const modifiers = [
-    ['Enemy health', multiplier(tier.hpMult)], ['Enemy damage', multiplier(tier.damageMult)],
+    ['Enemy hull', multiplier(tier.hpMult)], ['Enemy damage', multiplier(tier.damageMult)],
     ['Movement speed', multiplier(tier.speedMult)], ['Spawn count', multiplier(tier.countMult)],
-    ['Salvage', multiplier(tier.salvageMult)], ['Item level', `+${tier.lootLevelBonus}`],
-    ['Loot luck', multiplier(tier.lootLuck)], ['Elite rate', multiplier(tier.eliteRate)],
+    ['Salvage', multiplier(tier.salvageMult)], ['Elite rate', multiplier(tier.eliteRate)],
     ['Max elite modifiers', tier.maxMods], ['Bosses from', `Wave ${tier.bossFirstWave}`],
   ];
   return <div className="tier-brief">
-    <h3>{tier.name.toLowerCase()}</h3><p>{tier.blurb}</p>
+    <p>{tier.blurb}</p>
+    <LevelLootCard rl={tier.id} />
     <div className="tier-facts">
-      <div><b>{multiplier(tier.salvageMult)}</b><span>Salvage</span></div>
+      <div><b>{multiplier(tier.hpMult)}</b><span>Machine hull</span></div>
       <div><b>{tier.bossFirstWave}</b><span>First possible boss wave</span></div>
       <div><b>{record?.bestWave ?? '—'}</b><span>Best wave · {record?.runs ?? 0} runs</span></div>
     </div>
-    <details className="field-notes"><summary>Tier modifiers</summary>
+    <details className="field-notes"><summary>Level modifiers</summary>
       <dl className="tier-modifiers">{modifiers.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
     </details>
-    {next && <p className="next-tier"><strong>Tier {next.roman} · {next.name.toLowerCase()}</strong> {unlockText(next.id)}</p>}
+    <UnlockBar save={save} />
   </div>;
 }
 

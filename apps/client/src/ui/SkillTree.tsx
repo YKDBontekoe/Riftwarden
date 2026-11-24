@@ -40,7 +40,15 @@ export function SkillTreeTerminal({ flow, close }: { flow: Flow; close: () => vo
   const have = useMemo(() => new Set(st.allocated), [st.allocated]);
   const free = Math.max(0, pointsAt(info.level) - st.allocated.length);
   const [sel, setSel] = useState<string | null>(null);
-  const [view, setView] = useState({ x: 0, y: 0, z: 1 });
+  const [query, setQuery] = useState('');
+  // Deep trees open on the frontier (the outermost allocated node) instead of the whole disc.
+  const frontierView = () => {
+    const deepest = st.allocated.map((id) => tree.byId.get(id)).filter((n): n is TreeNode => !!n).sort((a, b) => b.ring - a.ring)[0];
+    if (!deepest) return { x: 0, y: 0, z: 1 };
+    const p = pos(deepest);
+    return { x: p.x, y: p.y, z: Math.max(1, (CORE_R + (rings + 1) * RING_GAP) / (RING_GAP * 5)) };
+  };
+  const [view, setView] = useState(() => (rings > 8 ? frontierView() : { x: 0, y: 0, z: 1 }));
   const drag = useRef<{ x: number; y: number; vx: number; vy: number } | null>(null);
   const { msg, run } = useTx(flow, 'lattice');
   const node = sel ? tree.byId.get(sel) ?? null : null;
@@ -51,7 +59,19 @@ export function SkillTreeTerminal({ flow, close }: { flow: Flow; close: () => vo
   const size = extent * 2 / view.z;
 
   const reachable = (n: TreeNode) => n.parents.some((p) => p === CORE_ID || have.has(p));
-  const onWheel = (e: RWheelEvent) => setView((v) => ({ ...v, z: Math.max(0.6, Math.min(4, v.z * (e.deltaY < 0 ? 1.15 : 1 / 1.15))) }));
+  // Zoom deep enough to read a few rings of a very large tree.
+  const maxZoom = Math.max(4, extent / (RING_GAP * 3));
+  const onWheel = (e: RWheelEvent) => setView((v) => ({ ...v, z: Math.max(0.6, Math.min(maxZoom, v.z * (e.deltaY < 0 ? 1.15 : 1 / 1.15))) }));
+  // Only what is inside the view (plus a margin) is drawn: deep trees have thousands of nodes.
+  const margin = 40;
+  const inView = (p: { x: number; y: number }) => Math.abs(p.x - view.x) < size / 2 + margin && Math.abs(p.y - view.y) < size / 2 + margin;
+  const q = query.trim().toLowerCase();
+  const matches = useMemo(() => {
+    if (!q) return null;
+    const out = new Set<string>();
+    for (const n of tree.nodes) if (n.name.toLowerCase().includes(q) || n.mods.some((m) => label(m.stat).toLowerCase().includes(q))) out.add(n.id);
+    return out;
+  }, [q, tree]);
   const onDown = (e: RPointerEvent) => {
     drag.current = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y };
     (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
@@ -91,6 +111,7 @@ export function SkillTreeTerminal({ flow, close }: { flow: Flow; close: () => vo
             {tree.nodes.map((n) =>
               n.parents.map((p) => {
                 const a = pos(n);
+                if (!inView(a)) return null;
                 const b = p === CORE_ID ? { x: Math.cos(n.angle) * CORE_R, y: -Math.sin(n.angle) * CORE_R } : pos(tree.byId.get(p)!);
                 const on = have.has(n.id) && (p === CORE_ID || have.has(p));
                 return <line key={`${n.id}-${p}`} className={`edge ${on ? 'on' : ''} ${n.ring > rings ? 'locked' : ''}`} x1={a.x} y1={a.y} x2={b.x} y2={b.y} style={on ? { stroke: BRANCH_INFO[n.branch].color } : undefined} />;
@@ -102,17 +123,24 @@ export function SkillTreeTerminal({ flow, close }: { flow: Flow; close: () => vo
             </text>
             {tree.nodes.map((n) => {
               const p = pos(n);
+              if (!inView(p)) return null;
               const locked = n.ring > rings;
               const state = have.has(n.id) ? 'on' : locked ? 'locked' : reachable(n) ? 'open' : 'far';
               const r = n.kind === 'keystone' ? 13 : n.kind === 'notable' ? 9.5 : 7;
               return (
-                <g key={n.id} transform={`translate(${p.x} ${p.y})`} className={`node ${state} ${n.kind} ${sel === n.id ? 'sel' : ''}`} data-node={n.id} data-state={state} onPointerDown={(e) => e.stopPropagation()} onClick={() => setSel(n.id)}>
+                <g key={n.id} transform={`translate(${p.x} ${p.y})`} opacity={matches && !matches.has(n.id) ? 0.18 : undefined} className={`node ${state} ${n.kind} ${sel === n.id ? 'sel' : ''}`} data-node={n.id} data-state={state} onPointerDown={(e) => e.stopPropagation()} onClick={() => setSel(n.id)}>
                   {n.kind === 'keystone' ? <rect x={-r} y={-r} width={r * 2} height={r * 2} transform="rotate(45)" style={nodeStyle(n, state)} /> : <circle r={r} style={nodeStyle(n, state)} />}
                 </g>
               );
             })}
           </svg>
-          <div className="absolute left-[10px] bottom-[8px] [font:10px_var(--mono)] text-faint pointer-events-none">Drag to pan · scroll to zoom · a new ring opens every {RING_EVERY} levels</div>
+          <div className="absolute left-[10px] top-[8px] flex gap-[6px] items-center">
+            <input className="field-input w-[170px] py-[4px] text-[12px]" placeholder="Find a stat or node…" value={query} onChange={(e) => setQuery(e.target.value)} data-testid="lattice-search" aria-label="Find a stat or node" />
+            {matches && <span className="font-mono text-[10px] text-faint">{matches.size} match{matches.size === 1 ? '' : 'es'}</span>}
+            <button className="mini m-0 w-auto" onClick={() => setView(frontierView())} data-testid="lattice-frontier">FRONTIER</button>
+            <button className="mini m-0 w-auto" onClick={() => setView({ x: 0, y: 0, z: 1 })}>WHOLE TREE</button>
+          </div>
+          <div className="absolute left-[10px] bottom-[8px] [font:10px_var(--mono)] text-faint pointer-events-none">Drag to pan · scroll to zoom · a new ring opens every {RING_EVERY} levels · ring {rings} of an endless lattice</div>
         </div>
         <div className="grid [align-content:start] gap-[12px]">
           <div className="lattice-level">

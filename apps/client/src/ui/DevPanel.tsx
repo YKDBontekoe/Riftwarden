@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react';
 import type { Flow } from '../core/Flow';
 import type { Game } from '@riftwarden/game/core/Game';
 import type { EnemyKind } from '@riftwarden/rules/data/defs';
-import { THREAT_TIERS } from '@riftwarden/rules/progression/tiers';
 import type { BossId } from '@riftwarden/rules/survival/bosses';
 import { ELITE_IDS, ELITE_MODS, type EliteModId } from '@riftwarden/rules/survival/elites';
 import { EVENT_IDS, EVENTS, type EventId } from '@riftwarden/rules/survival/events';
@@ -64,10 +63,10 @@ export function DevPanel({ game, flow }: { game: Game; flow: Flow }) {
                 <button key={id} onClick={act(`Event forced: ${EVENTS[id].name}`, () => game.dev.force({ event: id }))}>{EVENTS[id].name.toUpperCase()}</button>
               ))}
             </div>
-            <h4>THREAT TIER (NEW DEV RUN)</h4>
-            <div className="row">
-              {THREAT_TIERS.map((t) => (
-                <button key={t.id} onClick={() => void flow.abandonRun().then(() => flow.devDeploy(t.id))}>{t.roman}</button>
+            <h4>RIFT LEVEL (NEW DEV RUN)</h4>
+            <div className="row wrap">
+              {[1, 2, 3, 4, 5, 7, 10, 12, 14, 20, 30, 50].map((rl) => (
+                <button key={rl} onClick={() => void flow.abandonRun().then(() => flow.devDeploy(rl))}>RL {rl}</button>
               ))}
             </div>
           </section>

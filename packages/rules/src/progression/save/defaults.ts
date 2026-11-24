@@ -4,6 +4,7 @@ import { starterWeapon } from '../../loot/generate';
 import { newUid, SLOT_IDS, type SlotId } from '../items';
 import { STARTING_CREDITS } from '../../economy/config';
 import { generateMarket, progressLevel } from '../../economy/market';
+import { ALL_LOOT_LOCKS, lootLocks } from '../unlocks';
 import { LoadoutPreset, PRESET_COUNT, SAVE_VERSION, STORAGE_CAPACITY, SaveData, TierRecord, emptyEconomy, emptyProgress } from './types';
 
 export const DEFAULT_FACILITIES = ['command', 'deployment', 'configuration', 'storage', 'workshop', 'merchant', 'modules', 'salvage', 'fabricate'];
@@ -38,7 +39,8 @@ export function createDefaultSave(now = Date.now(), ids: { profileId?: string; s
     activeRun: null,
     base: { layoutVersion: 2, placeables: DEFAULT_PLACEABLES.map((p) => structuredCloneSafe(p)), facilities: [...DEFAULT_FACILITIES], structure: emptyStructure(), stations: {}, blueprints: [], owned: {} },
     tutorial: { done: [], skipped: false },
-    market: generateMarket(profileId, 0, { level: 1, tier: 1 }, now),
+    // A fresh warden's locks are fixed (never the automation switch), so genesis documents stay reproducible.
+    market: generateMarket(profileId, 0, { level: 1, tier: 1, locks: ALL_LOOT_LOCKS }, now),
     economy: emptyEconomy(),
     towers: { unlocked: [] },
     progress: emptyProgress(profileId),
@@ -46,8 +48,9 @@ export function createDefaultSave(now = Date.now(), ids: { profileId?: string; s
 }
 
 /** Progress inputs for merchant stock and fabrication (best loot level reached, unlocked tier). */
-export function marketProgress(data: Pick<SaveData, 'records' | 'threat'> & { base?: SaveData['base'] }): { level: number; tier: number; extra: number } {
-  return { level: progressLevel(data.records, data.threat.unlocked), tier: data.threat.unlocked, extra: facilityCount(data, 'marketUplink') * 2 };
+export function marketProgress(data: Pick<SaveData, 'records' | 'threat'> & { base?: SaveData['base']; progress?: SaveData['progress'] }): { level: number; tier: number; extra: number; locks: string[] } {
+  const locks = data.progress ? lootLocks({ progress: data.progress, threat: data.threat }) : [];
+  return { level: progressLevel(data.records, data.threat.unlocked), tier: data.threat.unlocked, extra: facilityCount(data, 'marketUplink') * 2, locks };
 }
 
 /** M7: number of a functional facility placed in the HQ. */

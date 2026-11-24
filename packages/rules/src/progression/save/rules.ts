@@ -1,14 +1,22 @@
+import { checkpointsNeeded, updateBoard } from '../seasons';
+import { MAX_TIER } from './coerce';
+import { breakthroughItem, breakthroughShards, isBreakthrough, newCodexEntries, PINNACLE } from '../spikes';
+import { bankMastery } from '../mastery';
 import { storageExpansionCost, STORAGE_EXPANSION } from '../../loot/economy';
 import { rarity } from '../../loot/rarity';
 import { fitsSlot, getSlot, type ItemInstance, SLOT_IDS, type SlotId, defaultSlot } from '../items';
 import type { Rewards, RunResult } from '../run';
-import { CHECKPOINT_INTERVAL, unlocksNextTier } from '../tiers';
+import { CHECKPOINT_INTERVAL } from '../tiers';
+import { lockedFamiliesOf, lockedSlots, lootLocks } from '../unlocks';
+
+/** The Rift Level an active run plays at: deploy level + Rift Surges taken on its map. */
+export const runLevel = (a: { tier: number; map?: { surge?: number } | null }): number => a.tier + (a.map?.surge ?? 0);
 import { dismantleYield, MAX_BALANCE } from '../../economy/config';
 import { HISTORY_LIMIT, MAX_XP, RunHistoryEntry, STORAGE_CAPACITY, SaveData, TierRecord } from './types';
 import { emptyRecord, rotateMarket } from './defaults';
 import { sanitizeItem } from './sanitize';
 import { allOwnedUids, equippedItem, itemByUid, slotOf } from './ownership';
-import { newMapState, resumable, type RunMapState } from '../../runmap/state';
+import { maxSurges, newMapState, resumable, type RunMapState, sanitizeMapState } from '../../runmap/state';
 import { pathCode } from '../../war/world';
 
 // ------------------------------------------------------------------ mutations (game rules)
@@ -73,9 +81,10 @@ export function resolveInterruptedRun(data: SaveData, now = Date.now(), opts: { 
   return entry;
 }
 
-export function beginRun(data: SaveData, runId: string, tier: number, now = Date.now(), opts: { mapSeed?: number; mode?: 'defense' | 'survival' } = {}): void {
+export function beginRun(data: SaveData, runId: string, tier: number, now = Date.now(), opts: { mapSeed?: number; mode?: 'defense' | 'survival'; locks?: string[] } = {}): void {
   resolveInterruptedRun(data, now);
   data.activeRun = { id: runId, tier, startedAt: now, bankedThroughWave: 0, salvageSecured: 0, itemsSecured: 0, creditsSecured: 0, componentsSecured: 0 };
+  if (opts.locks?.length) data.activeRun.locks = [...opts.locks];
   if (opts.mapSeed) {
     data.activeRun.map = newMapState(opts.mapSeed);
     data.activeRun.nodeBank = 0;
@@ -87,7 +96,21 @@ export function beginRun(data: SaveData, runId: string, tier: number, now = Date
 export function saveMapProgress(data: SaveData, runId: string, map: RunMapState): boolean {
   const a = data.activeRun;
   if (!a || a.id !== runId || !a.map) return false;
-  a.map = JSON.parse(JSON.stringify(map)) as RunMapState;
+  const next = sanitizeMapState(JSON.parse(JSON.stringify(map)));
+  if (!next || next.seed !== a.map.seed) return false;
+  // Untrusted input (synced entries): a node is cleared and a Rift Surge taken at most once per update, so a client
+  // cannot claim levels (and their loot) it never played.
+  const prev = a.map;
+  next.cleared = Math.min(next.cleared, prev.cleared + 1);
+  const surge = Math.min(next.surge ?? 0, (prev.surge ?? 0) + 1, maxSurges(next.cleared));
+  if (surge > 0) {
+    next.surge = surge;
+    next.surgeAt = surge > (prev.surge ?? 0) ? next.cleared : Math.min(next.surgeAt ?? 0, next.cleared);
+  } else {
+    delete next.surge;
+    delete next.surgeAt;
+  }
+  a.map = next;
   return true;
 }
 
@@ -124,9 +147,36 @@ export function bankRewards(data: SaveData, runId: string, wave: number, rewards
   a.bankedThroughWave = wave;
   // Validated in one step (application-level atomicity): applyBanked sanitizes every item first.
   applyBanked(data, a, rewards);
-  const rec = record(data, a.tier);
+  // Checkpoints count on the level the run plays at (deploy level + Rift Surges taken on the map).
+  const rl = runLevel(a);
+  const rec = record(data, rl);
   rec.checkpoints++;
-  if (unlocksNextTier(a.tier, wave, opts.bosses ?? 0) && data.threat.unlocked < a.tier + 1) data.threat.unlocked = a.tier + 1;
+  if (rl < MAX_TIER && rec.checkpoints >= checkpointsNeeded(data, rl) && data.threat.unlocked < rl + 1) {
+    data.threat.unlocked = rl + 1;
+    grantBreakthrough(data, rl);
+  }
+  updateBoard(data, a.startedAt);
+  void opts;
+  return true;
+}
+
+/**
+ * Breakthrough (every fifth Rift Level cleared): a guaranteed cache item one rarity above the level's ordinary drops,
+ * rift shards and a title. Deterministic per profile + level, granted once.
+ */
+export function grantBreakthrough(data: SaveData, cleared: number): boolean {
+  if (!isBreakthrough(cleared) || data.breakthroughs?.includes(cleared)) return false;
+  const locks = lootLocks(data);
+  const raw = breakthroughItem(data.profile.id, cleared, { families: lockedFamiliesOf(locks), components: locks.filter((l) => l.startsWith('comp:')) });
+  const it = sanitizeItem(raw);
+  if (it && !allOwnedUids(data).includes(it.uid)) {
+    data.items.push(it);
+    data.storage.uids.push(it.uid);
+    const found = newCodexEntries(data.codex ?? [], [it]);
+    if (found.length) data.codex = [...(data.codex ?? []), ...found.map((c) => c.id)];
+  }
+  data.resources.shards = Math.min(MAX_BALANCE, data.resources.shards + breakthroughShards(cleared));
+  data.breakthroughs = [...(data.breakthroughs ?? []), cleared].sort((a, b) => a - b);
   return true;
 }
 
@@ -147,6 +197,8 @@ function applyBanked(data: SaveData, a: NonNullable<SaveData['activeRun']>, rewa
   const xp = Math.max(0, Math.floor(rewards.xp ?? 0));
   a.salvageSecured += s;
   data.progress.xp = Math.min(MAX_XP, data.progress.xp + xp);
+  const mastery = bankMastery(data.progress.mastery, rewards.mastery);
+  if (mastery) data.progress.mastery = mastery;
   a.itemsSecured += incoming.length;
   a.creditsSecured += cr;
   a.componentsSecured += co;
@@ -157,6 +209,14 @@ function applyBanked(data: SaveData, a: NonNullable<SaveData['activeRun']>, rewa
   data.economy.stats.creditsEarned += cr;
   data.totals.salvageSecured += s;
   data.totals.itemsSecured += incoming.length;
+  // Pinnacle keys and the codex: first finds pay a one-time shard bonus.
+  const keys = Math.max(0, Math.floor(rewards.keys ?? 0));
+  if (keys) data.pinnacle = { runs: data.pinnacle?.runs ?? 0, keys: Math.min(PINNACLE.maxKeys, (data.pinnacle?.keys ?? 0) + keys) };
+  const found = newCodexEntries(data.codex ?? [], incoming);
+  if (found.length) {
+    data.codex = [...(data.codex ?? []), ...found.map((c) => c.id)];
+    data.resources.shards = Math.min(MAX_BALANCE, data.resources.shards + found.reduce((t, c) => t + c.shards, 0));
+  }
   // Banking never discards items: storage may exceed capacity (deployment is then blocked).
   data.items.push(...incoming);
   data.storage.uids.push(...incoming.map((i) => i.uid));
@@ -221,6 +281,8 @@ export function recordRun(data: SaveData, result: RunResult): boolean {
     }
     // XP banked at checkpoints is already applied; the end of the run adds what was kept.
     data.progress.xp = Math.min(MAX_XP, data.progress.xp + Math.max(0, Math.floor(result.xpKept ?? 0)));
+    const mk = bankMastery(data.progress.mastery, result.masteryKept);
+    if (mk) data.progress.mastery = mk;
     data.totals.runs++;
     data.totals.kills += result.kills;
     data.totals.itemsLost += result.itemsLost;
@@ -287,8 +349,9 @@ export function equipFromStorage(data: SaveData, uid: string, slot?: SlotId): bo
   const idx = data.storage.uids.indexOf(uid);
   const item = itemByUid(data, uid);
   if (idx < 0 || !item) return false;
-  const target = slot ?? defaultSlot(item.category, data.loadout);
-  if (!target || !fitsSlot(item, target)) return false;
+  const locked = lockedSlots(data);
+  const target = slot ?? defaultSlot(item.category, data.loadout, locked);
+  if (!target || !fitsSlot(item, target) || locked.includes(target)) return false;
   data.storage.uids.splice(idx, 1);
   const prev = data.loadout[target];
   if (prev) data.storage.uids.push(prev);
@@ -314,8 +377,10 @@ export function applyLoadout(data: SaveData, slots: Partial<Record<SlotId, strin
   if (data.activeRun && !opts.ignoreActiveRun) return false;
   let changed = false;
   const owned = new Set(data.items.map((i) => i.uid));
+  // Run results may return gear to any slot it left from; presets cannot fill slots the warden has not unlocked.
+  const locked = opts.ignoreActiveRun ? [] : lockedSlots(data);
   for (const slot of SLOT_IDS) {
-    if (!(slot in slots)) continue;
+    if (!(slot in slots) || (locked.includes(slot) && slots[slot])) continue;
     const want = slots[slot] ?? null;
     if (data.loadout[slot] === want) continue;
     if (want === null) {

@@ -1,7 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import { normalizeCode, parseClientMsg, PROTOCOL_VERSION, RateLimiter } from '@riftwarden/protocol/protocol';
 import { opError, runOp } from '@riftwarden/rules/progression/ops';
 import { createDefaultSave } from '@riftwarden/rules/progression/save';
+import { setUnlockAll } from '@riftwarden/rules/progression/unlocks';
+
+// Legacy rules suites exercise late systems on fresh profiles: staged unlocks are covered by tests/unlocks.test.ts.
+beforeAll(() => setUnlockAll(true));
+afterAll(() => setUnlockAll(false));
 
 const rich = () => {
   const d = createDefaultSave(1);

@@ -3,7 +3,8 @@ import type { Flow } from '../core/Flow';
 import { buyPrice, type Cost, dismantleYield, MARKET, sellPrice } from '@riftwarden/rules/economy/config';
 import { type MarketEntry, type MerchantId } from '@riftwarden/rules/economy/market';
 import { qualityOdds, QUALITIES, type QualityDef, type Recipe, recipeBases, RECIPES, unlockedFor } from '@riftwarden/rules/economy/recipes';
-import { craftCostFor, fabricationLevel, previewDismantle, protectionReason, refreshCost } from '@riftwarden/rules/economy/transactions';
+import { craftCostFor, fabricationLevel, heavyCrafts, previewDismantle, protectionReason, refreshCost } from '@riftwarden/rules/economy/transactions';
+import { HEAVY_ESCALATION } from '@riftwarden/rules/economy/recipes';
 import { fmtNum } from '@riftwarden/rules/combat/stats';
 import { rarity, RARITIES } from '@riftwarden/rules/loot/rarity';
 import { CATEGORY_LABEL, type Category, type ItemInstance } from '@riftwarden/rules/loot/types';
@@ -483,7 +484,7 @@ export function FabricateTerminal({ flow, close }: { flow: Flow; close: () => vo
   return (
     <Shell code="FB-08" title="FABRICATOR" sub={`Manufacture equipment from materials · output level ${level}`} close={close} wide accent="amber">
       <div className="market-head">
-        <div className="faint small">Output level follows your best cleared wave and threat tier. Crafted items use the same generator as enemy loot.</div>
+        <div className="faint small">Output level follows the deepest wave you cleared on your highest Rift Level. Crafted items use the same generator as enemy loot.</div>
         <ResourceBar save={save} cost={unlock.ok ? cost : undefined} compact />
       </div>
       <div className="fab-grid">
@@ -527,6 +528,13 @@ export function FabricateTerminal({ flow, close }: { flow: Flow; close: () => vo
               <CostLine cost={recipe.output.give} label="PRODUCES" />
             </div>
           ) : null}
+          {isItem && q.heavy && (
+            <div className="text-[12.5px] text-muted" data-testid="craft-escalation">
+              {heavyCrafts(save) > 0
+                ? <>Heavy fabrication this rotation: <b className="text-amber">{heavyCrafts(save)}</b> · next costs <b className="text-amber">+{Math.round(HEAVY_ESCALATION.step * Math.min(HEAVY_ESCALATION.max, heavyCrafts(save)) * 100)}%</b>. Resets when the merchants rotate (after a run).</>
+                : <>Superior and better grades cost {Math.round(HEAVY_ESCALATION.step * 100)}% more for each one made this rotation (resets after a run).</>}
+            </div>
+          )}
           <div className="buy-box">
             <div>
               <span className="font-mono text-[9.5px] tracking-[0.16em] text-faint">COST</span>

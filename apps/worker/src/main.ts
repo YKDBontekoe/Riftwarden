@@ -5,12 +5,16 @@
 import { createServer, type Socket } from 'node:net';
 import { FrameReader, frame } from './frames';
 import { createLogger } from './telemetry';
+import { setUnlockAll } from '@riftwarden/rules/progression/unlocks';
 
 const role = process.env.RIFT_WORKER_ROLE ?? 'rules';
 const listen = process.env.RIFT_WORKER_LISTEN ?? (role === 'sim' ? '127.0.0.1:7201' : '127.0.0.1:7101');
 const [host, port] = listen.includes(':') ? [listen.slice(0, listen.lastIndexOf(':')), Number(listen.slice(listen.lastIndexOf(':') + 1))] : ['127.0.0.1', Number(listen)];
 const telemetry = createLogger(`riftwarden-worker-${role}`, process.env.RIFT_BUILD ?? 'dev');
 const log = telemetry.log;
+// Test servers only: every staged unlock open, matching a `?test&account&unlocked` client (suites that need late
+// systems such as HQ construction on a fresh account). Production never sets RIFT_TEST.
+if (process.env.RIFT_TEST === '1' && process.env.RIFT_UNLOCK_ALL === '1') setUnlockAll(true);
 
 function serve(onSocket: (sock: Socket, onFrame: (f: Uint8Array) => void) => void, onFrameFor: (sock: Socket) => (f: Uint8Array) => void) {
   const server = createServer((sock) => {

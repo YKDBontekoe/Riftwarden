@@ -1,3 +1,4 @@
+import { rarity, rarityCeiling } from '../loot/rarity';
 import { mulberry32 } from '../combat/damage';
 import type { Category } from '../loot/types';
 import type { RarityId } from '../loot/rarity';
@@ -26,8 +27,12 @@ const STOCK_RARITY: [RarityId, number, number][] = [
   ['epic', 15, 650],
 ];
 
-/** Merchant stock of a node: three items (one is always rare+) and the service prices. */
-export function merchantStock(nodeSeed: number, wave: number): { items: StockOffer[]; services: Record<ServiceId, number> } {
+/**
+ * Merchant stock of a node: three items (one is always rare+, never above the Rift Level's own drop ceiling, so no
+ * epics before RL 3) and the service prices.
+ */
+export function merchantStock(nodeSeed: number, wave: number, rl = 99): { items: StockOffer[]; services: Record<ServiceId, number> } {
+  const ceiling = rarity(rarityCeiling(rl)).index;
   const r = mulberry32(h32(nodeSeed >>> 0, 0x5701));
   const k = priceScale(wave);
   const items: StockOffer[] = [];
@@ -42,6 +47,7 @@ export function merchantStock(nodeSeed: number, wave: number): { items: StockOff
       }
     }
     if (i === 0 && pick[0] === 'uncommon') pick = STOCK_RARITY[1];
+    while (rarity(pick[0]).index > ceiling && pick !== STOCK_RARITY[0]) pick = STOCK_RARITY[STOCK_RARITY.indexOf(pick) - 1];
     const category = STOCK_CATS[Math.floor(r() * STOCK_CATS.length) % STOCK_CATS.length];
     items.push({ key: `s${i}`, category, rarity: pick[0], price: Math.round(pick[2] * k), seed: h32(nodeSeed >>> 0, 0x1e7 + i) });
   }

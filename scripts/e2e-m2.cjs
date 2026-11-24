@@ -572,9 +572,11 @@ const savedItems = (p) => p.evaluate(() => JSON.parse(JSON.stringify(window.__ri
   const body = JSON.stringify(m1save);
   ({ b, ctx, p, errs } = await launch({ 'riftwarden.save': `{"v":1,"sum":"${fnv(body)}","data":${body}}` }));
   let h = await p.evaluate(() => ({ status: window.__rift.profile.loadStatus, save: window.__rift.profile.save }));
-  check('H1 M1 save loads and migrates', h.status === 'loaded' && h.save.version >= 2 && h.save.profile.callsign === 'VETERAN' && h.save.resources.salvage === 640 && h.save.threat.unlocked === 2, h.status);
-  const st1 = h.save.items.find((i) => i.uid === 'it_m1_starter');
-  check('H2 legacy weapon became a level-1 common repeater with the same damage', st1 && st1.level === 1 && st1.rarity === 'common' && st1.weapon.damage === 13 && h.save.loadout.weapon === 'it_m1_starter');
+  // The full chain ends in the v11 Rift Levels restart (owner decision): identity survives, progression restarts.
+  // The step-by-step M1 -> M2 item/loadout migration is covered by tests/save-m2.test.ts (chain stopped at v10).
+  check('H1 M1 save loads and migrates (v11 restart keeps the callsign)', h.status === 'loaded' && h.save.version >= 11 && h.save.profile.callsign === 'VETERAN' && h.save.wiped?.from === 10 && h.save.threat.unlocked === 1, h.status);
+  const st1 = h.save.items.find((i) => i.uid === h.save.loadout.weapon);
+  check('H2 the restarted profile deploys with a valid level-1 starter repeater', st1 && st1.level === 1 && st1.rarity === 'common' && st1.weapon.damage > 0);
   check('H3 storage expanded to the M2 capacity, presets added', h.save.storage.capacity === 50 && h.save.presets.length === 3);
   await p.click('text=ENTER HEADQUARTERS');
   await waitFor(p, () => window.__rift.state().screen === 'home');

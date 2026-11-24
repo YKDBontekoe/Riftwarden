@@ -5,7 +5,8 @@ import type { Flow } from '../core/Flow';
 import { MAX_PLAYERS, normalizeCode } from '@riftwarden/protocol/protocol';
 import type { NetState } from '@riftwarden/game/net/NetClient';
 import { rarity } from '@riftwarden/rules/loot/rarity';
-import { THREAT_TIERS } from '@riftwarden/rules/progression/tiers';
+import { getTier } from '@riftwarden/rules/progression/tiers';
+import { RiftLevelPicker, savePower } from './RiftLevel';
 import { SLOT_CSS } from '@riftwarden/game/visuals/droneModel';
 import { useSave } from './App';
 import { inviteCode } from './router';
@@ -113,7 +114,7 @@ export function CoopPanel({ flow, compact }: { flow: Flow; compact?: boolean }) 
 
   const link = `${location.origin}${location.pathname}#/join/${lobby.code}`;
   const allReady = lobby.players.filter((p) => p.connected && !p.host).every((p) => p.ready);
-  const tier = THREAT_TIERS.find((t) => t.id === lobby.tier) ?? THREAT_TIERS[0];
+  const tier = getTier(lobby.tier);
   return (
     <div className="coop" data-testid="coop-lobby">
       <div className="lobby-head">
@@ -156,13 +157,10 @@ export function CoopPanel({ flow, compact }: { flow: Flow; compact?: boolean }) 
         ))}
       </div>
       <div className="lobby-tier">
-        <span>THREAT TIER</span>
-        {THREAT_TIERS.map((t) => (
-          <button key={t.id} data-testid={`lobby-tier-${t.id}`} className={`mini ${t.id === lobby.tier ? 'on' : ''}`} disabled={!host || t.id > lobby.maxTier || lobby.state !== 'lobby'} title={t.id > lobby.maxTier ? 'Every warden must have unlocked this tier' : t.name} onClick={() => flow.net?.send({ t: 'tier', tier: t.id })}>
-            {t.roman}
-          </button>
-        ))}
-        <em>{tier.name}</em>
+        <span>RIFT LEVEL</span>
+        <div className="min-w-[280px] flex-1" title="Every warden must have unlocked the level">
+          <RiftLevelPicker value={lobby.tier} unlocked={lobby.maxTier} power={savePower(save)} disabled={!host || lobby.state !== 'lobby'} onPick={(rl) => flow.net?.send({ t: 'tier', tier: rl })} />
+        </div>
       </div>
       <LobbyWar flow={flow} host={host} node={lobby.node} disabled={lobby.state !== 'lobby'} />
       <div className="lobby-tier lobby-mode">
@@ -182,7 +180,7 @@ export function CoopPanel({ flow, compact }: { flow: Flow; compact?: boolean }) 
         )}
         {host && (
           <button className="primary" data-testid="lobby-start" disabled={!allReady || lobby.state !== 'lobby'} onClick={() => flow.net?.send({ t: 'start' })}>
-            {allReady ? `DEPLOY TEAM · TIER ${tier.roman}` : 'WAITING FOR READY'}
+            {allReady ? `DEPLOY TEAM · RL ${tier.id}` : 'WAITING FOR READY'}
           </button>
         )}
         {!host && lobby.state === 'lobby' && (

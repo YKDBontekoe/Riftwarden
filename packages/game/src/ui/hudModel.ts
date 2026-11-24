@@ -42,6 +42,10 @@ export interface LootTargetInput {
   cargoFull: boolean;
   /** Item currently in the slot this would go to. */
   equipped: { name: string; level: number; rarity: string } | null;
+  /** Loot feedback (LootVerdicts): beats everything owned of its kind, swap verdict, levels above the drop baseline. */
+  newBest?: boolean;
+  verdict?: string | null;
+  levelDelta?: number;
 }
 
 /** Prompt card for the pickup the drone is aiming at (modules have no slot, so no comparison). */
@@ -60,6 +64,9 @@ export function lootTargetInfo(i: LootTargetInput): LootTargetInfo {
     equippedName: cmp?.name ?? null,
     equippedLevel: i.equipped?.level ?? 0,
     equippedRarity: i.equipped?.rarity ?? null,
+    newBest: !!i.newBest,
+    verdict: i.verdict ?? null,
+    levelDelta: i.levelDelta ?? 0,
   };
 }
 

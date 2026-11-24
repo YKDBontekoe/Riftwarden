@@ -1,3 +1,5 @@
+import { useSyncExternalStore } from 'react';
+import { isUnlocked, lockReason, STATION_FEATURE, unlockDef } from '@riftwarden/rules/progression/unlocks';
 import type { Flow } from '../core/Flow';
 import { CURRENCIES, currencyTooltip } from '@riftwarden/rules/economy/currencies';
 import { HQ_STATIONS } from '@riftwarden/rules/home/layout';
@@ -34,6 +36,7 @@ export function WardenProgress({ flow }: { flow: Flow }) {
 
 /** Every HQ station: what it is for, which currencies it uses, and a ping to find it. */
 export function StationDirectory({ flow, close }: { flow: Flow; close: () => void }) {
+  const save = useSyncExternalStore(flow.profile.store.subscribe, flow.profile.store.get).save;
   return (
     <>
       <div className="col-label">STATION DIRECTORY</div>
@@ -41,6 +44,7 @@ export function StationDirectory({ flow, close }: { flow: Flow; close: () => voi
         {HQ_STATIONS.map((st) => {
           const info = STATION_INFO[st.id];
           if (!info) return null;
+          const locked = STATION_FEATURE[st.id] ? lockReason(save, STATION_FEATURE[st.id]) : null;
           return (
             <button
               key={st.id}
@@ -53,7 +57,7 @@ export function StationDirectory({ flow, close }: { flow: Flow; close: () => voi
             >
               <FieldArt name={stationArtwork(st.id)} className="directory-art" />
               <b><FieldIcon name={STATION_ICON[st.id]} /> {info.name.toUpperCase()}</b>
-              <span>{info.purpose}</span>
+              {locked ? <span className="text-orange" data-testid={`dir-locked-${st.id}`}>⨯ {locked}</span> : <span>{info.purpose}</span>}
               <small>
                 {st.area}
                 {info.uses.length > 0 && <span className="directory-currencies">{info.uses.map((k) => <i key={k} className={CURRENCIES[k].cls} title={CURRENCIES[k].name}><FieldIcon name={CURRENCY_ICON[k]} /></i>)}</span>}
@@ -67,6 +71,9 @@ export function StationDirectory({ flow, close }: { flow: Flow; close: () => voi
 }
 
 /** XP gained (this run) with the resulting level and any level-ups. */
+/** Warden level that opens the Neural Lattice (progression/unlocks). */
+const LATTICE_LEVEL = (() => { const u = unlockDef('station:lattice'); return u && 'warden' in u.by ? u.by.warden : 1; })();
+
 export function XpGain({ gained, totalAfter, label = 'WARDEN XP' }: { gained: number; totalAfter: number; label?: string }) {
   const after = levelInfo(totalAfter);
   const before = levelInfo(Math.max(0, totalAfter - gained));
@@ -81,7 +88,7 @@ export function XpGain({ gained, totalAfter, label = 'WARDEN XP' }: { gained: nu
       <div className="xp-bar">
         <i style={{ width: `${Math.round(after.frac * 100)}%` }} />
       </div>
-      {ups > 0 && <small>Spend skill points at the Neural Lattice in the drone bay.</small>}
+      {ups > 0 && <small>{isUnlocked({ progress: { xp: totalAfter }, threat: { unlocked: 1 } }, 'station:lattice') ? 'Spend skill points at the Neural Lattice in the drone bay.' : `Skill points wait for the Neural Lattice (opens at Warden level ${LATTICE_LEVEL}).`}</small>}
     </div>
   );
 }

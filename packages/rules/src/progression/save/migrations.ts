@@ -4,6 +4,7 @@ import { isRarity, rarity } from '../../loot/rarity';
 import { STARTING_CREDITS } from '../../economy/config';
 import { SAVE_VERSION } from './types';
 import { Obj, arr, obj } from './coerce';
+import { createDefaultSave } from './defaults';
 
 // ------------------------------------------------------------------ migrations
 
@@ -80,6 +81,25 @@ export const MIGRATIONS: Record<number, (data: Obj) => Obj> = {
    * (secured checkpoints, kills, bosses, elites, milestones) so they do not restart at level 1.
    * The skill tree starts unallocated (seed and validation via sanitize).
    */
+  /**
+   * v10 -> v11: the Rift Level progression (docs/progression-design.md). The loot curve changed completely, so
+   * progression restarts (owner decision): items, resources, records, levels, tree, HQ construction and market are
+   * reset; the profile id, callsign, creation time and tutorial survive. Deterministic (ids and times come from the
+   * old document), so the server and every device migrate a stored profile to the same document.
+   */
+  10: (d) => {
+    const p = obj(d.profile);
+    const id = typeof p.id === 'string' && p.id ? p.id : 'pf_migrated';
+    const at = typeof p.lastSavedAt === 'number' && Number.isFinite(p.lastSavedAt) ? p.lastSavedAt : 0;
+    const fresh = createDefaultSave(at, { profileId: id, starterUid: `${id.slice(0, 40)}.rl` });
+    const tut = obj(d.tutorial);
+    return {
+      ...(fresh as unknown as Obj),
+      profile: { ...fresh.profile, callsign: typeof p.callsign === 'string' ? p.callsign : fresh.profile.callsign, createdAt: typeof p.createdAt === 'number' ? p.createdAt : at },
+      tutorial: { done: arr(tut.done).filter((x) => typeof x === 'string'), skipped: tut.skipped === true },
+      wiped: { from: 10, at },
+    };
+  },
   /** v9 -> v10: two ability slots and an ultimate slot (empty) in the loadout and every preset. */
   9: (d) => ({
     ...d,
@@ -108,10 +128,11 @@ export function veteranXp(d: Obj): number {
   return Math.floor(Math.min(5_000_000, xp));
 }
 
-export function migrate(data: unknown, fromVersion: number): { data: unknown; ok: boolean } {
+export function migrate(data: unknown, fromVersion: number, toVersion = SAVE_VERSION): { data: unknown; ok: boolean } {
   if (!Number.isInteger(fromVersion) || fromVersion < 1 || fromVersion > SAVE_VERSION) return { data, ok: false };
   let cur = obj(data);
-  for (let v = fromVersion; v < SAVE_VERSION; v++) {
+  const to = Math.min(SAVE_VERSION, Math.max(fromVersion, Math.floor(toVersion)));
+  for (let v = fromVersion; v < to; v++) {
     const step = MIGRATIONS[v];
     if (!step) return { data, ok: false };
     cur = step(cur);

@@ -1,10 +1,19 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import { levelForXp, levelInfo, pointsAt, ringsAt, xpFor, xpForLevel, xpToNext, XP } from '@riftwarden/rules/progression/level';
 import { RunLedger } from '@riftwarden/rules/progression/run';
-import { BRANCHES, CORE_ID, allocateBlocker, generateTree, pruneAllocation, respecCost, treeModifiers, treeRules } from '@riftwarden/rules/progression/skilltree';
+import { BRANCHES, CORE_ID, allocateBlocker, capScale,
+  generateTree,
+  MAX_RINGS,
+  ringScale,
+  RULE_CAP, pruneAllocation, respecCost, treeModifiers, treeRules } from '@riftwarden/rules/progression/skilltree';
 import { MIGRATIONS, SAVE_VERSION, bankRewards, beginRun, createDefaultSave, migrate, recordRun, sanitizeSave, treeSeedFor } from '@riftwarden/rules/progression/save';
 import { runOp } from '@riftwarden/rules/progression/ops';
 import { STAT_DEFS } from '@riftwarden/rules/combat/stats';
+import { setUnlockAll } from '@riftwarden/rules/progression/unlocks';
+
+// Legacy rules suites exercise late systems on fresh profiles: staged unlocks are covered by tests/unlocks.test.ts.
+beforeAll(() => setUnlockAll(true));
+afterAll(() => setUnlockAll(false));
 
 const sv = { elitesKilled: 0, bossesKilled: 0, events: [] as string[], milestones: [] as string[], hvtKilled: 0, dev: false };
 
@@ -99,7 +108,7 @@ describe('save v8', () => {
     delete v7.progress;
     (v7.totals as Record<string, number>).kills = 1000;
     v7.milestones = ['w10'];
-    const m = migrate(v7, 7);
+    const m = migrate(v7, 7, 10);
     expect(m.ok).toBe(true);
     const { data } = sanitizeSave(m.data);
     expect(data.version).toBe(SAVE_VERSION);
@@ -168,9 +177,33 @@ describe('procedural skill tree', () => {
     const all = t.nodes.map((n) => n.id);
     const mods = treeModifiers(8, all);
     const dmg = mods.find((m) => m.stat === 'weaponDamageMult' && m.op === 'pct')!;
-    expect(dmg.value).toBeLessThanOrEqual(0.03 * 12);
+    // The cap grows 3% per ring of the deepest allocated node (deep points keep paying), never beyond it.
+    expect(dmg.value).toBeLessThanOrEqual(0.03 * 12 * capScale(60));
+    expect(dmg.value).toBeGreaterThan(0.03 * 12);
     expect(dmg.value).toBeGreaterThan(0);
     expect(treeModifiers(8, [])).toEqual([]);
+  });
+
+  it('the tree is endless: deep rings lean on keystones and notables, values grow slowly, rules stay bounded', () => {
+    const t = generateTree(5, 60);
+    const ring = (r: number) => t.nodes.filter((n) => n.ring === r);
+    expect(ring(21).some((n) => n.kind === 'keystone')).toBe(false);
+    expect(ring(22).some((n) => n.kind === 'keystone')).toBe(true);
+    expect(ring(24).some((n) => n.kind === 'keystone')).toBe(true);
+    const share = (from: number, to: number) => {
+      const ns = t.nodes.filter((n) => n.ring >= from && n.ring <= to && n.kind !== 'keystone');
+      return ns.filter((n) => n.kind === 'notable').length / ns.length;
+    };
+    expect(share(41, 60)).toBeGreaterThan(share(2, 39) + 0.12);
+    expect(ringScale(10)).toBeCloseTo(2.35);
+    expect(ringScale(30)).toBeCloseTo(3.35);
+    // Revealing rings never changes earlier ones (ring 2000 is still reachable and finite).
+    const deep = generateTree(5, MAX_RINGS);
+    expect(deep.rings).toBe(MAX_RINGS);
+    expect(deep.byId.get(t.nodes[30].id)).toEqual(t.nodes[30]);
+    for (const n of deep.nodes.slice(-40)) for (const m of n.mods) expect(Number.isFinite(m.value)).toBe(true);
+    const keys = deep.nodes.filter((n) => n.rule?.xpMult).map((n) => n.id);
+    expect(treeRules(5, keys).xpMult).toBeLessThanOrEqual(RULE_CAP.xpMult);
   });
 
   it('keystone rules are read from allocated keystones only', () => {

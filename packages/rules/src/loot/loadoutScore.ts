@@ -34,14 +34,30 @@ export const SCORE_HELP: Record<ScoreKey, string> = {
 };
 export const SCORE_KEYS: ScoreKey[] = ['dps', 'ehp', 'mobility', 'towers'];
 
-export const COMPARISON_PRIORITIES = ['balanced', 'firepower', 'survivability', 'towers'] as const;
+export const COMPARISON_PRIORITIES = ['build', 'balanced', 'firepower', 'survivability', 'towers'] as const;
 export type ComparisonPriority = typeof COMPARISON_PRIORITIES[number];
-const WEIGHTS: Record<ComparisonPriority, Record<ScoreKey, number>> = {
+const WEIGHTS: Record<Exclude<ComparisonPriority, 'build'>, Record<ScoreKey, number>> = {
   balanced: { dps: 0.45, ehp: 0.35, mobility: 0.1, towers: 0.1 },
   firepower: { dps: 0.7, ehp: 0.15, mobility: 0.1, towers: 0.05 },
   survivability: { dps: 0.15, ehp: 0.7, mobility: 0.1, towers: 0.05 },
   towers: { dps: 0.1, ehp: 0.1, mobility: 0.1, towers: 0.7 },
 };
+
+/**
+ * Build-aware weights: start from balanced and shift toward what the current loadout invests in (a tower build
+ * cares about tower power, a mobility build about speed), so "is this an upgrade?" follows the build in hand.
+ */
+export function buildWeights(b: Pick<LoadoutScore, 'mobility' | 'towers'>): Record<ScoreKey, number> {
+  const clamp = (v: number, hi: number) => Math.max(0, Math.min(hi, Number.isFinite(v) ? v : 0));
+  const towers = 0.1 + clamp((b.towers - 100) / 100, 0.45);
+  const mobility = 0.1 + clamp((b.mobility - 100) / 60, 0.2);
+  const rest = Math.max(0.2, 1 - towers - mobility);
+  return { dps: rest * 0.56, ehp: rest * 0.44, mobility, towers };
+}
+
+export function weightsFor(priority: ComparisonPriority, base: Pick<LoadoutScore, 'mobility' | 'towers'>): Record<ScoreKey, number> {
+  return priority === 'build' ? buildWeights(base) : WEIGHTS[priority];
+}
 
 const live = (items: readonly (ItemInstance | null | undefined)[]) => items.filter((i): i is ItemInstance => !!i && i.category !== 'module');
 
@@ -103,7 +119,8 @@ export function swapImpact(equipped: readonly (ItemInstance | null)[], candidate
 /** Compare two scored loadouts (also used for engineering before/after previews). */
 export function impactBetween(b: LoadoutScore, a: LoadoutScore, priority: ComparisonPriority = 'balanced'): SwapImpact {
   const deltas = SCORE_KEYS.map((key) => ({ key, before: b[key], after: a[key], pct: rel(a[key], b[key]) })).filter((d) => Math.abs(d.pct) >= 0.001);
-  const score = deltas.reduce((s, d) => s + WEIGHTS[priority][d.key] * Math.max(-1, Math.min(1, d.pct)), 0);
+  const w = weightsFor(priority, b);
+  const score = deltas.reduce((s, d) => s + w[d.key] * Math.max(-1, Math.min(1, d.pct)), 0);
   const gains = deltas.some((d) => d.pct > 0);
   const losses = deltas.some((d) => d.pct < 0);
   let verdict: Verdict = 'same';

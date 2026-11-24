@@ -4,6 +4,7 @@ import { BASE_STATS, computeStats, mitigation, STAT_DEFS } from '@riftwarden/rul
 import { AFFIXES, affixDef } from '@riftwarden/rules/loot/affixes';
 import { BASES, baseDef } from '@riftwarden/rules/loot/bases';
 import { DROP_SOURCES, itemLevelFor, rollDrops } from '@riftwarden/rules/loot/drops';
+import { getTier } from '@riftwarden/rules/progression/tiers';
 import { compareItems, equipmentModifiers, itemModifiers, statPreview, weaponDefFor } from '@riftwarden/rules/loot/equipment';
 import { flatScale, generateItem, isValidItem, MAX_ITEM_LEVEL, maxTierFor, pctScale, starterWeapon } from '@riftwarden/rules/loot/generate';
 import { RARITIES, rarity, rarityOdds, rollRarity } from '@riftwarden/rules/loot/rarity';
@@ -132,7 +133,7 @@ describe('rarity rolls', () => {
 });
 
 describe('drop tables', () => {
-  const ctx = (wave: number, tier = 1) => ({ wave, tierLevelBonus: [0, 8, 18][tier - 1], tierLuck: [1, 1.35, 1.8][tier - 1] });
+  const ctx = (wave: number, tier = 1) => ({ wave, tier, tierLevelBonus: getTier(tier).lootLevelBonus, tierLuck: 1 });
 
   it('elites drop more often and better than standard enemies', () => {
     const rand = mulberry32(9);
@@ -152,16 +153,19 @@ describe('drop tables', () => {
     expect(w.some((d) => d.baseId === 'bulwark_plating')).toBe(false);
   });
 
-  it('item levels rise with waves and threat tiers', () => {
+  it('item levels come from the Rift Level; waves add at most one level band', () => {
     const rand = mulberry32(3);
     const avgLevel = (wave: number, tier: number) => {
       let s = 0;
       for (let i = 0; i < 2000; i++) s += itemLevelFor(ctx(wave, tier), 0, rand);
       return s / 2000;
     };
-    expect(avgLevel(10, 1)).toBeGreaterThan(avgLevel(5, 1) + 4);
-    expect(avgLevel(10, 2)).toBeGreaterThan(avgLevel(10, 1) + 6);
-    expect(avgLevel(10, 3)).toBeGreaterThan(avgLevel(10, 2) + 6);
+    expect(avgLevel(10, 1)).toBeGreaterThan(avgLevel(1, 1) + 3);
+    expect(avgLevel(10, 2)).toBeGreaterThan(avgLevel(10, 1) + 9);
+    expect(avgLevel(10, 3)).toBeGreaterThan(avgLevel(10, 2) + 9);
+    // A deep run never leaps a level: wave 500 on RL 1 stays below wave 1 of RL 3.
+    expect(avgLevel(500, 1)).toBeLessThan(avgLevel(1, 3));
+    expect(avgLevel(500, 1) - avgLevel(19, 1)).toBeLessThan(0.2);
   });
 
   it('first wave clear is a guaranteed drop; checkpoint caches are rare+', () => {

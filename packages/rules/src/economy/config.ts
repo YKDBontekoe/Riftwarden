@@ -255,8 +255,10 @@ export const MARKET = {
   moduleSlots: 6,
   /** Manual manifest refresh: credits × (1 + refreshes this rotation). Free rotation after every run. */
   refreshCost: (n: number) => 60 * (1 + Math.min(20, Math.max(0, n))),
-  /** Merchants never sell above epic: legendary and exotic gear stays a drop/fabrication prize. */
+  /** Merchants never sell above epic (and never above the Rift Level's own drops): legendary and exotic gear stays a drop/fabrication prize. */
   maxRarity: 'epic' as const,
+  /** The featured slot may stock a legendary from this Rift Level. */
+  featuredLegendaryAt: 9,
   equipmentLuck: 1.5,
   moduleLuck: 1.8,
   /** Material exchange: fixed packs with limited stock per rotation (no selling back). */

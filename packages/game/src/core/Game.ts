@@ -1,3 +1,9 @@
+import type { SeasonRuleId } from '@riftwarden/rules/progression/seasons';
+import { PINNACLE, pinnacleBoss } from '@riftwarden/rules/progression/spikes';
+import { gearPower } from '@riftwarden/rules/progression/riftLevel';
+import { type LootVerdictHost, LootVerdicts } from '../arena/LootVerdicts';
+import { baseDef } from '@riftwarden/rules/loot/bases';
+import { killMastery, masteryModifiers, type MasteryState } from '@riftwarden/rules/progression/mastery';
 import '../babylonSideEffects';
 import { sectorAffinity } from '@riftwarden/rules/combat/elements';
 import { Ray } from '@babylonjs/core/Culling/ray.core';
@@ -33,7 +39,7 @@ import { type LootHost, LootPickups } from '../arena/LootPickups';
 import { type TowerEdit, type TowerHost, TowerControl } from '../arena/TowerControl';
 import { planBlast } from '@riftwarden/rules/combat/blast';
 import { hintFor, lootTargetInfo, runHud } from '../ui/hudModel';
-import { rollLoot } from '@riftwarden/rules/loot/roll';
+import { nextPity, rollLoot } from '@riftwarden/rules/loot/roll';
 import { gearUniques } from '@riftwarden/rules/loot/uniques';
 import { loadoutScore } from '@riftwarden/rules/loot/loadoutScore';
 import { contactShadow } from '../visuals/grounding';
@@ -49,7 +55,7 @@ import { scrapValue } from '@riftwarden/rules/loot/economy';
 import { RUN_INCOME } from '@riftwarden/rules/economy/config';
 import { RunInventory } from '@riftwarden/rules/loot/runInventory';
 import type { ItemInstance } from '@riftwarden/rules/loot/types';
-import type { SlotId } from '@riftwarden/rules/progression/items';
+import { SLOT_IDS, type SlotId } from '@riftwarden/rules/progression/items';
 import { Construction } from '../defense/Construction';
 import { type Turret, type TurretContext, TurretManager } from '../defense/Turrets';
 import { type Behavior, type Enemy, type EnemyContext, EnemyManager } from '../enemies/EnemyManager';
@@ -57,7 +63,7 @@ import { Effects } from '../fx/Effects';
 import { MOVE, Player } from '../player/Player';
 import { type HitKind, hudStore, type LootTargetInfo, type Screen, uiEvents } from '../ui/store';
 import type { Rewards, RunLedger } from '@riftwarden/rules/progression/run';
-import { isCheckpointWave, type ThreatTier } from '@riftwarden/rules/progression/tiers';
+import { isCheckpointWave, lootLevel, type ThreatTier } from '@riftwarden/rules/progression/tiers';
 import { ArenaBuilder } from '../visuals/arena';
 import { Atmosphere } from '../visuals/atmosphere';
 import { PostFx } from '../visuals/postfx';
@@ -132,6 +138,18 @@ export interface ArenaConfig {
   tutorial?: TutorialHost;
   /** Warden skill tree (seed + allocated nodes), snapshotted at deployment. */
   tree?: { seed: number; allocated: readonly string[] };
+  /** Staged-unlock loot locks at deployment (`progression/unlocks` `lootLocks`; recorded with every loot roll). */
+  locks?: readonly string[];
+  /** Slots the warden has not unlocked (run equips refuse them). */
+  lockedSlots?: readonly SlotId[];
+  /** Weapon-family mastery at deployment (rank damage, perks, finishes). */
+  mastery?: MasteryState;
+  /** Best owned item power per kind at deployment (loot/feedback `bestPowers`): NEW BEST on pickups. */
+  ownedBest?: ReadonlyMap<string, number>;
+  /** A pinnacle run (a key was spent): the pinnacle boss leads wave 1 and drops the pinnacle table. */
+  pinnacle?: boolean;
+  /** Seasonal profile: the month's season rule (progression/seasons). */
+  seasonRule?: SeasonRuleId | null;
   /** Arena layout for this run (procedural from the run seed); defaults to the classic hand-built arena. */
   layout?: ArenaLayout;
   /** Run map node this arena plays (absent = classic endless run with checkpoint choices). */
@@ -213,6 +231,8 @@ export class Game {
   lootTarget: Pickup | null = null;
   /** Loot placement, landing/pickup presentation and targeting. */
   protected readonly pickups = new LootPickups(this.lootHost());
+  /** NEW BEST / verdict / item level of the targeted pickup (cached per item). */
+  readonly verdicts = new LootVerdicts(this.verdictHost());
   /** Bumped on every inventory/loadout change so UI can refresh without polling. */
   inventoryVersion = 0;
   /** Items granted by the most recent checkpoint cache (checkpoint panel). */
@@ -409,6 +429,11 @@ export class Game {
     this.loot = new LootField(scene, this.kit, this.pal);
     this.loot.onLand = (p) => this.pickups.landed(p);
     this.inventory = new RunInventory(cfg.loadout, cfg.run);
+    this.inventory.lockedSlots = cfg.lockedSlots ?? [];
+    cfg.run.powerAtStart ??= gearPower(Object.values(cfg.loadout));
+    // Season rule Bountiful Rift: +15% loot luck on every level (the server accepts up to x4 node/act luck).
+    if (cfg.seasonRule === 'bountiful') cfg.tier = { ...cfg.tier, lootLuck: cfg.tier.lootLuck * 1.15 };
+    this.weapon.finishFor = (f) => cfg.mastery?.[f]?.finish;
     if (cfg.node?.carry) this.inventory.adoptLoadout(cfg.node.carry.loadout);
     // Every map node rolls its own loot stream (a new arena must not replay the previous node's drops).
     const nodeSalt = cfg.node?.node.seed ?? 0;
@@ -577,7 +602,8 @@ export class Game {
       get planner() { return g.planner; }, // prettier-ignore
       get run() { return g.cfg.run; }, // prettier-ignore
       get build() { return g.director.build; }, // prettier-ignore
-      get lootLevelBonus() { return g.cfg.tier.lootLevelBonus; }, // prettier-ignore
+      lootLevelAt: (wave: number) => lootLevel(g.cfg.tier, wave),
+      get riftLevel() { return g.cfg.tier.id; }, // prettier-ignore
       get cores() { return g.wallet.cores; }, // prettier-ignore
       set cores(v: number) { g.wallet.cores = Math.max(0, Math.floor(v)); }, // prettier-ignore
       get reactorHp() { return g.reactorHp; }, // prettier-ignore
@@ -776,7 +802,7 @@ export class Game {
 
   /** Enemy level scale for armor (same growth as flat item stats at this wave/tier). */
   get attackerScale(): number {
-    return flatScale(this.waves.number + this.cfg.tier.lootLevelBonus);
+    return flatScale(lootLevel(this.cfg.tier, this.waves.number));
   }
 
   /**
@@ -809,7 +835,7 @@ export class Game {
    */
   rebuildStats(): void {
     this.gearEffects = gearUniques(this.inventory.equippedItems(this.weaponSlots.inactive));
-    const mods = [...equipmentModifiers(this.inventory.equippedItems(this.weaponSlots.inactive)), ...this.treeMods, ...this.modifiers, ...this.director.build.modifiers(), ...this.director.buffModifiers(), ...(this.node?.mods() ?? [])];
+    const mods = [...equipmentModifiers(this.inventory.equippedItems(this.weaponSlots.inactive)), ...this.treeMods, ...masteryModifiers(this.cfg.mastery, this.handFamily()), ...this.modifiers, ...this.director.build.modifiers(), ...this.director.buffModifiers(), ...(this.node?.mods() ?? [])];
     Object.assign(this.stats, computeStats(mods));
     this.player.applyStats(this.stats, this.attackerScale);
     this.tactical.rechargeMult = this.stats.tacticalRechargeMult;
@@ -866,8 +892,12 @@ export class Game {
   private rollFrom(src: DropSource, wave: number): ItemInstance[] {
     const run = this.cfg.run;
     const t = this.cfg.tier;
-    if (this.dropChanceMult === 1) run.lootJournal.push({ node: this.cfg.node?.node.id ?? null, draw: this.lootDraws, counter: this.lootCounter, source: src, wave, tier: { lootLevelBonus: t.lootLevelBonus, lootLuck: t.lootLuck, id: t.id }, faction: this.director.faction });
-    return rollLoot({ source: src, wave, tier: this.cfg.tier, rand: this.lootRand, nextUid: () => `${run.id}.${++this.lootCounter}`, originId: run.id, chanceMult: this.dropChanceMult, faction: this.director.faction });
+    const pity = run.pity;
+    const locks = this.cfg.locks?.length ? [...this.cfg.locks] : undefined;
+    if (this.dropChanceMult === 1) run.lootJournal.push({ node: this.cfg.node?.node.id ?? null, draw: this.lootDraws, counter: this.lootCounter, source: src, wave, tier: { lootLevelBonus: t.lootLevelBonus, lootLuck: t.lootLuck, id: t.id }, faction: this.director.faction, pity, locks });
+    const items = rollLoot({ source: src, wave, tier: this.cfg.tier, rand: this.lootRand, nextUid: () => `${run.id}.${++this.lootCounter}`, originId: run.id, chanceMult: this.dropChanceMult, faction: this.director.faction, pity, locks });
+    run.pity = nextPity(pity, items);
+    return items;
   }
 
   /** Roll drops for a source and place them physically around `at`. */
@@ -895,6 +925,17 @@ export class Game {
     return p;
   }
 
+  private verdictHost(): LootVerdictHost {
+    const g = this;
+    return {
+      get ownedBest() { return g.cfg.ownedBest ?? new Map<string, number>(); }, // prettier-ignore
+      runItems: () => g.inventory.entries().map((e) => e.item),
+      equippedList: () => SLOT_IDS.map((s) => g.inventory.equipped(s)),
+      replaced: (it) => g.inventory.equipped(g.inventory.targetSlot(it) ?? 'weapon'),
+      baseline: (wave) => lootLevel(g.cfg.tier, wave),
+    };
+  }
+
   private lootHost(): LootHost {
     const g = this;
     return {
@@ -918,7 +959,10 @@ export class Game {
       this.pickups.refused(p);
       return false;
     }
+    const v = this.verdicts.of(p.item, p.droppedWave);
     this.pickups.collected(p);
+    if (v.newBest) uiEvents.emit('alert', { text: `NEW BEST · ${p.item.name.toUpperCase()}`, tone: 'orange' });
+    this.verdicts.reset();
     if (this.lootTarget === p) this.lootTarget = null;
     this.inventoryVersion++;
     return true;
@@ -1231,6 +1275,11 @@ export class Game {
     this.construction.setActive(false);
     this.weapon.setHolstered(false);
     this.waves.reset();
+    // Pinnacle run: the summoned boss commands wave 1 (seed-decided Colossus or Overseer).
+    if (this.cfg.pinnacle) {
+      this.planner.force(1, { boss: pinnacleBoss(this.cfg.run.id) });
+      this.waves.recompose();
+    }
     this.node?.begin();
     sfx.setTactical(false);
     this.publishHud(true);
@@ -1547,8 +1596,20 @@ export class Game {
         this.abilities.ult = Math.min(1, this.abilities.ult + f);
       },
       hitstop: (s, k) => this.hitstop(s, k),
+      masteryKill: (e) => this.gainMastery(this.weapon.def.family, killMastery(e.def.role, e.elite)),
       damageEnemy: (...a) => this.damageEnemy(...a),
     };
+  }
+
+  /** Weapon-family mastery XP into the run's unsecured pool (the co-op server routes it to the shooter). */
+  protected gainMastery(family: WeaponFamily, xp: number): void {
+    const got = this.cfg.seasonRule === 'masteryFever' ? Math.round(xp * 1.5) : xp;
+    if (this.cfg.run.collect({ mastery: { [family]: got } })) uiEvents.emit('mastery', { family, xp: got });
+  }
+
+  /** Family of the weapon in hand (mastery modifiers follow it). */
+  protected handFamily(): WeaponFamily | null {
+    return baseDef(this.inventory.equipped(this.weaponSlots.active)?.defId ?? '')?.weapon?.family ?? null;
   }
 
   /** Fire an ability slot (RMB ability I, F ability II, T ultimate in combat). */
@@ -1687,6 +1748,9 @@ export class Game {
     if (boss) at.y = Math.min(at.y, 6);
     if (e.kind in DROP_SOURCES && e.def.role !== 'hvt' && e.tag !== 'summon') this.dropLoot(e.kind as DropSourceId, at);
     if (e.elite) this.dropFrom(this.survival.eliteSource(e), at);
+    if (boss && this.cfg.pinnacle) this.dropLoot('pinnacle', at);
+    // Pinnacle keys: elites on RL 8+ (own stream, like shards, so loot rolls never shift).
+    if (e.elite && this.cfg.tier.id >= PINNACLE.minRl && this.shardRand() < PINNACLE.keyChance(e.mods.length) * (this.cfg.seasonRule === 'keyRush' ? 2 : 1) && this.cfg.run.collect({ keys: 1 })) uiEvents.emit('alert', { text: 'PINNACLE KEY · bank it to summon a pinnacle boss', tone: 'orange' });
     this.enemies.kill(e, this.enemyFx, this.enemyCtx);
   }
 
@@ -2186,6 +2250,7 @@ export class Game {
         expiring: lt.expiring,
         cargoFull: this.inventory.cargoFull,
         equipped: cur ? { name: cur.name, level: cur.level, rarity: cur.rarity } : null,
+        ...this.verdicts.of(lt.item, lt.droppedWave),
       });
     }
     hudStore.set({

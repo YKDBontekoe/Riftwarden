@@ -121,7 +121,7 @@ export function Cores() {
   );
 }
 
-/** Threat tier, salvage (unsecured vs secured) and checkpoint progress. */
+/** Rift Level, salvage (unsecured vs secured) and checkpoint progress. */
 export function RunPanel() {
   const run = useHud((s) => s.run);
   const cargo = useHud((s) => s.cargo);
@@ -156,7 +156,7 @@ export function RunPanel() {
   return (
     <div className="run-panel panel-frame">
       <div className="flex items-baseline gap-[8px] mb-[4px]">
-        <span className="font-display font-[700] text-[15px] tracking-[0.14em] text-amber">TIER {tier.roman}</span>
+        <span className="font-display font-[700] text-[15px] tracking-[0.14em] text-amber">RL {tier.id}</span>
         <span className="text-[10px] tracking-[0.2em] text-faint">{tier.name}</span>
       </div>
       <div className="rp-row">

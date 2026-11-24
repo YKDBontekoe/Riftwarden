@@ -144,7 +144,7 @@ export function RegionMap(p: RegionMapProps) {
             {st && <circle className="wm-lib" r={r + 5} strokeDasharray={`${(circ * lib) / 100} ${circ}`} transform="rotate(-90)" />}
             <circle className="wm-badge" r={r} />
             <g className="wm-node-icon" transform={n.actBoss ? 'translate(-17 -17) scale(1.42)' : 'translate(-12 -12)'}>
-              <FieldIcon name={st?.corrupt ? 'corrupt' : NODE_ICON[n.kind]} />
+              <FieldIcon name={st?.corrupt ? 'corrupt' : NODE_ICON[n.kind]} size={24} />
             </g>
             {p.current === n.id && <circle className="wm-cur" r={r + 11} />}
             {st && <text className="wm-pct" y={r + 24}>{Math.round(lib)}%</text>}
@@ -152,7 +152,7 @@ export function RegionMap(p: RegionMapProps) {
               <g key={e.id} className={`wm-ev ev-${e.kind}`} transform={`translate(${r + 6} ${-r - 4 + i * 18})`}>
                 <circle r={12} />
                 <g className="wm-event-icon" transform="translate(-8 -8)">
-                  <FieldIcon name={e.kind === 'distress' ? 'corrupt' : e.kind === 'defense' ? 'survivability' : 'courier'} />
+                  <FieldIcon name={e.kind === 'distress' ? 'corrupt' : e.kind === 'defense' ? 'survivability' : 'courier'} size={16} />
                 </g>
                 <text className="wm-evt" x={16} y={5}>{hrs(e.until - now)}</text>
               </g>

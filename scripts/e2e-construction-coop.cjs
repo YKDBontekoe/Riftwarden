@@ -246,7 +246,7 @@ const cell = (i, j) => [2 + 5 * i + 2.5, -2.5 + 5 * j + 2.5];
     const { startStack } = await import('./lib/stack.mjs');
     // Shader compilation can exceed the initial countdown on software GL. Start waves
     // explicitly after the replicas load; the authoritative combat clock stays real-time.
-    const stack = await startStack({ port: 8090, simEnv: { RIFT_TEST_MANUAL_WAVES: '1' } });
+    const stack = await startStack({ port: 8090, simEnv: { RIFT_TEST_MANUAL_WAVES: '1' }, workerEnv: { RIFT_UNLOCK_ALL: '1' } });
     const clients = [];
     failureDetails = () => [stack.log(80), ...clients.map((pg, i) => `Client ${i + 1}:\n${pg.errs.join('\n')}`)].join('\n');
     // Each page signs in with the test login (through the Vite proxy) and boots again with the account.
@@ -257,7 +257,7 @@ const cell = (i, j) => [2 + 5 * i + 2.5, -2.5 + 5 * j + 2.5];
       clients.push(pg);
       const r = await ev(pg, (n) => fetch('/auth/test-login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: n }) }).then((x) => x.status), name);
       if (r !== 200) throw new Error(`test login ${r}`);
-      await pg.goto((process.env.RIFT_URL || 'http://localhost:5173/') + '?test&account');
+      await pg.goto((process.env.RIFT_URL || 'http://localhost:5173/') + '?test&account&unlocked');
       await waitFor(pg, () => window.__rift && window.__rift.state().screen === 'menu' && window.__session?.()?.status.get().state === 'idle' && window.__session().status.get().rev > 0);
       await ev(pg, () => window.__rift.stopLoop());
       return pg;

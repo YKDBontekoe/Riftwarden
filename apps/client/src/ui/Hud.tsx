@@ -1,3 +1,4 @@
+import { MasteryGainToast } from './Mastery';
 import { TutorialCard } from './TutorialCard';
 import { TeamHud, TeamTags } from './TeamHud';
 import { RunBadges } from './Roguelite';
@@ -45,6 +46,7 @@ export function Hud({ game }: { game: Game }) {
       <CenterPanel />
       <WeaponPanel />
       <Banner />
+      <MasteryGainToast />
       <Hint />
       <Respawn />
       <Perf />

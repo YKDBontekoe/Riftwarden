@@ -24,7 +24,27 @@ export interface RunMapState {
   next: string | null;
   /** Ledger counters at the resume point (kills, waves, secured totals, statistics). */
   ledger: Record<string, unknown> | null;
+  /** Rift Surges taken: the run plays at deploy level + surge (optional: absent = 0). */
+  surge?: number;
+  /** Nodes cleared when the last surge was taken (spacing rule, see `canSurge`). */
+  surgeAt?: number;
 }
+
+/**
+ * Rift Surge (progression design §11): travelling to the next combat node can raise the run's Rift Level by one for
+ * the rest of the run. Offered after 2 cleared nodes, then every 3 cleared nodes, never into a boss sector.
+ */
+export const SURGE = { firstAfter: 2, spacing: 3, max: 50 } as const;
+
+export function canSurge(m: Pick<RunMapState, 'cleared' | 'surge' | 'surgeAt'> | null | undefined): boolean {
+  if (!m) return false;
+  const n = m.surge ?? 0;
+  if (n >= SURGE.max) return false;
+  return n === 0 ? m.cleared >= SURGE.firstAfter : m.cleared - (m.surgeAt ?? 0) >= SURGE.spacing;
+}
+
+/** Most surges a run with `cleared` nodes can have taken (server plausibility bound). */
+export const maxSurges = (cleared: number): number => (cleared < SURGE.firstAfter ? 0 : Math.min(SURGE.max, 1 + Math.floor((cleared - SURGE.firstAfter) / SURGE.spacing)));
 
 export const newMapState = (seed: number): RunMapState => ({ seed: seed >>> 0 || 1, act: 1, current: null, path: [], cleared: 0, actsCleared: 0, carry: null, next: null, ledger: null });
 
@@ -54,5 +74,13 @@ export function sanitizeMapState(raw: unknown): RunMapState | null {
     carry: sanitizeCarry(r.carry),
     next,
     ledger,
+    ...surgeFields(r, n(r.cleared, 1e6)),
   };
+}
+
+function surgeFields(r: Record<string, unknown>, cleared: number): Pick<RunMapState, 'surge' | 'surgeAt'> {
+  const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? Math.max(0, Math.floor(v)) : 0);
+  // A surge is taken when leaving a node, after it counts as cleared (MapSession.leave).
+  const surge = Math.min(n(r.surge), maxSurges(cleared));
+  return surge ? { surge, surgeAt: Math.min(cleared, n(r.surgeAt)) } : {};
 }

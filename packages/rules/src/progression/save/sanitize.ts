@@ -1,3 +1,7 @@
+import { rolloverSeason } from '../seasons';
+import { PINNACLE, sanitizeCodex } from '../spikes';
+import { sanitizeMastery } from '../mastery';
+import { ALL_LOOT_LOCKS } from '../unlocks';
 import { sanitizeMapState } from '../../runmap/state';
 import { isDamageElement } from '../../combat/elements';
 import { SURVEY_DESK } from '../../home/layout';
@@ -315,6 +319,8 @@ function sanitizeEconomy(v: unknown): EconomyState {
   const e = emptyEconomy();
   e.tx = arr(r.tx).filter((x): x is string => typeof x === 'string').map((x) => x.slice(0, 64)).slice(-TX_HISTORY);
   e.crafts = int(r.crafts, 0);
+  const hv = obj(r.heavy);
+  if (typeof hv.rotation === 'number' && typeof hv.n === 'number') e.heavy = { rotation: int(hv.rotation, 0), n: int(hv.n, 0, 0, 1000) };
   const st = obj(r.stats);
   for (const k of Object.keys(e.stats) as (keyof EconomyStats)[]) e.stats[k] = int(st[k], 0);
   return e;
@@ -324,7 +330,7 @@ function sanitizeEconomy(v: unknown): EconomyState {
  * Validate an arbitrary object into a consistent SaveData. Never throws.
  * `repairs` lists the fixes applied (useful for diagnostics/tests).
  */
-export function sanitizeSave(raw: unknown, now = Date.now()): { data: SaveData; repairs: string[] } {
+export function sanitizeSave(raw: unknown, now = Date.now(), nested = false): { data: SaveData; repairs: string[] } {
   const repairs: string[] = [];
   const r = obj(raw);
   const def = createDefaultSave(now);
@@ -497,6 +503,9 @@ export function sanitizeSave(raw: unknown, now = Date.now()): { data: SaveData; 
       data.activeRun.nodeBank = int(ar.nodeBank, 0);
     }
     if (ar.mode === 'survival') data.activeRun.mode = 'survival';
+    const locks = arr(ar.locks).filter((x): x is string => typeof x === 'string' && ALL_LOOT_LOCKS.includes(x));
+    if (locks.length) data.activeRun.locks = [...new Set(locks)].sort();
+    if (ar.pinnacle === true) data.activeRun.pinnacle = true;
   }
 
   const base = obj(r.base);
@@ -527,6 +536,18 @@ export function sanitizeSave(raw: unknown, now = Date.now()): { data: SaveData; 
   data.market = sanitizeMarket(r.market, data, new Set(allOwnedUids(data)), repairs, now);
   data.economy = sanitizeEconomy(r.economy);
   data.progress = sanitizeProgress(r.progress, data.profile.id);
+  const codex = sanitizeCodex(r.codex);
+  if (codex.length) data.codex = codex;
+  const bt = arr(r.breakthroughs).filter((x): x is number => Number.isInteger(x) && (x as number) >= 5 && (x as number) % 5 === 0 && (x as number) <= MAX_TIER);
+  if (bt.length) data.breakthroughs = [...new Set(bt)].sort((x, y) => x - y);
+  const pn = obj(r.pinnacle);
+  if (Object.keys(pn).length) data.pinnacle = { keys: int(pn.keys, 0, 0, PINNACLE.maxKeys), runs: int(pn.runs, 0, 0) };
+  const war = obj(r.war);
+  const ks = (v: unknown) => [...new Set(arr(v).filter((x): x is number => Number.isInteger(x) && (x as number) >= 0 && (x as number) < 100_000))].slice(0, 500);
+  if (Object.keys(war).length) data.war = { fought: ks(war.fought), claimed: ks(war.claimed) };
+  sanitizeSeasons(data, r, now, nested);
+  const w = obj(r.wiped);
+  if (typeof w.from === 'number' && typeof w.at === 'number') data.wiped = { from: int(w.from, 0, 0, 1000), at: num(w.at, 0, 0) };
 
   return { data, repairs };
 }
@@ -583,5 +604,25 @@ export function sanitizeProgress(raw: unknown, profileId: string): ProgressState
   out.tree.allocated = [...new Set(arr(tree.allocated).filter((x): x is string => typeof x === 'string' && x.length <= 24))].slice(0, 2000);
   out.respecs = int(p.respecs, 0, 0, 10_000);
   out.tree.allocated = pruneAllocation(out.tree.seed, levelForXp(out.xp), out.tree.allocated);
+  const mastery = sanitizeMastery(p.mastery);
+  if (mastery) out.mastery = mastery;
   return out;
+}
+
+/** Seasonal fields: the season marker, the running seasonal document (sanitized as a nested save), archives and the
+ * board summary; then the end-of-month rollover (deterministic for `now`). */
+function sanitizeSeasons(data: SaveData, r: Record<string, unknown>, now: number, nested: boolean): void {
+  if (Number.isInteger(r.seasonId) && (r.seasonId as number) >= 1) data.seasonId = r.seasonId as number;
+  const b = obj(r.board);
+  if (typeof b.rl === 'number') data.board = { rl: int(b.rl, 1, 1, MAX_TIER), wave: int(b.wave, 0, 0, 1e6), waveRl: int(b.waveRl, 0, 0, MAX_TIER), at: num(b.at, 0, 0) };
+  const done = arr(r.seasonsDone).map(obj).filter((x) => Number.isInteger(x.id));
+  if (done.length) data.seasonsDone = done.slice(-60).map((x) => ({ id: int(x.id, 1, 1), rl: int(x.rl, 1, 1, MAX_TIER), wave: int(x.wave, 0, 0, 1e6), journey: int(x.journey, 0, 0, 100), title: typeof x.title === 'string' ? x.title.slice(0, 40) : null }));
+  if (nested || data.seasonId) return;
+  const sz = obj(r.seasonal);
+  if (Number.isInteger(sz.id) && (sz.id as number) >= 1 && sz.doc && typeof sz.doc === 'object') {
+    const doc = sanitizeSave(sz.doc, now, true).data;
+    doc.seasonId = sz.id as number;
+    data.seasonal = { id: sz.id as number, doc };
+  }
+  rolloverSeason(data, now);
 }

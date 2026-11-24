@@ -1,5 +1,5 @@
 // Primary + secondary weapon: slot rules, save v9, holstered cooling, swap state, loadout scoring.
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import { otherSlot, WeaponSlots, type WeaponSlotsHost } from '@riftwarden/game/arena/WeaponSlots';
 import { coolHolstered, HEAT_PACE } from '@riftwarden/rules/combat/heat';
 import { BASE_STATS } from '@riftwarden/rules/combat/stats';
@@ -11,6 +11,11 @@ import type { ItemInstance } from '@riftwarden/rules/loot/types';
 import { defaultSlot, fitsSlot, getSlot } from '@riftwarden/rules/progression/items';
 import { RunLedger } from '@riftwarden/rules/progression/run';
 import { createDefaultSave, equipFromStorage, migrate, MIGRATIONS, SAVE_VERSION, sanitizeSave } from '@riftwarden/rules/progression/save';
+import { setUnlockAll } from '@riftwarden/rules/progression/unlocks';
+
+// Legacy rules suites exercise late systems on fresh profiles: staged unlocks are covered by tests/unlocks.test.ts.
+beforeAll(() => setUnlockAll(true));
+afterAll(() => setUnlockAll(false));
 
 const gen = (seed: number, o: Partial<Parameters<typeof generateItem>[0]> = {}): ItemInstance =>
   generateItem({ uid: `u${seed}`, seed, level: 10, rarity: 'rare', category: 'weapon', source: 'test', now: 1, ...o });
