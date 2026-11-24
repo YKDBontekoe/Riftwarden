@@ -86,13 +86,18 @@ interface BoardRow {
 }
 
 /** Leaderboards (server profiles): this season or permanent, by Rift Level or deepest wave. */
-export function Leaderboards() {
+/** `online` = false when the client runs without a server (local war): no request, the offline note shows. */
+export function Leaderboards({ online = true }: { online?: boolean }) {
   const [scope, setScope] = useState<'season' | 'permanent'>('season');
   const [metric, setMetric] = useState<'rl' | 'wave'>('rl');
   const [rows, setRows] = useState<BoardRow[] | null | 'offline'>(null);
   const season = seasonOf(Date.now());
   useEffect(() => {
     let live = true;
+    if (!online) {
+      setRows('offline');
+      return;
+    }
     setRows(null);
     fetch(`${apiBase()}/boards?scope=${scope}&season=${season}&metric=${metric}`, { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
@@ -101,7 +106,7 @@ export function Leaderboards() {
     return () => {
       live = false;
     };
-  }, [scope, metric, season]);
+  }, [scope, metric, season, online]);
   const tab = (on: boolean) => `mini m-0 w-auto ${on ? 'on' : ''}`;
   return (
     <div className="grid gap-[6px]" data-testid="boards">

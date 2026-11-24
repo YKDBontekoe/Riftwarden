@@ -31,7 +31,7 @@ export function CommandTerminal({ flow, close }: { flow: Flow; close: () => void
           <WardenProgress flow={flow} />
           <UnlockTrackPanel save={save} />
           <SeasonPanel flow={flow} />
-          <Leaderboards />
+          <Leaderboards online={flow.war.base !== null} />
           <CodexPanel save={save} />
           <WarCaches flow={flow} save={save} />
           <div className="col-label">MILESTONES · {save.milestones.length}/{MILESTONES.length}</div>
