@@ -1,6 +1,8 @@
 // Staged feature unlocks (docs/progression-design.md §5): a new warden starts with one weapon family, one ability and
 // the core stations; families, slots, stations and endgame systems open with Warden level (basics) and the highest
 // Rift Level unlocked (endgame). Pure: the HQ unlock track, the op gate, the loot locks and the slot rules read it.
+import { RESOURCE_KEYS } from '../economy/config';
+import type { ResourceKey } from '../economy/config';
 import { ALL_COMPONENT_LOCKS, componentLocks, type MasteryState } from './mastery';
 import type { WeaponFamily } from '../data/defs';
 import type { Category } from '../loot/types';
@@ -85,6 +87,22 @@ export function lockReason(d: UnlockProgress, id: string): string | null {
 export function stationForUnlock(id: string): string | null {
   for (const [station, feature] of Object.entries(STATION_FEATURE)) if (feature === id) return station;
   return id.startsWith('workshop:') ? 'workshop' : null;
+}
+
+/** Unlocks that put each currency to use (credits are used from the start). */
+const CURRENCY_FEATURES: Record<ResourceKey, readonly string[]> = {
+  credits: [],
+  salvage: ['station:salvage', 'station:modules'],
+  components: ['station:fabricate', 'station:modules', 'workshop:enhance', 'workshop:towers'],
+  shards: ['workshop:ascension', 'pinnacle', 'loot:exotic'],
+};
+
+/**
+ * Currencies worth showing (resource bars, HQ reserves): credits always; the others once the warden holds any
+ * or a system that spends them is open, so a fresh warden is not shown four counters at zero.
+ */
+export function visibleCurrencies(d: UnlockProgress & { resources: Readonly<Record<ResourceKey, number>> }): ResourceKey[] {
+  return RESOURCE_KEYS.filter((k) => k === 'credits' || d.resources[k] > 0 || CURRENCY_FEATURES[k].some((f) => isUnlocked(d, f)));
 }
 
 // ------------------------------------------------------------------ what the locks mean for loot, slots and ops

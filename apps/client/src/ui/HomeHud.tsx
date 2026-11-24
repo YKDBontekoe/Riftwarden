@@ -1,3 +1,4 @@
+import { visibleCurrencies } from '@riftwarden/rules/progression/unlocks';
 import { BoundKey } from './hud/widgets';
 import { TutorialCard } from './TutorialCard';
 import { useEffect, useState } from 'react';
@@ -35,7 +36,7 @@ export function HomeHud({ flow }: { flow: Flow }) {
         <div>
           <span>RESERVES</span>
           <div className="res-line" data-testid="hq-resources">
-            {RESOURCE_KEYS.map((k) => (
+            {visibleCurrencies(save).map((k) => (
               <span key={k} className={RES_CLASS[k]} title={currencyTooltip(k)}>
                 <i><CurrencyIcon k={k} /></i>
                 {save.resources[k].toLocaleString()}

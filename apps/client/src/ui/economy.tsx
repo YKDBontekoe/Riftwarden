@@ -1,3 +1,4 @@
+import { visibleCurrencies } from '@riftwarden/rules/progression/unlocks';
 import { type ReactNode, useCallback, useRef, useState } from 'react';
 import { sfx } from '@riftwarden/game/audio/Sfx';
 import type { Flow } from '../core/Flow';
@@ -12,9 +13,11 @@ export const RES_CLASS: Record<ResourceKey, string> = { credits: CURRENCIES.cred
 
 /** Balances strip; with `cost`, each balance shows what it would be after paying. */
 export function ResourceBar({ save, cost, compact }: { save: SaveData; cost?: Cost; compact?: boolean }) {
+  // Staged unlocks: currencies the warden cannot use yet stay hidden (unless a price asks for them).
+  const shown = visibleCurrencies(save);
   return (
     <div className={`res-bar ${compact ? 'compact' : ''}`}>
-      {RESOURCE_KEYS.map((k) => {
+      {RESOURCE_KEYS.filter((k) => shown.includes(k) || (cost?.[k] ?? 0) > 0).map((k) => {
         const have = save.resources[k];
         const need = cost?.[k] ?? 0;
         return (

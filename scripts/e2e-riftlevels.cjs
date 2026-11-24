@@ -215,6 +215,8 @@ async function openDeploy(p) {
       check('E1 a fresh warden cannot open the fabricator (locked prompt, op refused, no module stock)', e1.fab !== 'terminal' && /Warden level 10/.test(e1.lock) && !e1.deployLock && /Warden level 10/.test(e1.op) && e1.modules === 0, JSON.stringify(e1));
       const strip = await ev(p3, () => document.querySelector('[data-testid=next-unlocks]')?.textContent ?? '');
       check('E2 the HQ shows the next unlocks with progress', /NEXT UNLOCKS/.test(strip) && /Warden 1\/2/.test(strip), strip);
+      const e2b = await ev(p3, () => document.querySelectorAll('[data-testid=hq-resources] > span').length);
+      check("E2b a fresh warden's HQ reserves show credits only", e2b === 1, String(e2b));
       if (captureScreens) await shot(p3, 'rl-hq-next-unlocks', { frames: 2 });
       await ev(p3, () => window.__rift.home.openTerminal('loadout'));
       await p3.waitForSelector('[data-testid=slot-locked-weapon2]', { timeout: 20000 });
