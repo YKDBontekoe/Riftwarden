@@ -25,6 +25,8 @@ export interface Rewards {
   items: ItemInstance[];
   /** Weapon-family mastery XP (kills with the family; banked like XP, 25% kept on a loss). Optional. */
   mastery?: MasteryGain;
+  /** Pinnacle keys (elites on RL 8+; banked like shards). Optional. */
+  keys?: number;
 }
 
 export type RunOutcome = 'returned' | 'defeat' | 'abandoned';
@@ -181,6 +183,8 @@ export class RunLedger {
     this.unsecured.salvage += s;
     this.unsecured.credits += cr;
     this.unsecured.components += co;
+    const ky = Math.max(0, Math.floor(r.keys ?? 0));
+    if (ky) this.unsecured.keys = (this.unsecured.keys ?? 0) + ky;
     const mg = masteryTotal(r.mastery);
     if (mg) this.unsecured.mastery = addMastery(this.unsecured.mastery, r.mastery);
     let added = 0;
@@ -190,7 +194,7 @@ export class RunLedger {
       this.itemsCollected++;
       added++;
     }
-    return s > 0 || cr > 0 || co > 0 || sh > 0 || xp > 0 || mg > 0 || added > 0;
+    return s > 0 || cr > 0 || co > 0 || sh > 0 || xp > 0 || mg > 0 || ky > 0 || added > 0;
   }
 
   /** Items collected so far (for statistics). */
@@ -259,6 +263,7 @@ export class RunLedger {
     this.secured.shards += moved.shards;
     this.secured.xp += moved.xp;
     if (moved.mastery) this.secured.mastery = addMastery(this.secured.mastery, moved.mastery);
+    if (moved.keys) this.secured.keys = (this.secured.keys ?? 0) + moved.keys;
     this.secured.items.push(...moved.items);
     this.lastBankedWave = wave;
     this.checkpoints++;
@@ -280,6 +285,7 @@ export class RunLedger {
     this.secured.shards += moved.shards;
     this.secured.xp += moved.xp;
     if (moved.mastery) this.secured.mastery = addMastery(this.secured.mastery, moved.mastery);
+    if (moved.keys) this.secured.keys = (this.secured.keys ?? 0) + moved.keys;
     this.secured.items.push(...moved.items);
     return moved;
   }

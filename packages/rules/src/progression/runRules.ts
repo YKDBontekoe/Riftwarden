@@ -28,7 +28,7 @@ export interface LootRecord {
 }
 
 export type RunEntry =
-  | { kind: 'start'; runId: string; tier: number; at: number; mapSeed: number; mode: 'defense' | 'survival'; select: boolean }
+  | { kind: 'start'; runId: string; tier: number; at: number; mapSeed: number; mode: 'defense' | 'survival'; select: boolean; pinnacle?: boolean }
   | { kind: 'bank'; runId: string; wave: number; rewards: Rewards; bosses: number; loot: LootRecord[] }
   | { kind: 'nodeBank'; runId: string; step: number; rewards: Rewards; loot: LootRecord[] }
   | { kind: 'map'; runId: string; state: RunMapState }
@@ -45,6 +45,11 @@ export function applyRunEntry(d: SaveData, e: RunEntry): boolean {
       if (e.select) selectTier(d, e.tier);
       // Loot locks are derived from the profile here (device and server alike), never taken from the entry.
       beginRun(d, e.runId, e.tier, e.at, { mapSeed: e.mapSeed, mode: e.mode, locks: lootLocks(d) });
+      // A pinnacle run spends one key (checkRunEntry refused the start without one).
+      if (e.pinnacle && d.activeRun && (d.pinnacle?.keys ?? 0) > 0) {
+        d.pinnacle = { keys: d.pinnacle!.keys - 1, runs: (d.pinnacle!.runs ?? 0) + 1 };
+        d.activeRun.pinnacle = true;
+      }
       return true;
     case 'bank':
       return bankRewards(d, e.runId, e.wave, e.rewards, { bosses: e.bosses });

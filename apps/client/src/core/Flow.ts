@@ -1,4 +1,4 @@
-import { arenaProgress, watchUnlocks } from './unlockWatch';
+import { arenaProgress, PINNACLE_EFFECT, pinnacleBlocker, watchUnlocks } from './unlockWatch';
 import { type AbstractEngine as Engine } from '@babylonjs/core/Engines/abstractEngine';
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { type Scene } from '@babylonjs/core/scene';
@@ -21,7 +21,7 @@ import { emptyRewards } from '@riftwarden/rules/progression/run';
 import { fitsSlot } from '@riftwarden/rules/progression/items';
 import { MapSession } from '@riftwarden/game/core/mapSession';
 import { combineEffects, type MapNode, segmentTier } from '@riftwarden/rules/runmap/map';
-import { findNode } from '@riftwarden/rules/war/world';
+import { findNode, regionOf } from '@riftwarden/rules/war/world';
 import { WarClient } from '@riftwarden/game/war/client';
 import { hashSeed } from '@riftwarden/rules/loot/generate';
 import { MODE_EFFECT, NODE_KINDS, type RunMode } from '@riftwarden/rules/runmap/defs';
@@ -259,12 +259,12 @@ export class Flow {
   // ------------------------------------------------------------------ runs
 
   /** Start a fresh run on the selected tier. Callable from HQ or after a defeat. Map runs may name an entry node. */
-  async deploy(tierId = this.profile.save.threat.selected, entryNode?: string, mode: RunMode = this.runMode): Promise<boolean> {
+  async deploy(tierId = this.profile.save.threat.selected, entryNode?: string, mode: RunMode = this.runMode, pinnacle = false): Promise<boolean> {
     if (this.busy || (this.run && !this.run.ended)) return false;
     if (this.coopRun) return false;
     const save = this.profile.save;
     if (tierId < 1 || (tierId > save.threat.unlocked && !this.devNext) || tierId > MAX_RIFT_LEVEL) return false;
-    if (deployBlocker(save)) return false;
+    if (deployBlocker(save) || (pinnacle && pinnacleBlocker(save.pinnacle?.keys ?? 0, tierId))) return false;
     // The arena gets its own copies: run-side changes can never touch profile objects.
     const loadout = Object.fromEntries(SLOT_IDS.map((slot) => [slot, structuredClone(equippedItem(save, slot))]));
     sfx.init();
@@ -274,10 +274,10 @@ export class Flow {
     const tier = getTier(tierId);
     const runId = newUid('run');
     // Map runs play on the Rift War (the shared war, or the local copy when the server is unreachable).
-    const war = this.mapMode ? await this.warNow() : null;
+    const war = this.mapMode && !pinnacle ? await this.warNow() : null;
     if (this.busy || (this.run && !this.run.ended)) return false;
     const mapSeed = war ? war.seed : 0;
-    this.profile.runEntry({ kind: 'start', runId, tier: tierId, at: Date.now(), mapSeed, mode, select: !this.devNext });
+    this.profile.runEntry({ kind: 'start', runId, tier: tierId, at: Date.now(), mapSeed, mode, select: !this.devNext, ...(pinnacle ? { pinnacle } : {}) });
     const run = new RunLedger(runId, tierId, Date.now());
     run.survivalMode = mode === 'survival';
     this.run = run;
@@ -290,8 +290,8 @@ export class Flow {
     }
     this.map = null;
     const layout = Flow.layoutFor(this.arenaSeedFor(runId));
-    const sTier = mode === 'survival' ? segmentTier(tier, combineEffects(MODE_EFFECT.survival)) : tier;
-    await this.launchArena(`DEPLOYING · ${mode === 'survival' ? 'SURVIVAL · ' : ''}RIFT LEVEL ${tier.id}`, `${layout.name ?? 'Sector 07 reactor'} · ${tier.name}`, layout, sTier, { loadout, mode });
+    const sTier = segmentTier(tier, combineEffects(mode === 'survival' ? MODE_EFFECT.survival : undefined, pinnacle ? PINNACLE_EFFECT : undefined));
+    await this.launchArena(`DEPLOYING · ${pinnacle ? 'PINNACLE · ' : mode === 'survival' ? 'SURVIVAL · ' : ''}RIFT LEVEL ${tier.id}`, `${layout.name ?? 'Sector 07 reactor'} · ${tier.name}`, layout, sTier, { loadout, mode, pinnacle });
     return true;
   }
 
@@ -436,6 +436,7 @@ export class Flow {
   /** A sector was secured: count it in the Rift War (dev sessions never do). */
   private async reportSecured(id: string, mode: 'defense' | 'survival'): Promise<void> {
     if (this.run?.survival.dev) return;
+    this.profile.op('warContribute', [regionOf(id)]);
     const r = await this.war.report(id, mode);
     if (!r.ok) return;
     const local = this.war.source === 'local';

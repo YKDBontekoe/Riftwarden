@@ -1,3 +1,4 @@
+import { PINNACLE, sanitizeCodex } from '../spikes';
 import { sanitizeMastery } from '../mastery';
 import { ALL_LOOT_LOCKS } from '../unlocks';
 import { sanitizeMapState } from '../../runmap/state';
@@ -503,6 +504,7 @@ export function sanitizeSave(raw: unknown, now = Date.now()): { data: SaveData; 
     if (ar.mode === 'survival') data.activeRun.mode = 'survival';
     const locks = arr(ar.locks).filter((x): x is string => typeof x === 'string' && ALL_LOOT_LOCKS.includes(x));
     if (locks.length) data.activeRun.locks = [...new Set(locks)].sort();
+    if (ar.pinnacle === true) data.activeRun.pinnacle = true;
   }
 
   const base = obj(r.base);
@@ -533,6 +535,15 @@ export function sanitizeSave(raw: unknown, now = Date.now()): { data: SaveData; 
   data.market = sanitizeMarket(r.market, data, new Set(allOwnedUids(data)), repairs, now);
   data.economy = sanitizeEconomy(r.economy);
   data.progress = sanitizeProgress(r.progress, data.profile.id);
+  const codex = sanitizeCodex(r.codex);
+  if (codex.length) data.codex = codex;
+  const bt = arr(r.breakthroughs).filter((x): x is number => Number.isInteger(x) && (x as number) >= 5 && (x as number) % 5 === 0 && (x as number) <= MAX_TIER);
+  if (bt.length) data.breakthroughs = [...new Set(bt)].sort((x, y) => x - y);
+  const pn = obj(r.pinnacle);
+  if (Object.keys(pn).length) data.pinnacle = { keys: int(pn.keys, 0, 0, PINNACLE.maxKeys), runs: int(pn.runs, 0, 0) };
+  const war = obj(r.war);
+  const ks = (v: unknown) => [...new Set(arr(v).filter((x): x is number => Number.isInteger(x) && (x as number) >= 0 && (x as number) < 100_000))].slice(0, 500);
+  if (Object.keys(war).length) data.war = { fought: ks(war.fought), claimed: ks(war.claimed) };
   const w = obj(r.wiped);
   if (typeof w.from === 'number' && typeof w.at === 'number') data.wiped = { from: int(w.from, 0, 0, 1000), at: num(w.at, 0, 0) };
 

@@ -91,6 +91,8 @@ export interface RunHistoryEntry {
   mode?: 'survival';
   /** Staged-unlock loot locks at the start of the run (absent = none locked). */
   locks?: string[];
+  /** A pinnacle run (a key was spent; the pinnacle boss leads wave 1). */
+  pinnacle?: true;
   /** Run map: act reached, nodes completed and the compact path (e.g. "1C", "1E", "1B*"). */
   act?: number;
   nodes?: number;
@@ -115,6 +117,8 @@ export interface ActiveRun {
   mode?: 'survival';
   /** Staged-unlock loot locks at the start of the run (absent = none locked). */
   locks?: string[];
+  /** A pinnacle run (a key was spent; the pinnacle boss leads wave 1). */
+  pinnacle?: true;
 }
 
 export interface LoadoutPreset {
@@ -189,6 +193,14 @@ export interface SaveData {
   towers: { unlocked: string[] };
   /** Warden levels and the procedural skill tree (level and points are derived from xp). */
   progress: ProgressState;
+  /** Codex entries found (progression/spikes CODEX ids; optional). */
+  codex?: string[];
+  /** Rift Levels whose breakthrough (every 5th level cleared) was granted. */
+  breakthroughs?: number[];
+  /** Pinnacle keys held and pinnacle runs started. */
+  pinnacle?: { keys: number; runs: number };
+  /** Rift War: regions this warden secured sectors in, and regions whose victory cache was claimed. */
+  war?: { fought: number[]; claimed: number[] };
   /** Set when a migration restarted progression (v11 Rift Levels): the HQ shows a one-time notice. */
   wiped?: { from: number; at: number };
 }

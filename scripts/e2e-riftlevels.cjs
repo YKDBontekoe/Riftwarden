@@ -408,6 +408,63 @@ async function openDeploy(p) {
     }
   }
 
+  if (want('H')) {
+    // Big spikes: pinnacle keys + summon, codex + title, Rift War victory caches.
+    const { b: b6, p: p6, errs: errs6 } = await launch({ query: '&map' });
+    try {
+      await ev(p6, () => { window.__rift.flow.war.localSeed = 1; return window.__rift.flow.enterHq(); });
+      await waitFor(p6, () => window.__rift.state().location === 'home' && !window.__rift.flow.busy);
+      await ev(p6, () => window.__rift.profile.mutate((d) => { d.threat.unlocked = 9; d.threat.selected = 9; d.resources.shards = 45; d.progress.xp = 5e6; d.breakthroughs = [5]; d.war = { fought: [0], claimed: [] }; return true; }));
+      await ev(p6, () => window.__rift.home.openTerminal('deploy'));
+      await p6.waitForSelector('[data-testid=pinnacle]', { timeout: 20000 });
+      await p6.click('[data-testid=pinnacle-craft]');
+      const h1 = await ev(p6, () => ({ keys: document.querySelector('[data-testid=pinnacle-keys]')?.textContent, shards: window.__rift.profile.save.resources.shards }));
+      check('H1 the deploy terminal crafts a pinnacle key from 20 rift shards', h1.keys === '1 KEY' && h1.shards === 25, JSON.stringify(h1));
+      if (captureScreens) await shot(p6, 'rl-pinnacle-card', { frames: 2 });
+      await p6.click('[data-testid=pinnacle-go]');
+      await waitFor(p6, () => window.__rift.state().location === 'arena' && !window.__rift.flow.busy);
+      const h2 = await ev(p6, async () => {
+        const r = window.__rift;
+        const g = r.game;
+        g.setScreen('playing');
+        if (g.waves.phase === 'prep') g.startWave();
+        for (let i = 0; i < 80 && !g.enemies.active.some((e) => e.def.role === 'boss'); i++) r.advance(0.5);
+        const boss = g.enemies.active.find((e) => e.def.role === 'boss');
+        const before = g.loot.pickups.length;
+        if (boss) g.damageEnemy('player', boss, 1e9, boss.center(), false);
+        for (let i = 0; i < 30; i++) r.advance(0.25);
+        const drops = g.loot.pickups.slice(before).map((p) => p.item.rarity);
+        return { pin: g.cfg.pinnacle, map: !!r.flow.map, boss: boss?.kind ?? null, wave: g.waves.number, keys: r.profile.save.pinnacle?.keys, pinRun: r.profile.save.activeRun?.pinnacle, drops, journal: g.cfg.run.lootJournal.some((j) => j.source.id === 'pinnacle') };
+      });
+      check('H2 summoning spends the key: a classic pinnacle run whose wave 1 is the pinnacle boss', h2.pin && !h2.map && h2.boss && h2.wave === 1 && h2.keys === 0 && h2.pinRun === true, JSON.stringify(h2));
+      check('H3 the pinnacle boss drops the legendary-floor pinnacle cache (journaled)', h2.journal && h2.drops.filter((x) => x === 'legendary' || x === 'exotic').length >= 2, JSON.stringify(h2.drops));
+      await ev(p6, () => window.__rift.flow.abandonRun());
+      await waitFor(p6, () => window.__rift.state().location === 'home' && !window.__rift.flow.busy);
+      // Rift War victory: the region this warden fought in is liberated -> claim its cache in the console.
+      await ev(p6, () => {
+        const w = window.__rift.flow.war;
+        const st = structuredClone(w.store.get().war);
+        st.regions.find((x) => x.k === 0).status = 'liberated';
+        w.store.set({ ...w.store.get(), war: st });
+        window.__rift.home.setScreen('home');
+        window.__rift.home.openTerminal('command');
+      });
+      await p6.waitForSelector('[data-testid=claim-0]', { timeout: 20000 });
+      const h4a = await ev(p6, () => ({ codex: document.querySelector('[data-testid=codex]')?.textContent ?? '', title: document.querySelector('[data-testid=warden-title]')?.textContent }));
+      await p6.click('[data-testid=claim-0]');
+      const h4 = await ev(p6, () => ({ claimed: window.__rift.profile.save.war.claimed, msg: document.querySelector('[data-testid=war-caches] .term-msg')?.textContent ?? '' }));
+      check('H4 command console: codex progress with teasers and the breakthrough title', /CODEX · \d+\/24/.test(h4a.codex) && /▒▒/.test(h4a.codex) && h4a.title === 'RIFT BREAKER', JSON.stringify(h4a).slice(0, 160));
+      check('H5 a liberated region pays its victory cache once', h4.claimed.includes(0) && /Victory cache/.test(h4.msg), JSON.stringify(h4));
+      if (captureScreens) await shot(p6, 'rl-codex', { frames: 2 });
+      const bad6 = errs6.filter((e) => !/compil(e|ing) effect|Trying next fallback|BJS - \[[\d:]+\]: (Uniforms|Attributes|Defines|Error: (VERTEX|FRAGMENT))|GPU stall|favicon/.test(e));
+      check('H6 no runtime errors in the spikes flow', bad6.length === 0, bad6.slice(0, 3).join(' | '));
+    } catch (e) {
+      check('H no exception', false, e.stack || String(e));
+    } finally {
+      await b6.close();
+    }
+  }
+
   const bad = errs.filter((e) => !/compil(e|ing) effect|Trying next fallback|BJS - \[[\d:]+\]: (Uniforms|Attributes|Defines|Error: (VERTEX|FRAGMENT))|GPU stall|favicon/.test(e));
   check('Z no runtime errors', bad.length === 0, bad.slice(0, 3).join(' | '));
   console.log(`\n${stats.passes} passed, ${stats.failures} failed (${Math.round((Date.now() - t0) / 1000)} s)`);

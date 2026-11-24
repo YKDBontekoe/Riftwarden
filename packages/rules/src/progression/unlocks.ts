@@ -39,6 +39,7 @@ export const UNLOCKS: readonly UnlockDef[] = [
   { id: 'workshop:components', label: 'Component refits', kind: 'system', by: { rl: 5 }, blurb: 'Swap barrels, cores, cooling and mechanisms on your weapons.' },
   { id: 'loot:legendary', label: 'Legendary drops', kind: 'system', by: { rl: 7 }, blurb: 'Legendary gear can drop from RL 7 (and masterwork crafting opens).' },
   { id: 'loot:exotic', label: 'Exotic drops', kind: 'system', by: { rl: 12 }, blurb: 'Exotics can drop from RL 12.' },
+  { id: 'pinnacle', label: 'Pinnacle bosses', kind: 'system', by: { rl: 8 }, blurb: 'Elites drop pinnacle keys (or craft one for 20 rift shards); a key summons a pinnacle boss with legendary-floor loot.' },
   { id: 'workshop:ascension', label: 'Ascension', kind: 'system', by: { rl: 14 }, blurb: 'Ascend an exotic with rift shards; ascended drops can appear.' },
 ];
 
@@ -141,6 +142,7 @@ export const OP_FEATURE: Readonly<Record<string, string>> = {
   uninstallModule: 'station:modules',
   transferModule: 'station:modules',
   craft: 'station:fabricate',
+  craftKey: 'station:fabricate',
   rerollAffix: 'workshop:affixes',
   rerollUnlocked: 'workshop:affixes',
   enhanceItem: 'workshop:enhance',

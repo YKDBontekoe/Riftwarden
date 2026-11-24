@@ -17,7 +17,9 @@ const COMPONENT_SLOTS = ['barrel', 'core', 'cooling', 'mechanism', 'attachment']
 import { BUILD_OPS } from '../home/build/ops';
 import { TUTORIAL_OPS } from './tutorial';
 import { allocateNode, respecTree } from './treeOps';
-import { lockReason, lootLocks, opFeature, recipeFeature } from './unlocks';
+import { lockedFamiliesOf, lockReason, lootLocks, opFeature, recipeFeature } from './unlocks';
+import { PINNACLE, warCacheItem, warCacheShards } from './spikes';
+import { allOwnedUids, sanitizeItem } from './save';
 import { componentRank, FAMILY_NAME, finishesAt, MASTERY_FAMILIES, perkBlocker, rankOf } from './mastery';
 import type { WeaponFamily } from '../data/defs';
 import type { Finish } from '../weapons/build';
@@ -83,6 +85,10 @@ const DEFS: Record<string, OpDef> = {
   uninstallModule: { args: ['str', 'int'], run: (d, a, tx) => TX.withTx(d, tx, () => uninstallModule(d, a[0] as string, a[1] as number)) },
   transferModule: { args: ['str', 'int', 'str', 'int'], run: (d, a, tx) => TX.withTx(d, tx, () => transferModule(d, a[0] as string, a[1] as number, a[2] as string, a[3] as number)) },
   selectTier: { args: ['int'], run: (d, a) => bool(selectTier(d, a[0] as number), 'Tier locked') },
+  // ---- big spikes: pinnacle keys (fabricator), Rift War victory caches
+  craftKey: { args: [], run: (d, _a, tx) => TX.withTx(d, tx, () => craftKey(d) as never) },
+  warContribute: { args: ['int'], run: (d, a) => warContribute(d, a[0] as number) },
+  claimWarCache: { args: ['int'], run: (d, a, tx) => TX.withTx(d, tx, () => claimWarCache(d, a[0] as number) as never) },
   // ---- weapon-family mastery (perk choices are free to change; finishes need the rank)
   masteryPerk: { args: ['str', 'int', 'int'], run: (d, a) => choosePerk(d, a[0] as string, a[1] as number, a[2] as number) },
   masteryFinish: { args: ['str', 'str?'], run: (d, a) => chooseFinish(d, a[0] as string, (a[1] as string | null) ?? null) },
@@ -123,6 +129,45 @@ export function opError(name: unknown, args: unknown): string | null {
   if (args.length > def.args.length) return 'Too many arguments';
   for (let i = 0; i < def.args.length; i++) if (!checkArg(def.args[i], args[i])) return `Invalid argument ${i + 1}`;
   return null;
+}
+
+/** Craft a pinnacle key from rift shards (fabricator, RL 8+). */
+function craftKey(d: SaveData): OpResult {
+  if (d.activeRun) return { ok: false, reason: 'Not during an operation' };
+  if (d.threat.unlocked < PINNACLE.minRl) return { ok: false, reason: `Pinnacle keys open at Rift Level ${PINNACLE.minRl}` };
+  if (d.resources.shards < PINNACLE.craftShards) return { ok: false, reason: `Needs ${PINNACLE.craftShards} rift shards` };
+  if ((d.pinnacle?.keys ?? 0) >= PINNACLE.maxKeys) return { ok: false, reason: 'Key rack full' };
+  d.resources.shards -= PINNACLE.craftShards;
+  d.pinnacle = { runs: d.pinnacle?.runs ?? 0, keys: (d.pinnacle?.keys ?? 0) + 1 };
+  return { ok: true };
+}
+
+/** Remember that this warden secured a sector in Rift War region `k` (victory cache eligibility). */
+function warContribute(d: SaveData, k: number): OpResult {
+  if (!(k >= 0 && k < 100_000)) return { ok: false, reason: 'Unknown region' };
+  const w = d.war ?? { fought: [], claimed: [] };
+  if (w.fought.includes(k)) return { ok: true };
+  d.war = { fought: [...w.fought, k].slice(-500), claimed: w.claimed };
+  return { ok: true };
+}
+
+/**
+ * Claim the victory cache of a liberated region this warden fought in (the HQ offers it once the war reports the
+ * region liberated; like solo war reports, the liberation itself is not re-checked here).
+ */
+function claimWarCache(d: SaveData, k: number): OpResult {
+  const w = d.war;
+  if (d.activeRun) return { ok: false, reason: 'Not during an operation' };
+  if (!w?.fought.includes(k)) return { ok: false, reason: 'You did not fight in that region' };
+  if (w.claimed.includes(k)) return { ok: false, reason: 'Already claimed' };
+  const locks = lootLocks(d);
+  const it = sanitizeItem(warCacheItem(d.profile.id, k, d.threat.unlocked, { families: lockedFamiliesOf(locks), components: locks.filter((l) => l.startsWith('comp:')) }));
+  if (!it || allOwnedUids(d).includes(it.uid)) return { ok: false, reason: 'Cache unavailable' };
+  d.items.push(it);
+  d.storage.uids.push(it.uid);
+  d.resources.shards += warCacheShards(k);
+  d.war = { fought: w.fought, claimed: [...w.claimed, k] };
+  return { ok: true, item: it };
 }
 
 /** Choose a mastery perk option for a tier (free to change: there is no respec cost). */

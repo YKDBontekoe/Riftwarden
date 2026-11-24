@@ -57,6 +57,8 @@ export const DROP_SOURCES = {
   },
   wave: { id: 'wave', label: 'Wave cleared', chance: 0.4, rolls: 1, levelBonus: 1, luck: 1.25, categories: ALL, guaranteedThroughWave: 1 },
   checkpoint: { id: 'checkpoint', label: 'Checkpoint cache', chance: 1, rolls: 2, levelBonus: 3, luck: 1.6, minRarity: 'rare', gate: 1, categories: ALL },
+  /** Pinnacle boss (key runs on RL 8+): extra legendary-floor rolls on top of the boss's own table. */
+  pinnacle: { id: 'pinnacle', label: 'Pinnacle boss', chance: 1, rolls: 2, levelBonus: 6, luck: 2.4, minRarity: 'legendary', gate: 1, categories: ALL },
   boss: { id: 'boss', label: 'Boss', chance: 1, rolls: 3, levelBonus: 5, luck: 2.6, minRarity: 'rare', gate: 1, categories: ALL },
   // ---- M6 archetypes: each favours different categories (soft target farming)
   enforcer: { id: 'enforcer', label: 'Shielded Enforcer', chance: 0.2, rolls: 1, levelBonus: 1, luck: 1.3, categories: { armor: 4, shield: 4, reactor: 1.5, weapon: 1, processor: 1, accessory: 1, module: 1 } },

@@ -7,6 +7,7 @@ import { SLOTS } from '@riftwarden/rules/progression/items';
 import { deployBlocker, equippedItem, type SaveData } from '@riftwarden/rules/progression/save';
 import { CHECKPOINT_INTERVAL, getTier, type ThreatTier } from '@riftwarden/rules/progression/tiers';
 import { LevelLootCard, RiftLevelPicker, savePower, UnlockBar, WipeNotice } from '../RiftLevel';
+import { PinnacleCard } from '../Spikes';
 import { useSave } from '../App';
 import { Shell } from '../shell';
 import { CoopPanel } from '../Coop';
@@ -67,6 +68,11 @@ export function DeployTerminal({ flow, close }: { flow: Flow; close: () => void 
         <div className="tier-col">
           <div className="col-label">SELECT RIFT LEVEL</div>
           <RiftLevelPicker value={selected.id} unlocked={save.threat.unlocked} power={savePower(save)} disabled={busy} onPick={(rl) => flow.selectTier(rl)} />
+          <PinnacleCard flow={flow} save={save} rl={selected.id} busy={busy} onDeploy={() => {
+            if (busy) return;
+            setBusy(true);
+            void flow.deploy(selected.id, undefined, 'defense', true).then((ok) => !ok && setBusy(false));
+          }} />
           <TierBrief tier={selected} save={save} />
           <button className="primary deploy" disabled={busy || !!blocker} onClick={deploy}>
             <span>{busy ? 'LAUNCHING…' : `DEPLOY · RL ${selected.id}`}</span>

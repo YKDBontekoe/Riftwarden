@@ -1,10 +1,11 @@
+import { breakthroughItem, breakthroughShards, isBreakthrough, newCodexEntries, PINNACLE } from '../spikes';
 import { bankMastery } from '../mastery';
 import { storageExpansionCost, STORAGE_EXPANSION } from '../../loot/economy';
 import { rarity } from '../../loot/rarity';
 import { fitsSlot, getSlot, type ItemInstance, SLOT_IDS, type SlotId, defaultSlot } from '../items';
 import type { Rewards, RunResult } from '../run';
 import { CHECKPOINT_INTERVAL, unlocksNextTier } from '../tiers';
-import { lockedSlots } from '../unlocks';
+import { lockedFamiliesOf, lockedSlots, lootLocks } from '../unlocks';
 
 /** The Rift Level an active run plays at: deploy level + Rift Surges taken on its map. */
 export const runLevel = (a: { tier: number; map?: { surge?: number } | null }): number => a.tier + (a.map?.surge ?? 0);
@@ -148,8 +149,31 @@ export function bankRewards(data: SaveData, runId: string, wave: number, rewards
   const rl = runLevel(a);
   const rec = record(data, rl);
   rec.checkpoints++;
-  if (unlocksNextTier(rl, rec.checkpoints) && data.threat.unlocked < rl + 1) data.threat.unlocked = rl + 1;
+  if (unlocksNextTier(rl, rec.checkpoints) && data.threat.unlocked < rl + 1) {
+    data.threat.unlocked = rl + 1;
+    grantBreakthrough(data, rl);
+  }
   void opts;
+  return true;
+}
+
+/**
+ * Breakthrough (every fifth Rift Level cleared): a guaranteed cache item one rarity above the level's ordinary drops,
+ * rift shards and a title. Deterministic per profile + level, granted once.
+ */
+export function grantBreakthrough(data: SaveData, cleared: number): boolean {
+  if (!isBreakthrough(cleared) || data.breakthroughs?.includes(cleared)) return false;
+  const locks = lootLocks(data);
+  const raw = breakthroughItem(data.profile.id, cleared, { families: lockedFamiliesOf(locks), components: locks.filter((l) => l.startsWith('comp:')) });
+  const it = sanitizeItem(raw);
+  if (it && !allOwnedUids(data).includes(it.uid)) {
+    data.items.push(it);
+    data.storage.uids.push(it.uid);
+    const found = newCodexEntries(data.codex ?? [], [it]);
+    if (found.length) data.codex = [...(data.codex ?? []), ...found.map((c) => c.id)];
+  }
+  data.resources.shards = Math.min(MAX_BALANCE, data.resources.shards + breakthroughShards(cleared));
+  data.breakthroughs = [...(data.breakthroughs ?? []), cleared].sort((a, b) => a - b);
   return true;
 }
 
@@ -182,6 +206,14 @@ function applyBanked(data: SaveData, a: NonNullable<SaveData['activeRun']>, rewa
   data.economy.stats.creditsEarned += cr;
   data.totals.salvageSecured += s;
   data.totals.itemsSecured += incoming.length;
+  // Pinnacle keys and the codex: first finds pay a one-time shard bonus.
+  const keys = Math.max(0, Math.floor(rewards.keys ?? 0));
+  if (keys) data.pinnacle = { runs: data.pinnacle?.runs ?? 0, keys: Math.min(PINNACLE.maxKeys, (data.pinnacle?.keys ?? 0) + keys) };
+  const found = newCodexEntries(data.codex ?? [], incoming);
+  if (found.length) {
+    data.codex = [...(data.codex ?? []), ...found.map((c) => c.id)];
+    data.resources.shards = Math.min(MAX_BALANCE, data.resources.shards + found.reduce((t, c) => t + c.shards, 0));
+  }
   // Banking never discards items: storage may exceed capacity (deployment is then blocked).
   data.items.push(...incoming);
   data.storage.uids.push(...incoming.map((i) => i.uid));

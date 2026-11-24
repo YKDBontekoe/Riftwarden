@@ -1,3 +1,4 @@
+import { PINNACLE, pinnacleBoss } from '@riftwarden/rules/progression/spikes';
 import { gearPower } from '@riftwarden/rules/progression/riftLevel';
 import { type LootVerdictHost, LootVerdicts } from '../arena/LootVerdicts';
 import { baseDef } from '@riftwarden/rules/loot/bases';
@@ -144,6 +145,8 @@ export interface ArenaConfig {
   mastery?: MasteryState;
   /** Best owned item power per kind at deployment (loot/feedback `bestPowers`): NEW BEST on pickups. */
   ownedBest?: ReadonlyMap<string, number>;
+  /** A pinnacle run (a key was spent): the pinnacle boss leads wave 1 and drops the pinnacle table. */
+  pinnacle?: boolean;
   /** Arena layout for this run (procedural from the run seed); defaults to the classic hand-built arena. */
   layout?: ArenaLayout;
   /** Run map node this arena plays (absent = classic endless run with checkpoint choices). */
@@ -1267,6 +1270,11 @@ export class Game {
     this.construction.setActive(false);
     this.weapon.setHolstered(false);
     this.waves.reset();
+    // Pinnacle run: the summoned boss commands wave 1 (seed-decided Colossus or Overseer).
+    if (this.cfg.pinnacle) {
+      this.planner.force(1, { boss: pinnacleBoss(this.cfg.run.id) });
+      this.waves.recompose();
+    }
     this.node?.begin();
     sfx.setTactical(false);
     this.publishHud(true);
@@ -1734,6 +1742,9 @@ export class Game {
     if (boss) at.y = Math.min(at.y, 6);
     if (e.kind in DROP_SOURCES && e.def.role !== 'hvt' && e.tag !== 'summon') this.dropLoot(e.kind as DropSourceId, at);
     if (e.elite) this.dropFrom(this.survival.eliteSource(e), at);
+    if (boss && this.cfg.pinnacle) this.dropLoot('pinnacle', at);
+    // Pinnacle keys: elites on RL 8+ (own stream, like shards, so loot rolls never shift).
+    if (e.elite && this.cfg.tier.id >= PINNACLE.minRl && this.shardRand() < PINNACLE.keyChance(e.mods.length) && this.cfg.run.collect({ keys: 1 })) uiEvents.emit('alert', { text: 'PINNACLE KEY · bank it to summon a pinnacle boss', tone: 'orange' });
     this.enemies.kill(e, this.enemyFx, this.enemyCtx);
   }
 

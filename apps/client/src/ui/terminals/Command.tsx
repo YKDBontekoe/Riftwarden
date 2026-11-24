@@ -1,4 +1,5 @@
 import { UnlockTrackPanel } from '../UnlockTrack';
+import { CodexPanel, WarCaches } from '../Spikes';
 import type { Flow } from '../../core/Flow';
 import { getTier, type ThreatTier } from '@riftwarden/rules/progression/tiers';
 import { MILESTONES } from '@riftwarden/rules/survival/records';
@@ -28,6 +29,8 @@ export function CommandTerminal({ flow, close }: { flow: Flow; close: () => void
           </div>
           <WardenProgress flow={flow} />
           <UnlockTrackPanel save={save} />
+          <CodexPanel save={save} />
+          <WarCaches flow={flow} save={save} />
           <div className="col-label">MILESTONES · {save.milestones.length}/{MILESTONES.length}</div>
           <div className="milestones" data-testid="milestones">
             {MILESTONES.map((m) => (

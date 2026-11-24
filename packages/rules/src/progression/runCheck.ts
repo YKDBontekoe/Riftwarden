@@ -7,6 +7,7 @@
 //   - resources, XP, kills and timing must fit generous per-wave ceilings.
 // It cannot stop a client that fishes run ids for a lucky stream, but it rejects edited or invented items and
 // edited resource numbers, which is what matters for a loot game. Co-op runs are server-simulated (no check).
+import { pinnacleBlocker } from './spikes';
 import { masteryTotal } from './mastery';
 import { mulberry32 } from '../combat/damage';
 import { DROP_SOURCES, type DropSource } from '../loot/drops';
@@ -27,6 +28,8 @@ export const CEILINGS = {
   salvagePerWave: (w: number) => 500 + 50 * w,
   componentsPerWave: (w: number) => 8 + Math.floor(w / 5),
   shardsPerWave: 12,
+  /** Pinnacle keys per bank (elite drops on RL 8+). */
+  keysPerBank: 6,
   xpPerWave: (w: number) => 3000 + 300 * w,
   /** Mastery XP per wave (all families together; a boss is worth 300). */
   masteryPerWave: (w: number) => 1500 + 40 * w,
@@ -91,7 +94,7 @@ function nodeSalt(mapSeed: number, node: string | null): number | null {
 }
 
 /** Re-roll every recorded drop; returns the items the run genuinely produced (by uid) or a reason. */
-export function replayLoot(runId: string, runTier: number, mapSeed: number, records: LootRecord[], surge = 0, locks: readonly string[] = []): Map<string, ItemInstance> | string {
+export function replayLoot(runId: string, runTier: number, mapSeed: number, records: LootRecord[], surge = 0, locks: readonly string[] = [], pinnacleRun = false): Map<string, ItemInstance> | string {
   const want = [...locks].sort().join(',');
   const out = new Map<string, ItemInstance>();
   if (records.length > 5000) return 'loot journal too long';
@@ -101,6 +104,7 @@ export function replayLoot(runId: string, runTier: number, mapSeed: number, reco
     if (r.pity !== undefined && !(Number.isInteger(r.pity) && r.pity >= 0 && r.pity <= MAX_PITY)) return 'bad loot record';
     // Locks narrow the loot pool, so they must be exactly the run's own (a client could otherwise target-farm).
     if ((Array.isArray(r.locks) ? [...r.locks].sort().join(',') : '') !== want) return 'loot locks altered';
+    if (r.source.id === 'pinnacle' && !pinnacleRun) return 'pinnacle loot outside a pinnacle run';
     const bad = validSource(r.source) ?? validTier(r.tier, runTier, surge);
     if (bad) return bad;
     const salt = nodeSalt(mapSeed, r.node);
@@ -138,12 +142,13 @@ function checkRewards(d: SaveData, runId: string, tier: number, mapSeed: number,
     within('components', rewards.components, CEILINGS.componentsPerWave(top) * f) ??
     within('shards', rewards.shards, CEILINGS.shardsPerWave * f) ??
     within('xp', rewards.xp, CEILINGS.xpPerWave(top) * f) ??
-    within('mastery', masteryTotal(rewards.mastery), CEILINGS.masteryPerWave(top) * f);
+    within('mastery', masteryTotal(rewards.mastery), CEILINGS.masteryPerWave(top) * f) ??
+    within('keys', rewards.keys, CEILINGS.keysPerBank);
   if (bad) return bad;
   const items = rewards.items ?? [];
   if (items.length > CEILINGS.itemsPerWave * span) return 'more items than the waves drop';
   if (!items.length) return null;
-  const produced = replayLoot(runId, tier, mapSeed, loot, surge, locks);
+  const produced = replayLoot(runId, tier, mapSeed, loot, surge, locks, d.activeRun?.id === runId && !!d.activeRun.pinnacle);
   if (typeof produced === 'string') return produced;
   const owned = new Set(d.items.map((i) => i.uid));
   const seen = new Set<string>();
@@ -178,6 +183,7 @@ export function checkRunEntry(d: SaveData, e: RunEntry, now: number): string | n
       if (d.history.some((h) => h.id === e.runId) || a?.id === e.runId) return 'run already started';
       if (e.mode !== 'defense' && e.mode !== 'survival') return 'bad mode';
       if (!Number.isInteger(e.mapSeed)) return 'bad map seed';
+      if (e.pinnacle && (e.mapSeed || pinnacleBlocker(d.pinnacle?.keys ?? 0, e.tier))) return pinnacleBlocker(d.pinnacle?.keys ?? 0, e.tier) ?? 'pinnacle runs use the classic arena';
       if (e.at > now + 10 * 60_000) return 'run starts in the future';
       return deployBlocker(d);
     case 'bank':
