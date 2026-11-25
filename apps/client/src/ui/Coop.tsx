@@ -119,11 +119,11 @@ export function CoopPanel({ flow, compact }: { flow: Flow; compact?: boolean }) 
     <div className="coop" data-testid="coop-lobby">
       <div className="lobby-head">
         <div>
-          <div className="coop-kicker">SESSION CODE</div>
+          <div className="ds-lbl">Room code</div>
           <div className="lobby-code" data-testid="lobby-code">{lobby.code}</div>
         </div>
         <button
-          className="mini"
+          className="ds-btn"
           onClick={() => {
             void navigator.clipboard?.writeText(link).then(() => setCopied(true));
             setTimeout(() => setCopied(false), 1500);
@@ -139,6 +139,7 @@ export function CoopPanel({ flow, compact }: { flow: Flow; compact?: boolean }) 
         {lobby.players.map((p, i) => (
           <div key={p.id} className={`lobby-player ${p.connected ? '' : 'away'}`} data-testid="lobby-player">
             <i className="swatch" style={{ background: SLOT_CSS[i % SLOT_CSS.length] }} />
+            <span className="lp-slot ds-mono">SLOT {i + 1}</span>
             <span className="lp-name">
               {p.host && <b className="host">★</b>} {p.name}
               {p.id === me && <em> (you)</em>}
@@ -152,6 +153,7 @@ export function CoopPanel({ flow, compact }: { flow: Flow; compact?: boolean }) 
         {Array.from({ length: Math.max(0, lobby.capacity - lobby.players.length) }).map((_, i) => (
           <div key={`e${i}`} className="lobby-player empty">
             <i className="swatch" />
+            <span className="lp-slot ds-mono">SLOT {lobby.players.length + i + 1}</span>
             <span className="lp-name">Open slot · share the code</span>
           </div>
         ))}
@@ -166,7 +168,7 @@ export function CoopPanel({ flow, compact }: { flow: Flow; compact?: boolean }) 
       <div className="lobby-tier lobby-mode">
         <span>GAME MODE</span>
         {(['defense', 'survival'] as const).map((m) => (
-          <button key={m} data-testid={`lobby-mode-${m}`} className={`mini ${lobby.mode === m ? 'on' : ''}`} disabled={!host || lobby.state !== 'lobby'} onClick={() => flow.net?.send({ t: 'mode', mode: m })}>
+          <button key={m} data-testid={`lobby-mode-${m}`} className="set-opt" aria-pressed={lobby.mode === m} disabled={!host || lobby.state !== 'lobby'} onClick={() => flow.net?.send({ t: 'mode', mode: m })}>
             {m.toUpperCase()}
           </button>
         ))}

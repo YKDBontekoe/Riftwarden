@@ -353,3 +353,29 @@
 .set-pip { position: absolute; left: 8px; top: 8px; }
 .settings-screen .set-page { left: 44px; right: 44px; top: 64px; bottom: 76px; overflow: auto; padding-right: 8px; }
 @media (max-width: 760px) { .set-row { flex-wrap: wrap; } .set-ctl .settings-range { width: 160px; } .set-presets, .set-binds { grid-template-columns: 1fr; } }
+
+/* ---------------------------------------------------------------- co-op lobby */
+.coop[data-testid=coop-lobby] { display: flex; flex-direction: column; gap: 14px; }
+.lobby-head { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+.lobby-code { font: 800 48px/0.9 var(--ds-d); letter-spacing: 0.12em; color: var(--ds-ink); }
+.lobby-cap { margin-left: auto; font: 600 12px var(--ds-m); letter-spacing: 0.1em; color: var(--ds-dim); }
+.lobby-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.lobby-player { position: relative; display: grid; grid-template-columns: 1fr auto; grid-template-areas: 'slot ready' 'name name' 'weapon weapon'; gap: 4px 10px; padding: 14px 16px 14px 20px; border: 0; background: rgba(10, 14, 18, 0.7); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16); clip-path: var(--ds-cut-tr); }
+.lobby-player .swatch { position: absolute; left: 0; top: 0; bottom: 0; width: 3px; height: auto; border-radius: 0; }
+.lobby-player .lp-slot { grid-area: slot; }
+.lobby-player .lp-name { grid-area: name; font: 700 22px var(--ds-d); letter-spacing: 0.06em; text-transform: uppercase; }
+.lobby-player .lp-weapon { grid-area: weapon; font-size: 13px; }
+.lobby-player .lp-ready { grid-area: ready; font: 700 12px var(--ds-d); letter-spacing: 0.16em; color: var(--ds-dim); }
+.lobby-player .lp-ready.ok { color: var(--ds-up); }
+.lobby-player.empty { background: none; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12); }
+.lobby-player.empty .lp-name { font: 400 14px var(--font); text-transform: none; letter-spacing: 0; color: var(--ds-dim); }
+.lobby-player.away { opacity: 0.6; }
+.lobby-tier { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.lobby-tier > span { font: 600 13px var(--ds-d); letter-spacing: 0.16em; color: var(--ds-dim); }
+.lobby-mode em { font-style: normal; font-size: 13px; color: var(--ds-dim); }
+.lobby-mode .set-opt + .set-opt { margin-left: -14px; }
+.lobby-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.lobby-actions > button { width: auto; flex: none; margin: 0; }
+.lobby-actions > button.primary { flex: 1; min-height: 50px; }
+.coop .coop-status { font: 600 12px var(--ds-m); letter-spacing: 0.1em; color: var(--ds-muted); }
+@media (max-width: 700px) { .lobby-list { grid-template-columns: 1fr; } }
