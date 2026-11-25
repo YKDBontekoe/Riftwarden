@@ -372,7 +372,7 @@ const savedItems = (p) => p.evaluate(() => JSON.parse(JSON.stringify(window.__ri
   // Filter + sort + compare work in the storage UI.
   await p.click('.inv-filters button:has-text("WEAPON")');
   const weaponsOnly = await p.$$eval('.inv-list .icard em', (els) => els.every((e) => e.textContent.startsWith('WEAPON')));
-  await p.click('.inv-sort button:has-text("LEVEL")');
+  for (let i = 0; i < 5 && !(await p.textContent('.inv-sort')).includes('LEVEL'); i++) await p.click('.inv-sort'); // the sort chip cycles
   const levels = await p.$$eval('.inv-list .icard em', (els) => els.map((e) => +e.textContent.match(/LV (\d+)/)[1]));
   check('D7 storage filter by category and sort by level work', weaponsOnly && levels.every((v, i) => i === 0 || levels[i - 1] >= v), JSON.stringify(levels));
   await p.click('.inv-filters button:has-text("ALL")');

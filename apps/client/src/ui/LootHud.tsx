@@ -8,7 +8,7 @@ import { type Category, CATEGORY_LABEL } from '@riftwarden/rules/loot/types';
 import type { ItemInstance } from '@riftwarden/rules/loot/types';
 import { type SlotId, SLOTS } from '@riftwarden/rules/progression/items';
 import { getTier } from '@riftwarden/rules/progression/tiers';
-import { type InvEntry, InventoryView, ItemGlyph, RarityLegend } from './items';
+import { type InvEntry, InventoryView, ItemGlyph } from './items';
 import { hudStore, type LootEvent, uiEvents } from '@riftwarden/game/ui/store';
 import { useHud } from './useHud';
 import { FieldIcon, itemIcon } from './FieldIcon';
@@ -243,15 +243,10 @@ export function ArenaInventory({ game }: { game: Game }) {
               },
             }}
             header={
-              <div className="cargo-bar">
-                <span>
-                  CARGO <b>{unsecured}</b> / {inv.cargoCapacity} UNSECURED
-                </span>
-                <span>
-                  SECURED THIS RUN <b className="c">{run.secured.items.length}</b>
-                </span>
-                <span className="rule">Unsecured items, even equipped ones, are lost if the reactor falls before the next checkpoint.</span>
-                <RarityLegend />
+              <div className="cargo-bar ds-row">
+                <span className="ds-risk-tag">At risk until the next checkpoint · {unsecured} / {inv.cargoCapacity}</span>
+                <span className="ds-meta">Secured this run <b className="c">{run.secured.items.length}</b></span>
+                <span className="rule ds-meta">Unsecured items, even equipped ones, are lost if the reactor falls before the next checkpoint. Gear you swap out stays yours.</span>
               </div>
             }
           />

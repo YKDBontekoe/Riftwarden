@@ -167,3 +167,17 @@ export function StatName({ stat, equipped, children }: { stat: StatKey; equipped
     </span>
   );
 }
+
+/** Headline of a swap (final design): the biggest score change as one large number with the verdict under it. */
+export function ImpactHeadline({ impact }: { impact: SwapImpact | null | undefined }) {
+  if (!impact) return null;
+  const top = [...impact.deltas].sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct))[0];
+  const cls = impact.verdict === 'upgrade' ? 'ds-up' : impact.verdict === 'downgrade' ? 'ds-bad' : 'ds-side';
+  return (
+    <div className="impact-headline ds-col" data-testid="impact-headline">
+      <span className="ds-lbl">{top ? SCORE_LABEL[top.key] : 'Loadout'}</span>
+      <span className={`ih-num ${cls}`}>{top ? pctText(top.pct) : '='}</span>
+      <span className={`ds-lbl ${cls}`}>{VERDICT_LABEL[impact.verdict]} for your build</span>
+    </div>
+  );
+}

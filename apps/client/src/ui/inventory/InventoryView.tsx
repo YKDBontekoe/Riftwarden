@@ -3,7 +3,7 @@ import { STAT_DEFS } from '@riftwarden/rules/combat/stats';
 import { affixDef } from '@riftwarden/rules/loot/affixes';
 import { baseDef } from '@riftwarden/rules/loot/bases';
 import { swapImpact, type SwapImpact } from '@riftwarden/rules/loot/loadoutScore';
-import { ComparisonPriorityPicker, useComparisonPriority, useScore, useScoreContext, VerdictTag } from '../compare';
+import { ComparisonPriorityPicker, ImpactHeadline, useComparisonPriority, useScore, useScoreContext, VerdictTag } from '../compare';
 import { rarity } from '@riftwarden/rules/loot/rarity';
 import { type Category, type ItemInstance } from '@riftwarden/rules/loot/types';
 import { getSlot, type SlotId, SLOTS, slotsFor, defaultSlot } from '@riftwarden/rules/progression/items';
@@ -12,12 +12,15 @@ import { ComparePanel } from './compare';
 import { EquippedItemsContext, ItemDetail } from './detail';
 import { InvEntry, ItemCard, catLabel } from './entry';
 import { ItemGlyph } from './glyphs';
+import { rarityCls } from '../ds';
 
 type Filter = 'all' | Category | 'unsecured';
 
 type Sort = 'rarity' | 'level' | 'newest' | 'name';
 
 type ViewSort = Sort | 'impact';
+
+const SORTS: ViewSort[] = ['impact', 'rarity', 'level', 'newest', 'name'];
 
 const FILTERS: Filter[] = ['all', 'weapon', 'armor', 'shield', 'reactor', 'processor', 'accessory', 'ability', 'ultimate', 'module'];
 
@@ -139,59 +142,48 @@ export function InventoryView({ entries, equipped, actions, extraFilter, header,
     return () => window.removeEventListener('keydown', onKey);
   }, [actions]);
 
+  const sortLabel = (x: ViewSort) => (x === 'impact' ? 'BEST FOR BUILD' : x.toUpperCase());
+  const nextSort = () => setSort((x) => SORTS[(SORTS.indexOf(x) + 1) % SORTS.length]);
   return (
-    <div className="inv">
+    <div className="inv inv-ds">
       <div className="inv-slots">
         {SLOTS.map((s) => {
           const it = equipped[s.id];
-          const r = it ? rarity(it.rarity) : null;
           return (
-            <button key={s.id} className={`inv-slot ${it ? 'filled' : ''} ${shown && it?.uid === shown.uid ? 'sel' : ''} ${against && it?.uid === against.uid && shown?.uid !== it.uid ? 'vs' : ''}`} style={r ? { ['--rc' as string]: r.color } : undefined} onClick={() => it && setSel(it.uid)}>
-              <span className="font-mono text-[9px] tracking-[0.14em] text-faint">{s.label}</span>
-              {it ? <ItemGlyph item={it} size={28} /> : <span className="text-faint leading-[30px]">—</span>}
+            <button key={s.id} className={`inv-slot ds-tile ${it ? rarityCls(it.rarity) : 'empty'} ${it ? 'filled' : ''} ${shown && it?.uid === shown.uid ? 'sel on' : ''} ${against && it?.uid === against.uid && shown?.uid !== it.uid ? 'vs' : ''}`} title={it ? `${s.label}: ${it.name}` : `${s.label}: empty`} onClick={() => it && setSel(it.uid)}>
+              <span className="is-label">{s.label}</span>
+              {it ? <span className="ds-tile-art"><ItemGlyph item={it} size={34} /></span> : <span className="is-empty">+</span>}
               <b>{it ? it.name : 'EMPTY'}</b>
-              {it && <em>LV {fmtNum(it.level)}</em>}
+              {it && <em className="ds-lv">{fmtNum(it.level)}</em>}
             </button>
           );
         })}
       </div>
       {header}
-      <ComparisonPriorityPicker />
       <div className="inv-main">
         <div className="inv-list-col">
-          <div className="inv-search">
-            <input type="search" placeholder="Search name, rarity, stat…" value={query} onChange={(e) => setQuery(e.target.value)} data-testid="inv-search" />
-            <button className={`upg ${upOnly ? 'on' : ''}`} onClick={() => setUpOnly((v) => !v)} title="Show upgrades for the selected comparison priority" aria-pressed={upOnly}>
-              ▲ UPGRADES <i>{upgrades}</i>
-            </button>
-          </div>
           <div className="inv-filters">
-            {FILTERS.map((f) => (
-              <button key={f} className={filter === f ? 'on' : ''} onClick={() => setFilter(f)}>
+            {FILTERS.filter((f) => f === 'all' || (counts[f] ?? 0) > 0 || f === filter).map((f) => (
+              <button key={f} className={`ds-chip ${filter === f ? 'on solid' : ''}`} onClick={() => setFilter(f)}>
                 {f === 'all' ? 'ALL' : catLabel(f).replace('UPGRADE ', '')}
                 <i>{counts[f] ?? 0}</i>
               </button>
             ))}
             {extraFilter && (
-              <button className={`unsec ${filter === 'unsecured' ? 'on' : ''}`} onClick={() => setFilter('unsecured')}>
+              <button className={`ds-chip risk unsec ${filter === 'unsecured' ? 'on' : ''}`} onClick={() => setFilter('unsecured')}>
                 UNSECURED<i>{counts.unsecured}</i>
               </button>
             )}
           </div>
-          <div className="inv-sort">
-            SORT
-            {(['rarity', 'level', 'impact', 'newest', 'name'] as ViewSort[]).map((s) => (
-              <button key={s} className={sort === s ? 'on' : ''} onClick={() => setSort(s)}>
-                {s === 'impact' ? 'BEST FIRST' : s.toUpperCase()}
-              </button>
-            ))}
-            <span className="kbd-hint">
-              <kbd>↑</kbd>
-              <kbd>↓</kbd> select · <kbd>⏎</kbd> equip
-            </span>
+          <div className="inv-search">
+            <input type="search" placeholder="Search name, rarity, stat…" value={query} onChange={(e) => setQuery(e.target.value)} data-testid="inv-search" />
+            <button className={`upg ds-chip ${upOnly ? 'on green' : ''}`} onClick={() => setUpOnly((v) => !v)} title="Show upgrades for the selected comparison priority" aria-pressed={upOnly}>
+              ▲ UPGRADES ONLY <i>{upgrades}</i>
+            </button>
+            <button className="inv-sort ds-chip" onClick={nextSort} title="Change the sort order">SORT · {sortLabel(sort)}</button>
           </div>
           <div className="inv-list" ref={listRef} onMouseLeave={() => setHover(null)}>
-            {list.length === 0 && <div className="empty-state small">{query || upOnly ? 'No items match.' : 'No items in this category.'}</div>}
+            {list.length === 0 && <div className="empty-state small">{query || upOnly ? 'No items match.' : entries.length ? 'No items in this category.' : 'Nothing here yet. Secure loot at checkpoints to fill it.'}</div>}
             {list.map((e) => (
               <ItemCard
                 key={e.item.uid}
@@ -203,29 +195,41 @@ export function InventoryView({ entries, equipped, actions, extraFilter, header,
               />
             ))}
           </div>
+          <div className="inv-legend ds-meta">▲ upgrade for your build · ◆ sidegrade · ▼ downgrade · hover a tile to compare</div>
         </div>
         <div className={`inv-detail-col ${hovered && hovered !== selected ? 'previewing' : ''}`}>
           {!shownEntry || !shown ? (
             <div className="empty-state">
-              <div className="empty-ico">∅</div>
               <b>Nothing selected</b>
+              <span className="ds-meta">Pick a tile to see what it changes.</span>
             </div>
           ) : (
             <>
-              {hovered && hovered !== selected && <div className="preview-flag">HOVER PREVIEW · click to select</div>}
-              <div className={`detail-split ${!shownEntry.equippedIn && shown.category !== 'module' ? 'two' : ''}`}>
-                <div className="split-item">
-                  <EquippedItemsContext.Provider value={equippedList}>
-                    <ItemDetail item={shown} status={shownEntry.equippedIn ? 'equipped' : shownEntry.status} />
-                  </EquippedItemsContext.Provider>
+              {!shownEntry.equippedIn && shown.category !== 'module' && (
+                <div className="vs-head">
+                  <div className="ds-col vs-side">
+                    <span className="ds-lbl">{slot ? getSlot(slot).label : 'Equipped'}</span>
+                    <div className={`ds-tile ${against ? rarityCls(against.rarity) : 'empty'}`}>{against ? <span className="ds-tile-art"><ItemGlyph item={against} size={70} /></span> : <span className="is-empty">EMPTY</span>}{against && <span className="ds-lv">{fmtNum(against.level)}</span>}</div>
+                    <span className="ds-h3 vs-name">{against?.name ?? 'Nothing equipped'}</span>
+                  </div>
+                  <div className="ds-col vs-side">
+                    <span className="ds-lbl ds-em">{hovered && hovered !== selected ? 'Hover preview' : 'Selected'}</span>
+                    <div className={`ds-tile on ${rarityCls(shown.rarity)}`}><span className="ds-tile-art"><ItemGlyph item={shown} size={70} /></span><span className="ds-lv">{fmtNum(shown.level)}</span></div>
+                    <span className="ds-h3 vs-name">{shown.name}</span>
+                  </div>
                 </div>
+              )}
+              {!shownEntry.equippedIn && shown.category !== 'module' && <ImpactHeadline impact={impacts.get(shown.uid)} />}
+              {hovered && hovered !== selected && <div className="preview-flag">HOVER PREVIEW · click to select</div>}
+              <ComparisonPriorityPicker />
+              <div className={`detail-split ${!shownEntry.equippedIn && shown.category !== 'module' ? 'two' : ''}`}>
                 {!shownEntry.equippedIn && shown.category !== 'module' && (
                   <div className="split-compare">
                     {slots.length > 1 && (
                       <div className="slot-pick">
                         TARGET SLOT
                         {slots.map((s) => (
-                          <button key={s} className={slot === s ? 'on' : ''} onClick={() => setTargetSlot(s)}>
+                          <button key={s} className={`ds-chip ${slot === s ? 'on solid' : ''}`} onClick={() => setTargetSlot(s)}>
                             {getSlot(s).label}
                           </button>
                         ))}
@@ -234,47 +238,53 @@ export function InventoryView({ entries, equipped, actions, extraFilter, header,
                     <ComparePanel item={shown} against={against} equipped={equippedList} slot={slot} />
                   </div>
                 )}
-              </div>
-              {selected && item && shown === item && (
-                <div className="inv-actions">
-                  {item.category !== 'module' && !selected.equippedIn && baseDef(item.defId) && (
-                    <button className="primary small" disabled={!actions.canChange} onClick={() => actions.equip(item.uid, slot ?? undefined)}>
-                      EQUIP{slot ? ` · ${getSlot(slot).label}` : ''}
-                      {selectedImpact && <VerdictTag impact={selectedImpact} />}
-                    </button>
-                  )}
-                  {selected.equippedIn && (
-                    <button disabled={!actions.canChange || getSlot(selected.equippedIn).required} onClick={() => actions.unequip(selected.equippedIn!)}>
-                      {getSlot(selected.equippedIn).required ? 'REQUIRED SLOT' : 'UNEQUIP'}
-                    </button>
-                  )}
-                  {actions.remove &&
-                    actions.remove.allowed(selected) &&
-                    (confirm === item.uid ? (
-                      <div className="confirm-row">
-                        <span>{actions.remove.confirm}</span>
-                        <button
-                          className="danger"
-                          onClick={() => {
-                            actions.remove!.run(item.uid);
-                            setConfirm(null);
-                            setSel(null);
-                          }}
-                        >
-                          CONFIRM
-                        </button>
-                        <button onClick={() => setConfirm(null)}>CANCEL</button>
-                      </div>
-                    ) : (
-                      <button className="danger" disabled={!actions.canChange} onClick={() => setConfirm(item.uid)}>
-                        {actions.remove.label(selected)}
-                      </button>
-                    ))}
-                  {actions.extra?.(selected)}
-                  {!actions.canChange && <div className="locked-note">{actions.lockedReason}</div>}
+                <div className="split-item">
+                  <EquippedItemsContext.Provider value={equippedList}>
+                    <ItemDetail item={shown} status={shownEntry.equippedIn ? 'equipped' : shownEntry.status} />
+                  </EquippedItemsContext.Provider>
                 </div>
-              )}
+              </div>
             </>
+          )}
+          {selected && item && (!shown || shown === item) && (
+            <div className="inv-actions">
+              {actions.remove &&
+                actions.remove.allowed(selected) &&
+                (confirm === item.uid ? (
+                  <div className="confirm-row">
+                    <span>{actions.remove.confirm}</span>
+                    <button
+                      className="danger ds-btn ds-danger"
+                      onClick={() => {
+                        actions.remove!.run(item.uid);
+                        setConfirm(null);
+                        setSel(null);
+                      }}
+                    >
+                      CONFIRM
+                    </button>
+                    <button className="ds-btn" onClick={() => setConfirm(null)}>CANCEL</button>
+                  </div>
+                ) : (
+                  <button className="danger ds-btn ds-danger" disabled={!actions.canChange} onClick={() => setConfirm(item.uid)}>
+                    {actions.remove.label(selected)}
+                  </button>
+                ))}
+              {actions.extra?.(selected)}
+              {!actions.canChange && <div className="locked-note">{actions.lockedReason}</div>}
+              <span className="ds-grow" />
+              {selected.equippedIn && (
+                <button className="ds-btn" disabled={!actions.canChange || getSlot(selected.equippedIn).required} onClick={() => actions.unequip(selected.equippedIn!)}>
+                  {getSlot(selected.equippedIn).required ? 'REQUIRED SLOT' : 'UNEQUIP'}
+                </button>
+              )}
+              {item.category !== 'module' && !selected.equippedIn && baseDef(item.defId) && (
+                <button className="primary small ds-btn-p" disabled={!actions.canChange} onClick={() => actions.equip(item.uid, slot ?? undefined)}>
+                  <span className="ds-kd">ENTER</span>EQUIP{slot ? ` · ${getSlot(slot).label}` : ''}
+                  {selectedImpact && <VerdictTag impact={selectedImpact} />}
+                </button>
+              )}
+            </div>
           )}
         </div>
       </div>

@@ -1,0 +1,135 @@
+/* Screen layouts of the final UI design that build on ds.css (inventory, terminals, run panels).
+   Loaded after style.css, so these rules win over the older component styles they replace. */
+
+/* ---------------------------------------------------------------- item tiles (ItemCard default) */
+.icard.tile { position: relative; display: block; width: auto; height: 112px; margin: 0; padding: 0; border: 0; border-radius: 0; text-align: left; overflow: hidden;
+  clip-path: var(--ds-cut-tr); background: radial-gradient(ellipse at 50% 112%, color-mix(in srgb, var(--r) 40%, transparent), transparent 70%), linear-gradient(180deg, rgba(22, 28, 34, 0.92), rgba(10, 13, 16, 0.95));
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1); transition: transform 0.12s ease-out; }
+.icard.tile:hover { transform: translateY(-3px); box-shadow: inset 0 0 0 1px rgba(244, 241, 232, 0.6); background: radial-gradient(ellipse at 50% 112%, color-mix(in srgb, var(--r) 48%, transparent), transparent 70%), linear-gradient(180deg, rgba(26, 32, 38, 0.95), rgba(12, 15, 18, 0.95)); }
+.icard.tile.sel { background: radial-gradient(ellipse at 50% 112%, color-mix(in srgb, var(--r) 40%, transparent), transparent 70%), linear-gradient(180deg, rgba(40, 26, 16, 0.95), rgba(12, 13, 14, 0.95)) !important; box-shadow: inset 0 0 0 2px var(--ds-ember), inset 0 0 30px rgba(255, 138, 61, 0.35) !important; }
+.icard.tile .ds-tile-art { top: 6%; height: 64%; }
+.icard.tile .ds-tile-art .glyph { width: 100%; height: 100%; object-fit: contain; background: none; box-shadow: none; clip-path: none; border: 0; }
+.icard.tile .ic-main { position: absolute; left: 6px; right: 6px; bottom: 16px; display: block; text-align: center; }
+.icard.tile .ic-main b { display: block; font: 700 12px/1.1 var(--ds-d); letter-spacing: 0.06em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--ds-ink); text-shadow: 0 1px 2px #000; }
+.icard.tile .ic-foot { position: absolute; right: 6px; bottom: 5px; font: 700 9px var(--ds-d); letter-spacing: 0.1em; }
+.icard.tile .ic-foot .ic-status { padding: 0; border: 0; background: none; color: var(--ds-dim); }
+.icard.tile .ic-foot .ic-status.s-unsecured { color: var(--ds-risk); }
+.icard.tile .ic-foot .ic-status.s-equipped, .icard.tile.equipped .ic-status { color: var(--ds-ember-soft); background: none; }
+.icard.tile .ic-foot > :not(.ic-status) { font: 700 13px var(--ds-d); color: var(--ds-ink); }
+.icard.tile.stored .ic-status.s-stored { display: none; }
+.icard.tile .ic-check { position: absolute; right: 6px; top: 26px; z-index: 2; }
+.icard.tile .ic-lock { position: absolute; right: 8px; bottom: 30px; }
+.icard.tile.dis { opacity: 0.45; }
+.icard.tile .ds-vd { z-index: 1; }
+
+/* ---------------------------------------------------------------- inventory view */
+.inv.inv-ds { display: flex; flex-direction: column; gap: 12px; height: 100%; min-height: 0; }
+.inv-ds .inv-slots { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; }
+.inv-ds .inv-slot { position: relative; height: 62px; margin: 0; padding: 4px 6px; display: block; text-align: left; overflow: hidden; }
+.inv-ds .inv-slot .is-label { position: relative; z-index: 1; display: block; font: 600 10px var(--ds-d); letter-spacing: 0.14em; color: var(--ds-dim); text-transform: uppercase; }
+.inv-ds .inv-slot .ds-tile-art { left: 52%; width: 44%; top: 12%; height: 70%; }
+.inv-ds .inv-slot b { position: absolute; left: 6px; bottom: 8px; width: 50%; font: 700 11px/1.1 var(--ds-d); letter-spacing: 0.04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-transform: uppercase; }
+.inv-ds .inv-slot .ds-lv { top: auto; bottom: 22px; left: 6px; font-style: normal; font-size: 11px; color: var(--ds-dim); }
+.inv-ds .inv-slot .is-empty { position: absolute; right: 12px; top: 18px; font: 700 20px var(--ds-d); color: var(--ds-dim); }
+.inv-ds .inv-slot.vs { box-shadow: inset 0 0 0 1px var(--ds-ember-soft); }
+.inv-ds .inv-main { display: grid; grid-template-columns: minmax(330px, 1fr) minmax(0, 1.05fr); gap: 22px; flex: 1; min-height: 0; }
+.inv-ds .inv-list-col { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+.inv-ds .inv-filters { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; font: inherit; }
+.inv-ds .inv-filters button, .inv-ds .inv-search .ds-chip, .inv-ds .slot-pick .ds-chip { width: auto; margin: 0; padding: 4px 10px; border: 0; background: none; clip-path: none; font: 700 12px var(--ds-d); letter-spacing: 0.16em; color: var(--ds-ink); }
+.inv-ds .inv-filters button i, .inv-ds .inv-search .ds-chip i { font-style: normal; margin-left: 4px; opacity: 0.75; }
+.inv-ds .inv-filters button.on, .inv-ds .slot-pick .ds-chip.on { background: var(--ds-ink); color: #0e1114; box-shadow: none; }
+.inv-ds .inv-filters button.unsec { box-shadow: inset 0 0 0 1px var(--ds-risk); color: var(--ds-risk); }
+.inv-ds .inv-filters button.unsec.on { background: var(--ds-risk); color: #0e1114; }
+.inv-ds .inv-search { display: flex; gap: 6px; margin: 0; align-items: center; }
+.inv-ds .inv-search input { flex: 1; min-width: 120px; padding: 7px 10px; border-radius: 0; border: 0; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18); background: rgba(0, 0, 0, 0.35); }
+.inv-ds .inv-search input:focus { box-shadow: inset 0 0 0 1px var(--ds-ember); }
+.inv-ds .inv-search .upg { color: var(--ds-up); box-shadow: inset 0 0 0 1px rgba(143, 240, 182, 0.5); }
+.inv-ds .inv-search .upg.on { background: rgba(143, 240, 182, 0.14); }
+.inv-ds .inv-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); grid-auto-rows: 112px; gap: 10px; align-content: start; flex: 1; max-height: none; min-height: 0; overflow: auto; padding: 4px 6px 4px 0; }
+.inv-ds .inv-list .empty-state { grid-column: 1 / -1; }
+.inv-ds .inv-legend { font-size: 12px; }
+.inv-ds .inv-detail-col { display: flex; flex-direction: column; gap: 10px; min-height: 0; max-height: none; overflow: auto; padding: 0 6px 0 18px; border-left: 1px solid rgba(255, 255, 255, 0.1); }
+.inv-ds .inv-detail-col.previewing { border-left-color: var(--ds-ember); }
+.inv-ds .vs-head { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.inv-ds .vs-side { gap: 6px; min-width: 0; }
+.inv-ds .vs-side .ds-tile { height: 110px; cursor: default; }
+.inv-ds .vs-side .ds-tile-art .glyph { width: 100%; height: 100%; object-fit: contain; background: none; border: 0; box-shadow: none; }
+.inv-ds .vs-side .is-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font: 700 14px var(--ds-d); letter-spacing: 0.2em; color: var(--ds-dim); }
+.inv-ds .vs-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.inv-ds .detail-split.two { grid-template-columns: 1fr; }
+.inv-ds .slot-pick { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font: 600 12px var(--ds-d); letter-spacing: 0.16em; color: var(--ds-dim); margin-bottom: 8px; }
+.inv-ds .inv-actions { position: sticky; bottom: 0; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: auto; padding: 12px 0 2px; background: linear-gradient(0deg, rgba(10, 14, 18, 0.95) 70%, transparent); }
+.inv-ds .inv-actions > button { flex: none; width: auto; margin: 0; }
+.inv-ds .inv-actions .ds-btn-p { min-height: 46px; font-size: 18px; padding: 0 22px; }
+.inv-ds .inv-actions .ds-btn-p .verdict { margin-left: 6px; font-size: 12px; }
+.inv-ds .confirm-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.inv-ds .locked-note { font-size: 12px; color: var(--ds-risk); }
+@container (max-width: 860px) { .inv-ds .inv-main { grid-template-columns: 1fr; } .inv-ds .inv-detail-col { border-left: 0; padding-left: 0; } }
+@media (max-width: 900px), (max-height: 540px) { .inv-ds .inv-main { grid-template-columns: 1fr; } .inv-ds .inv-detail-col { border-left: 0; padding-left: 0; } }
+
+/* Terminals that hold the inventory view: let it fill the frame. */
+.terminal-screen .term-body:has(> .inv-ds), .terminal-screen .term-body:has(> * > .inv-ds) { display: flex; flex-direction: column; overflow: hidden; }
+.terminal-screen .term-body > .inv-ds, .terminal-screen .term-body > * > .inv-ds { flex: 1; }
+/* the legacy row verdict badge (::after) must not replace the tile's rarity bar */
+.icard.tile::after, button.icard.tile.v-upgrade::after { content: ''; position: absolute; left: 0; right: 0; top: auto; bottom: 0; height: 4px; padding: 0; font-size: 0; background: var(--r); box-shadow: 0 0 12px var(--r); color: transparent; }
+.inv-ds button.inv-slot { display: block; height: 70px; padding: 6px 8px; border: 0; }
+.inv-ds .inv-slot .ds-tile-art { left: 56%; width: 40%; top: 18%; height: 56%; }
+.inv-ds .inv-slot b { bottom: 10px; width: 52%; color: var(--ds-ink); }
+.inv-ds .inv-slot:not(.filled) b { color: var(--ds-dim); }
+.inv-ds .inv-slot .ds-lv { display: none; }
+.inv-ds .inv-actions { background: rgba(10, 14, 18, 0.97); box-shadow: 0 -1px 0 rgba(255, 255, 255, 0.1); }
+.storage-bar.ds-row, .cargo-bar.ds-row { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; padding: 0; border: 0; background: none; }
+.storage-bar .cap { display: flex; align-items: center; gap: 10px; min-width: 240px; font: 600 13px var(--ds-m); letter-spacing: 0.1em; color: var(--ds-dim); }
+.storage-bar .cap-bar { flex: 1; height: 4px; }
+.storage-bar .cap.over { color: var(--ds-risk); }
+.inv-ds .inv-slot.vs::before, .inv-ds .inv-slot.vs::after { display: none; }
+.inv-ds .vs-side .ds-tile { height: 88px; }
+.inv-ds .inv-actions { flex-wrap: nowrap; gap: 8px; }
+.inv-ds .inv-actions .ds-btn { min-height: 40px; padding: 0 14px; font-size: 14px; white-space: nowrap; }
+.inv-ds .inv-actions .ds-btn-p { min-height: 44px; padding: 0 18px; font-size: 15px; letter-spacing: 0.14em; white-space: nowrap; }
+.inv-ds .compare-priority, .inv-ds .cmp-priority { margin: 0; }
+/* comparison priority: one compact chip row */
+.comparison-priority { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 6px; padding: 0; border: 0; }
+.comparison-priority legend { float: left; margin-right: 8px; padding: 0; font: 600 12px var(--ds-d); letter-spacing: 0.16em; text-transform: uppercase; color: var(--ds-dim); }
+.comparison-priority > div { display: flex; flex-wrap: wrap; gap: 6px; }
+.comparison-priority label span { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; font: 700 12px var(--ds-d); letter-spacing: 0.12em; text-transform: uppercase; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25); border: 0; border-radius: 0; background: none; }
+.comparison-priority input:checked + span { background: var(--ds-ink); color: #0e1114; box-shadow: none; }
+.comparison-priority input:focus-visible + span { outline: 2px solid var(--ds-ember); outline-offset: 2px; }
+
+/* ---------------------------------------------------------------- item detail header (every terminal) */
+.idetail .id-head { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 16px; align-items: center; padding: 0 0 10px; margin-bottom: 8px; border: 0; background: none; border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
+.idetail .id-head > .ds-tile { height: 88px; cursor: default; }
+.idetail .id-head .ds-tile-art .glyph { width: 100%; height: 100%; object-fit: contain; background: none; border: 0; box-shadow: none; }
+.idetail .id-titles { gap: 4px; min-width: 0; }
+.idetail .id-name { font-size: clamp(26px, 2.6vw, 40px); line-height: 0.95; overflow-wrap: anywhere; }
+.idetail .id-tags { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font: 600 11px var(--ds-m); letter-spacing: 0.1em; color: var(--ds-dim); }
+.idetail .id-blurb { font-style: italic; color: var(--ds-dim); }
+
+/* ---------------------------------------------------------------- swap headline */
+.impact-headline { align-items: flex-end; gap: 2px; float: right; margin: 0 0 6px 12px; text-align: right; }
+.impact-headline .ih-num { font: 800 54px/0.9 var(--ds-d); text-shadow: 0 0 24px currentColor; }
+.inv-ds .impact-headline { float: none; align-items: flex-start; text-align: left; flex-direction: row; align-items: baseline; gap: 12px; }
+.inv-ds .impact-headline .ih-num { font-size: 40px; order: -1; }
+
+/* ---------------------------------------------------------------- market / reclamation / fabricator lists */
+.terminal-screen .market-grid { grid-template-columns: minmax(330px, 0.9fr) minmax(0, 1.1fr); gap: 24px; height: calc(100% - 60px); min-height: 0; }
+.terminal-screen .mk-list-col { height: 100%; min-height: 0; }
+.terminal-screen .mk-list-col .inv-list, .terminal-screen .market-grid .inv-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); grid-auto-rows: 132px; gap: 12px; align-content: start; flex: 1; max-height: none; min-height: 0; overflow: auto; padding: 4px 6px 4px 0; }
+.terminal-screen .market-grid .inv-list .icard.tile { height: 132px; }
+.terminal-screen .market-grid .inv-detail-col { height: 100%; max-height: none; overflow: auto; padding: 0 6px 0 22px; border-left: 1px solid rgba(255, 255, 255, 0.1); }
+.terminal-screen .mk-manifest { font: 600 12px var(--ds-m); letter-spacing: 0.1em; border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
+.terminal-screen .inv-filters { display: flex; flex-wrap: wrap; gap: 6px; }
+.terminal-screen .inv-filters button { width: auto; margin: 0; padding: 4px 10px; border: 0; background: none; clip-path: none; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.3); font: 700 12px var(--ds-d); letter-spacing: 0.16em; color: var(--ds-ink); }
+.terminal-screen .inv-filters button.on { background: var(--ds-ink); color: #0e1114; box-shadow: none; }
+.icard.tile .price { font: 700 14px var(--ds-d); color: var(--ds-ink); gap: 4px; }
+.icard.tile .price.short { color: var(--ds-down); }
+.icard.tile .price.gain { color: var(--ds-up); }
+.icard.tile .price.sold, .icard.tile .price.prot { border: 0; padding: 0; color: var(--ds-dim); font: 700 11px var(--ds-d); }
+.icard.tile .price .feat { position: absolute; right: 0; bottom: 96px; padding: 1px 5px; font: 700 9px var(--ds-d); letter-spacing: 0.14em; background: var(--ds-r-l); color: #0e1114; }
+.terminal-screen .buy-box { position: sticky; bottom: 0; display: flex; align-items: center; gap: 22px; margin-top: 14px; padding: 12px 0 4px; border: 0; background: rgba(10, 14, 18, 0.97); box-shadow: 0 -1px 0 rgba(255, 255, 255, 0.1); }
+.terminal-screen .buy-box > button, .terminal-screen .buy-box > .confirm-row { flex: 0 1 auto; margin-left: auto; min-width: 220px; }
+.terminal-screen .buy-box b { font: 700 22px var(--ds-d); }
+.terminal-screen .buy-box button.primary { min-height: 50px; font-size: 18px; }
+@media (max-width: 900px), (max-height: 540px) { .terminal-screen .market-grid { grid-template-columns: 1fr; height: auto; } .terminal-screen .market-grid .inv-detail-col { border-left: 0; padding-left: 0; } }
+.icard.tile .ic-main { bottom: 22px; }
+.inv-ds .inv-actions { flex-wrap: wrap; }
