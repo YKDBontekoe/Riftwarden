@@ -214,13 +214,13 @@ export function InventoryView({ entries, equipped, actions, extraFilter, header,
             <>
               {hovered && hovered !== selected && <div className="preview-flag">HOVER PREVIEW · click to select</div>}
               <div className={`detail-split ${!shownEntry.equippedIn && shown.category !== 'module' ? 'two' : ''}`}>
-                <div className="ds-item">
+                <div className="split-item">
                   <EquippedItemsContext.Provider value={equippedList}>
                     <ItemDetail item={shown} status={shownEntry.equippedIn ? 'equipped' : shownEntry.status} />
                   </EquippedItemsContext.Provider>
                 </div>
                 {!shownEntry.equippedIn && shown.category !== 'module' && (
-                  <div className="ds-compare">
+                  <div className="split-compare">
                     {slots.length > 1 && (
                       <div className="slot-pick">
                         TARGET SLOT

@@ -1394,7 +1394,7 @@ button.icard.v-upgrade::after { content: '▲'; position: absolute; right: -1px;
 .inv-main { grid-template-columns: minmax(250px, 0.78fr) minmax(0, 1.7fr); }
 .detail-split { display: grid; gap: 14px; }
 .detail-split.two { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
-.ds-compare .compare { margin-top: 0; gap: 6px; }
+.split-compare .compare { margin-top: 0; gap: 6px; }
 .inv-detail-col { position: relative; min-width: 0; padding-left: 14px; border-left: 1px solid rgba(150, 210, 230, 0.1); container-type: inline-size; }
 .inv-detail-col.previewing { border-left-color: var(--acc); }
 .preview-flag { position: sticky; top: 0; z-index: 1; margin-bottom: 6px; padding: 3px 8px; font: 600 9.5px var(--mono); letter-spacing: 0.16em; color: #031118; background: var(--acc); width: fit-content; }
@@ -1774,3 +1774,39 @@ button.inv-slot { position: relative; }
 .load-screen.ds-scr .transit-title { text-align: left; letter-spacing: 0.02em; }
 .load-screen.ds-scr .transit-sub { font-family: var(--font); letter-spacing: 0; text-transform: none; color: #dfe3db; }
 .load-screen.ds-scr .ls-tip { flex: 1 1 320px; text-align: right; }
+
+/* ===================================================================== terminal frame (final design)
+   Full-screen over the blurred HQ: breadcrumb + spent currencies on top, glass work area, purpose + back at the bottom.
+   One accent for every station: ember marks what is yours (selection, active tab); verdict colours come from ds. */
+.terminal-screen.ds-scr { display: block; }
+.terminal-screen .term-shade { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(5, 7, 9, 0.82), rgba(5, 7, 9, 0.55)); }
+.terminal-screen .term-top .term-code { display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; box-shadow: none; background: none; color: var(--ds-ember-soft); font-size: 12px; }
+.terminal-screen .terminal { position: absolute; left: 44px; right: 44px; top: 62px; bottom: 76px; width: auto; max-width: none; max-height: none; margin: 0;
+  --acc: var(--ds-ember); --acc-dim: rgba(255, 138, 61, 0.35); --acc-soft: rgba(255, 138, 61, 0.07); --up: var(--ds-up); --down: var(--ds-down); --side: var(--ds-side);
+  background: rgba(10, 14, 18, 0.6); border: 0; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1); backdrop-filter: blur(18px) saturate(1.2); clip-path: var(--ds-cut); animation: none; }
+.terminal-screen .terminal::before { display: none; }
+.terminal-screen .terminal.wide { width: auto; }
+.terminal-screen .term-head { padding: 14px 24px 10px; border-bottom: 1px solid rgba(255, 255, 255, 0.1); background: none; color: var(--ds-ink); min-height: 0; }
+.terminal-screen .terminal-art { opacity: 0.35; }
+.terminal-screen .term-title { font: 800 40px/0.95 var(--ds-d); letter-spacing: 0.04em; text-transform: uppercase; color: var(--ds-ink); text-shadow: none; }
+.terminal-screen .term-sub { font: 400 13px/1.4 var(--font); letter-spacing: 0; text-transform: none; color: var(--ds-dim); margin-top: 4px; }
+.terminal-screen .term-body { flex: 1; min-height: 0; padding: 16px 24px 20px; background: none; }
+.terminal-screen .term-bot .term-purpose { display: block; padding: 0; background: none; border: 0; font-size: 13px; max-width: 70%; }
+.terminal-screen .term-bot .term-uses i { font-style: normal; margin-left: 8px; color: var(--ds-muted); }
+.terminal-screen .term-close { margin: 0; width: auto; padding: 0; background: none; border: 0; }
+@media (max-width: 900px) { .terminal-screen .terminal { left: 16px; right: 16px; } }
+
+/* tabs in every panel: condensed caps, ember underline on the active one */
+.tabs { gap: 26px; border-bottom: 1px solid rgba(255, 255, 255, 0.14); }
+.tabs button { flex: none; padding: 0 0 10px; margin-bottom: -1px; font: 700 20px var(--display); letter-spacing: 0.12em; color: #9aa29c; border-bottom: 2px solid transparent; background: none; text-transform: uppercase; }
+.tabs button:hover { color: var(--white); background: none; }
+.tabs button.on { color: var(--white); border-bottom-color: var(--ds-ember); background: none; text-shadow: 0 0 20px rgba(255, 138, 61, 0.5); }
+
+/* item rows: tile-like rarity glyph, ember selection plate */
+.icard { border-radius: 0; }
+.icard.sel { background: linear-gradient(90deg, rgba(255, 138, 61, 0.3), rgba(255, 138, 61, 0.06) 70%, transparent) !important; box-shadow: inset 2px 0 0 var(--ds-ember) !important; }
+.icard .glyph { background: radial-gradient(ellipse at 50% 112%, color-mix(in srgb, var(--rc) 40%, transparent), transparent 70%), linear-gradient(180deg, rgba(22, 28, 34, 0.92), rgba(10, 13, 16, 0.95)); clip-path: var(--ds-cut-tr); box-shadow: inset 0 -3px 0 var(--rc); }
+.icard b { font-family: var(--display); font-size: 17px; letter-spacing: 0.05em; text-transform: uppercase; }
+.terminal-screen .term-head { padding: 12px 24px 10px; }
+.terminal-screen .term-titles { display: flex; align-items: baseline; gap: 18px; flex-wrap: wrap; }
+.terminal-screen .term-title { font-size: 32px; }

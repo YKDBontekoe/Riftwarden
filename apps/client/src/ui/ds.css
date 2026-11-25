@@ -85,7 +85,7 @@ html[data-touch] .ds-hint .ds-k { display: none; }
 .ds-btn:active { background: rgba(244,241,232,0.32); transform: translateY(1px); }
 .ds-btn:disabled { opacity: 0.45; cursor: default; }
 .ds-btn.ds-danger { color: #ffcdc6; box-shadow: inset 0 0 0 1px rgba(255,138,122,0.6); }
-.ds-btn-p:focus-visible, .ds-btn:focus-visible, .ds-tile:focus-visible, .ds-item:focus-visible, .ds-card:focus-visible { outline: 2px solid var(--ds-ember); outline-offset: 4px; }
+.ds-btn-p:focus-visible, .ds-btn:focus-visible, .ds-tile:focus-visible, .ds-card:focus-visible { outline: 2px solid var(--ds-ember); outline-offset: 4px; }
 
 /* ---- frame: breadcrumb + currencies (top), tabs, hints + primary action (bottom) ---- */
 .ds-top { position: absolute; left: 44px; right: 44px; top: 22px; display: flex; align-items: center; gap: 18px; }

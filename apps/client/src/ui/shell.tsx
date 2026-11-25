@@ -8,9 +8,12 @@ import { stationArtwork } from '@riftwarden/game/visuals/fieldArtwork';
 import { FieldArt } from './FieldArt';
 import { FieldIcon, STATION_ICON } from './FieldIcon';
 import { CurrencyIcon } from './inventory/thumbs';
+import { Crumb, Cur } from './ds';
 
 /** Currencies the warden can see (staged unlocks); null = all. Provided by TerminalHost. */
 export const ShellCurrencies = createContext<readonly ResourceKey[] | null>(null);
+/** Secured HQ resources (top-bar amounts). Provided by TerminalHost. */
+export const ShellResources = createContext<Partial<Record<ResourceKey, number>> | null>(null);
 
 /** Terminal window frame shared by every HQ station. E / Esc close it (not while typing). */
 export function Shell({ code, title, sub, close, children, accent = 'cyan', wide }: { code: string; title: string; sub: string; close: () => void; children: ReactNode; accent?: 'cyan' | 'amber' | 'violet'; wide?: boolean }) {
@@ -31,26 +34,35 @@ export function Shell({ code, title, sub, close, children, accent = 'cyan', wide
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [close, useCode]);
+  const res = useContext(ShellResources);
+  const name = info?.name ?? title;
   return (
-    <div className="screen terminal-screen">
+    <div className={`screen terminal-screen ds-scr acc-${accent}`}>
+      <div className="ds-blur" />
+      <div className="term-shade" />
+      <div className="ds-top term-top">
+        <span className="term-code ds-mono">{terminal && <FieldIcon name={STATION_ICON[terminal]} />}{code}</span>
+        <Crumb parts={['HQ', name, title]} />
+        <span className="ds-grow" />
+        {res && uses.filter((k) => (RESOURCE_KEYS as readonly string[]).includes(k)).map((k) => <Cur key={k} k={k} value={res[k as ResourceKey] ?? 0} />)}
+      </div>
       <div className={`terminal panel-frame ${accent} ${wide ? 'wide' : ''}`}>
         <div className="term-head">
           <FieldArt name={stationArtwork(terminal)} className="terminal-art" />
-          <div className="term-code">{terminal && <FieldIcon name={STATION_ICON[terminal]} />}{code}</div>
           <div className="term-titles flex-[1]">
             <div className="term-title">{title}</div>
             <div className="term-sub">{sub}</div>
           </div>
-          <button className="term-close" onClick={close}>
-            <kbd>{keyLabel(useCode)}</kbd>/<kbd>ESC</kbd> CLOSE
-          </button>
         </div>
+        <div className="term-body">{children}</div>
+      </div>
+      <div className="ds-bot term-bot">
         {info && (
-          <div className="term-purpose" data-testid="term-purpose">
-            <span>{info.purpose}</span>
+          <span className="term-purpose ds-meta" data-testid="term-purpose">
+            {info.purpose}
             {uses.length > 0 && (
               <span className="term-uses">
-                USES
+                {' '}Uses{' '}
                 {uses.map((k) => (
                   <i key={k} className={CURRENCIES[k].cls} title={currencyTooltip(k)}>
                     <CurrencyIcon k={k} /> {CURRENCIES[k].name}
@@ -58,10 +70,14 @@ export function Shell({ code, title, sub, close, children, accent = 'cyan', wide
                 ))}
               </span>
             )}
-          </div>
+          </span>
         )}
-        <div className="term-body">{children}</div>
+        <span className="ds-grow" />
+        <button className="term-close ds-hint" onClick={close}>
+          <span className="ds-k">{keyLabel(useCode)}</span><span className="ds-k">ESC</span>BACK
+        </button>
       </div>
+      <div className="ds-grain" />
     </div>
   );
 }
