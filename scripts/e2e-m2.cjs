@@ -348,7 +348,7 @@ const savedItems = (p) => p.evaluate(() => JSON.parse(JSON.stringify(window.__ri
   check('D1 reached the wave-5 checkpoint', st === 'checkpoint' && s.screen === 'checkpoint', st);
   check('D2 every collected item (and the checkpoint cache) is banked', runItems.unsecured === 0 && runItems.secured.length >= 9 && runItems.secured.every((u) => saveUids.includes(u)) && runItems.cache.length === 2, `${runItems.secured.length} secured, cache ${runItems.cache.length}`);
   const cpText = await p.textContent('.checkpoint').catch(() => '');
-  check('D3 checkpoint panel lists the cache and secured equipment', /CHECKPOINT CACHE/.test(cpText) && /EQUIPMENT SECURED/.test(cpText));
+  check('D3 checkpoint panel lists the cache and secured equipment', /checkpoint cache/i.test(cpText) && /Secured/.test(cpText) && /items secured this run|Secured ·/.test(cpText), cpText.slice(0, 160));
   await shot(p, 'D_checkpoint');
   // Repeated hook for the same checkpoint must not duplicate.
   const dup = await p.evaluate(() => {
@@ -417,6 +417,8 @@ const savedItems = (p) => p.evaluate(() => JSON.parse(JSON.stringify(window.__ri
   check('E2 unsecured items are lost on defeat', lostE.every((u) => !saveE.items.some((i) => i.uid === u)));
   check('E3 previously banked items remain', bankedE.every((u) => saveE.items.some((i) => i.uid === u)));
   check('E4 pre-run equipment remains equipped and owned', Object.entries(preRun.loadout).every(([k, v]) => saveE.loadout[k] === v) && preRun.items.every((u) => saveE.items.some((i) => i.uid === u)));
+  // The per-item list sits under the defeat screen's "Full breakdown".
+  await p.click('.defeat details summary');
   await p.waitForSelector('.defeat .brief-list.lost', { timeout: 10000 });
   await shot(p, 'E_defeat');
   check('E5 defeat screen lists the lost items', (await p.$$eval('.defeat .brief-list.lost .brief', (e) => e.length)) === lostE.length);
