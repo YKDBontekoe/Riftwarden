@@ -155,7 +155,7 @@ async function openTerminal(p, id) {
       const ping = await ev(p, () => ({ t: window.__rift.home.pingT, id: window.__rift.home.pinged?.station.id }));
       check('E4 directory ping marks the station', ping.id === 'lattice' && ping.t > 0, JSON.stringify(ping));
       const lvl = await p.textContent('[data-testid="warden-level"]');
-      check('E5 HQ overlay shows the Warden level', /WARDEN LEVEL/.test(lvl), lvl);
+      check('E5 HQ overlay shows the Warden level', /WARDEN \d+/.test(lvl), lvl);
       await shot(p, 'prog-E-hq');
     }
     check('Z1 no page errors', errs.length === 0, errs.slice(0, 3).join(' | '));
