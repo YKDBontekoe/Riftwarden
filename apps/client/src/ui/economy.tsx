@@ -105,7 +105,7 @@ export function ConfirmButton({ label, confirm, onConfirm, disabled, className =
   const [armed, setArmed] = useState(false);
   if (armed)
     return (
-      <div className="confirm-row">
+      <div className={`confirm-row ${className.includes('term-primary') ? 'term-primary-row' : ''}`}>
         <span>{confirm}</span>
         <button
           className="danger"
@@ -121,7 +121,7 @@ export function ConfirmButton({ label, confirm, onConfirm, disabled, className =
       </div>
     );
   return (
-    <button className={className} data-testid={testId} disabled={disabled} onClick={() => (needConfirm ? setArmed(true) : onConfirm())}>
+    <button className={className} data-testid={testId} disabled={disabled} {...(className.includes('term-primary') ? { 'data-key': 'ENTER', 'data-enter': '' } : {})} onClick={() => (needConfirm ? setArmed(true) : onConfirm())}>
       {label}
     </button>
   );

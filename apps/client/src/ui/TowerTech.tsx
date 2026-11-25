@@ -80,7 +80,7 @@ export function TowerTech({ flow, save }: { flow: Flow; save: SaveData }) {
           <span className="ds-meta">Researched parts can be built and refitted in every future run.</span>
           <TxMessage msg={tx.msg} />
           {selTech && selState !== 'done' && (
-            <button className="ds-btn-p" disabled={!!why} title={why ?? ''} onClick={research}>
+            <button className="ds-btn-p term-primary" data-key="ENTER" disabled={!!why} title={why ?? ''} onClick={research}>
               <span className="ds-kd">ENTER</span>{why ?? 'RESEARCH'}
             </button>
           )}

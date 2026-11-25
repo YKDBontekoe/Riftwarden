@@ -224,7 +224,7 @@ function BuyPane({ save, merchant, tx }: { save: SaveData; merchant: MerchantId;
                 <button disabled>SOLD</button>
               ) : (
                 <ConfirmButton
-                  className="primary small"
+                  className="primary small term-primary"
                   testId="buy"
                   label={`BUY · ◈ ${price.toLocaleString()}`}
                   confirm={`Buy ${item.name} for ${price} credits?`}
@@ -427,7 +427,7 @@ export function SalvageTerminal({ flow, close }: { flow: Flow; close: () => void
               {valid.length > 10 && <span>+{valid.length - 10} more</span>}
             </div>
             <ConfirmButton
-              className="danger wide"
+              className="danger wide term-primary"
               testId="dismantle"
               label={`DISMANTLE ${preview.count || ''} ${preview.count === 1 ? 'ITEM' : 'ITEMS'}`}
               confirm={`Destroy ${preview.count} item${preview.count === 1 ? '' : 's'} permanently for ${costText({ salvage: preview.salvage, components: preview.components }, '+')}?`}
@@ -556,7 +556,7 @@ export function FabricateTerminal({ flow, close }: { flow: Flow; close: () => vo
             {!unlock.ok ? (
               <div className="prot-note">{unlock.reason}</div>
             ) : (
-              <button className="primary small" data-testid="craft" disabled={(isItem && bays < 1) || Object.entries(cost).some(([k, v]) => save.resources[k as keyof SaveData['resources']] < (v ?? 0))} onClick={doCraft}>
+              <button className="primary small term-primary" data-key="ENTER" data-enter data-testid="craft" disabled={(isItem && bays < 1) || Object.entries(cost).some(([k, v]) => save.resources[k as keyof SaveData['resources']] < (v ?? 0))} onClick={doCraft}>
                 {isItem ? `FABRICATE · ${q.label.toUpperCase()}` : 'CONVERT'}
               </button>
             )}

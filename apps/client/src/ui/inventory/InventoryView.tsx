@@ -279,7 +279,7 @@ export function InventoryView({ entries, equipped, actions, extraFilter, header,
                 </button>
               )}
               {item.category !== 'module' && !selected.equippedIn && baseDef(item.defId) && (
-                <button className="primary small ds-btn-p" disabled={!actions.canChange} onClick={() => actions.equip(item.uid, slot ?? undefined)}>
+                <button className="primary small ds-btn-p term-primary" data-key="ENTER" disabled={!actions.canChange} onClick={() => actions.equip(item.uid, slot ?? undefined)}>
                   <span className="ds-kd">ENTER</span>EQUIP{slot ? ` · ${getSlot(slot).label}` : ''}
                   {selectedImpact && <VerdictTag impact={selectedImpact} />}
                 </button>

@@ -797,7 +797,7 @@ export class Game {
 
   applySettings(s: Settings): void {
     this.settings = s;
-    this.player.sensitivity = s.sensitivity;
+    Object.assign(this.player, { sensitivity: s.sensitivity, invertY: s.invertY });
     // User FOV is horizontal at 16:9; convert to the vertical FOV Babylon uses.
     const h = (s.fov * Math.PI) / 180;
     this.player.baseFov = 2 * Math.atan(Math.tan(h / 2) / (16 / 9));

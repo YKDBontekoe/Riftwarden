@@ -46,7 +46,7 @@ export function ArchitectTerminal({ flow, close }: { flow: Flow; close: () => vo
               RELOCATED STATIONS <b>{Object.keys(save.base.stations).length}</b>
             </span>
           </div>
-          <button className="primary deploy" data-testid="enter-construction" disabled={!!save.activeRun || flow.home?.readOnly} onClick={() => flow.home?.enterConstruction()}>
+          <button className="primary deploy term-primary" data-key="ENTER" data-enter data-testid="enter-construction" disabled={!!save.activeRun || flow.home?.readOnly} onClick={() => flow.home?.enterConstruction()}>
             <span>ENTER CONSTRUCTION MODE</span>
             <i>▶</i>
           </button>

@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { sfx } from '@riftwarden/game/audio/Sfx';
 import { fmtNum } from '@riftwarden/rules/combat/stats';
 import type { Flow } from '../../core/Flow';
+import { StoragePanel } from './Storage';
 import { DroneStats } from '../DroneStats';
 import { rarity } from '@riftwarden/rules/loot/rarity';
 import { weaponDefFor, weaponSummary } from '@riftwarden/rules/loot/equipment';
@@ -24,7 +25,7 @@ export function useEquipped(save: SaveData): Record<SlotId, ItemInstance | null>
   return useMemo(() => Object.fromEntries(SLOTS.map((s) => [s.id, equippedItem(save, s.id)])) as Record<SlotId, ItemInstance | null>, [save]);
 }
 
-type Tab = 'loadout' | 'stats' | 'presets';
+type Tab = 'loadout' | 'storage' | 'stats' | 'presets';
 const ABILITY_KEY: Partial<Record<SlotId, string>> = { ability: 'RMB', ability2: 'F', ultimate: 'T · ult' };
 const GEAR: SlotId[] = ['armor', 'shield', 'reactor', 'processor', 'accessory', 'accessory2'];
 
@@ -52,12 +53,12 @@ function SlotTile({ save, slot, it, sel, pick, height, children }: { save: SaveD
   );
 }
 
-export function LoadoutTerminal({ flow, close }: { flow: Flow; close: () => void }) {
+export function LoadoutTerminal({ flow, close, initial = 'loadout' }: { flow: Flow; close: () => void; initial?: Tab }) {
   const save = useSave(flow);
   const equipped = useEquipped(save);
   const all = useMemo(() => SLOTS.map((s) => equipped[s.id]), [equipped]);
   const score = useScore(all);
-  const [tab, setTab] = useState<Tab>('loadout');
+  const [tab, setTab] = useState<Tab>(initial);
   const [sel, setSel] = useState<SlotId>('weapon');
   const [msg, setMsg] = useState('');
   const mutate = (op: string, args: unknown[], ok: string, fail: string) => {
@@ -75,14 +76,14 @@ export function LoadoutTerminal({ flow, close }: { flow: Flow; close: () => void
     return w ? weaponSummary(w, score.stats) : null;
   };
   const selItem = equipped[sel];
-  const tabs: [Tab, string][] = [['loadout', 'Loadout'], ['stats', 'Stats'], ['presets', 'Presets']];
+  const tabs: [Tab, string][] = [['loadout', 'Loadout'], ['storage', `Storage ${save.storage.uids.length} / ${save.storage.capacity}`], ['stats', 'Stats'], ['presets', 'Presets']];
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.repeat || e.target instanceof HTMLInputElement) return;
       const i = tabs.findIndex(([t]) => t === tab);
       if (e.code === 'KeyQ') setTab(tabs[(i + tabs.length - 1) % tabs.length][0]);
       else if (e.code === 'KeyR') setTab(tabs[(i + 1) % tabs.length][0]);
-      else if (e.code === 'KeyX' && selItem && !getSlot(sel).required) mutate('unequipToStorage', [sel], 'Moved to storage', 'Storage full');
+      else if (e.code === 'KeyX' && tab === 'loadout' && selItem && !getSlot(sel).required) mutate('unequipToStorage', [sel], 'Moved to storage', 'Storage full');
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -98,10 +99,10 @@ export function LoadoutTerminal({ flow, close }: { flow: Flow; close: () => void
     );
   };
   return (
-    <Shell code="DC-02" title="DRONE CONFIGURATION" sub="Warden Mk-I · loadout, statistics and presets" close={close} wide>
+    <Shell code="DC-02" title={tabs.find(([t]) => t === tab)![1].replace(/ \d.*$/, '').toUpperCase()} sub="Warden Mk-I · loadout, storage, statistics and presets" close={close} wide>
       <div className="tabs term-tabs lo-tabs">
         <span className="ds-sh">Q</span>
-        {tabs.map(([t, label]) => <button key={t} className={tab === t ? 'on' : ''} onClick={() => setTab(t)}>{label}</button>)}
+        {tabs.map(([t, label]) => <button key={t} className={tab === t ? 'on' : ''} data-tab={t} onClick={() => setTab(t)}>{label}</button>)}
         <span className="ds-sh">R</span>
         <span className="ds-grow" />
         <span className="ds-mono">RL {tier.id} {ready.toUpperCase()} · POWER {fmtNum(power)}</span>
@@ -140,6 +141,7 @@ export function LoadoutTerminal({ flow, close }: { flow: Flow; close: () => void
           </div>
         </div>
       )}
+      {tab === 'storage' && <StoragePanel flow={flow} />}
       {tab === 'stats' && <DroneStats equipped={equipped} />}
       {tab === 'presets' && (
         <div className="presets ds-col" style={{ gap: 8, maxWidth: 720 }}>
@@ -157,7 +159,7 @@ export function LoadoutTerminal({ flow, close }: { flow: Flow; close: () => void
           })}
         </div>
       )}
-      <div className="lo-bot ds-row">
+      {tab !== 'storage' && <div className="lo-bot ds-row">
         <span className="ds-lbl">Presets</span>
         {save.presets.map((p, i) => {
           const n = Object.values(p.slots).filter(Boolean).length;
@@ -167,7 +169,7 @@ export function LoadoutTerminal({ flow, close }: { flow: Flow; close: () => void
         {msg && <span className="term-msg ds-meta">{msg}</span>}
         <span className="ds-grow" />
         {tab === 'loadout' && selItem && !getSlot(sel).required && <Hint keys="X" onClick={() => mutate('unequipToStorage', [sel], 'Moved to storage', 'Storage full')}>Unequip {rarity(selItem.rarity).label.toLowerCase()} {getSlot(sel).label.toLowerCase()}</Hint>}
-      </div>
+      </div>}
     </Shell>
   );
 }

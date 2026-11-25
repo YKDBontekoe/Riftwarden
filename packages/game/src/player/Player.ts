@@ -130,6 +130,8 @@ export class Player implements KitBody {
   /** Camera shake energy (0..1); shake amplitude is trauma squared. */
   trauma = 0;
   sensitivity = 1;
+  /** Settings: invert vertical look. */
+  invertY = false;
   /** M7 accessibility: no FOV kicks, roll or camera shake. */
   reduceMotion = false;
   /** M7: camera shake multiplier (settings). */
@@ -394,7 +396,7 @@ export class Player implements KitBody {
     if (controlsEnabled) {
       const k = 0.0022 * this.sensitivity;
       this.yaw += input.mouseDx * k;
-      this.pitch += input.mouseDy * k;
+      this.pitch += input.mouseDy * k * (this.invertY ? -1 : 1);
       this.lookDx = input.mouseDx * k;
       this.lookDy = input.mouseDy * k;
       this.pitch = Math.max(-1.52, Math.min(1.52, this.pitch));

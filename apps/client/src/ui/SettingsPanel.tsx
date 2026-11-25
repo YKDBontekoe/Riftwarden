@@ -1,7 +1,7 @@
 // Settings (final design: "Settings", "Settings · graphics / controls / audio"). One row per option: label + one
 // line of help on the left, a segmented choice or slider on the right. Every control changes real behaviour and
 // persists (localStorage, versioned). SettingsScreen is the full page used from the main menu and the pause menu.
-import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { Fragment, useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { minimapStore, setMinimap } from './hud/minimap';
 import type { Flow } from '../core/Flow';
 import { InstallApp } from '../touch/MobileUi';
@@ -62,9 +62,13 @@ function VisionPreview({ mode }: { mode: Settings['colorblind'] }) {
 }
 
 /** Every control changes real behaviour; values persist (localStorage, versioned). */
-export function SettingsPanel({ flow, compact, page }: { flow: Flow; compact?: boolean; page?: boolean }) {
+export function SettingsPanel({ flow, compact, page, onTab }: { flow: Flow; compact?: boolean; page?: boolean; onTab?: (label: string) => void }) {
   const [s, setS] = useState<Settings>(flow.settings);
-  const [tab, setTab] = useState<Tab>('display');
+  const [tab, setTabState] = useState<Tab>('display');
+  const setTab = (t: Tab) => {
+    setTabState(t);
+    onTab?.(TAB_LABEL[t]);
+  };
   const [binding, setBinding] = useState<string | null>(null);
   const update = (patch: Partial<Settings>) => {
     const next = { ...s, ...patch };
@@ -98,6 +102,13 @@ export function SettingsPanel({ flow, compact, page }: { flow: Flow; compact?: b
       const i = tabs.indexOf(tab);
       if (e.code === 'KeyQ') setTab(tabs[(i + tabs.length - 1) % tabs.length]);
       else if (e.code === 'KeyR') setTab(tabs[(i + 1) % tabs.length]);
+      else if (e.code === 'Delete') {
+        // DEL: the focused key binding goes back to its default, otherwise the whole tab does.
+        const focused = (document.activeElement as HTMLElement | null)?.dataset?.action;
+        const a = ACTIONS.find((x) => x.id === focused);
+        if (a) update({ keys: { ...s.keys, ...Object.fromEntries(Object.entries(s.keys).filter(([, k]) => k === a.def).map(([id]) => [id, s.keys[a.id]])), [a.id]: a.def } });
+        else update(resetTab(tab));
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -153,23 +164,21 @@ export function SettingsPanel({ flow, compact, page }: { flow: Flow; compact?: b
           )}
           {tab === 'controls' && (
             <>
-              <Slider label="Mouse sensitivity" min={0.2} max={3} step={0.05} value={s.sensitivity} fmt={(v) => v.toFixed(2)} onChange={(v) => update({ sensitivity: v })} />
-              <Seg label="Touch controls" help="Auto turns on for touch screens" value={s.touchControls} options={[['auto', 'Auto'], ['on', 'On'], ['off', 'Off']]} onChange={(v) => update({ touchControls: v })} />
-              <Slider label="Touch look speed" testId="touch-look" min={0.3} max={3} step={0.05} value={s.touchLook} fmt={(v) => v.toFixed(2)} onChange={(v) => update({ touchLook: v })} />
-              <Slider label="Touch button opacity" min={0.2} max={1} step={0.05} value={s.touchOpacity} fmt={pct} onChange={(v) => update({ touchOpacity: v })} />
-              <InstallApp />
-              <div className="set-binds">
+              <div className="set-bind-table" data-testid="bind-table">
+                <span className="ds-lbl">Action</span>
+                <span className="ds-lbl">Key</span>
+                <span className="ds-lbl">Alternate</span>
                 {ACTIONS.map((a) => (
-                  <button key={a.id} type="button" className="set-bind" aria-pressed={binding === a.id} data-testid={`bind-${a.id}`} onClick={() => setBinding(a.id)}>
-                    <span>{a.label}</span>
-                    <kbd>{binding === a.id ? 'PRESS A KEY' : keyLabel(s.keys[a.id])}</kbd>
-                  </button>
+                  <Fragment key={a.id}>
+                    <button type="button" className={`set-bind sbt-name ${binding === a.id ? 'listen' : ''}`} aria-pressed={binding === a.id} data-testid={`bind-${a.id}`} data-action={a.id} onClick={() => setBinding(a.id)}>
+                      <b>{a.label.replace(/ \(.*\)$/, '')}</b>
+                    </button>
+                    <span className={`sbt-key ${binding === a.id ? 'listen' : ''}`}><kbd>{binding === a.id ? 'PRESS A KEY…' : keyLabel(s.keys[a.id])}</kbd></span>
+                    <span className="sbt-alt"><kbd>{ALTERNATE[a.id] ?? '—'}</kbd></span>
+                  </Fragment>
                 ))}
               </div>
-              <div className="ds-row">
-                <button type="button" className="ds-btn" onClick={() => update({ keys: { ...DEFAULT_SETTINGS.keys } })}>RESET KEYS</button>
-                <span className="ds-meta">A key already in use swaps with the action that had it: no binding is ever lost silently.</span>
-              </div>
+              {!page && <MouseAndTouch s={s} update={update} />}
             </>
           )}
           {tab === 'interface' && (
@@ -199,13 +208,67 @@ export function SettingsPanel({ flow, compact, page }: { flow: Flow; compact?: b
           {tab === 'account' && <AccountPanel />}
         </section>
         {page && tab === 'access' && <VisionPreview mode={s.colorblind} />}
+        {page && tab === 'controls' && <MouseAndTouch s={s} update={update} />}
+        {page && tab === 'display' && <LivePreview flow={flow} />}
       </div>
     </div>
   );
 }
 
+/** Built-in second inputs the game always accepts next to the binding. */
+const ALTERNATE: Record<string, string> = { grapple: 'MMB', swap: 'WHEEL', jump: '—', use: '—' };
+
+/** Defaults for one tab (DEL on the settings page). */
+function resetTab(tab: Tab): Partial<Settings> {
+  const d = DEFAULT_SETTINGS;
+  switch (tab) {
+    case 'display': return { quality: d.quality, ...PRESETS[d.quality], fov: d.fov, renderer: d.renderer };
+    case 'audio': return { volume: d.volume, sfxVolume: d.sfxVolume, ambienceVolume: d.ambienceVolume, uiVolume: d.uiVolume };
+    case 'controls': return { sensitivity: d.sensitivity, invertY: d.invertY, touchControls: d.touchControls, touchLook: d.touchLook, touchOpacity: d.touchOpacity, keys: { ...d.keys } };
+    case 'interface': return { uiScale: d.uiScale };
+    case 'access': return { colorblind: d.colorblind, reduceMotion: d.reduceMotion, shake: d.shake };
+    default: return {};
+  }
+}
+
+/** Controls side panel (canvas "Settings · controls"): pointer and touch options next to the key table. */
+function MouseAndTouch({ s, update }: { s: Settings; update: (p: Partial<Settings>) => void }) {
+  return (
+    <aside className="set-aside ds-glass ds-cut ds-col" data-testid="mouse-touch">
+      <span className="ds-h3">MOUSE AND TOUCH</span>
+      <Slider label="Mouse sensitivity" min={0.2} max={3} step={0.05} value={s.sensitivity} fmt={(v) => v.toFixed(2)} onChange={(v) => update({ sensitivity: v })} />
+      <Slider label="Touch look speed" testId="touch-look" min={0.3} max={3} step={0.05} value={s.touchLook} fmt={(v) => `${v.toFixed(1)}×`} onChange={(v) => update({ touchLook: v })} />
+      <Seg label="Invert vertical look" value={s.invertY ? 'on' : 'off'} options={[['off', 'Off'], ['on', 'On']]} onChange={(v) => update({ invertY: v === 'on' })} />
+      <Seg label="Touch controls" help="Auto turns on for touch screens" value={s.touchControls} options={[['auto', 'Auto'], ['on', 'On'], ['off', 'Off']]} onChange={(v) => update({ touchControls: v })} />
+      <Slider label="Touch button opacity" min={0.2} max={1} step={0.05} value={s.touchOpacity} fmt={pct} onChange={(v) => update({ touchOpacity: v })} />
+      <InstallApp />
+      <span className="ds-meta">A key already in use swaps with the action that had it: a binding is never lost silently. DEL on a row restores its default.</span>
+    </aside>
+  );
+}
+
+/** Graphics side panel (canvas "Settings · graphics"): the frame rate of the world behind the page, live. */
+function LivePreview({ flow }: { flow: Flow }) {
+  const [fps, setFps] = useState(() => flow.engine.getFps());
+  useEffect(() => {
+    const t = window.setInterval(() => setFps(flow.engine.getFps()), 500);
+    return () => window.clearInterval(t);
+  }, [flow]);
+  const f = Number.isFinite(fps) ? fps : 0;
+  return (
+    <aside className="set-aside set-live ds-col" data-testid="live-preview">
+      <span className="ds-lbl">Live preview · behind this panel</span>
+      <span className="ds-numxl">{Math.round(f)}<span style={{ fontSize: 22, color: 'var(--ds-muted)' }}> fps</span></span>
+      <span className="ds-meta">Measured on the world behind this page. Frame time {f > 0 ? (1000 / f).toFixed(1) : '—'} ms · {flow.backend === 'webgpu' ? 'WebGPU' : 'WebGL2'}.</span>
+      <span className="ds-bar" style={{ '--c': f >= 55 ? '#8ff0b6' : f >= 30 ? '#ffd84d' : '#ff5a4a' } as React.CSSProperties}><i style={{ width: `${Math.min(100, Math.round((f / 120) * 100))}%` }} /></span>
+      <span className="ds-meta">WebGPU is a beta: some effects may differ until it is checked on your GPU.</span>
+    </aside>
+  );
+}
+
 /** Full settings page (main menu and pause): crumb, tabs, rows, hints. Esc returns. */
 export function SettingsScreen({ flow, from, close }: { flow: Flow; from: string; close: () => void }) {
+  const [tabLabel, setTabLabel] = useState(TAB_LABEL.display);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.code !== 'Escape' || e.defaultPrevented) return;
@@ -220,15 +283,17 @@ export function SettingsScreen({ flow, from, close }: { flow: Flow; from: string
     <div className="screen ds-scr settings-screen" data-testid="settings-screen">
       <Backdrop />
       <div className="ds-top">
-        <Crumb parts={[from, 'Settings']} />
+        <Crumb parts={[from, 'Settings', tabLabel]} />
         <span className="ds-grow" />
         <span className="ds-mono">{flow.location === 'arena' ? 'ARENA CHANGES APPLY ON THE NEXT SECTOR' : 'CHANGES APPLY AT ONCE'}</span>
       </div>
       <div className="set-page ds-abs">
-        <SettingsPanel flow={flow} page />
+        <SettingsPanel flow={flow} page onTab={setTabLabel} />
       </div>
       <div className="ds-bot">
         <span className="ds-grow" />
+        <Hint keys={['Q', 'R']}>Tabs</Hint>
+        <Hint keys="DEL">Reset tab</Hint>
         <Hint keys="ESC" onClick={close}>Done</Hint>
       </div>
       <div className="ds-grain" />

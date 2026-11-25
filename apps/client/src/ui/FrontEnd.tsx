@@ -13,14 +13,19 @@ import { levelInfo } from '@riftwarden/rules/progression/level';
 import { freePoints } from '@riftwarden/rules/progression/skilltree';
 import { readiness, recommendedLevel } from '@riftwarden/rules/progression/riftLevel';
 import { resumable } from '@riftwarden/rules/runmap/state';
-import { seasonEnd, seasonOf } from '@riftwarden/rules/progression/seasons';
+import { JOURNEY, journeyDone, journeyTitle, seasonEnd, seasonOf } from '@riftwarden/rules/progression/seasons';
+import type { SaveData } from '@riftwarden/rules/progression/save';
+import { regionLayout } from '@riftwarden/rules/war/regions';
+import { regionLiberation } from '@riftwarden/rules/war/state';
+import { findNode } from '@riftwarden/rules/war/world';
+import { nodeInfo } from '@riftwarden/rules/runmap/map';
 import { FieldArt } from './FieldArt';
 import { touchStore } from '../touch/touchMode';
 import { InstallApp } from '../touch/MobileUi';
 import { useHud } from './useHud';
 import { useSave } from './useSave';
 import { savePower } from './RiftLevel';
-import { Backdrop, Bar, Crumb, Cur, Hint, RiskTag } from './ds';
+import { Backdrop, Bar, Crumb, Cur, Hint, RiskTag, Seg } from './ds';
 import { OfflineBanner } from './SystemStates';
 
 const CONTROLS = [
@@ -166,7 +171,6 @@ export function MainMenu({ flow }: { flow: Flow }) {
   const now = Date.now();
   const season = seasonOf(now);
   const days = Math.max(0, Math.ceil((seasonEnd(season) - now) / 86_400_000));
-  const record = save.records[String(tier.id)];
   const sections = Object.keys(MENU_SECTIONS) as MenuSection[];
   const items: { id: string; title: string; badge?: string; solid?: boolean; go: () => void }[] = [
     ...(canResume ? [{ id: 'resume', title: 'Resume operation', badge: `ACT ${run!.map?.act ?? 1} · NODE ${(run!.map?.path.length ?? 0) + 1}`, go: () => void flow.enterHq() }] : []),
@@ -226,17 +230,7 @@ export function MainMenu({ flow }: { flow: Flow }) {
 
       {tab === null ? (
         <aside className="menu-hero ds-abs ds-col" style={{ right: 48, top: 74, width: 400, gap: 12 }}>
-          <div className="ds-glass ds-cut-tr ds-col" style={{ padding: '18px 20px', gap: 8, boxShadow: 'inset 0 0 0 1px rgba(255,138,61,0.35)' }}>
-            <span className="ds-ov ds-em">Rift Level</span>
-            <span className="ds-row" style={{ alignItems: 'flex-end' }}>
-              <span className="ds-col ds-grow"><span style={{ font: '700 34px/0.9 var(--ds-d)' }}>RL {tier.id} · {tier.name.toUpperCase()}</span><span className="ds-meta">Gear readiness: {ready} · {save.threat.unlocked} unlocked</span></span>
-              <span className="ds-num">{record?.bestWave ?? 0}<span style={{ fontSize: 16, color: 'var(--ds-dim)' }}> best wave</span></span>
-            </span>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 }}>
-            <div className="ds-glass ds-cut-tr ds-col" style={{ padding: '14px 16px', gap: 4, borderTop: '2px solid #b9ece0' }}><span className="ds-lbl">Operations</span><span className="ds-num">{save.totals.runs.toLocaleString()}</span><span className="ds-meta" style={{ color: 'var(--ds-muted)' }}>{Object.values(save.records).reduce((n, r) => n + (r?.checkpoints ?? 0), 0)} checkpoints banked</span></div>
-            <div className="ds-glass ds-cut-tr ds-col" style={{ padding: '14px 16px', gap: 4, borderTop: '2px solid #edb282' }}><span className="ds-lbl">Salvage</span><span className="ds-num">{save.resources.salvage.toLocaleString()}</span><span className="ds-meta" style={{ color: 'var(--ds-muted)' }}>secured in storage</span></div>
-          </div>
+          <MenuHero flow={flow} save={save} season={season} />
           {canResume && <div className="ds-glass ds-toast risk"><span className="ds-dot" style={{ background: 'var(--ds-risk)' }} /><span className="ds-col"><b>Operation suspended</b><span className="ds-meta">Resume or end it at the deployment console</span></span></div>}
           <InstallApp />
         </aside>
@@ -262,6 +256,49 @@ export function MainMenu({ flow }: { flow: Flow }) {
       </div>
       <div className="ds-grain" />
     </main>
+  );
+}
+
+/** Main menu aside (canvas "Main menu"): the season journey as the reward to chase, then the live Rift War. */
+function MenuHero({ flow, save, season }: { flow: Flow; save: SaveData; season: number }) {
+  const war = useSyncExternalStore(flow.war.store.subscribe, flow.war.store.get).war;
+  useEffect(() => {
+    if (!flow.war.state) void flow.war.refresh().catch(() => {});
+  }, [flow]);
+  const done = journeyDone(save).length;
+  const next = JOURNEY.find((g) => !g.done(save));
+  const title = journeyTitle(season, done);
+  const front = war ? Math.max(...war.regions.map((r) => r.k)) : 0;
+  const distress = war?.events.filter((e) => e.kind === 'distress' && e.until > Date.now()).sort((a, b) => a.until - b.until)[0];
+  const sector = distress && war ? findNode(war.seed, distress.node) : null;
+  const left = distress ? Math.max(0, distress.until - Date.now()) : 0;
+  return (
+    <>
+      <div className="menu-reward ds-cut-tr" data-testid="menu-season">
+        <span className="ds-ov" style={{ color: '#ffcf73' }}>Season {season} journey · goal {Math.min(JOURNEY.length, done + 1)} of {JOURNEY.length}</span>
+        <span className="mr-mark" aria-hidden="true"><WardenMark /></span>
+        <div className="mr-foot">
+          <span className="ds-col ds-grow">
+            <span className="mr-title">{next ? next.label.toUpperCase() : 'JOURNEY COMPLETE'}</span>
+            <span className="ds-meta" style={{ color: '#e9dcc0' }}>{title ? `Title earned: ${title}` : `Title at 6 goals: Season ${season} Veteran`}</span>
+          </span>
+          <span className="ds-num" style={{ color: '#ffcf73' }}>{done}<span style={{ fontSize: 16, color: '#e9dcc0' }}> / {JOURNEY.length}</span></span>
+        </div>
+      </div>
+      <Seg value={done / JOURNEY.length} total={JOURNEY.length} color="#ffcf73" />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 }}>
+        <div className="ds-glass ds-cut-tr ds-col" style={{ padding: '14px 16px', gap: 4, borderTop: '2px solid #b9ece0' }} data-testid="menu-war">
+          <span className="ds-lbl">Rift War</span>
+          <span className="ds-num">{war ? Math.round(regionLiberation(war, front)) : '—'}<span style={{ fontSize: 18 }}>%</span></span>
+          <span className="ds-meta" style={{ color: 'var(--ds-muted)' }}>{war ? `${regionLayout(war.seed, front).name} liberated` : 'War map loading'}</span>
+        </div>
+        <div className="ds-glass ds-cut-tr ds-col" style={{ padding: '14px 16px', gap: 4, borderTop: `2px solid ${distress ? '#ff5a4a' : 'rgba(255,255,255,0.2)'}` }} data-testid="menu-distress">
+          <span className="ds-lbl">Distress</span>
+          <span className="ds-num">{distress ? `${String(Math.floor(left / 3_600_000)).padStart(2, '0')}:${String(Math.floor((left % 3_600_000) / 60_000)).padStart(2, '0')}` : '—'}</span>
+          <span className="ds-meta" style={{ color: 'var(--ds-muted)' }}>{sector ? `Double liberation at ${nodeInfo(sector).name}` : 'No distress call right now'}</span>
+        </div>
+      </div>
+    </>
   );
 }
 

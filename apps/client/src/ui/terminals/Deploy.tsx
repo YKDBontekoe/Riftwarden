@@ -83,7 +83,7 @@ export function DeployTerminal({ flow, close }: { flow: Flow; close: () => void 
             void flow.deploy(selected.id, undefined, 'defense', true).then((ok) => !ok && setBusy(false));
           }} />
           <TierBrief tier={selected} save={save} />
-          <button className="primary deploy" disabled={busy || !!blocker} onClick={deploy}>
+          <button className="primary deploy term-primary" data-key="ENTER" data-enter disabled={busy || !!blocker} onClick={deploy}>
             <span>{busy ? 'LAUNCHING…' : `DEPLOY · RL ${selected.id}`}</span>
             <span aria-hidden="true">↗</span>
           </button>

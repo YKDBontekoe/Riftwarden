@@ -30,6 +30,16 @@ export function Shell({ code, title, sub, close, children, accent = 'cyan', wide
       if (e.code === 'Escape' || (e.code === useCode && !typing)) {
         e.preventDefault();
         close();
+        return;
+      }
+      // Enter runs the station's main action (the docked button) unless something else has the focus.
+      const focus = document.activeElement;
+      if ((e.code === 'Enter' || e.code === 'NumpadEnter') && !typing && !e.defaultPrevented && !(focus instanceof HTMLButtonElement || focus instanceof HTMLAnchorElement || focus instanceof HTMLSelectElement)) {
+        const btn = document.querySelector<HTMLButtonElement>('.terminal-screen .term-primary[data-enter]:not(:disabled)');
+        if (btn) {
+          e.preventDefault();
+          btn.click();
+        }
       }
     };
     window.addEventListener('keydown', onKey);
