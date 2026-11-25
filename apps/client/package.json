@@ -15,6 +15,9 @@
   "dependencies": {
     "@babylonjs/core": "catalog:",
     "@babylonjs/havok": "catalog:",
+    "@fontsource/barlow-condensed": "catalog:",
+    "@fontsource/inter": "catalog:",
+    "@fontsource/jetbrains-mono": "catalog:",
     "@riftwarden/game": "workspace:*",
     "@riftwarden/protocol": "workspace:*",
     "@riftwarden/rules": "workspace:*",

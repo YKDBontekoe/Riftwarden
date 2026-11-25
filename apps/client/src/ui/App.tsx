@@ -1,14 +1,11 @@
 import { RunRecap } from './RunRecap';
+import { MainMenu, PauseMenu } from './FrontEnd';
 import { savePower } from './RiftLevel';
 import { LoadingScreen } from './LoadingScreen';
-import { AccountPanel } from '../account/AccountPanel';
 import { BoundKey } from './hud/widgets';
-import { CoopPanel } from './Coop';
-import { MENU_SECTIONS, type MenuSection, useMenuSection } from './router';
-import { SettingsPanel } from './SettingsPanel';
 import { ConstructionPanel } from './Construction';
 import { ClientGame } from '@riftwarden/game/net/ClientGame';
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import type { Flow } from '../core/Flow';
 import type { Game } from '@riftwarden/game/core/Game';
 import type { RunResult } from '@riftwarden/rules/progression/run';
@@ -32,8 +29,7 @@ import { EVENTS, type EventId } from '@riftwarden/rules/survival/events';
 import { FieldArt } from './FieldArt';
 import { FieldIcon } from './FieldIcon';
 import { TouchControls } from '../touch/TouchControls';
-import { touchStore } from '../touch/touchMode';
-import { InstallApp, RotateHint, UpdateToast } from '../touch/MobileUi';
+import { RotateHint, UpdateToast } from '../touch/MobileUi';
 
 interface Props {
   getFlow: () => Flow | null;
@@ -109,198 +105,6 @@ function Insignia() {
 
 export function Logo({ small }: { small?: boolean }) {
   return <div className={`logo ${small ? 'small' : ''}`}><Insignia /><span className="logo-word">Riftwarden</span></div>;
-}
-
-const CONTROLS = [
-  [<BoundKey action="move" />, 'Move'],
-  [<kbd>MOUSE</kbd>, 'Aim · LMB fire'],
-  [<BoundKey action="jump" />, 'Jump · press again for a directional boost'],
-  [<BoundKey action="dash" />, 'Dash · hold to sprint'],
-  [<BoundKey action="slide" />, 'Slide while running · ground pound in the air'],
-  [<><BoundKey action="grapple" /><kbd>MMB</kbd></>, 'Grapple to the surface under the crosshair · jump releases'],
-  [<kbd>WALL</kbd>, 'Run along a wall in the air · jump kicks off it'],
-  [<BoundKey action="use" />, 'Use terminal or pick up loot'],
-  [<><BoundKey action="inventory" /><kbd>TAB</kbd></>, 'Drone cargo'],
-  [<><BoundKey action="swap" /><kbd>1</kbd></>, 'Swap to the other weapon (or mouse wheel) · 1 primary (the holstered one cools)'],
-  [<kbd>RMB</kbd>, 'Ability I (equip ability items in the ABILITY slots)'],
-  [<BoundKey action="repair" />, 'Ability II · repairs the tower under the crosshair on mazing arenas'],
-  [<kbd>T</kbd>, 'Ultimate during a wave (charges from the damage you deal) · tower panel in preparation'],
-  [<><BoundKey action="build" /><kbd>2</kbd></>, 'Build tower · C/V/N/M cycle parts'],
-  [<kbd>T</kbd>, 'Tower engineering during preparation'],
-  [<kbd>R/C/V/N</kbd>, 'Aim at a tower to level or refit it'],
-  [<kbd>U</kbd>, 'Run build overview'],
-  [<BoundKey action="tactical" />, 'Tactical slow-time'],
-  [<BoundKey action="recycle" />, 'Hold to recycle a turret'],
-  [<BoundKey action="wave" />, 'Start wave early'],
-  [<BoundKey action="checkpoint" />, 'Run map once a node is secured: travel to the next node or extract to HQ'],
-  [<kbd>ESC</kbd>, 'Pause or close terminal'],
-  [<kbd>F3</kbd>, 'Performance stats'],
-] as const;
-
-const BRIEFING = [
-  ['Deploy from headquarters', <>Use the deployment terminal with <BoundKey action="use" /> to pick a Rift Level.</>],
-  ['Hold the reactor', <>Build turrets between waves. Collect equipment and salvage from fallen machines with <BoundKey action="use" />.</>],
-  ['Bank your salvage', 'Every five waves, a checkpoint secures your haul. Return home or stay for another wave. Losing the reactor costs your unsecured cargo.'],
-] as const;
-
-const TOUCH_CONTROLS = [
-  ['LEFT THUMB', 'Move: the stick appears where you touch · push past the ring to sprint'],
-  ['RIGHT SIDE', 'Drag anywhere to aim · drag the FIRE button to aim while firing'],
-  ['JUMP · DASH', 'Jump (again in the air for a boost) · dash'],
-  ['SLIDE · HOOK', 'Slide while running, ground pound in the air · grapple to the surface under the crosshair'],
-  ['ABILITIES', 'Ability buttons above FIRE · ULT appears during waves'],
-  ['BUILD', 'Build mode: FIRE becomes PLACE, CANCEL leaves, WPN/CORE/MOD/BASE cycle parts'],
-  ['TOWER', 'Aim at a tower: LEVEL, REPAIR, hold RECYCLE'],
-  ['TOP RIGHT', 'Start wave · build · towers · slow time · run map · cargo · pause'],
-] as const;
-
-function Controls() {
-  const touch = useSyncExternalStore(touchStore.subscribe, touchStore.get);
-  if (touch)
-    return (
-      <div className="grid gap-[9px] text-[15px] text-muted [.modal_&]:mt-[16px]" data-testid="touch-legend">
-        {TOUCH_CONTROLS.map(([k, v]) => (
-          <div key={k} className="flex items-center gap-[8px]">
-            <kbd className="min-w-[96px] text-center">{k}</kbd>
-            <span>{v}</span>
-          </div>
-        ))}
-      </div>
-    );
-  return (
-    <div className="grid grid-cols-[1fr_1fr] gap-x-[18px] gap-y-[9px] text-[15px] text-muted [.modal_&]:mt-[16px] [@media(max-width:900px)]:grid-cols-1">
-      {CONTROLS.map(([k, v]) => (
-        <div key={v} className="flex items-center gap-[8px]">
-          <span className="flex min-w-[70px] flex-wrap items-center gap-[3px] [&_kbd]:m-0">{k}</span>
-          <span>{v}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-const MENU_ICON = { briefing: 'briefing', 'co-op': 'coop', account: 'drone', settings: 'settings', controls: 'controls' } as const;
-
-function MainMenu({ flow }: { flow: Flow }) {
-  const [tab, setTab] = useMenuSection();
-  const save = useSave(flow);
-  const tier = getTier(save.threat.selected);
-  const close = useRef(setTab);
-  close.current = setTab;
-  useEffect(() => {
-    const dismiss = (event: KeyboardEvent) => { if (event.key === 'Escape') close.current(null); };
-    document.addEventListener('keydown', dismiss);
-    return () => document.removeEventListener('keydown', dismiss);
-  }, []);
-  return (
-    <main className="screen menu">
-      <header className="menu-header">
-        <button className="menu-identity" aria-label="Riftwarden main menu" onClick={() => setTab(null)}>
-          <Insignia /><span>Sector 07</span>
-        </button>
-        <nav className="menu-nav" aria-label="Main menu">
-          {(Object.keys(MENU_SECTIONS) as MenuSection[]).map((section) => (
-            <button key={section} aria-pressed={tab === section} onClick={() => setTab(tab === section ? null : section)}>
-              <FieldIcon name={MENU_ICON[section]} /> {MENU_SECTIONS[section].toUpperCase()}
-            </button>
-          ))}
-        </nav>
-      </header>
-      {tab === null ? (
-        <section className="menu-hero">
-          <h1>Riftwarden</h1>
-          <p>Pilot a defense drone. Hold the reactor against waves of machines. Bring the salvage home.</p>
-          <button className="primary deploy" onClick={() => void flow.enterHq()}>
-            <span>ENTER HEADQUARTERS</span><span aria-hidden="true">↗</span>
-          </button>
-          <InstallApp />
-        </section>
-      ) : (
-        <section className="menu-sheet" aria-label={MENU_SECTIONS[tab]}>
-          <div className="menu-sheet-head"><h2>{MENU_SECTIONS[tab]}</h2><button aria-label="Back to main menu" onClick={() => setTab(null)}>×</button></div>
-          {tab === 'briefing' && <><FieldArt name="hub-reactor" className="menu-brief-art" /><ol className="m-0 py-0 pr-0 pl-[22px]">
-            {BRIEFING.map(([title, detail]) => (
-              <li key={title} className="mt-[15px] pl-[6px] marker:font-mono marker:text-[12px] marker:text-orange">
-                <b className="text-[15px]">{title}</b>
-                <p className="m-0 mt-[5px] text-[14px] leading-[1.5] text-muted">{detail}</p>
-              </li>
-            ))}
-          </ol></>}
-          {tab === 'co-op' && <CoopPanel flow={flow} compact />}
-          {tab === 'account' && <AccountPanel />}
-          {tab === 'settings' && <SettingsPanel flow={flow} />}
-          {tab === 'controls' && <Controls />}
-        </section>
-      )}
-      <footer className="menu-ledger">
-        <div><span>Rift Level</span><strong>RL {tier.id} <i>/</i> {tier.name}</strong></div>
-        <div><span>Operations</span><strong>{save.totals.runs.toLocaleString()}</strong></div>
-        <div><span>Salvage</span><strong>{save.resources.salvage.toLocaleString()}</strong></div>
-        <div><span>Credits</span><strong>{save.resources.credits.toLocaleString()}</strong></div>
-      </footer>
-    </main>
-  );
-}
-
-function PauseMenu({ flow }: { flow: Flow }) {
-  const [tab, setTab] = useState<'settings' | 'controls'>('settings');
-  const [confirm, setConfirm] = useState(false);
-  const [resuming, setResuming] = useState(false);
-  const inArena = flow.location === 'arena';
-  const resume = useCallback(() => {
-    if (resuming) return;
-    setResuming(true);
-    if (inArena) void flow.arena?.resume();
-    else void flow.home?.takeControl();
-    // Re-enable if pointer lock was denied outright so the menu isn't stuck.
-    window.setTimeout(() => setResuming(false), 4000);
-  }, [flow, inArena, resuming]);
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.repeat || e.code !== 'Escape') return;
-      e.preventDefault();
-      if (confirm) setConfirm(false);
-      else resume();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [confirm, resume]);
-  return (
-    <div className="screen dim">
-      <div className="modal panel-frame">
-        <div className="modal-title">
-          <span className="tick" />
-          PAUSED
-        </div>
-        <div className="font-mono text-[11px] tracking-[0.2em] text-faint m-[-6px_0_14px]">{inArena ? `SECTOR 07 · RIFT LEVEL ${flow.arena?.cfg.tier.id ?? flow.run?.tier ?? 1}` : 'HEADQUARTERS'}</div>
-        <button className="primary" disabled={resuming} onClick={resume}>
-          {resuming ? 'RESUMING…' : 'RESUME'}
-        </button>
-        {inArena &&
-          (confirm ? (
-            <div className="confirm">
-              <div className="confirm-text">Abandon the run? Unsecured salvage and items are lost. Secured loot and the gear you deployed with are kept.</div>
-              <div className="row2">
-                <button className="danger" onClick={() => void flow.abandonRun()}>
-                  ABANDON
-                </button>
-                <button onClick={() => setConfirm(false)}>CANCEL</button>
-              </div>
-            </div>
-          ) : (
-            <button onClick={() => setConfirm(true)}>ABANDON RUN</button>
-          ))}
-        <div className="tabs">
-          {(['settings', 'controls'] as const).map((t) => (
-            <button key={t} className={tab === t ? 'on' : ''} onClick={() => setTab(t)}>
-              {t.toUpperCase()}
-            </button>
-          ))}
-        </div>
-        {tab === 'settings' ? <SettingsPanel flow={flow} compact={inArena} /> : <Controls />}
-      </div>
-    </div>
-  );
 }
 
 function CoopVote({ game }: { game: ClientGame }) {
