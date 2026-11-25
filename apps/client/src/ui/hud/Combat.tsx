@@ -19,7 +19,13 @@ const reactorOf = (s: HudState) => s.reactorHp / Math.max(1, s.reactorMax);
 const hullOf = (s: HudState) => s.playerHp / Math.max(1, s.playerMax);
 
 /** Top left: what to do right now. */
-export function Objective() {
+export function Objective({ game }: { game?: Game }) {
+  const survivalMode = useHud((s) => s.mode === 'survival');
+  if (survivalMode && game) return <HuntObjective game={game} />;
+  return <DefenseObjective />;
+}
+
+function DefenseObjective() {
   const wave = useHud((s) => s.wave);
   const phase = useHud((s) => s.phase);
   const survival = useHud((s) => s.mode === 'survival');
@@ -30,7 +36,8 @@ export function Objective() {
   const build = useHud((s) => s.buildMode);
   // Hostile bar: share of the wave still alive (peak count seen this wave = 100%).
   const peak = useRef({ wave: 0, n: 1 });
-  const title = phase === 'prep' ? `PREP · WAVE ${wave} NEXT` : phase === 'combat' ? (survival ? `SURVIVE WAVE ${wave}` : `CLEAR WAVE ${wave}`) : `WAVE ${wave} SECURED`;
+  const boss = useHud((s) => !!s.m6?.boss);
+  const title = phase === 'prep' ? `PREP · WAVE ${wave} NEXT` : phase === 'combat' ? (boss && !survival ? 'DEFEND THE REACTOR' : survival ? `SURVIVE WAVE ${wave}` : `CLEAR WAVE ${wave}`) : `WAVE ${wave} SECURED`;
   const atRisk = run && (run.salvageUnsecured > 0 || cargo > 0);
   return (
     <div className="hud-objective" data-testid="hud-objective">
@@ -89,6 +96,103 @@ export function PrepClock() {
       <span className="ds-lbl">Prep · wave {wave} next{survival ? ' · they will hunt you' : ''}</span>
       <LiveText as="b" className="hp-time" select={(s) => { const t = Math.max(0, Math.ceil(s.phaseTimer)); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`; }} />
       <span className="ds-hint"><BoundKey action="wave" />Call wave early · +2 cores per second</span>
+    </div>
+  );
+}
+
+/** Machines still hunting the drone, nearest first (survival HUD). */
+function hunters(game: Game): { x: number; z: number; d: number }[] {
+  const p = game.player.position;
+  const out: { x: number; z: number; d: number }[] = [];
+  for (const e of game.enemies.active) if (e.alive && !e.hidden) out.push({ x: e.pos.x, z: e.pos.z, d: Math.hypot(e.pos.x - p.x, e.pos.z - p.z) });
+  return out.sort((a, b) => a.d - b.d);
+}
+
+/** Survival top left (canvas "HUD · survival mode"): hunted, one life, how many machines and how close. */
+function HuntObjective({ game }: { game: Game }) {
+  const wave = useHud((s) => s.wave);
+  const phase = useHud((s) => s.phase);
+  const run = useHud((s) => s.run);
+  const cargo = useHud((s) => s.cargo);
+  const node = useHud((s) => s.node);
+  const nearest = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    const t = window.setInterval(() => {
+      const h = hunters(game);
+      if (nearest.current) nearest.current.textContent = h.length ? ` · nearest ${Math.round(h[0].d)} m` : '';
+    }, 250);
+    return () => window.clearInterval(t);
+  }, [game]);
+  const atRisk = run && (run.salvageUnsecured > 0 || cargo > 0);
+  return (
+    <>
+      <div className="hud-objective hunt" data-testid="hud-objective">
+        <span className="ds-row" style={{ gap: 10 }} data-testid="survival-banner">
+          <span className="ds-chip red">Survival</span>
+          <span className="ds-h3">HUNTED · ONE LIFE</span>
+        </span>
+        <span className="ds-row" style={{ gap: 10, alignItems: 'center' }}>
+          <LiveText as="b" className="hunt-count" select={(s) => `${s.phase === 'combat' ? s.enemiesLeft : 0}`} />
+          <span className="ds-col">
+            <span className="ds-lbl">{phase === 'combat' ? 'Machines hunting you' : `Prep · wave ${wave} next`}</span>
+            <span className="ds-meta">Wave {wave}<span ref={nearest} /></span>
+          </span>
+        </span>
+        {atRisk && <span className="ds-risk-tag obj-risk">At risk · {run!.salvageUnsecured.toLocaleString()} salvage{cargo > 0 ? ` · ${cargo} item${cargo === 1 ? '' : 's'}` : ''} · +25% income</span>}
+        {node && (
+          <span className="ds-row obj-chips" style={{ gap: 6, flexWrap: 'wrap' }}>
+            <span className="ds-chip">{node.name}</span>
+          </span>
+        )}
+      </div>
+      <div className="hud-hunt-rules">
+        <span className="ds-lbl">No reactor · no towers</span>
+        <span className="ds-meta">Losing the drone ends the run</span>
+      </div>
+      <ThreatArrows game={game} />
+    </>
+  );
+}
+
+const ARROWS = 5;
+/** Edge arrows with distances to the nearest hunters outside the view (survival). */
+function ThreatArrows({ game }: { game: Game }) {
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    let raf = 0;
+    const tick = () => {
+      raf = requestAnimationFrame(tick);
+      const el = box.current;
+      if (!el) return;
+      const p = game.player.position;
+      const yaw = game.player.yaw;
+      const half = (game.player.camera.fov * (window.innerWidth / Math.max(1, window.innerHeight))) / 2;
+      const off = hunters(game).filter((h) => {
+        const rel = Math.atan2(Math.sin(Math.atan2(h.x - p.x, h.z - p.z) - yaw), Math.cos(Math.atan2(h.x - p.x, h.z - p.z) - yaw));
+        (h as { rel?: number }).rel = rel;
+        return Math.abs(rel) > half * 0.9;
+      }).slice(0, ARROWS);
+      for (let i = 0; i < ARROWS; i++) {
+        const a = el.children[i] as HTMLElement;
+        const h = off[i] as ({ d: number; rel?: number } | undefined);
+        if (!h) { a.style.display = 'none'; continue; }
+        const rel = h.rel ?? 0;
+        // Point on the screen edge in the hunter's direction (behind = bottom edge).
+        const sx = Math.sin(rel), sy = -Math.cos(rel);
+        const k = Math.min(0.46 / Math.max(1e-3, Math.abs(sx)), 0.42 / Math.max(1e-3, Math.abs(sy)));
+        a.style.display = '';
+        a.style.left = `${50 + sx * k * 100}%`;
+        a.style.top = `${50 + sy * k * 100}%`;
+        (a.firstChild as HTMLElement).style.transform = `rotate(${rel}rad)`;
+        (a.lastChild as HTMLElement).textContent = `${Math.round(h.d)} M`;
+      }
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [game]);
+  return (
+    <div ref={box} className="hud-threats" aria-hidden="true">
+      {Array.from({ length: ARROWS }, (_, i) => <span key={i} className="ht" style={{ display: 'none' }}><i /><b /></span>)}
     </div>
   );
 }
@@ -281,7 +385,7 @@ export function Vitals({ children }: { children?: React.ReactNode }) {
           <LiveBar segments={12} className="hv-hull" select={(s) => ({ value: hullOf(s), tone: hullOf(s) < 0.35 ? 'red' : 'white' })} />
         </div>
       </div>
-      <LiveText as="div" className="ds-lbl hv-label" select={(s) => `Hull ${Math.ceil(s.playerHp)} / ${max}${s.playerShieldMax > 0 ? ` · shield ${Math.ceil(s.playerShield)}` : ''}`} />
+      <LiveText as="div" className="ds-lbl hv-label" select={(s) => `Hull ${Math.ceil(s.playerHp)} / ${max}${s.playerShieldMax > 0 ? ` · shield ${Math.ceil(s.playerShield)}` : ''}${s.mode === 'survival' ? ' · the hull is the run' : ''}`} />
       {children}
     </div>
   );

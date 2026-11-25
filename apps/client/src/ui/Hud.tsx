@@ -40,7 +40,7 @@ export function Hud({ game }: { game: Game }) {
         <RunBadges />
         <TutorialCard />
       </aside>
-      <Objective />
+      <Objective game={game} />
       <Compass game={game} />
       <SurvivalHud />
       <NodeChip />

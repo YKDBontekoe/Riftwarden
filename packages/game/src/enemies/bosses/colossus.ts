@@ -233,6 +233,9 @@ export const colossusBehavior: Behavior = {
       state: a.transT > 0 ? 'RECONFIGURING' : a.stagger > 0 ? 'STAGGERED' : a.door > 0.5 ? 'CORE EXPOSED · REAR COMPARTMENT' : PHASE_NAMES[a.phase],
       immune: a.transT > 0,
       attack: a.atk ? ATTACK_NAMES[a.atk.kind] : '',
+      ...(a.atk?.kind === 'beam'
+        ? { interrupt: { progress: Math.min(1, a.taken / (COLOSSUS.beamInterrupt * e.maxHp)), left: Math.max(0, a.atk.dur - a.atk.t), need: `${Math.round(COLOSSUS.beamInterrupt * 100)}% of its hull` } }
+        : {}),
     };
   },
 };
