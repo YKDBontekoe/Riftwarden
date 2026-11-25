@@ -90,6 +90,7 @@ import { type Impact, Ordnance, Telegraphs } from '../fx/Hostile';
 import { M6_BEHAVIORS } from '../enemies/behaviors';
 import { JAMMER_CRAWLER_BEHAVIORS } from '../enemies/jammerCrawlerBehaviors';
 import { FACTION_BEHAVIORS } from '../enemies/factionBehaviors';
+import { Range, RANGE_STAND } from '../arena/Range';
 import { BOSS_BEHAVIORS } from '../enemies/bosses';
 import { bossMults, SurvivalPlanner } from '@riftwarden/rules/survival/plan';
 import { SurvivalRuntime } from '../survival/SurvivalRuntime';
@@ -158,6 +159,8 @@ export interface ArenaConfig {
   node?: NodeSetup;
   /** Game mode: defense (hold the reactor, build towers) or survival (no towers, every machine hunts the drone, one life). */
   mode?: RunMode;
+  /** Firing range: frozen training dummies and a DPS readout (no waves, loot or banking). */
+  range?: boolean;
 }
 
 export type { RunMode };
@@ -1198,8 +1201,22 @@ export class Game {
   /** Enter the arena: fresh run state, preparation phase of wave 1. */
   start(): void {
     this.newRun();
+    if (this.cfg.range) this.openRange();
     this.setScreen(this.input.captured || this.input.isLockedNow() ? 'playing' : 'paused');
     this.canvas.focus();
+  }
+
+  /** Firing range runtime (null in a real run). */
+  range: Range | null = null;
+
+  /** Firing range: hostile time stays frozen, the prep clock is held and nothing drops. */
+  private openRange(): void {
+    this.waves.hold = true;
+    this.dropChanceMult = 0;
+    this.range = new Range({ enemies: this.enemies, layout: this.layout, director: this.director });
+    this.range.configure();
+    this.player.controller.setPosition(new Vector3(RANGE_STAND.x, 1, RANGE_STAND.z));
+    this.player.yaw = RANGE_STAND.yaw;
   }
 
   async resume(): Promise<void> {
@@ -1249,6 +1266,7 @@ export class Game {
     this.emitters = [];
     this.disposed = true;
     this.input.onLockChange = () => {};
+    this.range?.dispose();
     this.director.bus.reset();
     this.node?.dispose();
     sfx.setTactical(false);
@@ -1388,7 +1406,7 @@ export class Game {
     }
     if (this.hitstopT > 0) this.hitstopT = Math.max(0, this.hitstopT - dt);
     const stop = this.hitstopT > 0 ? this.hitstopScale : 1;
-    const hdt = this.screen === 'defeat' ? dt * 0.15 : dt * this.tactical.hostileScale * stop;
+    const hdt = this.range ? 0 : this.screen === 'defeat' ? dt * 0.15 : dt * this.tactical.hostileScale * stop;
 
     if (playing) {
       this.runTime += dt;
@@ -1444,7 +1462,12 @@ export class Game {
     this.playerWasAlive = this.player.alive;
     this.turretCtx.stats = this.stats;
     this.turrets.update(dt, this.turretCtx);
-    this.director.update(dt, this.screen === 'playing' ? hdt : 0);
+    // The range freezes the machines but its damage over time still ticks.
+    this.director.update(dt, this.screen === 'playing' ? (this.range ? dt : hdt) : 0);
+    if (this.screen === 'playing' && this.range) {
+      if (controls) this.range.keys(input);
+      this.range.update(dt);
+    }
     if (this.towerNote.t > 0) this.towerNote.t -= dt;
     this.updateProjectiles(hdt);
     this.fx.update(dt);

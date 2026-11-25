@@ -12,13 +12,14 @@ import { SeasonBar } from '../Seasons';
 import { useSave } from '../useSave';
 import { Shell } from '../shell';
 import { CoopPanel } from '../Coop';
+import { RangeCard } from '../FiringRange';
 
 const multiplier = (value: number) => `${Number(value.toFixed(2))}×`;
 
 export function DeployTerminal({ flow, close }: { flow: Flow; close: () => void }) {
   const save = useSave(flow);
   const [busy, setBusy] = useState(false);
-  const [mode, setMode] = useState<'solo' | 'coop'>(flow.net ? 'coop' : 'solo');
+  const [mode, setMode] = useState<'solo' | 'coop' | 'range'>(flow.net ? 'coop' : 'solo');
   const selected = getTier(Math.min(save.threat.selected, save.threat.unlocked));
   const weapon = equippedItem(save, 'weapon');
   const blocker = deployBlocker(save);
@@ -41,8 +42,13 @@ export function DeployTerminal({ flow, close }: { flow: Flow; close: () => void 
         <button className={mode === 'coop' ? 'on' : ''} data-testid="deploy-coop" onClick={() => setMode('coop')}>
           CO-OP OPERATION · 2-4 WARDENS
         </button>
+        <button className={mode === 'range' ? 'on' : ''} data-testid="deploy-range" onClick={() => setMode('range')}>
+          FIRING RANGE
+        </button>
       </div>
-      {mode === 'coop' ? (
+      {mode === 'range' ? (
+        <RangeCard flow={flow} />
+      ) : mode === 'coop' ? (
         <CoopPanel flow={flow} />
       ) : (
       <>

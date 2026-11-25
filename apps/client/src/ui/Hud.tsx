@@ -15,12 +15,14 @@ import { useSyncExternalStore } from 'react';
 import { minimapStore } from './hud/minimap';
 export { Banner, Perf } from './hud/Panels';
 
+import { RangePanel } from './FiringRange';
+
 export function Hud({ game }: { game: Game }) {
   const phase = useHud(s => s.phase);
   const build = useHud(s => s.buildMode);
   const radar = useSyncExternalStore(minimapStore.subscribe, minimapStore.get).on;
   return (
-    <div className={`hud combat-hud ${radar ? 'show-radar' : ''}`} data-phase={phase} data-build={build}>
+    <div className={`hud combat-hud ${radar ? 'show-radar' : ''}${game.range ? ' in-range' : ''}`} data-phase={phase} data-build={build}>
       <Overlays />
       <HealthBars game={game} />
       <DamageNumbers game={game} />
@@ -43,6 +45,7 @@ export function Hud({ game }: { game: Game }) {
       <SurvivalHud />
       <NodeChip />
       <PhaseCores />
+      <RangePanel game={game} />
       <aside className="hud-rail hud-starboard">
         <LootFeed />
       </aside>

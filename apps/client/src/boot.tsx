@@ -7,6 +7,7 @@ import havokWasmUrl from '@babylonjs/havok/lib/esm/HavokPhysics.wasm?url';
 import { createEngine } from './core/engine';
 import { createRoot } from 'react-dom/client';
 import { Flow } from './core/Flow';
+import { debugApi } from './core/debugApi';
 import { loadSettings, mobileDefaults } from '@riftwarden/game/core/settings';
 import { immersiveStats, initTouch, isTouchDevice } from './touch/touchMode';
 import { simulatePwa } from './pwa';
@@ -54,7 +55,7 @@ export async function boot(): Promise<void> {
     // does ?account: the server replays every entry on the real track (a run without its loot locks is refused).
     // ?account&unlocked pairs with a test stack started with RIFT_UNLOCK_ALL=1 (both sides open).
     if (!params.has('locks') && (!params.has('account') || params.has('unlocked'))) unlockAllForTests(flow.profile);
-    (window as unknown as { __rift: unknown }).__rift = flow.debugApi();
+    (window as unknown as { __rift: unknown }).__rift = debugApi(flow);
     (window as unknown as { __touch: unknown }).__touch = { immersiveStats, simulatePwa };
   }
 

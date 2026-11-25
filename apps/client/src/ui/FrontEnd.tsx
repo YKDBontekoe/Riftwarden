@@ -288,7 +288,8 @@ export function PauseMenu({ flow }: { flow: Flow }) {
     { id: 'resume', label: resuming ? 'Resuming…' : 'Resume', go: resume },
     { id: 'settings', label: 'Settings', go: () => setTab(tab === 'settings' ? null : 'settings') },
     { id: 'controls', label: 'Controls', go: () => setTab(tab === 'controls' ? null : 'controls') },
-    ...(inArena ? [{ id: 'abandon', label: 'Abandon run', danger: true, go: () => setConfirm(true) }] : []),
+    ...(inArena && flow.arena?.range ? [{ id: 'leave', label: 'Leave the firing range', go: () => void flow.abandonRun() }] : []),
+    ...(inArena && !flow.arena?.range ? [{ id: 'abandon', label: 'Abandon run', danger: true, go: () => setConfirm(true) }] : []),
   ];
   const [sel, setSel] = useMenuKeys(rows.length, (i) => rows[i].go(), !confirm && tab !== 'settings');
   useEffect(() => {
