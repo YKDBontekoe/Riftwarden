@@ -193,7 +193,7 @@ export function RunMapScreen({ flow, game }: { flow: Flow; game: Game }) {
               {coop ? 'VOTE: EXTRACT' : 'EXTRACT'}
             </button>
             <button className="primary ds-btn-p" data-testid="rm-travel" disabled={!selected || busy} onClick={() => selected && go(selected)}>
-              <span className="ds-kd">ENTER</span>{coop ? 'VOTE: TRAVEL' : canSurgeHere ? `TRAVEL · RL ${view.tier}` : 'TRAVEL'}
+              <span className="ds-kd">ENTER</span>{coop ? 'VOTE: TRAVEL' : canSurgeHere ? `STAY ON RL ${view.tier}` : 'TRAVEL'}
             </button>
           </div>
         </div>

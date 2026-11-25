@@ -15,6 +15,7 @@ import { useHud } from './useHud';
 import { useSave } from './useSave';
 import { fmtTime } from './format';
 import { RunSummary } from './RunSummary';
+import { RunRecap } from './RunRecap';
 import { GearUpgrades } from './GearUpgrades';
 import { savePower } from './RiftLevel';
 import { ItemGlyph } from './inventory/glyphs';
@@ -233,7 +234,8 @@ export function SummaryScreen({ flow }: { flow: Flow }) {
             <Bar value={levelInfo(save.progress.xp).frac} color="#d4b2ff" />
           </div>}
         </div>
-        <details className="field-notes"><summary className="ds-lbl" style={{ cursor: 'pointer' }}>Full breakdown</summary><RunSummary result={result} powerAfter={savePower(save)} /></details>
+        <RunRecap result={result} powerAfter={savePower(save)} />
+        <details className="field-notes"><summary className="ds-lbl" style={{ cursor: 'pointer' }}>Full breakdown</summary><RunSummary result={result} powerAfter={savePower(save)} recap={false} /></details>
       </section>
       <aside className="ds-abs ds-glass ds-cut ds-col" style={{ right: 44, top: 76, width: 460, maxHeight: 'calc(100% - 170px)', padding: '22px 24px', gap: 12, overflowY: 'auto' }}>
         <span className="ds-ov">From this run</span>

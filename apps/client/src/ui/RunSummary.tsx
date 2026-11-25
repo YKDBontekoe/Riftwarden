@@ -8,7 +8,7 @@ import { BriefList } from './items';
 import { FieldIcon } from './FieldIcon';
 import { fmtBig, fmtTime } from './format';
 
-export function RunSummary({ result, extra, powerAfter }: { result: RunResult; extra?: { turretsBuilt: number; coresEarned: number } | null; powerAfter?: number }) {
+export function RunSummary({ result, extra, powerAfter, recap = true }: { result: RunResult; extra?: { turretsBuilt: number; coresEarned: number } | null; powerAfter?: number; recap?: boolean }) {
   const tier = getTier(result.tier);
   const sv = result.survival;
   const resources = [
@@ -28,7 +28,7 @@ export function RunSummary({ result, extra, powerAfter }: { result: RunResult; e
       {sv?.dev && <div className="record-badge dev">DEVELOPMENT SESSION · NOT RECORD ELIGIBLE · NOTHING BANKED</div>}
       {!sv?.dev && (result.records?.length ?? 0) > 0 && <div className="record-badge"><strong>RL {tier.id} personal record{result.records!.length > 1 ? 's' : ''}</strong> {result.records!.join(' · ')}</div>}
       {!sv?.dev && !result.records && result.newRecord && <div className="record-badge">New personal record · RL {tier.id}</div>}
-      <RunRecap result={result} powerAfter={powerAfter} />
+      {recap && <RunRecap result={result} powerAfter={powerAfter} />}
       <div className="result-headline">
         <div><b>{result.wavesCleared}</b><span><FieldIcon name="wave" /> Waves cleared</span></div>
         <div><b>{result.kills.toLocaleString()}</b><span><FieldIcon name="enemy" /> Hostiles destroyed</span></div>
