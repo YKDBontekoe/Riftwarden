@@ -9,6 +9,7 @@ import { FieldArt } from './FieldArt';
 import { FieldIcon, STATION_ICON } from './FieldIcon';
 import { CurrencyIcon } from './inventory/thumbs';
 import { Crumb, Cur } from './ds';
+import { OfflineBanner } from './SystemStates';
 
 /** Currencies the warden can see (staged unlocks); null = all. Provided by TerminalHost. */
 export const ShellCurrencies = createContext<readonly ResourceKey[] | null>(null);
@@ -40,6 +41,7 @@ export function Shell({ code, title, sub, close, children, accent = 'cyan', wide
     <div className={`screen terminal-screen ds-scr acc-${accent}`}>
       <div className="ds-blur" />
       <div className="term-shade" />
+      <OfflineBanner />
       <div className="ds-top term-top">
         <span className="term-code ds-mono">{terminal && <FieldIcon name={STATION_ICON[terminal]} />}{code}</span>
         <Crumb parts={['HQ', name, title]} />

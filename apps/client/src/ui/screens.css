@@ -373,9 +373,17 @@
 .lobby-tier { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 .lobby-tier > span { font: 600 13px var(--ds-d); letter-spacing: 0.16em; color: var(--ds-dim); }
 .lobby-mode em { font-style: normal; font-size: 13px; color: var(--ds-dim); }
-.lobby-mode .set-opt + .set-opt { margin-left: -14px; }
 .lobby-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .lobby-actions > button { width: auto; flex: none; margin: 0; }
 .lobby-actions > button.primary { flex: 1; min-height: 50px; }
 .coop .coop-status { font: 600 12px var(--ds-m); letter-spacing: 0.1em; color: var(--ds-muted); }
 @media (max-width: 700px) { .lobby-list { grid-template-columns: 1fr; } }
+
+/* ---------------------------------------------------------------- account page + system states */
+.account-screen .account-panel { right: 56px; top: 96px; width: 440px; max-height: calc(100% - 190px); overflow: auto; padding: 24px 26px; gap: 14px; }
+.account-panel .field-input { padding: 12px 14px; border: 0; box-shadow: inset 0 0 0 1px rgba(244, 241, 232, 0.35); background: rgba(0, 0, 0, 0.35); font: 700 20px var(--ds-d); letter-spacing: 0.1em; }
+.account-panel .field-input:focus { outline: none; box-shadow: inset 0 0 0 2px var(--ds-ember); }
+.account-panel [role=tablist] button { width: auto; margin: 0; }
+.account-panel [role=tablist] button[aria-selected='true'] { background: var(--ds-ink); color: #0e1114; }
+.offline-banner { position: fixed; left: 50%; top: 12px; transform: translateX(-50%); z-index: 40; max-width: min(640px, calc(100vw - 32px)); pointer-events: none; }
+@media (max-width: 1000px) { .account-screen .account-panel { left: 16px; right: 16px; width: auto; top: auto; bottom: 70px; } }

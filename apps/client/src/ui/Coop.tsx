@@ -167,11 +167,13 @@ export function CoopPanel({ flow, compact }: { flow: Flow; compact?: boolean }) 
       <LobbyWar flow={flow} host={host} node={lobby.node} disabled={lobby.state !== 'lobby'} />
       <div className="lobby-tier lobby-mode">
         <span>GAME MODE</span>
+        <span className="set-seg">
         {(['defense', 'survival'] as const).map((m) => (
           <button key={m} data-testid={`lobby-mode-${m}`} className="set-opt" aria-pressed={lobby.mode === m} disabled={!host || lobby.state !== 'lobby'} onClick={() => flow.net?.send({ t: 'mode', mode: m })}>
             {m.toUpperCase()}
           </button>
         ))}
+        </span>
         <em>{lobby.mode === 'survival' ? 'No towers · hunted · one life per node' : 'Hold the reactor · build towers'}</em>
       </div>
       <div className="lobby-actions">

@@ -110,3 +110,11 @@ html[data-touch] .hq-keys { display: none; }
   html[data-touch] .home-hud :is(.hq-loc, .hq-res) { zoom: calc(var(--ui-scale, 1) * 0.66); }
   html[data-touch] .home-hud .hq-prompt { zoom: 0.8; }
 }
+
+/* Mobile system screens (final design "Mobile · rotate, install, update") */
+.rotate-hint { background: rgba(6, 8, 10, 0.96); }
+.rotate-hint b { font: 800 30px var(--ds-d); letter-spacing: 0.14em; color: var(--ds-ink); }
+.rotate-hint .phone { border-color: var(--ds-ember); }
+.rotate-hint button.primary { width: auto; }
+.pwa-toast { border: 0; background: rgba(10, 14, 18, 0.92); box-shadow: inset 0 0 0 1px rgba(255, 216, 77, 0.6); clip-path: var(--ds-cut-tr); color: var(--ds-ink); font-family: var(--font); }
+.pwa-toast button { width: auto; margin: 0; }

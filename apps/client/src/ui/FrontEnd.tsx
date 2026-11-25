@@ -21,6 +21,7 @@ import { useHud } from './useHud';
 import { useSave } from './useSave';
 import { savePower } from './RiftLevel';
 import { Backdrop, Bar, Crumb, Cur, Hint, RiskTag } from './ds';
+import { OfflineBanner } from './SystemStates';
 
 const CONTROLS = [
   [<BoundKey action="move" />, 'Move'],
@@ -172,7 +173,7 @@ export function MainMenu({ flow }: { flow: Flow }) {
     ...sections.map((s) => ({ id: s, title: MENU_SECTIONS[s], badge: s === 'account' && account.status === 'signedIn' ? 'SIGNED IN' : undefined, go: () => setTab(tab === s ? null : s) })),
   ];
   const all = [{ id: 'deploy', title: 'Deploy', go: () => void flow.enterHq() }, ...items];
-  const [sel, setSel] = useMenuKeys(all.length, (i) => all[i].go(), tab !== 'settings');
+  const [sel, setSel] = useMenuKeys(all.length, (i) => all[i].go(), tab !== 'settings' && tab !== 'account');
   const close = useRef(setTab);
   close.current = setTab;
   useEffect(() => {
@@ -182,11 +183,13 @@ export function MainMenu({ flow }: { flow: Flow }) {
   }, []);
   const name = account.account?.name ?? 'GUEST';
   if (tab === 'settings') return <SettingsScreen flow={flow} from="Main menu" close={() => setTab(null)} />;
+  if (tab === 'account') return <AccountScreen close={() => setTab(null)} />;
   const sync = account.status === 'signedIn' ? 'synced' : account.status === 'offline' ? 'offline · playing locally' : 'progress on this device';
   return (
     <main className="screen menu ds-scr">
       <Backdrop />
       <div className="ds-scrim-b" />
+      <OfflineBanner />
       <div className="ds-top">
         <span className="ds-mono">RW-OPS // HQ-01 · {account.status === 'signedIn' ? 'ONLINE' : account.status === 'offline' ? 'OFFLINE' : 'LOCAL'}</span>
         <span className="ds-grow" />
@@ -241,7 +244,6 @@ export function MainMenu({ flow }: { flow: Flow }) {
         <Sheet title={MENU_SECTIONS[tab]} close={() => setTab(null)}>
           {tab === 'briefing' && <Briefing />}
           {tab === 'co-op' && <CoopPanel flow={flow} compact />}
-          {tab === 'account' && <AccountPanel />}
           {tab === 'controls' && <Controls />}
         </Sheet>
       )}
@@ -358,5 +360,51 @@ export function PauseMenu({ flow }: { flow: Flow }) {
       </div>
       <div className="ds-grain" />
     </div>
+  );
+}
+
+/** Account page (final design "Account · passkey sign-in"): why an account, then the passkey panel. Esc returns. */
+function AccountScreen({ close }: { close: () => void }) {
+  const account = useAccount();
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code !== 'Escape') return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      close();
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [close]);
+  const signedIn = account.status === 'signedIn';
+  return (
+    <main className="screen menu ds-scr account-screen" data-testid="account-screen">
+      <Backdrop />
+      <div className="ds-top">
+        <Crumb parts={['Main menu', 'Account']} />
+        <span className="ds-grow" />
+        <span className="ds-row ds-meta"><span className="ds-dot" style={{ background: signedIn ? 'var(--ds-up)' : 'var(--ds-risk)' }} />{signedIn ? `Signed in as ${account.account?.name} · synced` : account.status === 'offline' ? 'Offline · progress saved on this device' : 'Guest · progress saved on this device'}</span>
+      </div>
+      <div className="ds-abs ds-col" style={{ left: 56, top: 110, width: 520, gap: 16 }}>
+        <span className="ds-ov ds-em">Optional · play without one</span>
+        <span className="ds-hero">Your warden, everywhere</span>
+        <p className="ds-body" style={{ fontSize: 15 }}>An account keeps your progress on the server, joins the shared Rift War and lets you play co-op. No password: your device unlocks it with a passkey (fingerprint, face or PIN).</p>
+        <div className="ds-col">
+          <div className="ds-list-row"><span className="ds-dot" style={{ background: 'var(--ds-up)' }} />Your guest progress moves into the new account</div>
+          <div className="ds-list-row"><span className="ds-dot" style={{ background: 'var(--ds-up)' }} />Offline play keeps working; it syncs when you are back</div>
+          <div className="ds-list-row"><span className="ds-dot" style={{ background: 'var(--ds-up)' }} />One recovery code in case you lose every device</div>
+        </div>
+      </div>
+      <section className="account-panel ds-abs ds-glass ds-cut ds-col">
+        <span className="ds-h2">{signedIn ? 'Account' : 'Sign in or create'}</span>
+        <AccountPanel />
+      </section>
+      <div className="ds-bot">
+        <span className="ds-meta">Your name is shown to squads and on leaderboards</span>
+        <span className="ds-grow" />
+        <Hint keys="ESC" onClick={close}>{signedIn ? 'Back' : 'Continue as guest'}</Hint>
+      </div>
+      <div className="ds-grain" />
+    </main>
   );
 }
