@@ -6,7 +6,7 @@ import type { Game } from '@riftwarden/game/core/Game';
 import { LootFeed, LootLabels, LootPrompt } from './LootHud';
 import { SurvivalHud } from './SurvivalHud';
 import { Banner, CenterPanel, CondRow, Hint, MoveRow, Overlays, Perf, Respawn } from './hud/Panels';
-import { Compass, Objective, PhaseCores, Vitals, WeaponBlock } from './hud/Combat';
+import { Compass, CriticalHull, Objective, PhaseCores, Vitals, WeaponBlock } from './hud/Combat';
 import { Crosshair, DamageDirection, DamageNumbers, HealthBars, Hitmarker, KillChain, KillPulse } from './hud/Feedback';
 import { Radar } from './hud/Radar';
 import { NodeChip } from './RunMap';
@@ -55,6 +55,7 @@ export function Hud({ game }: { game: Game }) {
       <Banner />
       <MasteryGainToast />
       <Hint />
+      <CriticalHull />
       <Respawn />
       <Perf />
     </div>

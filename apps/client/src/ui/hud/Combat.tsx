@@ -43,7 +43,7 @@ export function Objective() {
       </div>
       {phase === 'combat' && (
         <div className="obj-line">
-          <LiveText className="ds-meta" select={(s) => `${s.enemiesLeft} hostile${s.enemiesLeft === 1 ? '' : 's'}`} />
+          <LiveText className="ds-meta" select={(s) => (s.mode === 'survival' ? `${s.enemiesLeft} hunting you` : `${s.enemiesLeft} hostile${s.enemiesLeft === 1 ? '' : 's'}`)} />
           <LiveBar segments={1} className="obj-bar" select={(s) => {
             const p = peak.current;
             if (p.wave !== s.wave) { p.wave = s.wave; p.n = 1; }
@@ -68,6 +68,7 @@ export function Objective() {
           <LiveText as="b" className="ds-d" select={(s) => `${Math.ceil(reactorOf(s) * 100)}%`} />
         </div>
       )}
+      {survival && <span className="ds-meta obj-note">No reactor · no towers · losing the drone ends the run</span>}
       {atRisk && <span className="ds-risk-tag obj-risk">At risk · {run!.salvageUnsecured.toLocaleString()} salvage{cargo > 0 ? ` · ${cargo} item${cargo === 1 ? '' : 's'}` : ''}</span>}
       {node && (
         <span className="ds-row obj-chips" style={{ gap: 6, flexWrap: 'wrap' }}>
@@ -305,6 +306,23 @@ export function WeaponBlock() {
         <span className={!build ? 'on' : ''}><kbd>1</kbd> weapon</span>
         {!survival && <span className={build ? 'on' : ''}><kbd>2</kbd> build</span>}
       </div>
+    </div>
+  );
+}
+
+/** Centre warning while the hull is critical (below 25%, alive): the one alert that outranks everything but a boss. */
+export function CriticalHull() {
+  const critical = useHud((s) => s.respawnIn <= 0 && s.playerMax > 0 && s.playerHp / s.playerMax < 0.25);
+  const shieldUp = useHud((s) => s.playerShield > 0);
+  if (!critical) return null;
+  return (
+    <div className="hud-critical" role="status" data-testid="hull-critical">
+      <span className="hc-rule" aria-hidden="true" />
+      <span className="ds-col" style={{ alignItems: 'center' }}>
+        <b>HULL CRITICAL · GET TO COVER</b>
+        <span className="ds-meta">{shieldUp ? 'Shield holding' : 'Self-repair starts 4 s after the last hit'}</span>
+      </span>
+      <span className="hc-rule r" aria-hidden="true" />
     </div>
   );
 }

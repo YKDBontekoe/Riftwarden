@@ -100,18 +100,23 @@ export function CenterPanel() {
   return (
     <div className="bottom-center">
       {build && (
-        <div className={`build-panel panel-frame ${valid ? 'ok' : 'bad'}`}>
-          <div className="bp-head">
-            <span className="bp-icon">◈</span>
-            <span className="bp-title">{m5?.template ?? 'TOWER'}</span>
-            <span className={cores >= cost ? 'cost' : 'cost bad'}>◆ {cost}</span>
+        <div className={`build-panel build-bar ${valid ? 'ok' : 'bad'}`}>
+          <div className="bb-cards">
+            {(m5?.template ?? 'TOWER').split(' · ').map((name, i) => (
+              <div key={i} className="bb-card">
+                <span className="ds-row"><kbd>{['C', 'V', 'N'][i] ?? 'M'}</kbd><span className="ds-lbl">{['Weapon', 'Core', 'Modifier'][i] ?? 'Part'}</span></span>
+                <b className="ds-h3">{name}</b>
+              </div>
+            ))}
+            <div className="bb-card cost-card">
+              <span className="ds-lbl">Cost</span>
+              <b className={cores >= cost ? 'cost ds-num' : 'cost bad ds-num'}>{cost}</b>
+            </div>
           </div>
-          <div className="status">
-            <i />
-            {msg}
-          </div>
-          <div className="keys">
-            <Key k="C" /> weapon <Key k="V" /> core <Key k="N" /> mod <Key k="M" /> base · <Key k="LMB" /> place <Key k="RMB" /> cancel {active ? <span className="rapid">RAPID PLACEMENT</span> : <><BoundKey action="tactical" /> tactical</>}
+          <div className={`status bb-status ${valid ? 'ds-up' : 'ds-bad'}`}>{msg}</div>
+          <div className="keys bb-keys">
+            <span className="ds-hint"><Key k="M" />Base</span><span className="ds-hint"><Key k="LMB" />Place</span><span className="ds-hint"><Key k="RMB" />Exit</span>
+            {active ? <span className="rapid ds-hint ds-em">Rapid placement</span> : <span className="ds-hint"><BoundKey action="tactical" />Slow time</span>}
           </div>
         </div>
       )}

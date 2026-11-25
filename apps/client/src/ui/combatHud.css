@@ -133,3 +133,33 @@
   .combat-hud .hud-weapon .hw-bar.segbar { width: 26vw; }
   .combat-hud .bottom-center { width: 28vw; }
 }
+
+/* build mode bar (HudPrep artboard): the template as four cards, validity, keys */
+.combat-hud .bottom-center:has(.build-bar) { width: min(760px, 70vw); }
+.combat-hud .build-bar { display: flex; flex-direction: column; gap: 8px; padding: 0; background: none; border: 0; clip-path: none; }
+.combat-hud .bb-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) 110px; gap: 8px; }
+.combat-hud .bb-card { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; text-align: left; background: rgba(10, 14, 18, 0.7); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18); clip-path: var(--ds-cut-s); }
+.combat-hud .bb-card .ds-h3 { font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.combat-hud .bb-card kbd { margin: 0; }
+.combat-hud .bb-card.cost-card { align-items: flex-end; }
+.combat-hud .bb-card .cost.bad { color: var(--ds-down); }
+.combat-hud .bb-status { font: 700 14px var(--ds-d); letter-spacing: 0.14em; text-transform: uppercase; }
+.combat-hud .bb-keys { display: flex; flex-wrap: wrap; gap: 18px; justify-content: center; }
+.combat-hud .bb-keys .ds-hint { font-size: 13px; }
+
+/* critical hull (HudBoss artboard) */
+.hud-critical { position: fixed; left: 50%; top: 58%; transform: translateX(-50%); display: flex; align-items: center; gap: 14px; pointer-events: none; }
+.hud-critical b { font: 800 26px var(--ds-d); letter-spacing: 0.14em; color: #ffd3cc; text-shadow: 0 0 18px rgba(255, 90, 74, 0.8), 0 1px 2px #000; animation: critPulse 0.9s ease-in-out infinite; }
+.hud-critical .hc-rule { width: 70px; height: 4px; background: linear-gradient(90deg, rgba(255, 90, 74, 0), #ff5a4a); }
+.hud-critical .hc-rule.r { background: linear-gradient(270deg, rgba(255, 90, 74, 0), #ff5a4a); }
+@keyframes critPulse { 50% { opacity: 0.6; } }
+@media (prefers-reduced-motion: reduce) { .hud-critical b { animation: none; } }
+.hud-objective .obj-note { padding-left: 24px; color: #e0e4dc; }
+
+/* co-op squad panel (HudTeam artboard) */
+.combat-hud .team-panel { padding: 0; background: none; border: 0; }
+.combat-hud .team-panel .tm { display: flex; align-items: center; gap: 10px; padding: 6px 0; border: 0; border-bottom: 1px solid rgba(255, 255, 255, 0.1); background: none; }
+.combat-hud .team-panel .tm-name { font: 700 15px var(--ds-d); letter-spacing: 0.1em; text-transform: uppercase; }
+.combat-hud .team-panel .tm.down .tm-name { color: var(--ds-down); }
+.combat-hud .team-panel .tm-link { font: 500 11px var(--ds-m); color: var(--ds-dim); }
+.team-tag { font-family: var(--ds-d); letter-spacing: 0.12em; }
