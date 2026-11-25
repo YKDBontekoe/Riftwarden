@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
+import { minimapStore, setMinimap } from './hud/minimap';
 import type { Flow } from '../core/Flow';
 import { InstallApp } from '../touch/MobileUi';
 import { keyLabel, ACTIONS, DEFAULT_SETTINGS, PRESETS, type Quality, type Settings } from '@riftwarden/game/core/settings';
@@ -135,6 +136,7 @@ export function SettingsPanel({ flow, compact }: { flow: Flow; compact?: boolean
         <>
           <Slider label="Interface scale" min={0.8} max={1.3} step={0.05} value={s.uiScale} fmt={pct} onChange={(v) => update({ uiScale: v })} />
           <Slider label="Camera shake" min={0} max={1.5} step={0.05} value={s.shake} fmt={pct} onChange={(v) => update({ shake: v })} />
+          <MinimapToggle />
           <Seg label="Reduce motion" value={s.reduceMotion ? 'on' : 'off'} options={[['off', 'OFF'], ['on', 'ON']]} onChange={(v) => update({ reduceMotion: v === 'on' })} />
           <Seg
             label="Colour vision"
@@ -187,4 +189,10 @@ function TutorialToggle({ flow }: { flow: Flow }) {
       </div>
     </div>
   );
+}
+
+/** Arena minimap: the compass is the default; the top-down radar can be added back (this device only). */
+function MinimapToggle() {
+  const on = useSyncExternalStore(minimapStore.subscribe, minimapStore.get).on;
+  return <Seg label="Arena minimap" value={on ? 'on' : 'off'} options={[['off', 'COMPASS'], ['on', 'RADAR TOO']]} onChange={(v) => setMinimap(v === 'on')} />;
 }

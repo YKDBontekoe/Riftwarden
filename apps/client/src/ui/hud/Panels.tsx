@@ -234,7 +234,7 @@ function MoveChip({ label, action, kind }: { label: string; action: string; kind
   );
 }
 
-function MoveRow() {
+export function MoveRow() {
   const state = useHud((s) => s.moves.state);
   const contextual = useHud((s) => s.phase === 'combat' && !s.buildMode);
   const ready = useHud((s) => s.moves.grapple <= 0 && s.moves.pound <= 0);
@@ -250,7 +250,7 @@ function MoveRow() {
 }
 
 /** Conditional affixes: one chip per condition the gear uses, lit while it holds (nothing without conditional gear). */
-function CondRow() {
+export function CondRow() {
   const key = useHud((s) => s.conds.map((c) => `${c.id}:${c.on ? 1 : 0}:${c.tag}`).join(','));
   if (!key) return null;
   return (
