@@ -581,7 +581,7 @@ html[data-touch] .hq-stations { display: none; }
 
 /* ---- Squad lobby (canvas "Co-op lobby"): full screen over the deployment terminal */
 .lobby-screen.screen { position: fixed; inset: 0; z-index: 30; display: block; padding: 0; gap: 0; }
-.lobby-screen .lobby-shade { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(5, 7, 9, 0.97) 0%, rgba(5, 7, 9, 0.82) 32%, rgba(5, 7, 9, 0.94) 66%); }
+.lobby-screen .lobby-shade { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(5, 7, 9, 1) 0%, rgba(5, 7, 9, 0.9) 32%, rgba(5, 7, 9, 0.94) 66%); }
 .lobby-screen .ds-top .lobby-code { font: 700 22px var(--ds-m); letter-spacing: 0.12em; color: var(--ds-ink); text-shadow: none; }
 .lobby-screen .ds-top .ds-btn { min-height: 36px; font-size: 14px; }
 .lobby-screen .lobby-title { position: absolute; left: 44px; top: 80px; gap: 4px; max-width: 720px; }
@@ -616,3 +616,49 @@ html[data-touch] .hq-stations { display: none; }
 .runmap .rm-actions .rm-banked { flex: 1; font-size: 12px; }
 .runmap .rm-actions .ds-btn .ds-k { margin-left: 6px; }
 @media (max-width: 1100px) { .runmap .rm-wrap, .runmap .rm-wrap.show-side { grid-template-columns: minmax(0, 1fr) 420px; } .runmap .rm-wrap.show-side .rm-side { display: none; } }
+
+/* Deploy · the Rift War (canvas "Deploy · planet"): the planet or the sector map left, the region panel right. */
+.dm-panel.dw { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(340px, 1fr); gap: 36px; align-items: start; }
+.dw-left { position: sticky; top: 0; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.dw-viewbar { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.dw-viewbar .war-head { margin: 0; border: 0; padding: 0; background: none; }
+.dw-viewseg { display: flex; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.24); }
+.dw-viewseg button { width: auto; margin: 0; padding: 8px 16px; border: 0; background: none; font: 700 13px var(--ds-d); letter-spacing: 0.16em; color: var(--ds-dim); }
+.dw-viewseg button.on { background: var(--ds-ink); color: #0b0d10; }
+.dw-planet { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 18px 0 6px; background: radial-gradient(circle at 50% 42%, rgba(127, 224, 200, 0.1), transparent 62%); }
+.dw-planet .war-globe { max-width: 100%; height: auto !important; aspect-ratio: 1; }
+.dw-planet .war-tabs { flex-direction: row; flex-wrap: wrap; justify-content: center; }
+.dw-sector .war-map { max-height: 470px; }
+.dw-legend { display: flex; flex-wrap: wrap; gap: 18px; align-items: center; font: 500 12px var(--font); color: var(--ds-dim); }
+.dw-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.dw-legend i { width: 10px; height: 10px; box-sizing: border-box; border: 1.5px solid; }
+.dw-legend i.lib { border-color: #7fe0c8; background: rgba(127, 224, 200, 0.3); }
+.dw-legend i.front { border-color: var(--ds-ember); background: rgba(255, 138, 61, 0.3); }
+.dw-legend i.fallen { border-color: #ff5a4a; background: rgba(255, 90, 74, 0.3); }
+.dw-legend i.locked { border-color: rgba(255, 255, 255, 0.5); }
+.dw-legend .ds-hint { margin-left: auto; }
+.dw-right { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.dw-right .ds-kicker { color: var(--ds-ember); }
+.dw-name { margin: -8px 0 0; font: 800 56px/0.95 var(--ds-d); letter-spacing: 0.01em; text-transform: uppercase; color: var(--ds-ink); }
+.dw-lib { display: flex; align-items: center; gap: 14px; }
+.dw-lib > b { font: 800 52px/0.9 var(--ds-d); color: #7fe0c8; }
+.dw-lib > b small { font-size: 24px; }
+.dw-lib > div { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+.dw-lib span { font: 700 12px var(--ds-d); letter-spacing: 0.16em; color: rgba(244, 241, 232, 0.78); }
+.dw-live { display: flex; flex-direction: column; }
+.dw-live .ds-lbl { margin-bottom: 4px; }
+.dw-ev { display: grid; grid-template-columns: 12px 1fr auto 52px; align-items: center; gap: 10px; width: 100%; margin: 0; padding: 9px 0; border: 0; border-bottom: 1px solid rgba(255, 255, 255, 0.1); background: none; text-align: left; font: 400 14px var(--font); color: var(--ds-ink); }
+button.dw-ev:hover { background: rgba(255, 255, 255, 0.04); }
+.dw-ev i { width: 9px; height: 9px; transform: rotate(45deg); background: rgba(255, 255, 255, 0.5); }
+.dw-ev.threat i { background: #ff5a4a; }
+.dw-ev.risk i { background: #ffd23d; }
+.dw-ev b { font-weight: 600; }
+.dw-ev em { font-style: normal; font-size: 12px; color: var(--ds-dim); }
+.dw-ev time { font: 700 13px var(--ds-m); text-align: right; }
+.dw-ev.quiet { color: rgba(244, 241, 232, 0.75); }
+.dw-right .war-order { border-top: 2px solid var(--ds-ember); }
+.dw-right .mode-switch { display: grid; grid-template-columns: 1fr 1fr; }
+.dw-level { display: flex; flex-direction: column; gap: 10px; }
+.dw-right .dm-node { margin: 0; }
+.dw-right .field-notes p { margin: 8px 0; }
+@media (max-width: 980px) { .dm-panel.dw { grid-template-columns: minmax(0, 1fr); } .dw-left { position: static; } }

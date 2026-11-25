@@ -32,6 +32,17 @@ export function DeployTerminal({ flow, close }: { flow: Flow; close: () => void 
       if (!ok) setBusy(false);
     });
   };
+  const pinnacle = () => {
+    if (busy) return;
+    setBusy(true);
+    void flow.deploy(selected.id, undefined, 'defense', true).then((ok) => !ok && setBusy(false));
+  };
+  const deployButton = (
+    <button className="primary deploy term-primary" data-key="ENTER" data-enter disabled={busy || !!blocker} onClick={deploy}>
+      <span>{busy ? 'LAUNCHING…' : `DEPLOY · RL ${selected.id}`}</span>
+      <span aria-hidden="true">↗</span>
+    </button>
+  );
   return (
     <Shell code="DP-01" title="DEPLOYMENT" sub="Launch bay · survival operations" close={close} wide>
       <WipeNotice save={save} />
@@ -53,11 +64,27 @@ export function DeployTerminal({ flow, close }: { flow: Flow; close: () => void 
       ) : (
       <>
       <SeasonBar flow={flow} save={save} />
-      <div className={`deploy-grid${flow.mapMode ? ' war' : ''}`}>
+      {flow.mapMode ? (
+        <>
+          <ResumeCard flow={flow} save={save} />
+          <DeployMapPanel flow={flow} save={save} entry={entry} onEntry={setEntry} aside={
+            <div className="dw-level">
+              <div className="ds-lbl">Rift level</div>
+              <RiftLevelPicker value={selected.id} unlocked={save.threat.unlocked} power={savePower(save)} disabled={busy} onPick={(rl) => flow.selectTier(rl)} />
+              <LevelLootCard rl={selected.id} />
+              <PinnacleCard flow={flow} save={save} rl={selected.id} busy={busy} onDeploy={pinnacle} />
+              <UnlockBar save={save} />
+              {blocker && <div className="deploy-block">{blocker}</div>}
+            </div>
+          } />
+          {deployButton}
+        </>
+      ) : (
+      <div className="deploy-grid">
         <div className="arena-card">
           <ResumeCard flow={flow} save={save} />
-          {flow.mapMode ? <DeployMapPanel flow={flow} save={save} entry={entry} onEntry={setEntry} /> : <><div className="operation-heading"><h2>Reactor yard</h2><span>Sector 07</span></div>
-          <FacilityPlan /></>}
+          <div className="operation-heading"><h2>Reactor yard</h2><span>Sector 07</span></div>
+          <FacilityPlan />
           <p>Hold the reactor. Build along the marked approaches and bank your haul every {CHECKPOINT_INTERVAL} waves.</p>
           <details className="field-notes">
             <summary>Survival rules</summary>
@@ -77,18 +104,12 @@ export function DeployTerminal({ flow, close }: { flow: Flow; close: () => void 
         <div className="tier-col">
           <div className="col-label">SELECT RIFT LEVEL</div>
           <RiftLevelPicker value={selected.id} unlocked={save.threat.unlocked} power={savePower(save)} disabled={busy} onPick={(rl) => flow.selectTier(rl)} />
-          <PinnacleCard flow={flow} save={save} rl={selected.id} busy={busy} onDeploy={() => {
-            if (busy) return;
-            setBusy(true);
-            void flow.deploy(selected.id, undefined, 'defense', true).then((ok) => !ok && setBusy(false));
-          }} />
+          <PinnacleCard flow={flow} save={save} rl={selected.id} busy={busy} onDeploy={pinnacle} />
           <TierBrief tier={selected} save={save} />
-          <button className="primary deploy term-primary" data-key="ENTER" data-enter disabled={busy || !!blocker} onClick={deploy}>
-            <span>{busy ? 'LAUNCHING…' : `DEPLOY · RL ${selected.id}`}</span>
-            <span aria-hidden="true">↗</span>
-          </button>
+          {deployButton}
         </div>
       </div>
+      )}
       </>
       )}
     </Shell>
