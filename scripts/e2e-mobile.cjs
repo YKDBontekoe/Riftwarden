@@ -123,7 +123,13 @@ const visible = (p, testId) => p.locator(`[data-testid="${testId}"]`).count();
       await t.drag(10, box.x + box.width / 2, box.y + box.height - 20, box.x + box.width / 2, box.y + 20, 10);
       await t.up(10);
       await p.waitForTimeout(400);
-      const top = await body.evaluate((el) => el.scrollTop);
+      // The finger may land on an inner list that scrolls by itself (inventory grid): any scroll container under it counts.
+      const top = await body.evaluate((el, pt) => {
+        let n = document.elementFromPoint(pt.x, pt.y);
+        let best = el.scrollTop;
+        for (; n && n !== el.parentElement; n = n.parentElement) best = Math.max(best, n.scrollTop);
+        return best;
+      }, { x: box.x + box.width / 2, y: box.y + 20 });
       check('G1 a terminal taller than the phone scrolls with a swipe', max <= 0 || top > 20, `scrollTop=${top} max=${max}`);
       const close = await p.locator('button.term-close').first().boundingBox();
       await t.down(11, close.x + close.width / 2, close.y + close.height / 2);
