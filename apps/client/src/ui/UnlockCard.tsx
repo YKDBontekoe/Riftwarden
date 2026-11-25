@@ -37,17 +37,17 @@ export function UnlockCard({ flow }: { flow: Flow }) {
   // A big jump (several levels at once) lists everything, compact past four entries.
   const compact = list.length > 4;
   return (
-    <div className="screen dim" data-testid="unlock-card" role="dialog" aria-modal="true" aria-labelledby="unlock-card-title">
-      <div className="modal panel-frame grid gap-[12px] w-[min(520px,calc(100vw-32px))] max-h-[calc(100vh-48px)] overflow-auto">
-        <div className="grid gap-[2px]">
-          <span className="font-mono text-[11px] tracking-[0.18em] text-ok">{list.length === 1 ? 'NEW SYSTEM ONLINE' : `${list.length} NEW SYSTEMS ONLINE`}</span>
-          <h2 id="unlock-card-title" className="cp-title">{list.length === 1 ? list[0].label : 'Headquarters expanded'}</h2>
+    <div className="screen dim unlock-screen" data-testid="unlock-card" role="dialog" aria-modal="true" aria-labelledby="unlock-card-title">
+      <div className="unlock-card ds-cut-tr grid gap-[12px] max-h-[calc(100vh-48px)] overflow-auto">
+        <div className="grid gap-[4px]">
+          <span className="ds-ov ds-em">{list.length === 1 ? 'New system online' : `${list.length} new systems online`}</span>
+          <h2 id="unlock-card-title" className="ds-h2">{list.length === 1 ? list[0].label : 'Headquarters expanded'}</h2>
         </div>
         <div className="grid gap-[8px]">
           {list.map((u) => (
-            <div key={u.id} className="grid gap-[3px] border-l-2 border-ok/80 pl-[10px] py-[3px]" data-unlock={u.id}>
+            <div key={u.id} className="ds-list-row grid gap-[3px]" data-unlock={u.id}>
               <div className="flex items-baseline justify-between gap-[10px]">
-                <b className="text-[14px]">{u.label}</b>
+                <b className="ds-h3">{u.label}</b>
                 <span className="font-mono text-[10px] tracking-[0.1em] text-faint whitespace-nowrap">{KIND[u.kind as UnlockKind] ?? 'SYSTEM'}</span>
               </div>
               {!compact && <span className="text-[13px] text-muted">{u.blurb}</span>}
@@ -55,8 +55,8 @@ export function UnlockCard({ flow }: { flow: Flow }) {
             </div>
           ))}
         </div>
-        <button className="primary" data-testid="unlock-card-ok" autoFocus onClick={ack}>
-          GOT IT
+        <button className="ds-btn-p" data-testid="unlock-card-ok" autoFocus onClick={ack}>
+          <span className="ds-kd">ENTER</span>GOT IT
         </button>
       </div>
     </div>
