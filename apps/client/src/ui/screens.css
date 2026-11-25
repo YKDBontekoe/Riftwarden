@@ -298,3 +298,24 @@
 .breakthrough .bt-glow { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 30%, rgba(255, 207, 115, 0.22), transparent 55%); }
 .breakthrough .bt-rewards { left: 140px; right: 140px; top: 330px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
 .breakthrough .bt-reward { gap: 10px; padding: 22px; align-items: flex-start; background: rgba(10, 14, 18, 0.74); box-shadow: inset 0 0 0 1px rgba(255, 207, 115, 0.35); clip-path: var(--ds-cut-tr); }
+
+/* ---------------------------------------------------------------- run map (sector map artboard) */
+.runmap.ds-scr { display: block; }
+.runmap .rm-wrap { position: absolute; left: 44px; right: 44px; top: 64px; bottom: 72px; width: auto; max-height: none; grid-template-columns: 230px minmax(0, 1fr) 360px; padding: 0; background: none; border: 0; clip-path: none; animation: none; }
+.runmap .rm-side { padding-right: 6px; }
+.runmap .rm-detail { padding: 18px 20px; background: rgba(10, 14, 18, 0.74); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12); clip-path: var(--ds-cut); backdrop-filter: blur(18px); }
+.runmap .rm-actions { display: flex; gap: 10px; align-items: stretch; padding-top: 10px; }
+.runmap .rm-actions .ds-btn { flex: none; }
+.runmap .rm-actions .ds-btn-p { flex: 1; min-height: 50px; font-size: 20px; }
+.runmap .rm-stats b { font: 700 26px var(--ds-d); }
+.runmap .cp-label, .runmap .cp-kicker { font: 600 13px var(--ds-d); letter-spacing: 0.18em; color: var(--ds-dim); text-transform: uppercase; }
+.runmap .rm-note { font-size: 13px; color: var(--ds-muted); }
+.runmap .rm-note.warn { color: var(--ds-risk); }
+.runmap .rm-votelist > div { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
+@media (max-width: 1100px) { .runmap .rm-wrap { grid-template-columns: minmax(0, 1fr) 320px; } .runmap .rm-side { display: none; } }
+@media (max-width: 760px), (max-height: 520px) { .runmap .rm-wrap { left: 8px; right: 8px; top: 40px; bottom: 44px; grid-template-columns: 1fr; overflow: auto; } }
+
+/* ---------------------------------------------------------------- deploy (planet artboard) */
+.terminal-screen .dm-panel .rm-liberation, .terminal-screen .rm-liberation { font: 600 12px var(--ds-d); letter-spacing: 0.16em; }
+.war-bar { background: rgba(255, 255, 255, 0.14); }
+.war-bar > i { background: var(--ds-lib); box-shadow: 0 0 8px var(--ds-lib); }

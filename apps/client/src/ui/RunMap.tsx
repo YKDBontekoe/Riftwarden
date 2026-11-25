@@ -16,7 +16,7 @@ import type { RunMapView, StationPanel } from '@riftwarden/rules/runmap/view';
 import { AffinityRow } from './LoadingScreen';
 import { ItemDetail, ItemGlyph, RarityTag } from './items';
 import { useHud } from './useHud';
-import { Crumb, Cur, Hint, pips, rarityCls } from './ds';
+import { Backdrop, Crumb, Cur, Hint, pips, rarityCls } from './ds';
 import { BIOMES } from '@riftwarden/rules/world/biomes';
 import { NamedDrops } from './NamedDrops';
 import { bossArtwork } from '@riftwarden/game/visuals/fieldArtwork';
@@ -135,8 +135,14 @@ export function RunMapScreen({ flow, game }: { flow: Flow; game: Game }) {
   const def = node ? regionLayout(seed, node.act - 1) : null;
   const nodeLib = node && def ? nodeLiberation(war, node.id, def) : 0;
   return (
-    <div className="screen dim runmap" data-testid="runmap">
-      <div className="rm-wrap panel-frame">
+    <div className="screen dim runmap ds-scr" data-testid="runmap">
+      <Backdrop />
+      <div className="ds-top">
+        <Crumb parts={['Rift War', regionLayout(war.seed, k).name, node ? node.kind === 'combat' ? 'Sector map' : NODE_KINDS[node.kind].name : 'Sector map']} />
+        <span className="ds-grow" />
+        <span className="ds-mono">RL {view.tier} · {view.cleared} NODE{view.cleared === 1 ? '' : 'S'} · WAVE {view.lastWave} · BANKED</span>
+      </div>
+      <div className="rm-wrap">
         <div className="rm-side">
           <Globe war={war} selected={k} onSelect={onRegion} size={200} />
           <div className="cp-kicker">Rift War · sector secured{survival ? ' · Survival' : ''}</div>
@@ -167,7 +173,6 @@ export function RunMapScreen({ flow, game }: { flow: Flow; game: Game }) {
           <RegionTabs war={war} k={k} onPick={onRegion} />
           <RegionStrip war={war} k={k} />
           <RegionMap war={war} k={k} current={view.current} path={view.path} reachable={reach} selected={selected} onSelect={setSel} onHover={setHover} votes={votes} ahead={look?.reach} seenAt={wv.seenAt} />
-          <div className="rm-hint">Hover or focus a sector for intel · select a lit sector or press <kbd>1</kbd>–<kbd>{Math.max(1, reach.length)}</kbd> · links at the edge lead to other regions</div>
         </div>
         <div className="rm-detail">
           <div className="rm-detail-body">
@@ -183,15 +188,22 @@ export function RunMapScreen({ flow, game }: { flow: Flow; game: Game }) {
             {node && inspect !== selected && <div className="rm-note">Inspecting · travel goes to the selected lit sector</div>}
           </div>
           {canSurgeHere && <SurgeOffer level={view.tier} busy={busy} onSurge={() => selected && go(selected, true)} />}
-          <button className="primary" data-testid="rm-travel" disabled={!selected || busy} onClick={() => selected && go(selected)}>
-            {coop ? 'VOTE: TRAVEL HERE' : canSurgeHere ? `TRAVEL · STAY ON RL ${view.tier}` : 'TRAVEL'}
-          </button>
-          <button className="home-btn" data-testid="rm-extract" disabled={busy} onClick={extract}>
-            {coop ? 'VOTE: EXTRACT' : 'EXTRACT TO HQ'}
-          </button>
-          <button className="mini" data-testid="rm-stay" onClick={() => void game.continueRun()}>BACK TO THE ARENA (MAP: H)</button>
+          <div className="rm-actions">
+            <button className="ds-btn" data-testid="rm-extract" disabled={busy} onClick={extract}>
+              {coop ? 'VOTE: EXTRACT' : 'EXTRACT'}
+            </button>
+            <button className="primary ds-btn-p" data-testid="rm-travel" disabled={!selected || busy} onClick={() => selected && go(selected)}>
+              <span className="ds-kd">ENTER</span>{coop ? 'VOTE: TRAVEL' : canSurgeHere ? `TRAVEL · RL ${view.tier}` : 'TRAVEL'}
+            </button>
+          </div>
         </div>
       </div>
+      <div className="ds-bot">
+        <span className="ds-meta">Hover a sector for intel · select a lit one or press 1–{Math.max(1, reach.length)} · edge links lead to other regions</span>
+        <span className="ds-grow" />
+        <Hint keys="H" testId="rm-stay" onClick={() => void game.continueRun()}>Back to the arena</Hint>
+      </div>
+      <div className="ds-grain" />
     </div>
   );
 }

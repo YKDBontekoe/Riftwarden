@@ -57,7 +57,7 @@ export function Crumb({ parts }: { parts: readonly string[] }) {
 }
 
 /** Key glyph(s) + words. Touch mode hides the glyphs (html[data-touch]); the words stay. */
-export function Hint({ keys, children, onClick }: { keys: readonly string[] | string; children: ReactNode; onClick?: () => void }) {
+export function Hint({ keys, children, onClick, testId }: { keys: readonly string[] | string; children: ReactNode; onClick?: () => void; testId?: string }) {
   const ks = typeof keys === 'string' ? [keys] : keys;
   const inner = (
     <>
@@ -67,7 +67,7 @@ export function Hint({ keys, children, onClick }: { keys: readonly string[] | st
       {children}
     </>
   );
-  return onClick ? <button type="button" className="ds-hint" onClick={onClick}>{inner}</button> : <span className="ds-hint">{inner}</span>;
+  return onClick ? <button type="button" className="ds-hint" data-testid={testId} onClick={onClick}>{inner}</button> : <span className="ds-hint" data-testid={testId}>{inner}</span>;
 }
 
 /** Skewed segment meter: n of total lit. */
