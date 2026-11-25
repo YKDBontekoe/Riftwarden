@@ -6,6 +6,7 @@ import { BASES, CORES, MAX_TOWER_LEVEL, MODIFIERS, partDef, partsFor, swapCost, 
 import { ELEMENT_COLOR_CSS } from './elements';
 import { BoundKey } from './hud/widgets';
 import { useHud } from './useHud';
+import { Backdrop, Crumb, ElementGem, ELEMENT_PATH, Gem, Hint } from './ds';
 
 const SLOT_LABEL: Record<TowerSlot, string> = { base: 'BASE', weapon: 'WEAPON MODULE', core: 'POWER CORE', modifier: 'MODIFIER' };
 
@@ -32,49 +33,73 @@ export function UpgradePanel({ game }: { game: Game }) {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [game, waiting]);
+  // Synergy: picks already taken that share a tag with the offered card; the run's tag totals for the footer.
+  const owned = [...build.stacks.entries()].map(([id, n]) => ({ def: upgradeDef(id), n })).filter((p) => p.def);
+  const tagCount = new Map<string, number>();
+  for (const p of owned) for (const t of p.def!.tags) tagCount.set(t, (tagCount.get(t) ?? 0) + p.n);
+  const runTags = [...tagCount.entries()].sort((x, y) => y[1] - x[1]).slice(0, 5);
+  const node = useHud((s) => s.node);
   return (
-    <div className="screen dim upgrade-screen" data-testid="upgrade-panel">
-      <div className="upgrade-wrap">
-        <div className="cp-kicker">WAVE {game.waves.number - 1} CLEARED · RIFT UPGRADE</div>
-        <div className="cp-title">{waiting ? `${waiting.toUpperCase()} IS CHOOSING` : coop ? 'Choose a team upgrade' : 'Choose an upgrade'}</div>
-        {coop && (
-          <div className="cp-sub">
-            {waiting ? 'Team upgrades are picked in turn; this one applies to every warden.' : 'Your turn: this upgrade applies to the whole team.'} · {coop.offerLeft} s
-            <button className="mini" style={{ marginLeft: 12 }} onClick={() => void game.closePanel?.()}>
-              BACK TO THE ARENA
-            </button>
-          </div>
-        )}
-        <div className="cp-sub">Upgrades last for this operation.{!coop && ' The next wave waits for your choice.'}</div>
-        <div className="upgrade-cards">
-          {offer.map((u, i) => {
-            const have = build.count(u.id);
-            const color = RARITY_COLOR[u.rarity];
-            return (
-              <button key={u.id} data-testid={`upgrade-card-${i}`} data-id={u.id} className="ucard" disabled={!!waiting} style={{ ['--rc' as string]: color, animationDelay: `${i * 0.09}s` }} onClick={() => game.chooseUpgrade(u.id)}>
-                <div className="uc-top">
-                  <span className="uc-rarity">{u.rarity.toUpperCase()}</span>
-                  <span className="uc-key">{i + 1}</span>
-                </div>
-                <span aria-hidden="true" className={`uc-art art-${u.category}`} data-el={u.tags.find((t) => t === 'thermal' || t === 'cryo') ?? undefined} />
-                <div className="uc-name">{u.name}</div>
-                <div className="uc-cat">{CATEGORY_LABEL[u.category]}{u.needs?.towers ? ' · TOWERS' : ''}</div>
-                <div className="uc-text">{u.text(have + 1)}</div>
-                {u.hint && <div className="uc-hint">{u.hint}</div>}
-                <div className="uc-stack">{have > 0 ? `STACK ${have} → ${have + 1} / ${u.maxStacks}` : u.maxStacks > 1 ? `NEW · MAX ${u.maxStacks}` : 'NEW · UNIQUE'}</div>
-              </button>
-            );
-          })}
-        </div>
-        {!waiting && (
-          <div className="uc-foot">
-            Press <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> to pick and jump straight back in · <kbd>Esc</kbd> frees the cursor to click a card
-          </div>
-        )}
+    <div className="screen dim upgrade-screen ds-scr" data-testid="upgrade-panel">
+      <Backdrop scrim="none" />
+      <div className="ds-top">
+        <Crumb parts={['Run', node?.name ?? 'Sector', 'Run upgrade']} />
+        <span className="ds-grow" />
+        <span className="ds-mono">{coop ? `TEAM PICK · ${coop.offerLeft} S` : 'WORLD PAUSED'}</span>
       </div>
+      <div className="ds-abs ds-col" style={{ left: 0, right: 0, top: 62, alignItems: 'center', gap: 4, textAlign: 'center' }}>
+        <span className="ds-ov ds-up">Wave {game.waves.number - 1} cleared · {coop ? 'team upgrade' : 'world paused'}</span>
+        <span className="ds-hero">{waiting ? `${waiting} is choosing` : coop ? 'Choose a team upgrade' : 'Choose an upgrade'}</span>
+        <span className="ds-meta">{coop ? (waiting ? 'Team upgrades are picked in turn; this one applies to every warden.' : 'Your turn: this upgrade applies to the whole team.') : 'Lasts for this run · numbers include what you already took'}</span>
+        {coop && <button className="ds-btn" style={{ minHeight: 36, marginTop: 6 }} onClick={() => void game.closePanel?.()}>BACK TO THE ARENA</button>}
+      </div>
+      <div className="upgrade-cards ds-abs" style={{ left: 'max(24px, 9vw)', right: 'max(24px, 9vw)', top: coop ? 236 : 200, display: 'grid', gridTemplateColumns: `repeat(${Math.max(1, offer.length)}, minmax(0, 1fr))`, gap: 28 }}>
+        {offer.map((u, i) => {
+          const have = build.count(u.id);
+          const color = UP_COLOR[u.rarity] ?? RARITY_COLOR[u.rarity];
+          const el = u.tags.find((t) => t in ELEMENT_PATH);
+          const syn = owned.filter((p) => p.def!.id !== u.id && p.def!.tags.some((t) => u.tags.includes(t) && t !== u.category));
+          const synTag = syn.length ? u.tags.find((t) => syn.some((p) => p.def!.tags.includes(t))) : null;
+          return (
+            <button key={u.id} data-testid={`upgrade-card-${i}`} data-id={u.id} className="ucard ds-card" disabled={!!waiting} style={{ '--r': color } as React.CSSProperties} onClick={() => game.chooseUpgrade(u.id)}>
+              <span className="ds-row" style={{ justifyContent: 'space-between', width: '100%' }}>
+                <span style={{ font: '700 13px var(--ds-d)', letterSpacing: '0.3em', color }}>{u.rarity.toUpperCase()}</span>
+                <span className="ds-k">{i + 1}</span>
+              </span>
+              <span style={{ margin: '6px 0 4px 8px' }}>
+                {el ? <ElementGem el={el} size={54} /> : <Gem color={color} size={54}><span aria-hidden="true" style={{ font: '700 22px var(--ds-d)', color }}>{u.icon}</span></Gem>}
+              </span>
+              <span style={{ font: "800 34px/0.95 var(--ds-d)", letterSpacing: '0.03em', textTransform: 'uppercase' }}>{u.name}</span>
+              <span className="ds-body" style={{ fontSize: 15 }}>{u.text(have + 1)}</span>
+              {u.hint && <span className="ds-meta">{u.hint}</span>}
+              <span className="ds-row" style={{ gap: 6, flexWrap: 'wrap' }}>
+                <span className="ds-chip">{CATEGORY_LABEL[u.category]}</span>
+                {u.tags.filter((t) => t !== u.category).slice(0, 2).map((t) => <span key={t} className="ds-chip">{t}</span>)}
+                {u.needs?.towers ? <span className="ds-chip">Towers</span> : null}
+              </span>
+              {synTag && <span style={{ font: '700 14px var(--ds-d)', letterSpacing: '0.12em', color: 'var(--ds-up)', textTransform: 'uppercase' }}>▲ Synergy · {syn.length} {synTag} pick{syn.length > 1 ? 's' : ''} taken</span>}
+              <span className="ds-meta" style={{ marginTop: 'auto' }}>{have > 0 ? `Owned ${have} · stack ${have + 1} of ${u.maxStacks}` : u.maxStacks > 1 ? `New · stacks to ${u.maxStacks}` : 'New · unique'}</span>
+            </button>
+          );
+        })}
+      </div>
+      <div className="ds-bot">
+        {runTags.length > 0 && (
+          <span className="ds-row" style={{ gap: 8, flexWrap: 'wrap' }}>
+            <span className="ds-lbl">Your run</span>
+            {runTags.map(([t, n]) => <span key={t} className="ds-chip">{t} {n}</span>)}
+          </span>
+        )}
+        <span className="ds-grow" />
+        {!waiting && <span className="ds-hint"><span className="ds-k">1</span><span className="ds-k">2</span><span className="ds-k">3</span>Pick</span>}
+        <Hint keys="ESC">Free cursor</Hint>
+      </div>
+      <div className="ds-grain" />
     </div>
   );
 }
+
+const UP_COLOR: Record<string, string> = { common: '#c9cdc4', rare: '#8cc4ff', epic: '#d4b2ff', legendary: '#ffcf73' };
 
 // ------------------------------------------------------------------ run build overview
 
