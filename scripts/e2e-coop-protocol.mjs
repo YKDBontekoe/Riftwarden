@@ -416,6 +416,57 @@ async function profileRows(id) {
       a.close(); b.close();
       await sleep(400);
     }
+    // ------------------------------------------------------------ T: warden-to-warden trading (lobby trade window)
+    if (want('T')) {
+      const A = await bot('Trader'), B = await bot('Buyer'), C = await bot('Rookie');
+      const idA = A.welcome.playerId, idB = B.welcome.playerId;
+      // Raise A and B past Warden 15, give A credits and a stored item; push the edited copies to the worker
+      // (a no-op op makes the gateway forward the profile, as a sync from another device would).
+      const docA = await profileDoc(stack, idA), docB = await profileDoc(stack, idB);
+      const item = { ...structuredClone(docA.items[0]), uid: 'tr_item_A' };
+      docA.items.push(item);
+      docA.storage.uids.push(item.uid);
+      for (const d of [docA, docB]) d.progress.xp = 400000;
+      docA.resources.credits = 5000;
+      const creditsB = docB.resources.credits;
+      for (const [id, d] of [[idA, docA], [idB, docB]]) await stack.db.query('UPDATE profiles SET doc = $2 WHERE account_id = $1', [id, d]);
+      await A.sync([{ op: { name: 'selectTier', args: [1] } }]);
+      await B.sync([{ op: { name: 'selectTier', args: [1] } }]);
+      await sleep(300);
+      A.send({ t: 'create', tier: 1 });
+      await A.waitNew((m) => m.t === 'lobby' && m.lobby);
+      for (const x of [B, C]) x.send({ t: 'join', code: A.lobby.code });
+      await A.wait((m) => m.t === 'lobby' && m.lobby?.players.length === 3);
+      A.send({ t: 'trade', op: 'open', with: C.welcome.playerId });
+      const gate = await A.waitNew((m) => m.t === 'error' && m.code === 'trade');
+      check('T1 trading is gated (a warden below level 15 cannot trade)', /cannot trade yet/.test(gate.msg), gate.msg);
+      const seen = [A, B].map((x) => x.waitNew((m) => m.t === 'trade' && m.trade));
+      A.send({ t: 'trade', op: 'open', with: idB });
+      await Promise.all(seen);
+      check('T2 opening a trade shows the window to both wardens', B.trade?.status === 'open' && A.trade?.status === 'open', JSON.stringify(B.trade?.status));
+      A.send({ t: 'trade', op: 'offer', items: [docA.loadout.weapon], credits: 0 });
+      const eq = await A.waitNew((m) => m.t === 'error' && m.code === 'trade');
+      check('T3 equipped items cannot be offered', /equipped/.test(eq.msg), eq.msg);
+      A.send({ t: 'trade', op: 'offer', items: ['tr_item_A'], credits: 1000 });
+      await B.waitNew((m) => m.t === 'trade' && m.trade?.[m.trade.a.id === idA ? 'a' : 'b'].items.length === 1);
+      A.send({ t: 'trade', op: 'confirm' });
+      const early = await A.waitNew((m) => m.t === 'error' && m.code === 'trade');
+      check('T4 confirming before both sides locked in is refused', /lock in/.test(early.msg), early.msg);
+      A.send({ t: 'trade', op: 'lock' });
+      B.send({ t: 'trade', op: 'lock' });
+      await A.waitNew((m) => m.t === 'trade' && m.trade?.a.locked && m.trade?.b.locked);
+      A.send({ t: 'trade', op: 'confirm' });
+      B.send({ t: 'trade', op: 'confirm' });
+      const done = await A.waitNew((m) => m.t === 'trade' && (m.trade?.status === 'done' || m.trade?.status === 'failed'), 15000);
+      check('T5 both confirmations apply the trade', done.trade.status === 'done', JSON.stringify({ s: done.trade.status, r: done.trade.reason }));
+      const afterA = await profileDoc(stack, idA), afterB = await profileDoc(stack, idB);
+      check('T6 the item moved to the other warden\'s storage (and only there)', !afterA.items.some((i) => i.uid === 'tr_item_A') && afterB.storage.uids.includes('tr_item_A'));
+      check('T7 credits moved with the 10% tax', afterA.resources.credits === 4000 && afterB.resources.credits === creditsB + 900, `${afterA.resources.credits} / ${afterB.resources.credits}`);
+      const synced = await B.pull();
+      check('T8 the buyer\'s device receives the traded item on its next sync', synced.storage.uids.includes('tr_item_A'));
+      A.close(); B.close(); C.close();
+      await sleep(400);
+    }
     // ------------------------------------------------------------ K: capacity (own stack, one operation slot)
     if (want('K')) {
       const main = stack;

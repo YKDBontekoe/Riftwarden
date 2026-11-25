@@ -74,3 +74,38 @@ message LobbyStart {}
 message LobbyListed {
   bool listed = 1;
 }
+
+// ---- Warden-to-warden trading (two members of one lobby; economy/trade.ts)
+
+// Client -> server. op: open (with = other player id), offer (items + credits), lock, unlock, confirm, cancel.
+message TradeCmd {
+  string op = 1;
+  string with = 2;
+  repeated string items = 3;
+  uint64 credits = 4;
+}
+
+message TradeSide {
+  string id = 1;
+  string name = 2;
+  // Offered items as JSON (ItemInstance), so the other side can inspect them.
+  repeated Doc items = 3;
+  uint64 credits = 4;
+  bool locked = 5;
+  bool confirmed = 6;
+}
+
+message TradeState {
+  string id = 1;
+  TradeSide a = 2;
+  TradeSide b = 3;
+  // open | committing | done | failed
+  string status = 4;
+  string reason = 5;
+  double expires_at = 6;
+}
+
+// Server -> client: the trade this player is in (unset = no trade).
+message TradeUpdate {
+  TradeState trade = 1;
+}

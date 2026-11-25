@@ -25,6 +25,8 @@ message SimDown {
     Doc war = 5;
     // Draining: finish running operations, open no new rooms.
     bool drain = 6;
+    // Outcome of a trade the worker asked the gateway to apply.
+    SimTradeResult trade_result = 7;
   }
 }
 
@@ -40,6 +42,8 @@ message SimUp {
     SimBind bind = 5;
     // Rooms on this worker changed: open room codes and running operations.
     SimLoad load = 6;
+    // Both sides confirmed a trade: apply both entries in one transaction (all or nothing).
+    SimTrade trade = 7;
   }
 }
 
@@ -95,4 +99,19 @@ message RoomListing {
   uint32 capacity = 4;
   uint32 tier = 5;
   GameMode mode = 6;
+}
+
+message SimTrade {
+  string id = 1;
+  string account_a = 2;
+  string account_b = 3;
+  // Each side's trusted log entry body ({trade: TradeEntry}).
+  Doc entry_a = 4;
+  Doc entry_b = 5;
+}
+
+message SimTradeResult {
+  string id = 1;
+  bool ok = 2;
+  string reason = 3;
 }

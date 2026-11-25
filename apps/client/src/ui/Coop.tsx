@@ -13,6 +13,7 @@ import { inviteCode } from './router';
 import { useAccount } from '../account/store';
 import { NamedDrops } from './NamedDrops';
 import { SquadBrowser } from './SquadBrowser';
+import { TradeWindow } from './Trade';
 
 function useNet(flow: Flow): NetState | null {
   const [s, setS] = useState<NetState | null>(flow.net?.state ?? null);
@@ -119,6 +120,7 @@ export function CoopPanel({ flow, compact }: { flow: Flow; compact?: boolean }) 
   const tier = getTier(lobby.tier);
   return (
     <div className="coop" data-testid="coop-lobby">
+      {net.trade && <TradeWindow flow={flow} trade={net.trade} me={me} />}
       <div className="lobby-head">
         <div>
           <div className="ds-lbl">Room code</div>
@@ -155,6 +157,11 @@ export function CoopPanel({ flow, compact }: { flow: Flow; compact?: boolean }) 
               {p.weapon} · LV {p.level}
             </span>
             <span className={`lp-ready ${p.host || p.ready ? 'ok' : ''}`}>{!p.connected ? 'RECONNECTING' : p.host ? 'HOST' : p.ready ? 'READY' : 'NOT READY'}</span>
+            {p.id !== me && p.connected && lobby.state === 'lobby' && !net.trade && (
+              <button className="ds-btn lp-trade" data-testid={`lobby-trade-${i}`} onClick={() => flow.net?.send({ t: 'trade', op: 'open', with: p.id })}>
+                TRADE
+              </button>
+            )}
           </div>
         ))}
         {Array.from({ length: Math.max(0, lobby.capacity - lobby.players.length) }).map((_, i) => (

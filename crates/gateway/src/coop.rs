@@ -14,8 +14,8 @@ use std::{
 
 use prost::Message;
 use riftwarden_proto::v1::{
-    ClientFrame, Doc, Error as ProtoError, Pong, RoomListing, ServerFrame, SimAttach, SimDown, SimEntries, SimInput, SimProfile, SimUp,
-    SyncEntry, WarReport, client_frame, server_frame, sim_down, sim_up,
+    ClientFrame, Doc, Error as ProtoError, Pong, RoomListing, ServerFrame, SimAttach, SimDown, SimEntries, SimInput, SimProfile,
+    SimTradeResult, SimUp, SyncEntry, WarReport, client_frame, server_frame, sim_down, sim_up,
 };
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -290,6 +290,20 @@ impl Coop {
                     if let Err(e) = state.war.report(&state, rep).await {
                         tracing::warn!(error = %e.message, "co-op war report failed");
                     }
+                });
+            }
+            Some(sim_up::Msg::Trade(t)) => {
+                let state = state.clone();
+                let link = self.links[idx].clone();
+                tokio::spawn(async move {
+                    let (ok, reason) = match (Uuid::parse_str(&t.account_a), Uuid::parse_str(&t.account_b), t.entry_a, t.entry_b) {
+                        (Ok(a), Ok(b), Some(ea), Some(eb)) => match crate::sync::apply_trade(&state, &t.id, a, b, ea, eb).await {
+                            Ok(()) => (true, String::new()),
+                            Err(e) => (false, e.message.clone()),
+                        },
+                        _ => (false, "Malformed trade".to_string()),
+                    };
+                    let _ = link.tx.send(down(sim_down::Msg::TradeResult(SimTradeResult { id: t.id, ok, reason })));
                 });
             }
             Some(sim_up::Msg::Bind(b)) => {

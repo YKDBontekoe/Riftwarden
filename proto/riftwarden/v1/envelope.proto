@@ -27,6 +27,7 @@ message ClientFrame {
     Act act = 15;
     Ping ping = 16;
     LobbyListed listed = 17;
+    TradeCmd trade = 18;
   }
   // 10, 11: guest profile init / operations (profiles sync through the session socket since v13).
   reserved 10, 11;
@@ -45,6 +46,7 @@ message ServerFrame {
     ActResult act_result = 11;
     RunEnd run_end = 12;
     Pong pong = 13;
+    TradeUpdate trade = 14;
   }
   // 4, 5: online profile state / operation results (removed in v13).
   reserved 4, 5;

@@ -5,7 +5,8 @@
 import { type OpResult, runOp } from './ops';
 import { checkRunEntry } from './runCheck';
 import { applyRunEntry, type RunEntry } from './runRules';
-import { createDefaultSave, migrate, sanitizeSave, SAVE_VERSION, type SaveData } from './save';
+import { createDefaultSave, migrate, sanitizeItem, sanitizeSave, SAVE_VERSION, type SaveData } from './save';
+import { applyTrade, type TradeEntry } from '../economy/trade';
 
 export interface OpEntry {
   name: string;
@@ -19,6 +20,8 @@ export interface LogEntry {
   at: number;
   op?: OpEntry;
   run?: RunEntry;
+  /** One side of a warden-to-warden trade (economy/trade.ts); only accepted from the server (trusted). */
+  trade?: TradeEntry;
   /** Seasonal profile entries: the season they belong to (applied to `SaveData.seasonal.doc`). */
   season?: number;
 }
@@ -73,6 +76,10 @@ function applyOne(root: SaveData, e: LogEntry, now: number, trusted: boolean): s
     if (typeof e.op.name !== 'string' || !Array.isArray(e.op.args)) return 'malformed op';
     const r: OpResult = runOp(d, e.op.name, e.op.args, e.op.tx, now);
     return r.ok ? null : ((r as { reason?: string }).reason ?? 'rejected');
+  }
+  if (e.trade) {
+    if (!trusted || e.season !== undefined) return 'trades are applied by the server';
+    return applyTrade(d, e.trade, (v) => sanitizeItem(v));
   }
   if (e.run) {
     const bad = trusted ? null : checkRunEntry(d, e.run, now);

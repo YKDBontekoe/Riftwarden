@@ -1,7 +1,7 @@
 import { Store } from '../ui/store';
 import type { CoopTunnel } from './SessionClient';
 import { decodeServer, encodeClient } from '@riftwarden/protocol/codec';
-import { type ActMsg, type ClientMsg, type LobbyState, PROTOCOL_VERSION, type RunStart, type ServerMsg } from '@riftwarden/protocol/protocol';
+import { type ActMsg, type ClientMsg, type LobbyState, PROTOCOL_VERSION, type RunStart, type ServerMsg, type TradeView } from '@riftwarden/protocol/protocol';
 
 export type NetStatus = 'offline' | 'connecting' | 'online' | 'reconnecting' | 'error';
 
@@ -11,6 +11,8 @@ export interface NetState {
   playerId: string;
   name: string;
   lobby: LobbyState | null;
+  /** Trade window with another lobby member (null = not trading). */
+  trade: TradeView | null;
   rtt: number;
   /** Host HQ layout while visiting (owner id + base data). */
   hostHq: { owner: string; base: unknown } | null;
@@ -34,7 +36,7 @@ export interface NetHandlers {
  * again and the worker puts it back into its room (and running operation) within the reconnect window.
  */
 export class NetClient {
-  readonly store = new Store<NetState>({ status: 'offline', error: '', playerId: '', name: '', lobby: null, rtt: 0, hostHq: null, presence: [] });
+  readonly store = new Store<NetState>({ status: 'offline', error: '', playerId: '', name: '', lobby: null, trade: null, rtt: 0, hostHq: null, presence: [] });
   private wantOpen = false;
   private welcomed = false;
   private actSeq = 1;
@@ -124,7 +126,10 @@ export class NetClient {
         this.handlers.error?.(m.code, m.msg);
         return;
       case 'lobby':
-        this.store.set({ lobby: m.lobby });
+        this.store.set({ lobby: m.lobby, ...(m.lobby ? {} : { trade: null }) });
+        return;
+      case 'trade':
+        this.store.set({ trade: m.trade });
         return;
       case 'presence':
         this.store.set({ presence: m.players });
@@ -184,6 +189,6 @@ export class NetClient {
     this.unlisten = null;
     if (this.pingT) clearInterval(this.pingT);
     this.pingT = null;
-    this.store.set({ status: 'offline', lobby: null, hostHq: null, presence: [] });
+    this.store.set({ status: 'offline', lobby: null, trade: null, hostHq: null, presence: [] });
   }
 }

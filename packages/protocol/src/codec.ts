@@ -5,10 +5,10 @@ import { create, fromBinary, type MessageInitShape, toBinary } from '@bufbuild/p
 import { GameMode } from './gen/riftwarden/v1/common_pb';
 import { AbilitySlot, type Act, type ActSchema, TestOp, TowerPart, WeaponSlot } from './gen/riftwarden/v1/coop_pb';
 import { type ClientFrame, ClientFrameSchema, type ServerFrame, ServerFrameSchema } from './gen/riftwarden/v1/envelope_pb';
-import { LobbyPhase, type LobbyState as LobbyProto } from './gen/riftwarden/v1/lobby_pb';
+import { LobbyPhase, type LobbyState as LobbyProto, type TradeSide as TradeSideProto, type TradeState as TradeStateProto } from './gen/riftwarden/v1/lobby_pb';
 import type { ReplicatedEvent } from './events';
 import { eventFromProto, eventToProto } from './eventCodec';
-import type { ActMsg, ClientMsg, LobbyState, RunStart, ServerMsg, V3 } from './protocol';
+import type { ActMsg, ClientMsg, LobbyState, RunStart, ServerMsg, TradeOp, TradeSideView, TradeView, V3 } from './protocol';
 import { snapshotFromProto, snapshotToProto } from './snapshotCodec';
 import { fromDoc, toDoc } from './value';
 
@@ -140,6 +140,8 @@ function clientInit(m: ClientMsg): ClientInit {
       return { msg: { case: 'node', value: { node: m.node ?? '' } } };
     case 'listed':
       return { msg: { case: 'listed', value: { listed: m.listed } } };
+    case 'trade':
+      return { msg: { case: 'trade', value: { op: m.op, with: m.with ?? '', items: m.items ?? [], credits: BigInt(m.credits ?? 0) } } };
     case 'start':
       return { msg: { case: 'start', value: {} } };
     case 'presence':
@@ -203,6 +205,8 @@ export function decodeClient(bytes: Uint8Array): unknown {
       return { t: 'node', node: m.value.node || null };
     case 'listed':
       return { t: 'listed', listed: m.value.listed };
+    case 'trade':
+      return { t: 'trade', op: m.value.op as TradeOp, ...(m.value.with ? { with: m.value.with } : {}), items: [...m.value.items], credits: Number(m.value.credits) };
     case 'start':
       return { t: 'start' };
     case 'presence':
@@ -251,6 +255,18 @@ function lobbyFromProto(l: LobbyProto): LobbyState {
   };
 }
 
+const sideToProto = (x: TradeSideView) => ({ ...x, items: x.items.map((i) => toDoc(i)), credits: BigInt(x.credits) });
+const sideFromProto = (x: TradeSideProto | undefined): TradeSideView => ({ id: x?.id ?? '', name: x?.name ?? '', items: (x?.items ?? []).map((d) => fromDoc(d)), credits: Number(x?.credits ?? 0), locked: !!x?.locked, confirmed: !!x?.confirmed });
+const TRADE_STATUS = ['open', 'committing', 'done', 'failed'] as const;
+
+function tradeToProto(t: TradeView) {
+  return { id: t.id, a: sideToProto(t.a), b: sideToProto(t.b), status: t.status, reason: t.reason, expiresAt: t.expiresAt };
+}
+
+function tradeFromProto(t: TradeStateProto): TradeView {
+  return { id: t.id, a: sideFromProto(t.a), b: sideFromProto(t.b), status: TRADE_STATUS.find((s) => s === t.status) ?? 'failed', reason: t.reason, expiresAt: t.expiresAt };
+}
+
 function runStartToProto(r: RunStart) {
   return {
     runId: r.runId,
@@ -280,6 +296,8 @@ function serverInit(m: ServerMsg): ServerInit {
       return { msg: { case: 'presence', value: { players: m.players.map((p) => ({ id: p.id, name: p.name, p: vec(p.p), yaw: p.yaw })) } } };
     case 'hostHq':
       return { msg: { case: 'hostHq', value: { owner: m.owner, base: toDoc(m.base) } } };
+    case 'trade':
+      return { msg: { case: 'trade', value: { trade: m.trade ? tradeToProto(m.trade) : undefined } } };
     case 'runStart':
       return { msg: { case: 'runStart', value: runStartToProto(m.run) } };
     case 'snap':
@@ -320,6 +338,8 @@ export function decodeServer(bytes: Uint8Array): ServerMsg | null {
       return { t: 'presence', players: m.value.players.map((p) => ({ id: p.id, name: p.name, p: unvec(p.p), yaw: p.yaw })) };
     case 'hostHq':
       return { t: 'hostHq', owner: m.value.owner, base: fromDoc(m.value.base) };
+    case 'trade':
+      return { t: 'trade', trade: m.value.trade ? tradeFromProto(m.value.trade) : null };
     case 'runStart': {
       const r = m.value;
       const mode = modeOut(r.mode);

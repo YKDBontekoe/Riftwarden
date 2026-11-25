@@ -36,6 +36,7 @@ export const UNLOCKS: readonly UnlockDef[] = [
   { id: 'station:fabricate', label: 'Fabricator', kind: 'station', by: { warden: 10 }, blurb: 'Craft the slot and family you want. Higher grades open with Rift Levels.' },
   { id: 'family:swarm', label: 'Drone Swarm family', kind: 'family', by: { warden: 12 }, blurb: 'Hives of seeker drones that lock onto targets around the crosshair.' },
   { id: 'family:flamer', label: 'Flamer family', kind: 'family', by: { warden: 11 }, blurb: 'Short-range streams that sweep several machines at once and stack burn, chill or corrosion.' },
+  { id: 'trading', label: 'Trading', kind: 'system', by: { warden: 15 }, blurb: 'Trade items and credits with another warden in your co-op lobby (10% tax on credits; Ascended and pinnacle items stay bound). Accounts must also be 7 days old.' },
   { id: 'station:architect', label: 'HQ construction', kind: 'station', by: { warden: 14 }, blurb: 'Expand and decorate the HQ; facilities give real bonuses.' },
   { id: 'workshop:enhance', label: 'Enhancement', kind: 'system', by: { rl: 2 }, blurb: 'Raise an item\'s power level by level at the workshop.' },
   { id: 'station:modules', label: 'Weapon modules', kind: 'station', by: { rl: 3 }, blurb: 'Modules drop and the Broker opens; install them in weapon sockets.' },

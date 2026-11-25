@@ -23,6 +23,9 @@ const CLIENT: ClientMsg[] = [
   { t: 'node', node: 'r0n4' },
   { t: 'node', node: null },
   { t: 'listed', listed: true },
+  { t: 'trade', op: 'open', with: 'acc-2', items: [], credits: 0 },
+  { t: 'trade', op: 'offer', items: ['u1', 'u2'], credits: 1500 },
+  { t: 'trade', op: 'confirm', items: [], credits: 0 },
   { t: 'start' },
   { t: 'presence', p: [1.5, 2, -3.25], yaw: 0.75 },
   { t: 'visit', on: true },
@@ -173,6 +176,18 @@ describe('frame codec: server messages', () => {
     },
     { t: 'lobby', lobby: { code: 'ABCDE', hostId: 'p1', tier: 1, mode: 'defense', node: null, maxTier: 1, capacity: 4, state: 'lobby', wave: 0, listed: false, players: [] } },
     { t: 'presence', players: [{ id: 'p2', name: 'Beta', p: [1, 2, 3], yaw: 0.5 }] },
+    { t: 'trade', trade: null },
+    {
+      t: 'trade',
+      trade: {
+        id: 'tr1',
+        a: { id: 'p1', name: 'Alpha', items: [{ uid: 'u1', name: 'Plate', level: 12 }], credits: 1500, locked: true, confirmed: false },
+        b: { id: 'p2', name: 'Beta', items: [], credits: 0, locked: false, confirmed: false },
+        status: 'open',
+        reason: '',
+        expiresAt: 1700000000000,
+      },
+    },
     { t: 'hostHq', owner: 'p1', base: { structure: {} } },
     {
       t: 'runStart',

@@ -16,7 +16,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file riftwarden/v1/sim.proto.
  */
 export const file_riftwarden_v1_sim: GenFile = /*@__PURE__*/
-  fileDesc("ChdyaWZ0d2FyZGVuL3YxL3NpbS5wcm90bxINcmlmdHdhcmRlbi52MSLaAQoHU2ltRG93bhIqCgZhdHRhY2gYASABKAsyGC5yaWZ0d2FyZGVuLnYxLlNpbUF0dGFjaEgAEigKBWlucHV0GAIgASgLMhcucmlmdHdhcmRlbi52MS5TaW1JbnB1dEgAEhAKBmRldGFjaBgDIAEoCUgAEiwKB3Byb2ZpbGUYBCABKAsyGS5yaWZ0d2FyZGVuLnYxLlNpbVByb2ZpbGVIABIhCgN3YXIYBSABKAsyEi5yaWZ0d2FyZGVuLnYxLkRvY0gAEg8KBWRyYWluGAYgASgISABCBQoDbXNnIo4CCgVTaW1VcBIoCgVoZWxsbxgBIAEoCzIXLnJpZnR3YXJkZW4udjEuU2ltSGVsbG9IABIqCgZvdXRwdXQYAiABKAsyGC5yaWZ0d2FyZGVuLnYxLlNpbU91dHB1dEgAEiwKB2VudHJpZXMYAyABKAsyGS5yaWZ0d2FyZGVuLnYxLlNpbUVudHJpZXNIABIqCgZyZXBvcnQYBCABKAsyGC5yaWZ0d2FyZGVuLnYxLldhclJlcG9ydEgAEiYKBGJpbmQYBSABKAsyFi5yaWZ0d2FyZGVuLnYxLlNpbUJpbmRIABImCgRsb2FkGAYgASgLMhYucmlmdHdhcmRlbi52MS5TaW1Mb2FkSABCBQoDbXNnIisKCFNpbUhlbGxvEg0KBWJ1aWxkGAEgASgJEhAKCGNhcGFjaXR5GAIgASgNIk8KCVNpbUF0dGFjaBIPCgdhY2NvdW50GAEgASgJEgwKBG5hbWUYAiABKAkSIwoHcHJvZmlsZRgDIAEoCzISLnJpZnR3YXJkZW4udjEuRG9jIioKCFNpbUlucHV0Eg8KB2FjY291bnQYASABKAkSDQoFZnJhbWUYAiABKAwiQgoKU2ltUHJvZmlsZRIPCgdhY2NvdW50GAEgASgJEiMKB3Byb2ZpbGUYAiABKAsyEi5yaWZ0d2FyZGVuLnYxLkRvYyIsCglTaW1PdXRwdXQSEAoIYWNjb3VudHMYASADKAkSDQoFZnJhbWUYAiABKAwiWAoKU2ltRW50cmllcxIPCgdhY2NvdW50GAEgASgJEikKB2VudHJpZXMYAiADKAsyGC5yaWZ0d2FyZGVuLnYxLlN5bmNFbnRyeRIOCgZkZXZpY2UYAyABKAkiKAoHU2ltQmluZBIPCgdhY2NvdW50GAEgASgJEgwKBGNvZGUYAiABKAkiVQoHU2ltTG9hZBINCgVjb2RlcxgBIAMoCRIPCgdydW5uaW5nGAIgASgNEioKBmxpc3RlZBgDIAMoCzIaLnJpZnR3YXJkZW4udjEuUm9vbUxpc3RpbmcigQEKC1Jvb21MaXN0aW5nEgwKBGNvZGUYASABKAkSDAoEaG9zdBgCIAEoCRIPCgdwbGF5ZXJzGAMgASgNEhAKCGNhcGFjaXR5GAQgASgNEgwKBHRpZXIYBSABKA0SJQoEbW9kZRgGIAEoDjIXLnJpZnR3YXJkZW4udjEuR2FtZU1vZGViBnByb3RvMw", [file_riftwarden_v1_common, file_riftwarden_v1_session, file_riftwarden_v1_worker]);
+  fileDesc("ChdyaWZ0d2FyZGVuL3YxL3NpbS5wcm90bxINcmlmdHdhcmRlbi52MSKRAgoHU2ltRG93bhIqCgZhdHRhY2gYASABKAsyGC5yaWZ0d2FyZGVuLnYxLlNpbUF0dGFjaEgAEigKBWlucHV0GAIgASgLMhcucmlmdHdhcmRlbi52MS5TaW1JbnB1dEgAEhAKBmRldGFjaBgDIAEoCUgAEiwKB3Byb2ZpbGUYBCABKAsyGS5yaWZ0d2FyZGVuLnYxLlNpbVByb2ZpbGVIABIhCgN3YXIYBSABKAsyEi5yaWZ0d2FyZGVuLnYxLkRvY0gAEg8KBWRyYWluGAYgASgISAASNQoMdHJhZGVfcmVzdWx0GAcgASgLMh0ucmlmdHdhcmRlbi52MS5TaW1UcmFkZVJlc3VsdEgAQgUKA21zZyK4AgoFU2ltVXASKAoFaGVsbG8YASABKAsyFy5yaWZ0d2FyZGVuLnYxLlNpbUhlbGxvSAASKgoGb3V0cHV0GAIgASgLMhgucmlmdHdhcmRlbi52MS5TaW1PdXRwdXRIABIsCgdlbnRyaWVzGAMgASgLMhkucmlmdHdhcmRlbi52MS5TaW1FbnRyaWVzSAASKgoGcmVwb3J0GAQgASgLMhgucmlmdHdhcmRlbi52MS5XYXJSZXBvcnRIABImCgRiaW5kGAUgASgLMhYucmlmdHdhcmRlbi52MS5TaW1CaW5kSAASJgoEbG9hZBgGIAEoCzIWLnJpZnR3YXJkZW4udjEuU2ltTG9hZEgAEigKBXRyYWRlGAcgASgLMhcucmlmdHdhcmRlbi52MS5TaW1UcmFkZUgAQgUKA21zZyIrCghTaW1IZWxsbxINCgVidWlsZBgBIAEoCRIQCghjYXBhY2l0eRgCIAEoDSJPCglTaW1BdHRhY2gSDwoHYWNjb3VudBgBIAEoCRIMCgRuYW1lGAIgASgJEiMKB3Byb2ZpbGUYAyABKAsyEi5yaWZ0d2FyZGVuLnYxLkRvYyIqCghTaW1JbnB1dBIPCgdhY2NvdW50GAEgASgJEg0KBWZyYW1lGAIgASgMIkIKClNpbVByb2ZpbGUSDwoHYWNjb3VudBgBIAEoCRIjCgdwcm9maWxlGAIgASgLMhIucmlmdHdhcmRlbi52MS5Eb2MiLAoJU2ltT3V0cHV0EhAKCGFjY291bnRzGAEgAygJEg0KBWZyYW1lGAIgASgMIlgKClNpbUVudHJpZXMSDwoHYWNjb3VudBgBIAEoCRIpCgdlbnRyaWVzGAIgAygLMhgucmlmdHdhcmRlbi52MS5TeW5jRW50cnkSDgoGZGV2aWNlGAMgASgJIigKB1NpbUJpbmQSDwoHYWNjb3VudBgBIAEoCRIMCgRjb2RlGAIgASgJIlUKB1NpbUxvYWQSDQoFY29kZXMYASADKAkSDwoHcnVubmluZxgCIAEoDRIqCgZsaXN0ZWQYAyADKAsyGi5yaWZ0d2FyZGVuLnYxLlJvb21MaXN0aW5nIoEBCgtSb29tTGlzdGluZxIMCgRjb2RlGAEgASgJEgwKBGhvc3QYAiABKAkSDwoHcGxheWVycxgDIAEoDRIQCghjYXBhY2l0eRgEIAEoDRIMCgR0aWVyGAUgASgNEiUKBG1vZGUYBiABKA4yFy5yaWZ0d2FyZGVuLnYxLkdhbWVNb2RlIoYBCghTaW1UcmFkZRIKCgJpZBgBIAEoCRIRCglhY2NvdW50X2EYAiABKAkSEQoJYWNjb3VudF9iGAMgASgJEiMKB2VudHJ5X2EYBCABKAsyEi5yaWZ0d2FyZGVuLnYxLkRvYxIjCgdlbnRyeV9iGAUgASgLMhIucmlmdHdhcmRlbi52MS5Eb2MiOAoOU2ltVHJhZGVSZXN1bHQSCgoCaWQYASABKAkSCgoCb2sYAiABKAgSDgoGcmVhc29uGAMgASgJYgZwcm90bzM", [file_riftwarden_v1_common, file_riftwarden_v1_session, file_riftwarden_v1_worker]);
 
 /**
  * @generated from message riftwarden.v1.SimDown
@@ -73,6 +73,14 @@ export type SimDown = Message<"riftwarden.v1.SimDown"> & {
      */
     value: boolean;
     case: "drain";
+  } | {
+    /**
+     * Outcome of a trade the worker asked the gateway to apply.
+     *
+     * @generated from field: riftwarden.v1.SimTradeResult trade_result = 7;
+     */
+    value: SimTradeResult;
+    case: "tradeResult";
   } | { case: undefined; value?: undefined };
 };
 
@@ -134,6 +142,14 @@ export type SimUp = Message<"riftwarden.v1.SimUp"> & {
      */
     value: SimLoad;
     case: "load";
+  } | {
+    /**
+     * Both sides confirmed a trade: apply both entries in one transaction (all or nothing).
+     *
+     * @generated from field: riftwarden.v1.SimTrade trade = 7;
+     */
+    value: SimTrade;
+    case: "trade";
   } | { case: undefined; value?: undefined };
 };
 
@@ -380,4 +396,70 @@ export type RoomListing = Message<"riftwarden.v1.RoomListing"> & {
  */
 export const RoomListingSchema: GenMessage<RoomListing> = /*@__PURE__*/
   messageDesc(file_riftwarden_v1_sim, 10);
+
+/**
+ * @generated from message riftwarden.v1.SimTrade
+ */
+export type SimTrade = Message<"riftwarden.v1.SimTrade"> & {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * @generated from field: string account_a = 2;
+   */
+  accountA: string;
+
+  /**
+   * @generated from field: string account_b = 3;
+   */
+  accountB: string;
+
+  /**
+   * Each side's trusted log entry body ({trade: TradeEntry}).
+   *
+   * @generated from field: riftwarden.v1.Doc entry_a = 4;
+   */
+  entryA?: Doc | undefined;
+
+  /**
+   * @generated from field: riftwarden.v1.Doc entry_b = 5;
+   */
+  entryB?: Doc | undefined;
+};
+
+/**
+ * Describes the message riftwarden.v1.SimTrade.
+ * Use `create(SimTradeSchema)` to create a new message.
+ */
+export const SimTradeSchema: GenMessage<SimTrade> = /*@__PURE__*/
+  messageDesc(file_riftwarden_v1_sim, 11);
+
+/**
+ * @generated from message riftwarden.v1.SimTradeResult
+ */
+export type SimTradeResult = Message<"riftwarden.v1.SimTradeResult"> & {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * @generated from field: bool ok = 2;
+   */
+  ok: boolean;
+
+  /**
+   * @generated from field: string reason = 3;
+   */
+  reason: string;
+};
+
+/**
+ * Describes the message riftwarden.v1.SimTradeResult.
+ * Use `create(SimTradeResultSchema)` to create a new message.
+ */
+export const SimTradeResultSchema: GenMessage<SimTradeResult> = /*@__PURE__*/
+  messageDesc(file_riftwarden_v1_sim, 12);
 

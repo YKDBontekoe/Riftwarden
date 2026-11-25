@@ -50,6 +50,7 @@ export class Bot {
     this.msgs.push(m);
     if (m.t === 'welcome') this.welcome = m;
     if (m.t === 'lobby') this.lobby = m.lobby;
+    if (m.t === 'trade') this.trade = m.trade;
     if (m.t === 'snap') this.snap = m.s;
     if (m.t === 'ev') this.events.push(...m.e);
     if (m.t === 'runStart') this.run = m.run;

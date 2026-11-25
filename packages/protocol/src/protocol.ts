@@ -88,6 +88,8 @@ export type ClientMsg =
   | { t: 'node'; node: string | null }
   /** Host: show the squad in the open-squad browser (GET /rooms) or take it off. */
   | { t: 'listed'; listed: boolean }
+  /** Trade window with another member of the lobby (economy/trade.ts). */
+  | { t: 'trade'; op: TradeOp; with?: string; items?: string[]; credits?: number }
   | { t: 'start' }
   | { t: 'presence'; p: V3; yaw: number }
   | { t: 'visit'; on: boolean }
@@ -127,6 +129,30 @@ export interface LobbyState {
   listed: boolean;
 }
 
+export type TradeOp = 'open' | 'offer' | 'lock' | 'unlock' | 'confirm' | 'cancel';
+export const TRADE_OPS: readonly TradeOp[] = ['open', 'offer', 'lock', 'unlock', 'confirm', 'cancel'];
+
+export interface TradeSideView {
+  id: string;
+  name: string;
+  /** Offered items (full ItemInstance JSON, so the other side can inspect them). */
+  items: unknown[];
+  credits: number;
+  locked: boolean;
+  confirmed: boolean;
+}
+
+/** The trade window both sides see. Any change to an offer unlocks both sides again. */
+export interface TradeView {
+  id: string;
+  a: TradeSideView;
+  b: TradeSideView;
+  status: 'open' | 'committing' | 'done' | 'failed';
+  reason: string;
+  /** Epoch ms when an unconfirmed window closes by itself. */
+  expiresAt: number;
+}
+
 /** One squad in the open-squad browser (`GET /rooms` on the gateway; lobby phase, listed by its host, not full). */
 export interface OpenSquad {
   code: string;
@@ -141,6 +167,7 @@ export type ServerMsg =
   | { t: 'welcome'; v: number; playerId: string; name: string }
   | { t: 'error'; code: string; msg: string }
   | { t: 'lobby'; lobby: LobbyState | null }
+  | { t: 'trade'; trade: TradeView | null }
   | { t: 'presence'; players: { id: string; name: string; p: V3; yaw: number }[] }
   | { t: 'hostHq'; owner: string; base: unknown }
   | { t: 'runStart'; run: RunStart }
@@ -253,6 +280,13 @@ export function parseClientMsg(raw: unknown): ClientMsg | null {
       return o.node === null || isStr(o.node, 16) ? (o as ClientMsg) : null;
     case 'listed':
       return typeof o.listed === 'boolean' ? (o as ClientMsg) : null;
+    case 'trade':
+      return TRADE_OPS.includes(o.op as TradeOp) &&
+        (o.with === undefined || isStr(o.with, 64)) &&
+        (o.items === undefined || (Array.isArray(o.items) && o.items.length <= 8 && o.items.every((u) => isStr(u, 64)))) &&
+        (o.credits === undefined || (Number.isInteger(o.credits) && (o.credits as number) >= 0 && (o.credits as number) <= 1e9))
+        ? (o as ClientMsg)
+        : null;
     case 'presence':
       return isV3(o.p) && isNum(o.yaw, 100) ? (o as ClientMsg) : null;
     case 'visit':
