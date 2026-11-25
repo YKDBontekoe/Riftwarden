@@ -7,8 +7,11 @@ import { rarity, type RarityId } from '@riftwarden/rules/loot/rarity';
 import { type Category, CATEGORY_LABEL } from '@riftwarden/rules/loot/types';
 import type { ItemInstance } from '@riftwarden/rules/loot/types';
 import { type SlotId, SLOTS } from '@riftwarden/rules/progression/items';
-import { getTier } from '@riftwarden/rules/progression/tiers';
-import { type InvEntry, InventoryView, ItemGlyph } from './items';
+import { ComparePanel, type InvEntry, ItemCard, ItemDetail, ItemGlyph } from './items';
+import { Crumb, Hint, RiskTag } from './ds';
+import { defaultSlot } from '@riftwarden/rules/progression/items';
+import { loadoutScore, swapImpact } from '@riftwarden/rules/loot/loadoutScore';
+import { keyLabel } from '@riftwarden/game/core/settings';
 import { hudStore, type LootEvent, uiEvents } from '@riftwarden/game/ui/store';
 import { useHud } from './useHud';
 import { FieldIcon, itemIcon } from './FieldIcon';
@@ -169,11 +172,13 @@ function useInventoryVersion(): number {
   return useSyncExternalStore(hudStore.subscribe, () => hudStore.get().inventoryVersion);
 }
 
-/** Arena inventory (I / Tab): inspect any time, change equipment only in preparation. */
+/** Arena cargo (I / Tab; canvas "Run cargo · equip in prep"): what was found this run (at risk) next to what was
+ * carried in (safe), the selected item compared with the slot it would take, equip only during preparation. */
 export function ArenaInventory({ game }: { game: Game }) {
   const version = useInventoryVersion();
   const allowed = useHud((s) => s.equipAllowed);
   const phase = useHud((s) => s.phase);
+  const timer = useHud((s) => s.phaseTimer);
   const [, force] = useState(0);
   const inv = game.inventory;
   const entries: InvEntry[] = useMemo(
@@ -182,76 +187,95 @@ export function ArenaInventory({ game }: { game: Game }) {
     [inv, version],
   );
   const equipped = useMemo(() => Object.fromEntries(SLOTS.map((s) => [s.id, inv.equipped(s.id)])) as Record<SlotId, ItemInstance | null>, [inv, version]);
+  const equippedList = useMemo(() => SLOTS.map((s) => equipped[s.id]), [equipped]);
+  // Build-aware verdicts in the arena: tree, run upgrades, node effects, mastery and the sector faction.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const scoreCtx = useMemo(() => game.scoreContext(), [game, version]);
+  const base = useMemo(() => loadoutScore(equippedList, scoreCtx), [equippedList, scoreCtx]);
+  const found = entries.filter((e) => e.status === 'unsecured');
+  const worn = entries.filter((e) => e.status !== 'unsecured' && e.equippedIn);
+  const kept = entries.filter((e) => e.status !== 'unsecured' && !e.equippedIn);
+  const [sel, setSel] = useState<string | null>(found[0]?.item.uid ?? worn[0]?.item.uid ?? null);
+  const cur = entries.find((e) => e.item.uid === sel) ?? null;
+  const targetOf = (it: ItemInstance): SlotId | null => defaultSlot(it.category, equipped, inv.lockedSlots);
+  const impactOf = (it: ItemInstance) => {
+    const slot = targetOf(it);
+    if (!slot || it.category === 'module') return null;
+    return swapImpact(equippedList, it, equipped[slot], base, 'build', SLOTS.findIndex((x) => x.id === slot), scoreCtx);
+  };
+  const refresh = () => force((n) => n + 1);
+  const run = game.cfg.run;
+  const checkpoint = run.wavesCleared + (5 - (run.wavesCleared % 5));
+  const equipSel = () => {
+    if (!cur || cur.equippedIn || !allowed) return;
+    game.equip(cur.item.uid);
+    refresh();
+  };
+  const dropSel = () => {
+    if (!cur || cur.status !== 'unsecured' || cur.equippedIn) return;
+    game.discard(cur.item.uid);
+    setSel(null);
+    refresh();
+  };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.repeat) return;
       if (e.code === 'Escape' || e.code === game.settings.keys.inventory || e.code === 'Tab') {
         e.preventDefault();
         void game.closeInventory();
-      }
+      } else if (e.code === 'Enter') equipSel();
+      else if (e.code === 'KeyX') dropSel();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [game]);
-  const run = game.cfg.run;
-  // Build-aware verdicts in the arena: tree, run upgrades, node effects, mastery and the sector faction.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const scoreCtx = useMemo(() => game.scoreContext(), [game, version]);
-  const refresh = () => force((n) => n + 1);
-  const unsecured = run.unsecured.items.length;
+  });
+  const t = Math.max(0, Math.ceil(timer));
+  const tile = (e: InvEntry) => (
+    <ItemCard key={e.item.uid} e={e} selected={sel === e.item.uid} onSelect={() => setSel(e.item.uid)} impact={e.equippedIn ? null : impactOf(e.item)} />
+  );
+  const slot = cur ? cur.equippedIn ?? targetOf(cur.item) : null;
   return (
-    <div className="screen terminal-screen arena-inv">
-      <div className="terminal panel-frame wide inv-term">
-        <div className="term-head">
-          <div className="term-code">INV</div>
-          <div className="flex-[1]">
-            <div className="term-title">DRONE CARGO</div>
-            <div className="term-sub">
-              Rift Level {getTier(game.cfg.tier.id).id} · wave {game.waves.number} · {allowed ? 'preparation: equipment changes allowed' : `${phase === 'combat' ? 'combat' : 'wave resolving'}: inspection only`}
+    <div className="screen terminal-screen arena-inv ds-scr cargo-ds">
+      <div className="ds-blur" />
+      <div className="term-shade" />
+      <div className="ds-top">
+        <Crumb parts={['Run', phase === 'prep' ? `Prep ${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}` : phase === 'combat' ? 'Combat' : 'Wave secured', 'Cargo']} />
+        <span className="ds-grow" />
+        <span className="ds-mono">{allowed ? 'EQUIPPING ONLY DURING PREP' : 'INSPECTION ONLY · EQUIP DURING PREP'}</span>
+      </div>
+      <ScoreCtx.Provider value={scoreCtx}>
+        <section className="cargo-left inv-list">
+          <span className="ds-row"><span className="ds-h3 ds-grow">FOUND THIS RUN</span><RiskTag>At risk until wave {checkpoint} · {found.length} / {inv.cargoCapacity}</RiskTag></span>
+          <div className="cargo-grid">{found.length ? found.map(tile) : <span className="ds-meta">Nothing found yet. Machines drop loot; walk over it and press E.</span>}</div>
+          <span className="ds-h3">WORN · SAFE (CARRIED IN)</span>
+          <div className="cargo-grid worn">{worn.map(tile)}</div>
+          {kept.length > 0 && (
+            <>
+              <span className="ds-h3">SECURED THIS RUN</span>
+              <div className="cargo-grid worn">{kept.map(tile)}</div>
+            </>
+          )}
+        </section>
+        {cur && (
+          <section className="cargo-detail ds-glass ds-cut">
+            <ItemDetail item={cur.item} status={cur.status} stage={false} />
+            {!cur.equippedIn && cur.item.category !== 'module' && <ComparePanel item={cur.item} against={slot ? equipped[slot] : null} equipped={equippedList} slot={slot} />}
+            <span className="ds-meta">
+              {cur.status === 'unsecured'
+                ? `Equipping it now uses it this run. If the run fails before wave ${checkpoint} you lose it; the item you swap out stays yours either way.`
+                : cur.equippedIn ? 'Worn: carried in or secured, it can never be lost.' : 'Secured at a checkpoint: it is already in your storage.'}
+            </span>
+            <div className="inv-actions">
+              {!cur.equippedIn && <button className="primary term-primary" data-key="ENTER" disabled={!allowed || !slot} title={allowed ? '' : 'Equipment can only be changed during the preparation phase between waves.'} onClick={equipSel}>EQUIP NOW</button>}
+              {cur.equippedIn && !SLOTS.find((x) => x.id === cur.equippedIn)?.required && <button className="ds-btn" disabled={!allowed} onClick={() => { game.unequip(cur.equippedIn!); refresh(); }}>UNEQUIP</button>}
             </div>
-          </div>
-          <button className="term-close" onClick={() => void game.closeInventory()}>
-            <BoundKey action="inventory" />/<kbd>ESC</kbd> CLOSE
-          </button>
-        </div>
-        <div className="term-body">
-          <ScoreCtx.Provider value={scoreCtx}>
-          <InventoryView
-            entries={entries}
-            equipped={equipped}
-            lockedSlots={inv.lockedSlots}
-            extraFilter
-            actions={{
-              canChange: allowed,
-              lockedReason: 'Equipment can only be changed during the preparation phase between waves.',
-              equip: (uid, slot) => {
-                game.equip(uid, slot);
-                refresh();
-              },
-              unequip: (slot) => {
-                game.unequip(slot);
-                refresh();
-              },
-              remove: {
-                label: () => 'DISCARD',
-                allowed: (e) => e.status === 'unsecured' && !e.equippedIn,
-                run: (uid) => {
-                  game.discard(uid);
-                  refresh();
-                },
-                confirm: 'Discard this unsecured item?',
-              },
-            }}
-            header={
-              <div className="cargo-bar ds-row">
-                <span className="ds-risk-tag">At risk until the next checkpoint · {unsecured} / {inv.cargoCapacity}</span>
-                <span className="ds-meta">Secured this run <b className="c">{run.secured.items.length}</b></span>
-                <span className="rule ds-meta">Unsecured items, even equipped ones, are lost if the reactor falls before the next checkpoint. Gear you swap out stays yours.</span>
-              </div>
-            }
-          />
-          </ScoreCtx.Provider>
-        </div>
+          </section>
+        )}
+      </ScoreCtx.Provider>
+      <div className="ds-bot">
+        <Hint keys="X" onClick={dropSel}>Drop</Hint>
+        <span className="ds-grow" />
+        <Hint keys={[keyLabel(game.settings.keys.inventory)]} onClick={() => void game.closeInventory()}>Close</Hint>
       </div>
     </div>
   );

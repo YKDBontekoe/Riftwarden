@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { type ReactNode, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import type { Flow } from '../core/Flow';
 import type { Game } from '@riftwarden/game/core/Game';
 import { BLESSINGS, CURSES, isCombatKind, NODE_KINDS, type NodeKind } from '@riftwarden/rules/runmap/defs';
@@ -16,7 +16,8 @@ import type { RunMapView, StationPanel } from '@riftwarden/rules/runmap/view';
 import { AffinityRow } from './LoadingScreen';
 import { ItemDetail, ItemGlyph, RarityTag } from './items';
 import { useHud } from './useHud';
-import { Backdrop, Crumb, Cur, Hint, pips, rarityCls } from './ds';
+import { Backdrop, Crumb, Cur, Hint, pips, rarityCls, Seg } from './ds';
+import { GUARDIAN } from '@riftwarden/rules/runmap/hub';
 import { BIOMES } from '@riftwarden/rules/world/biomes';
 import { NamedDrops } from './NamedDrops';
 import { bossArtwork } from '@riftwarden/game/visuals/fieldArtwork';
@@ -309,13 +310,30 @@ function RoutePanel({ look }: { look: Lookahead }) {
 }
 
 /** Station panel (merchant / forge / rest / anomaly / vault). */
+/** Split an anomaly choice's honest odds text into outcome lines with their chance (100% when certain). */
+function outcomes(text: string): { text: string; p: number; color: string }[] {
+  return text.split(/(?<=\.)\s+/).filter(Boolean).map((line) => {
+    const m = /(\d+)%/.exec(line);
+    const bad = /curse|lose|guardian|ambush|attack|bleed|nothing|otherwise/i.test(line);
+    return { text: line.replace(/^\d+%:?\s*/, '').replace(/\.$/, ''), p: m ? Number(m[1]) : 100, color: bad ? (/nothing/i.test(line) ? '#cfd4cc' : '#ffa294') : '#8ff0b6' };
+  });
+}
+
 export function StationScreen({ game }: { game: Game }) {
   const [, tick] = useState(0);
   const [hover, setHover] = useState<string | null>(null);
   const [why, setWhy] = useState('');
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' || e.key === 'e' || e.key === 'E') void game.continueRun();
+      if (e.key === 'Escape' || e.key === 'e' || e.key === 'E') return void game.continueRun();
+      const panel = game.node?.panel();
+      if (!panel) return;
+      const n = Number(e.key);
+      const pick = panel.station === 'vault' && e.key === 'Enter' ? panel.options[0] : panel.station !== 'merchant' && n >= 1 && n <= panel.options.length ? panel.options[n - 1] : null;
+      if (pick && !pick.disabled) {
+        setWhy(game.node?.act(pick.id) ?? '');
+        tick((x) => x + 1);
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -331,6 +349,109 @@ export function StationScreen({ game }: { game: Game }) {
     tick((x) => x + 1);
   };
   const price = (o: (typeof p.options)[number]) => o.disabled ?? (o.price !== null ? `${o.price}` : 'Free');
+  const frame = (body: ReactNode, opts: { meta?: ReactNode; bottom?: ReactNode; primary?: ReactNode } = {}) => (
+    <div className={`screen dim station ds-scr st-kind-${p.station}`} data-testid="station">
+      <div className={`st-art-bg st-${p.station}`} aria-hidden="true"><FieldArt name={`hub-${p.station}`} className="station-art" /></div>
+      <div className="ds-scrim-l" />
+      <div className="ds-vig" />
+      <div className="ds-top">
+        <Crumb parts={['Run', game.node?.hud()?.name ?? 'Node', p.title]} />
+        <span className="ds-grow" />
+        {opts.meta ?? <Cur k="cores" value={p.cores} note="cores · this run" />}
+      </div>
+      {body}
+      <div className="ds-bot">
+        {(p.note || why) ? <span className={`st-note ds-meta${why ? ' bad' : ''}`} data-testid="st-note">{why || p.note}</span> : opts.bottom}
+        <span className="ds-grow" />
+        <Hint keys={['E', 'ESC']} onClick={() => void game.continueRun()}>Close</Hint>
+        {opts.primary}
+      </div>
+      <div className="ds-grain" />
+    </div>
+  );
+  if (p.station === 'event') {
+    return frame(
+      <>
+        <div className="st-anomaly-glow" aria-hidden="true" />
+        <div className="ds-abs ds-col" style={{ left: 0, right: 0, top: 70, alignItems: 'center', gap: 6 }}>
+          <span className="ds-ov" style={{ color: '#e5d6ff' }}>Anomaly · {p.title.toLowerCase()}</span>
+          <span className="ds-hero">{p.title}</span>
+          <span className="ds-meta" style={{ maxWidth: 640, textAlign: 'center', color: '#dfe3db' }}>{p.lore}</span>
+        </div>
+        <div className="st-cards" style={{ gridTemplateColumns: `repeat(${p.options.length}, minmax(0, 1fr))` }}>
+          {p.options.map((o, i) => (
+            <button key={o.id} className="st-card anomaly" data-testid={`st-${o.id}`} disabled={!!o.disabled || p.used} onClick={() => buy(o.id)}>
+              <span className="ds-row" style={{ width: '100%' }}><span className="ds-h3 ds-grow" style={{ fontSize: 26, textAlign: 'left' }}>{o.label.toUpperCase()}</span><span className="ds-k">{i + 1}</span></span>
+              {outcomes(o.text).map((x, j) => (
+                <span key={j} className="ds-col" style={{ width: '100%', gap: 4 }}>
+                  <span className="ds-row"><span className="ds-grow" style={{ fontSize: 14, textAlign: 'left' }}>{x.text}</span><b className="ds-d" style={{ fontSize: 18, color: x.color }}>{x.p}%</b></span>
+                  <span className="ds-bar" style={{ '--c': x.color } as React.CSSProperties}><i style={{ width: `${x.p}%` }} /></span>
+                </span>
+              ))}
+              {o.disabled && <span className="ds-meta">{o.disabled}</span>}
+            </button>
+          ))}
+        </div>
+      </>,
+      { meta: <span className="ds-mono">ODDS ARE EXACT · SEEDED PER NODE</span>, bottom: <span className="ds-meta">Curses last until the act ends · max 4 at once · you hold {game.node?.carry.curses.length ?? 0}</span> },
+    );
+  }
+  if (p.station === 'forge') {
+    const gem: Record<string, string> = { temper: '#ffa46b', plating: '#f4f1e8', coolant: '#9fe0ff', calibrate: '#b9ece0' };
+    const stacks = (game.node?.carry.forge ?? {}) as Record<string, number | undefined>;
+    return frame(
+      <>
+        <div className="ds-abs ds-col" style={{ left: 44, top: 70, gap: 4 }}>
+          <span className="ds-ov ds-em">Hub · act {game.node?.hud()?.act ?? 1}</span>
+          <span className="ds-hero">FORGE</span>
+          <span className="ds-meta">Run-only upgrades. Each stack costs 35% more. Max 4 per line.</span>
+        </div>
+        <div className="st-cards forge" style={{ gridTemplateColumns: `repeat(${p.options.length}, minmax(0, 1fr))` }}>
+          {p.options.map((o, i) => {
+            const n = stacks[o.id] ?? 0;
+            const full = o.disabled === 'Maxed';
+            return (
+              <button key={o.id} className={`st-card forge ${full ? 'full' : ''}`} data-testid={`st-${o.id}`} disabled={!!o.disabled} onClick={() => buy(o.id)}>
+                <span className="ds-row" style={{ width: '100%' }}><span className="ds-gem" style={{ '--c': gem[o.id] ?? '#f4f1e8', width: 34, height: 34 } as React.CSSProperties} /><span className="ds-grow" /><span className="ds-k">{i + 1}</span></span>
+                <span style={{ font: '800 30px/0.95 var(--ds-d)', textAlign: 'left' }}>{o.label.replace(/ \(.*\)$/, '').toUpperCase()}</span>
+                <span className="ds-meta" style={{ textAlign: 'left', color: '#dfe3db' }}>{o.text}</span>
+                <Seg value={n / 4} total={4} color="#f4f1e8" />
+                <span className="ds-row" style={{ width: '100%', marginTop: 'auto' }}><span className="ds-meta ds-grow">{full ? 'Maxed' : o.disabled ?? `Stack ${n + 1} of 4`}</span><b className="ds-d" style={{ fontSize: 24 }}>{full ? '—' : o.price}</b></span>
+              </button>
+            );
+          })}
+        </div>
+      </>,
+      { bottom: <span className="ds-meta">Forge stacks last until the run ends; towers reset per sector, stacks do not</span> },
+    );
+  }
+  if (p.station === 'vault') {
+    const o = p.options[0];
+    return frame(
+      <>
+        <div className="ds-abs ds-col" style={{ left: 44, top: 80, width: 520, gap: 14 }}>
+          <span className="ds-ov ds-em">Hub · sealed vault</span>
+          <span className="ds-hero">{p.used ? 'VAULT OPEN' : 'CRACK THE SEAL?'}</span>
+          <p className="ds-body" style={{ fontSize: 16, margin: 0 }}>Breaking the seal wakes its guardians: one wave built from this sector&apos;s roster at +25% hull. They go straight for the reactor. Clear them to open the vault.</p>
+          <div className="ds-col">
+            <div className="ds-list-row"><span className="ds-dot" style={{ background: '#ff5a4a' }} /><span className="ds-grow">Guardian wave · elite guardians · +25% hull</span></div>
+            <div className="ds-list-row"><span className="ds-dot" style={{ background: '#ff5a4a' }} /><span className="ds-grow">Extraction blocked until they are cleared</span></div>
+            <div className="ds-list-row"><span className="ds-dot" style={{ background: '#b9ece0' }} /><span className="ds-grow">Your towers here reset after the vault</span></div>
+          </div>
+        </div>
+        <section className="ds-abs ds-glass ds-cut ds-col" style={{ right: 44, top: 110, width: 470, padding: '22px 24px', gap: 12 }}>
+          <span className="ds-h2">INSIDE</span>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
+            <div className="ds-tile ds-re" style={{ height: 120 }}><span className="ds-abs ds-lbl" style={{ left: 10, top: 8, color: '#f4f1e8' }}>Elite cache</span></div>
+            <div className="ds-tile ds-ra" style={{ height: 120 }}><span className="ds-abs ds-col" style={{ left: 14, bottom: 16 }}><span className="ds-num" style={{ color: '#9ff5ff' }}>+{GUARDIAN.cacheShards}</span><span className="ds-lbl">Rift shards</span></span></div>
+          </div>
+          <div className="ds-list-row" style={{ border: 0 }}><span className="ds-grow">Cache floor</span><b className="ds-d" style={{ fontSize: 20, color: '#8cc4ff' }}>Rare or better</b></div>
+          <span className="ds-meta">Cache contents bank with this node when you travel on.</span>
+        </section>
+      </>,
+      { primary: <button className="ds-btn-p" data-testid={`st-${o.id}`} disabled={!!o.disabled} onClick={() => buy(o.id)}><span className="ds-kd">ENTER</span>{o.disabled ?? 'CRACK THE SEAL'}</button> },
+    );
+  }
   return (
     <div className="screen dim station ds-scr" data-testid="station">
       <div className={`st-art-bg st-${p.station}`} aria-hidden="true"><FieldArt name={`hub-${p.station}`} className="station-art" /></div>
