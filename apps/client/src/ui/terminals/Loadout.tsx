@@ -46,7 +46,7 @@ function SlotTile({ save, slot, it, sel, pick, height, children }: { save: SaveD
       {it && <span className="ds-lv">{fmtNum(it.level)}</span>}
       <span className="lo-cap ds-col">
         <span className={`ds-lbl ${it ? '' : 'ds-warn'}`}>{label}{it ? '' : ' · empty'}</span>
-        <b className="ds-d">{it ? it.name : '+ equip at storage'}</b>
+        <b className="ds-d">{it ? it.name : '+ equip'}</b>
         {children}
       </span>
     </button>

@@ -168,6 +168,7 @@
    and the hull warning sits on the hull readout instead of over the crosshair. */
 .combat-hud:has(.boss-bar) .hud-compass { display: none; }
 .combat-hud .boss-bar { top: 16px; }
+.combat-hud:has(.boss-bar) .hud-objective { top: 118px; }
 .hud-critical { left: 28px; top: auto; bottom: 178px; transform: none; gap: 10px; }
 .hud-critical b { font-size: 20px; }
 .hud-critical .hc-rule:first-child { display: none; }

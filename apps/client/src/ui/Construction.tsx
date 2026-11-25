@@ -9,6 +9,7 @@ import { HQ_STATIONS } from '@riftwarden/rules/home/layout';
 import { useSave } from './useSave';
 import { CostLine, ResourceBar, TxMessage, useTx } from './economy';
 import { Shell } from './shell';
+import { Crumb } from './ds';
 import { useHud } from './useHud';
 
 /** Architect console: construction entry point, blueprint catalogue, owned pieces, facility summary. */
@@ -131,8 +132,12 @@ export function ConstructionPanel({ flow }: { flow: Flow }) {
   return (
     <div className="construct" data-testid="construct-panel">
       <div className="cons-top">
-        <div className="cons-title">CONSTRUCTION MODE</div>
+        <div className="cons-title"><Crumb parts={['HQ', 'Architect', 'Construction']} /></div>
+        <span className="cons-gap" />
         <ResourceBar save={save} compact />
+        <span className="cons-count ds-mono">
+          LIGHTS {save.base.placeables.filter((p) => pieceDef(p.type)?.light && p.props.on !== false).length} / {LIMITS.lights} · MODULES {Object.keys(save.base.structure.floors).length} / {LIMITS.floors}
+        </span>
         <button className="mini" onClick={() => bm.undo()} disabled={!h.undo} data-testid="cons-undo">
           UNDO ({h.undo})
         </button>
