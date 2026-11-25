@@ -118,3 +118,5 @@ html[data-touch] .hq-keys { display: none; }
 .rotate-hint button.primary { width: auto; }
 .pwa-toast { border: 0; background: rgba(10, 14, 18, 0.92); box-shadow: inset 0 0 0 1px rgba(255, 216, 77, 0.6); clip-path: var(--ds-cut-tr); color: var(--ds-ink); font-family: var(--font); }
 .pwa-toast button { width: auto; margin: 0; }
+/* QA: the SLOW button covers tactical time on touch; the centred bar collided with the hull readout. */
+html[data-touch] .combat-hud .bottom-center .tactical { display: none; }

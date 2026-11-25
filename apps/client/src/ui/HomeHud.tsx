@@ -2,6 +2,9 @@ import { visibleCurrencies } from '@riftwarden/rules/progression/unlocks';
 import { BoundKey } from './hud/widgets';
 import { TutorialCard } from './TutorialCard';
 import { useEffect, useState } from 'react';
+import { HQ_STATIONS } from '@riftwarden/rules/home/layout';
+import { lockReason, STATION_FEATURE } from '@riftwarden/rules/progression/unlocks';
+import type { SaveData } from '@riftwarden/rules/progression/save';
 import type { Flow } from '../core/Flow';
 import { RESOURCE_KEYS, type ResourceKey } from '@riftwarden/rules/economy/config';
 import { RES_CLASS } from './economy';
@@ -52,6 +55,7 @@ export function HomeHud({ flow }: { flow: Flow }) {
           </div>
         </div>
       )}
+      {walking && flow.home && <StationList home={flow.home} save={save} />}
       {walking && (
         <div className="hq-keys ds-row">
           <span className="ds-hint"><BoundKey action="move" />Move</span>
@@ -61,6 +65,50 @@ export function HomeHud({ flow }: { flow: Flow }) {
       )}
       <Banner />
       <Perf />
+    </div>
+  );
+}
+
+/** Bottom left while roaming (canvas "HQ free roam"): the nearest open stations with their distance. */
+function stationDirectory(home: NonNullable<Flow['home']>, save: SaveData) {
+  const p = home.player?.position;
+  const open: { id: string; title: string; dist: number }[] = [];
+  let offline = 0;
+  for (const st of HQ_STATIONS) {
+    const f = STATION_FEATURE[st.id];
+    if (f && lockReason(save, f)) {
+      offline++;
+      continue;
+    }
+    // Relocated stations stand where the warden put them.
+    const pose = save.base.stations?.[st.id];
+    const [x, z] = pose ? [pose.x, pose.z] : st.pos;
+    open.push({ id: st.id, title: st.title, dist: p ? Math.hypot(x - p.x, z - p.z) : 0 });
+  }
+  open.sort((a, b) => a.dist - b.dist);
+  return { open, offline };
+}
+
+function StationList({ home, save }: { home: NonNullable<Flow['home']>; save: SaveData }) {
+  const [dir, setDir] = useState(() => stationDirectory(home, save));
+  useEffect(() => {
+    const t = window.setInterval(() => setDir(stationDirectory(home, save)), 500);
+    return () => window.clearInterval(t);
+  }, [home, save]);
+  if (!dir.open.length) return null;
+  return (
+    <div className="hq-stations ds-glass" data-testid="hq-stations">
+      <span className="ds-lbl">Stations</span>
+      <ul>
+        {dir.open.slice(0, 5).map((s, i) => (
+          <li key={s.id} className={i === 0 ? 'near' : ''}>
+            <span className="ds-dia" aria-hidden="true" />
+            <b>{s.title}</b>
+            <em>{s.dist < 4 ? 'here' : `${Math.round(s.dist)} m`}</em>
+          </li>
+        ))}
+      </ul>
+      {dir.offline > 0 && <span className="ds-meta hs-off">{dir.offline} more offline · unlock by level</span>}
     </div>
   );
 }

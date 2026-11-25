@@ -41,11 +41,12 @@ export function Shell({ code, title, sub, close, children, accent = 'cyan', wide
     <div className={`screen terminal-screen ds-scr acc-${accent}`}>
       <div className="ds-blur" />
       <div className="term-shade" />
-      <OfflineBanner />
       <div className="ds-top term-top">
         <span className="term-code ds-mono">{terminal && <FieldIcon name={STATION_ICON[terminal]} />}{code}</span>
         <Crumb parts={['HQ', name, title]} />
         <span className="ds-grow" />
+        <OfflineBanner chip />
+        <span className="term-meta ds-mono" title={sub}>{sub}</span>
         {res && uses.filter((k) => (RESOURCE_KEYS as readonly string[]).includes(k)).map((k) => <Cur key={k} k={k} value={res[k as ResourceKey] ?? 0} />)}
       </div>
       <div className={`terminal panel-frame ${accent} ${wide ? 'wide' : ''}`}>

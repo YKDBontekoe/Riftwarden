@@ -189,10 +189,10 @@ export function MainMenu({ flow }: { flow: Flow }) {
     <main className="screen menu ds-scr">
       <Backdrop />
       <div className="ds-scrim-b" />
-      <OfflineBanner />
       <div className="ds-top">
         <span className="ds-mono">RW-OPS // HQ-01 · {account.status === 'signedIn' ? 'ONLINE' : account.status === 'offline' ? 'OFFLINE' : 'LOCAL'}</span>
         <span className="ds-grow" />
+        <OfflineBanner chip />
         <Cur k="credits" value={save.resources.credits} />
         {save.resources.shards > 0 && <Cur k="shards" value={save.resources.shards} />}
       </div>

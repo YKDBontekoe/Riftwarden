@@ -52,9 +52,6 @@ export function Objective() {
           }} />
         </div>
       )}
-      {phase === 'prep' && !build && (
-        <div className="obj-line"><span className="ds-hint" style={{ fontSize: 13 }}><BoundKey action="wave" />Call wave early · +2 cores per second</span></div>
-      )}
       {survival ? (
         <div className="obj-line reactor survival-mode" data-testid="survival-banner">
           <span className="ds-meta obj-warn">Hunted · one life</span>
@@ -80,6 +77,23 @@ export function Objective() {
   );
 }
 
+/** Top centre during preparation: the countdown to the next wave and the call-early key (canvas "HUD · prep"). */
+export function PrepClock() {
+  const phase = useHud((s) => s.phase);
+  const wave = useHud((s) => s.wave);
+  const node = useHud((s) => s.node);
+  const survival = useHud((s) => s.mode === 'survival');
+  // Hubs and secured nodes hold the clock: nothing to count down there.
+  if (phase !== 'prep' || (node && (!node.waves || node.complete))) return null;
+  return (
+    <div className="hud-prep" data-testid="prep-clock">
+      <span className="ds-lbl">Prep · wave {wave} next{survival ? ' · they will hunt you' : ''}</span>
+      <LiveText as="b" className="hp-time" select={(s) => { const t = Math.max(0, Math.ceil(s.phaseTimer)); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`; }} />
+      <span className="ds-hint"><BoundKey action="wave" />Call wave early · +2 cores per second</span>
+    </div>
+  );
+}
+
 const CARDINAL = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 const COMPASS_W = 600;
 /** Pixels per radian across the strip (about 120 degrees visible). */
@@ -93,8 +107,8 @@ export function Compass({ game }: { game: Game }) {
   const survival = useHud((s) => s.mode === 'survival');
   useEffect(() => {
     let raf = 0;
-    const place = (el: HTMLElement | null, x: number, z: number, label?: string) => {
-      if (!el) return;
+    const place = (el: HTMLElement | null, x: number, z: number, label?: string): number => {
+      if (!el) return -1e9;
       const p = game.player.position;
       let rel = Math.atan2(x - p.x, z - p.z) - game.player.yaw;
       rel = Math.atan2(Math.sin(rel), Math.cos(rel));
@@ -106,6 +120,7 @@ export function Compass({ game }: { game: Game }) {
         const t = el.querySelector('i');
         if (t && t.textContent !== label) t.textContent = label;
       }
+      return px;
     };
     const tick = () => {
       raf = requestAnimationFrame(tick);
@@ -123,7 +138,7 @@ export function Compass({ game }: { game: Game }) {
       }
       const r = game.layout.reactor;
       const p = game.player.position;
-      if (!survival) place(reactor.current, r.x, r.z, `REACTOR ${Math.round(Math.hypot(r.x - p.x, r.z - p.z))}M`);
+      const rx = survival ? -1e9 : place(reactor.current, r.x, r.z, `REACTOR ${Math.round(Math.hypot(r.x - p.x, r.z - p.z))}M`);
       // A boss first, else the nearest elite.
       let best: { x: number; z: number; d: number; boss: boolean } | null = null;
       for (const e of game.enemies.active) {
@@ -134,7 +149,11 @@ export function Compass({ game }: { game: Game }) {
         if (!best || (boss && !best.boss) || (boss === best.boss && d < best.d)) best = { x: e.pos.x, z: e.pos.z, d, boss };
       }
       if (threat.current) threat.current.style.display = best ? '' : 'none';
-      if (best) place(threat.current, best.x, best.z, `${best.boss ? 'BOSS' : 'ELITE'} ${Math.round(best.d)}M`);
+      if (best) {
+        const tx = place(threat.current, best.x, best.z, `${best.boss ? 'BOSS' : 'ELITE'} ${Math.round(best.d)}M`);
+        // Two markers close together: the threat label goes above the strip so the labels never overlap.
+        threat.current?.classList.toggle('up', Math.abs(tx - rx) < 80);
+      }
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);

@@ -45,6 +45,9 @@ export function RangePanel({ game }: { game: Game }) {
   if (!r) return null;
   const s = r.setup;
   const sheet = game.firepower();
+  // How the weapon in hand fares against the first dummy (faction, frame and defences).
+  const dummy = game.range?.targets[0];
+  const aff = dummy ? game.director.affinityOf(dummy, game.weapon.def.element ?? 'kinetic') : 1;
   const rows: [string, string, string][] = [
     ['J', 'Target', label(RANGE_TARGETS, s.target)],
     ['K', 'Defences', label(RANGE_MODS, s.mod)],
@@ -66,6 +69,7 @@ export function RangePanel({ game }: { game: Game }) {
         <div><dt>Crit rate</dt><dd>{Math.round(r.critRate * 100)}%</dd></div>
         <div><dt>Total</dt><dd data-testid="range-total">{fmtBig(Math.round(r.total))}</dd></div>
         <div><dt>Hits</dt><dd>{r.hits}</dd></div>
+        <div><dt>Affinity</dt><dd data-testid="range-aff" className={aff > 1.001 ? 'ds-up' : aff < 0.999 ? 'ds-down' : ''}>×{aff.toFixed(2)}</dd></div>
       </dl>
       <ul className="range-setup">
         {rows.map(([k, name, value]) => (

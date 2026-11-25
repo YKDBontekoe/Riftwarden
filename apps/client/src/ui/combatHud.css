@@ -163,3 +163,23 @@
 .combat-hud .team-panel .tm.down .tm-name { color: var(--ds-down); }
 .combat-hud .team-panel .tm-link { font: 500 11px var(--ds-m); color: var(--ds-dim); }
 .team-tag { font-family: var(--ds-d); letter-spacing: 0.12em; }
+
+/* Boss fights (canvas "HUD · boss and critical hull"): the boss bar takes the compass's place at the top centre,
+   and the hull warning sits on the hull readout instead of over the crosshair. */
+.combat-hud:has(.boss-bar) .hud-compass { display: none; }
+.combat-hud .boss-bar { top: 16px; }
+.hud-critical { left: 28px; top: auto; bottom: 178px; transform: none; gap: 10px; }
+.hud-critical b { font-size: 20px; }
+.hud-critical .hc-rule:first-child { display: none; }
+.hud-critical .hc-rule { display: none; }
+.hud-critical .ds-col { align-items: flex-start !important; }
+.hud-compass .hc-mark.up { flex-direction: column-reverse; top: -2px; }
+.hud-compass .hc-mark.up i { margin: 0 0 2px; }
+
+/* Preparation countdown under the compass (canvas "HUD · prep and build mode"). */
+.hud-prep { position: fixed; left: 50%; top: 74px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 4px; pointer-events: none; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9), 0 0 14px rgba(0, 0, 0, 0.5); }
+.hud-prep .hp-time { font: 800 64px/0.9 var(--ds-d); letter-spacing: 0.02em; color: var(--ds-ink); font-variant-numeric: tabular-nums; }
+.hud-prep .ds-hint { font-size: 13px; }
+.combat-hud.in-range .hud-prep { display: none; }
+html[data-touch] .hud-prep { top: 56px; zoom: 0.7; }
+.combat-hud[data-phase=prep] .surv-chips { top: 200px; }
