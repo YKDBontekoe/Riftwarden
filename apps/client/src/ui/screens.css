@@ -625,7 +625,7 @@ html[data-touch] .hq-stations { display: none; }
 .dw-viewseg { display: flex; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.24); }
 .dw-viewseg button { width: auto; margin: 0; padding: 8px 16px; border: 0; background: none; font: 700 13px var(--ds-d); letter-spacing: 0.16em; color: var(--ds-dim); }
 .dw-viewseg button.on { background: var(--ds-ink); color: #0b0d10; }
-.dw-planet { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 18px 0 6px; background: radial-gradient(circle at 50% 42%, rgba(127, 224, 200, 0.1), transparent 62%); }
+.dw-planet { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 0; background: radial-gradient(circle at 50% 42%, rgba(127, 224, 200, 0.1), transparent 62%); }
 .dw-planet .war-globe { max-width: 100%; height: auto !important; aspect-ratio: 1; }
 .dw-planet .war-tabs { flex-direction: row; flex-wrap: wrap; justify-content: center; }
 .dw-sector .war-map { max-height: 470px; }
@@ -662,3 +662,16 @@ button.dw-ev:hover { background: rgba(255, 255, 255, 0.04); }
 .dw-right .dm-node { margin: 0; }
 .dw-right .field-notes p { margin: 8px 0; }
 @media (max-width: 980px) { .dm-panel.dw { grid-template-columns: minmax(0, 1fr); } .dw-left { position: static; } }
+.war-globe-wrap { position: relative; flex-shrink: 0; }
+.gl-labels { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
+.gl-label { position: absolute; left: 0; top: 0; display: flex; flex-direction: column; gap: 1px; padding: 3px 8px; pointer-events: auto; cursor: pointer; white-space: nowrap; background: rgba(8, 10, 12, 0.6); border-left: 2px solid currentColor; transition: opacity 0.2s; text-shadow: 0 1px 2px #000; }
+.gl-label b { font: 700 13px var(--ds-d); letter-spacing: 0.14em; text-transform: uppercase; color: var(--ds-ink); }
+.gl-label span { font: 600 10px var(--ds-d); letter-spacing: 0.14em; text-transform: uppercase; }
+.gl-label.s-liberated { color: #7fe0c8; }
+.gl-label.s-front { color: var(--ds-ember); }
+.gl-label.s-fallen { color: #ff5a4a; }
+.gl-label.s-locked { color: rgba(244, 241, 232, 0.55); }
+.gl-label.on { background: rgba(8, 10, 12, 0.85); box-shadow: inset 0 0 0 1px currentColor; }
+.dw-right .ds-kicker { font: 700 12px var(--ds-d); letter-spacing: 0.18em; text-transform: uppercase; }
+.dw-planet { background: radial-gradient(circle at 50% 45%, rgba(127, 200, 224, 0.12), transparent 60%); }
+.dw-planet .war-globe-wrap::before { content: ''; position: absolute; inset: 8%; border-radius: 50%; box-shadow: 0 0 46px 8px rgba(120, 190, 235, 0.22), inset 0 0 18px 2px rgba(150, 210, 255, 0.16); pointer-events: none; }

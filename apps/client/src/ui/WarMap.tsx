@@ -15,24 +15,30 @@ const py = (n: MapNode) => 40 + (n.y ?? 0.5) * (H - 80);
 const hrs = (ms: number) => (ms <= 0 ? 'now' : ms < HOUR ? `${Math.ceil(ms / 60000)} min` : `${Math.ceil(ms / HOUR)} h`);
 
 /** The hologram globe (its own engine on a small canvas). */
-export function Globe({ war, selected, onSelect, size = 220 }: { war: WarState; selected: number; onSelect: (k: number) => void; size?: number }) {
+export function Globe({ war, selected, onSelect, size = 220, labels = false }: { war: WarState; selected: number; onSelect: (k: number) => void; size?: number; labels?: boolean }) {
   const ref = useRef<HTMLCanvasElement>(null);
+  const tags = useRef<HTMLDivElement>(null);
   const view = useRef<GlobeView | null>(null);
   useEffect(() => {
     if (!ref.current) return;
-    const v = new GlobeView(ref.current);
+    const v = new GlobeView(ref.current, labels ? tags.current : null);
     view.current = v;
     return () => {
       v.dispose();
       view.current = null;
     };
-  }, []);
+  }, [labels]);
   useEffect(() => {
     if (!view.current) return;
     view.current.onSelect = onSelect;
     view.current.update(war, selected);
   }, [war, selected, onSelect]);
-  return <canvas ref={ref} className="war-globe" width={size} height={size} style={{ width: size, height: size }} data-testid="war-globe" />;
+  return (
+    <div className="war-globe-wrap" style={{ width: size, height: size }}>
+      <canvas ref={ref} className="war-globe" width={size} height={size} style={{ width: size, height: size }} data-testid="war-globe" />
+      {labels && <div ref={tags} className="gl-labels" />}
+    </div>
+  );
 }
 
 export interface RegionMapProps {

@@ -108,7 +108,7 @@ export function DeployMapPanel({ flow, save, entry, onEntry, aside }: { flow: Fl
         </div>
         {view === 'planet' ? (
           <div className="dw-planet">
-            <Globe war={war} selected={k} onSelect={onRegion} size={400} />
+            <Globe war={war} selected={k} onSelect={onRegion} size={400} labels />
             <RegionTabs war={war} k={k} onPick={onRegion} />
           </div>
         ) : (
