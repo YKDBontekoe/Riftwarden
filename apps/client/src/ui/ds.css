@@ -163,6 +163,6 @@ html[data-touch] .ds-hint .ds-k { display: none; }
 .ds-toast.bad { box-shadow: inset 0 0 0 1px rgba(255,138,122,0.6); }
 
 /* The menus are laid out on a 1280x720 frame; smaller viewports zoom the whole frame (offsets included). */
-@media (max-height: 660px), (max-width: 1180px) { .ds-scr { zoom: 0.82; } }
-@media (max-height: 540px), (max-width: 980px) { .ds-scr { zoom: 0.66; } }
-@media (max-height: 430px), (max-width: 860px) { .ds-scr { zoom: 0.54; } }
+@media (max-height: 660px), (max-width: 1180px) { .ds-scr:not(.terminal-screen) { zoom: 0.82; } }
+@media (max-height: 540px), (max-width: 980px) { .ds-scr:not(.terminal-screen) { zoom: 0.66; } }
+@media (max-height: 430px), (max-width: 860px) { .ds-scr:not(.terminal-screen) { zoom: 0.54; } }

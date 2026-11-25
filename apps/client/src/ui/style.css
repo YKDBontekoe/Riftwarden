@@ -1794,7 +1794,16 @@ button.inv-slot { position: relative; }
 .terminal-screen .term-bot .term-purpose { display: block; padding: 0; background: none; border: 0; font-size: 13px; max-width: 70%; }
 .terminal-screen .term-bot .term-uses i { font-style: normal; margin-left: 8px; color: var(--ds-muted); }
 .terminal-screen .term-close { margin: 0; width: auto; padding: 0; background: none; border: 0; }
-@media (max-width: 900px) { .terminal-screen .terminal { left: 16px; right: 16px; } }
+@media (max-width: 900px), (max-height: 540px) {
+  .terminal-screen .terminal { left: 8px; right: 8px; top: 40px; bottom: 44px; }
+  .terminal-screen .term-top { left: 12px; right: 12px; top: 10px; }
+  .terminal-screen .term-bot { left: 12px; right: 12px; bottom: 8px; }
+  .terminal-screen .term-bot .term-purpose { display: none; }
+  .terminal-screen .term-head { padding: 6px 12px; }
+  .terminal-screen .term-title { font-size: 22px; }
+  .terminal-screen .term-sub { display: none; }
+  .terminal-screen .term-body { padding: 10px 12px 14px; }
+}
 
 /* tabs in every panel: condensed caps, ember underline on the active one */
 .tabs { gap: 26px; border-bottom: 1px solid rgba(255, 255, 255, 0.14); }
@@ -1872,3 +1881,4 @@ button.inv-slot { position: relative; }
 .alert-line.red::after { background: linear-gradient(270deg, transparent, var(--ds-danger)); }
 .node-chip { background: rgba(10, 14, 18, 0.6); border: 0; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14); clip-path: var(--ds-cut-s); }
 .node-chip b { font: 700 13px var(--display); letter-spacing: 0.14em; }
+@media (max-width: 900px), (max-height: 540px) { .terminal-screen .term-title { font-size: 22px; } .terminal-screen .term-head { padding: 6px 12px; } }

@@ -215,12 +215,12 @@ const visible = (p, testId) => p.locator(`[data-testid="${testId}"]`).count();
       check('D4 pause button opens the pause menu', (await S(p)).screen === 'paused' && (await visible(p, 'touch-layer')) === 0);
       // A tap, not a click: a mouse click would (correctly) switch auto mode back to mouse controls.
       {
-        const box = await p.locator('.modal .tabs button', { hasText: 'CONTROLS' }).first().boundingBox();
+        const box = await p.locator('[data-testid=pause-controls]').first().boundingBox();
         await t.down(8, box.x + box.width / 2, box.y + box.height / 2);
         await t.up(8);
       }
       check('D5 the controls tab shows the touch legend', (await visible(p, 'touch-legend')) === 1);
-      const [rx, ry] = await (async () => { const box = await p.locator('.modal button.primary').first().boundingBox(); return [box.x + box.width / 2, box.y + box.height / 2]; })();
+      const [rx, ry] = await (async () => { const box = await p.locator('[data-testid=pause-resume]').first().boundingBox(); return [box.x + box.width / 2, box.y + box.height / 2]; })();
       await t.down(7, rx, ry);
       await t.up(7);
       await H.waitFor(p, () => window.__rift.game.screen === 'playing', null, 10000);

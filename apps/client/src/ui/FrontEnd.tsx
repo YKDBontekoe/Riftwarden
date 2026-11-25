@@ -316,7 +316,7 @@ export function PauseMenu({ flow }: { flow: Flow }) {
       </div>
       <nav aria-label="Pause menu" className="ds-abs ds-menu" style={{ left: 32, top: 200, width: 440 }}>
         {rows.map((r, i) => (
-          <button key={r.id} className={`ds-menu-item ${sel === i ? 'ds-sel' : ''} ${r.danger ? 'ds-danger' : ''}`} disabled={r.id === 'resume' && resuming}
+          <button key={r.id} data-testid={`pause-${r.id}`} className={`ds-menu-item ${sel === i ? 'ds-sel' : ''} ${r.danger ? 'ds-danger' : ''}`} disabled={r.id === 'resume' && resuming}
             onMouseEnter={() => setSel(i)} onClick={r.go} style={sel === i ? { fontSize: 40, fontWeight: 700 } : undefined}>
             {r.label}
           </button>
