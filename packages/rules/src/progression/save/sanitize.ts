@@ -173,6 +173,7 @@ export function sanitizeItem(v: unknown, repairs: string[] = [], nested = false,
   if (typeof r.uniqueId === 'string' && uniqueDef(r.uniqueId)?.baseId === defId) item.uniqueId = r.uniqueId;
   // Sets: only on set gear without a unique identity.
   if (isSetId(r.set) && !item.uniqueId && SET_CATEGORIES.includes(item.category)) item.set = r.set;
+  if (r.bound === true) item.bound = true;
   // M4 engineering state (only stored when set).
   if (r.locked === true) item.locked = true;
   const enh = int(r.enhance, 0, 0, MAX_ENHANCE_ANY);

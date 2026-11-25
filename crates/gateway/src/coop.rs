@@ -14,8 +14,8 @@ use std::{
 
 use prost::Message;
 use riftwarden_proto::v1::{
-    ClientFrame, Doc, Error as ProtoError, Pong, ServerFrame, SimAttach, SimDown, SimEntries, SimInput, SimProfile, SimUp, SyncEntry,
-    WarReport, client_frame, server_frame, sim_down, sim_up,
+    ClientFrame, Doc, Error as ProtoError, Pong, RoomListing, ServerFrame, SimAttach, SimDown, SimEntries, SimInput, SimProfile,
+    SimTradeResult, SimUp, SyncEntry, WarReport, client_frame, server_frame, sim_down, sim_up,
 };
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -46,6 +46,8 @@ struct Directory {
     rooms: HashMap<String, usize>,
     /// Account -> worker holding its room.
     accounts: HashMap<Uuid, usize>,
+    /// Worker -> squads its hosts listed in the open-squad browser (lobby phase, not full).
+    listed: HashMap<usize, Vec<RoomListing>>,
 }
 
 type ClientTx = mpsc::UnboundedSender<Vec<u8>>;
@@ -250,6 +252,15 @@ impl Coop {
     }
 
     /// Open rooms and running operations (health / metrics).
+    /// Open-squad browser rows over every worker, at most `limit`, fullest first (most likely to deploy soon).
+    pub fn open_squads(&self, limit: usize) -> Vec<RoomListing> {
+        let dir = self.dir.lock().expect("dir");
+        let mut rows: Vec<RoomListing> = dir.listed.values().flatten().cloned().collect();
+        rows.sort_by(|a, b| b.players.cmp(&a.players).then_with(|| a.code.cmp(&b.code)));
+        rows.truncate(limit);
+        rows
+    }
+
     pub fn status(&self) -> (usize, u32) {
         let rooms = self.dir.lock().expect("dir").rooms.len();
         (rooms, self.links.iter().map(|l| l.running.load(Ordering::Relaxed)).sum())
@@ -281,6 +292,20 @@ impl Coop {
                     }
                 });
             }
+            Some(sim_up::Msg::Trade(t)) => {
+                let state = state.clone();
+                let link = self.links[idx].clone();
+                tokio::spawn(async move {
+                    let (ok, reason) = match (Uuid::parse_str(&t.account_a), Uuid::parse_str(&t.account_b), t.entry_a, t.entry_b) {
+                        (Ok(a), Ok(b), Some(ea), Some(eb)) => match crate::sync::apply_trade(&state, &t.id, a, b, ea, eb).await {
+                            Ok(()) => (true, String::new()),
+                            Err(e) => (false, e.message.clone()),
+                        },
+                        _ => (false, "Malformed trade".to_string()),
+                    };
+                    let _ = link.tx.send(down(sim_down::Msg::TradeResult(SimTradeResult { id: t.id, ok, reason })));
+                });
+            }
             Some(sim_up::Msg::Bind(b)) => {
                 let Ok(account) = Uuid::parse_str(&b.account) else { return };
                 let mut dir = self.dir.lock().expect("dir");
@@ -299,6 +324,7 @@ impl Coop {
                 for c in l.codes {
                     dir.rooms.insert(c, idx);
                 }
+                dir.listed.insert(idx, l.listed);
             }
             None => {}
         }
@@ -310,6 +336,7 @@ impl Coop {
         let accounts: Vec<Uuid> = {
             let mut dir = self.dir.lock().expect("dir");
             dir.rooms.retain(|_, w| *w != idx);
+            dir.listed.remove(&idx);
             let gone: Vec<Uuid> = dir.accounts.iter().filter(|(_, w)| **w == idx).map(|(a, _)| *a).collect();
             for a in &gone {
                 dir.accounts.remove(a);

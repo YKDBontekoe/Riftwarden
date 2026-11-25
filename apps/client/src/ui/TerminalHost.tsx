@@ -5,9 +5,9 @@ import { FabricateTerminal, MerchantTerminal, SalvageTerminal } from './Market';
 import { useMemo } from 'react';
 import type { ScoreContext } from '@riftwarden/rules/loot/loadoutScore';
 import { treeModifiers } from '@riftwarden/rules/progression/skilltree';
-import { useSave } from './App';
+import { useSave } from './useSave';
 import { ScoreCtx } from './compare';
-import { ShellCurrencies } from './shell';
+import { ShellCurrencies, ShellResources } from './shell';
 import { visibleCurrencies } from '@riftwarden/rules/progression/unlocks';
 import { useHud } from './useHud';
 import { ArchitectTerminal } from './Construction';
@@ -23,7 +23,7 @@ export function TerminalHost({ flow, home }: { flow: Flow; home: HomeBase }) {
   const shown = useMemo(() => visibleCurrencies(save), [save]);
   return (
     <ScoreCtx.Provider value={ctx}>
-      <ShellCurrencies.Provider value={shown}>{terminal(id, flow, home)}</ShellCurrencies.Provider>
+      <ShellCurrencies.Provider value={shown}><ShellResources.Provider value={save.resources}>{terminal(id, flow, home)}</ShellResources.Provider></ShellCurrencies.Provider>
     </ScoreCtx.Provider>
   );
 }

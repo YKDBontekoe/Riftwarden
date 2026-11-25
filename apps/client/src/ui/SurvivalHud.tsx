@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { ROMAN } from '@riftwarden/rules/survival/records';
 import { uiEvents } from '@riftwarden/game/ui/store';
 import { useHud } from './useHud';
 import { bossArtwork } from '@riftwarden/game/visuals/fieldArtwork';
@@ -26,15 +25,17 @@ function BossBar() {
   const b = useHud((s) => s.m6?.boss ?? null);
   if (!b) return null;
   const f = Math.max(0, b.hp / b.max);
+  const phases = b.ticks.length + 1;
+  const it = b.interrupt;
   return (
     <div className={`boss-bar phase${b.phase} ${b.immune ? 'immune' : ''}`} data-testid="boss-bar">
       <div className="boss-head">
+        <span className="boss-phase">Boss · phase {b.phase} of {phases}</span>
         <span className="boss-name">
           <FieldArt name={bossArtwork(b.name)} className="boss-portrait" />
           {b.name}
-          {b.encounter > 1 && <em> {ROMAN[Math.min(9, b.encounter - 1)]}</em>}
         </span>
-        <span className="boss-phase">PHASE {b.phase}</span>
+        <span className="boss-enc">{b.encounter > 1 ? `Encounter ${b.encounter} · stronger` : 'First encounter'}</span>
       </div>
       <div className="boss-track">
         <i style={{ transform: `scaleX(${f})` }} />
@@ -43,8 +44,20 @@ function BossBar() {
         ))}
       </div>
       <div className="boss-foot">
-        <span className={`boss-state ${b.immune ? 'imm' : /EXPOSED|OPEN|STAGGER/.test(b.state) ? 'vuln' : ''}`}>{b.state}</span>
-        {b.attack && <span className="boss-attack">▲ {b.attack}</span>}
+        {b.attack ? (
+          <>
+            <span className="boss-attack">{b.attack}</span>
+            {it && (
+              <>
+                <span className="boss-need">Interrupt: {it.need} before it fires</span>
+                <span className="boss-int" aria-hidden="true"><i style={{ width: `${Math.round(it.progress * 100)}%` }} /></span>
+                <span className="boss-left">{it.left.toFixed(1)} S</span>
+              </>
+            )}
+          </>
+        ) : (
+          <span className={`boss-state ${b.immune ? 'imm' : /EXPOSED|OPEN|STAGGER/.test(b.state) ? 'vuln' : ''}`}>{b.state}</span>
+        )}
       </div>
     </div>
   );
@@ -57,7 +70,7 @@ function EventChips() {
   const boss = useHud((s) => !!s.m6?.boss);
   if (boss && !hvt) return null;
   return (
-    <div className="fixed top-[112px] left-[50%] [transform:translateX(-50%)] flex gap-[8px] pointer-events-none">
+    <div className="surv-chips fixed top-[112px] left-[50%] [transform:translateX(-50%)] flex gap-[8px] pointer-events-none">
       {upcoming && (
         <div className="event-chip incoming" data-testid="incoming">
           <span><FieldIcon name="corrupt" /> INCOMING</span>

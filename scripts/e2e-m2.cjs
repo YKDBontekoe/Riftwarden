@@ -108,7 +108,7 @@ const savedItems = (p) => p.evaluate(() => JSON.parse(JSON.stringify(window.__ri
 (async () => {
   const t0 = Date.now();
   let { b, ctx, p, errs } = await launch();
-  await p.click('text=ENTER HEADQUARTERS');
+  await p.click('button.deploy');
   await waitFor(p, () => window.__rift.state().screen === 'home');
   const starterUid = await p.evaluate(() => window.__rift.profile.save.loadout.weapon);
 
@@ -348,7 +348,7 @@ const savedItems = (p) => p.evaluate(() => JSON.parse(JSON.stringify(window.__ri
   check('D1 reached the wave-5 checkpoint', st === 'checkpoint' && s.screen === 'checkpoint', st);
   check('D2 every collected item (and the checkpoint cache) is banked', runItems.unsecured === 0 && runItems.secured.length >= 9 && runItems.secured.every((u) => saveUids.includes(u)) && runItems.cache.length === 2, `${runItems.secured.length} secured, cache ${runItems.cache.length}`);
   const cpText = await p.textContent('.checkpoint').catch(() => '');
-  check('D3 checkpoint panel lists the cache and secured equipment', /CHECKPOINT CACHE/.test(cpText) && /EQUIPMENT SECURED/.test(cpText));
+  check('D3 checkpoint panel lists the cache and secured equipment', /checkpoint cache/i.test(cpText) && /Secured/.test(cpText) && /items secured this run|Secured ·/.test(cpText), cpText.slice(0, 160));
   await shot(p, 'D_checkpoint');
   // Repeated hook for the same checkpoint must not duplicate.
   const dup = await p.evaluate(() => {
@@ -372,14 +372,15 @@ const savedItems = (p) => p.evaluate(() => JSON.parse(JSON.stringify(window.__ri
   // Filter + sort + compare work in the storage UI.
   await p.click('.inv-filters button:has-text("WEAPON")');
   const weaponsOnly = await p.$$eval('.inv-list .icard em', (els) => els.every((e) => e.textContent.startsWith('WEAPON')));
-  await p.click('.inv-sort button:has-text("LEVEL")');
+  for (let i = 0; i < 5 && !(await p.textContent('.inv-sort')).includes('LEVEL'); i++) await p.click('.inv-sort'); // the sort chip cycles
   const levels = await p.$$eval('.inv-list .icard em', (els) => els.map((e) => +e.textContent.match(/LV (\d+)/)[1]));
   check('D7 storage filter by category and sort by level work', weaponsOnly && levels.every((v, i) => i === 0 || levels[i - 1] >= v), JSON.stringify(levels));
   await p.click('.inv-filters button:has-text("ALL")');
-  const firstStored = await p.$('.inv-list .icard.stored');
-  if (firstStored) await firstStored.click();
+  // First stored item that is not a module (modules have no slot to compare against).
+  const gearUid = await p.evaluate(() => { const d = window.__rift.profile.save; const byUid = new Map(d.items.map((i) => [i.uid, i])); return d.storage.uids.find((u) => byUid.get(u)?.category !== 'module') ?? null; });
+  if (gearUid) await p.click(`.inv-list .icard.stored[data-uid="${gearUid}"]`);
   const cmp = await p.$('.compare .cmp-table');
-  check('D8 selecting a stored item shows a comparison against the equipped slot', !!cmp || !(await p.$('.inv-list .icard.stored .ic-main em:not(:has-text("MODULE"))')));
+  check('D8 selecting a stored item shows a comparison against the equipped slot', !!cmp || !gearUid, String(gearUid));
   await shot(p, 'D_storage');
   await p.keyboard.press('Escape');
   await boot(p, true);
@@ -389,7 +390,7 @@ const savedItems = (p) => p.evaluate(() => JSON.parse(JSON.stringify(window.__ri
 
   // ------------------------------------------------------------------ E: unsecured loss
   console.log('\n== Scenario E: bank at 5, collect in 6+, reactor lost before 10');
-  await p.click('text=ENTER HEADQUARTERS');
+  await p.click('button.deploy');
   await waitFor(p, () => window.__rift.state().screen === 'home');
   const preRun = await p.evaluate(() => ({ loadout: { ...window.__rift.profile.save.loadout }, items: window.__rift.profile.save.items.map((i) => i.uid) }));
   await deploy(p);
@@ -417,6 +418,8 @@ const savedItems = (p) => p.evaluate(() => JSON.parse(JSON.stringify(window.__ri
   check('E2 unsecured items are lost on defeat', lostE.every((u) => !saveE.items.some((i) => i.uid === u)));
   check('E3 previously banked items remain', bankedE.every((u) => saveE.items.some((i) => i.uid === u)));
   check('E4 pre-run equipment remains equipped and owned', Object.entries(preRun.loadout).every(([k, v]) => saveE.loadout[k] === v) && preRun.items.every((u) => saveE.items.some((i) => i.uid === u)));
+  // The per-item list sits under the defeat screen's "Full breakdown".
+  await p.click('.defeat details summary');
   await p.waitForSelector('.defeat .brief-list.lost', { timeout: 10000 });
   await shot(p, 'E_defeat');
   check('E5 defeat screen lists the lost items', (await p.$$eval('.defeat .brief-list.lost .brief', (e) => e.length)) === lostE.length);
@@ -579,7 +582,7 @@ const savedItems = (p) => p.evaluate(() => JSON.parse(JSON.stringify(window.__ri
   const st1 = h.save.items.find((i) => i.uid === h.save.loadout.weapon);
   check('H2 the restarted profile deploys with a valid level-1 starter repeater', st1 && st1.level === 1 && st1.rarity === 'common' && st1.weapon.damage > 0);
   check('H3 storage expanded to the M2 capacity, presets added', h.save.storage.capacity === 50 && h.save.presets.length === 3);
-  await p.click('text=ENTER HEADQUARTERS');
+  await p.click('button.deploy');
   await waitFor(p, () => window.__rift.state().screen === 'home');
   await deploy(p, 2);
   st = await clearThrough(p, 5, { collect: true });

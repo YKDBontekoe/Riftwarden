@@ -7,7 +7,7 @@ import { ELITE_IDS, ELITE_MODS, type EliteModId } from '@riftwarden/rules/surviv
 import { EVENT_IDS, EVENTS, type EventId } from '@riftwarden/rules/survival/events';
 import { eliteChance, maxModsFor, SurvivalPlanner } from '@riftwarden/rules/survival/plan';
 import type { GateId } from '@riftwarden/rules/world/layout';
-import { fmtNum } from './App';
+import { fmtBig as fmtNum } from './format';
 
 const KINDS: EnemyKind[] = ['walker', 'rusher', 'bulwark', 'enforcer', 'artillery', 'engineer', 'jammer', 'crawler', 'sapper', 'skimmer', 'marksman', 'burrower', 'courier', 'colossus', 'overseer'];
 

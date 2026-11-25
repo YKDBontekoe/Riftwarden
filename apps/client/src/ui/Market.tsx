@@ -10,11 +10,11 @@ import { rarity, RARITIES } from '@riftwarden/rules/loot/rarity';
 import { CATEGORY_LABEL, type Category, type ItemInstance } from '@riftwarden/rules/loot/types';
 import { defaultSlot, SLOTS, slotsFor } from '@riftwarden/rules/progression/items';
 import { swapImpact } from '@riftwarden/rules/loot/loadoutScore';
-import { ComparisonPriorityPicker, useComparisonPriority, useScore, useScoreContext } from './compare';
+import { ImpactHeadline, ComparisonPriorityPicker, useComparisonPriority, useScore, useScoreContext } from './compare';
 import { type SaveData } from '@riftwarden/rules/progression/save';
 import { FAMILIES, SOCKET_LABEL } from '@riftwarden/rules/weapons/build';
 import { canInstall, moduleTypeDef } from '@riftwarden/rules/weapons/modules';
-import { useSave } from './App';
+import { useSave } from './useSave';
 import { ConfirmButton, CostLine, costText, ResourceBar, TxMessage, useTx } from './economy';
 import { ComparePanel, type InvEntry, ItemCard, ItemDetail, ItemGlyph, itemTitle, RarityTag, sortEntries } from './items';
 import { CurrencyIcon } from './inventory/thumbs';
@@ -207,22 +207,24 @@ function BuyPane({ save, merchant, tx }: { save: SaveData; merchant: MerchantId;
           </div>
         ) : (
           <>
+            <ImpactHeadline impact={entry.sold ? null : impactOf(item)} />
             <ItemDetail item={item} />
             {item.category === 'module' ? <ModuleCompat save={save} module={item} /> : <ComparePanel item={item} against={slot ? equipped[slot] : null} equipped={eqList} slot={slot} />}
             <div className="buy-box">
               <div>
-                <span className="font-mono text-[9.5px] tracking-[0.16em] text-faint">PRICE</span>
+                <span className="ds-lbl">Price</span>
                 <CostLine cost={{ credits: price }} save={save} />
+                <span className="ds-meta">{Math.max(0, save.resources.credits - price).toLocaleString()} credits left after</span>
               </div>
               <div>
-                <span className="font-mono text-[9.5px] tracking-[0.16em] text-faint">STORAGE</span>
+                <span className="ds-lbl">Storage</span>
                 <b className={bays < 1 ? 'bad' : ''}>{bays < 1 ? 'FULL' : `${bays} BAYS FREE`}</b>
               </div>
               {entry.sold ? (
                 <button disabled>SOLD</button>
               ) : (
                 <ConfirmButton
-                  className="primary small"
+                  className="primary small term-primary"
                   testId="buy"
                   label={`BUY · ◈ ${price.toLocaleString()}`}
                   confirm={`Buy ${item.name} for ${price} credits?`}
@@ -425,7 +427,7 @@ export function SalvageTerminal({ flow, close }: { flow: Flow; close: () => void
               {valid.length > 10 && <span>+{valid.length - 10} more</span>}
             </div>
             <ConfirmButton
-              className="danger wide"
+              className="danger wide term-primary"
               testId="dismantle"
               label={`DISMANTLE ${preview.count || ''} ${preview.count === 1 ? 'ITEM' : 'ITEMS'}`}
               confirm={`Destroy ${preview.count} item${preview.count === 1 ? '' : 's'} permanently for ${costText({ salvage: preview.salvage, components: preview.components }, '+')}?`}
@@ -547,14 +549,14 @@ export function FabricateTerminal({ flow, close }: { flow: Flow; close: () => vo
             </div>
             {isItem && (
               <div>
-                <span className="font-mono text-[9.5px] tracking-[0.16em] text-faint">STORAGE</span>
+                <span className="ds-lbl">Storage</span>
                 <b className={bays < 1 ? 'bad' : ''}>{bays < 1 ? 'FULL' : `${bays} BAYS FREE`}</b>
               </div>
             )}
             {!unlock.ok ? (
               <div className="prot-note">{unlock.reason}</div>
             ) : (
-              <button className="primary small" data-testid="craft" disabled={(isItem && bays < 1) || Object.entries(cost).some(([k, v]) => save.resources[k as keyof SaveData['resources']] < (v ?? 0))} onClick={doCraft}>
+              <button className="primary small term-primary" data-key="ENTER" data-enter data-testid="craft" disabled={(isItem && bays < 1) || Object.entries(cost).some(([k, v]) => save.resources[k as keyof SaveData['resources']] < (v ?? 0))} onClick={doCraft}>
                 {isItem ? `FABRICATE · ${q.label.toUpperCase()}` : 'CONVERT'}
               </button>
             )}

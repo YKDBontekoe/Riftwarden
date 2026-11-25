@@ -107,6 +107,8 @@ export interface ItemInstance {
   signature: string | null;
   /** Hand-made unique id (loot/uniques.ts): fixed name, flavour and mechanic. Absent = procedural item. */
   uniqueId?: string;
+  /** Trade-locked (pinnacle drops): it never leaves the warden who earned it. Ascended items are always bound. */
+  bound?: true;
   /** Item set (loot/sets.ts) of rare+ gear; absent = no set. Decided by the seed at generation. */
   set?: SetId;
   /** Generation metadata: seed and generator version. */

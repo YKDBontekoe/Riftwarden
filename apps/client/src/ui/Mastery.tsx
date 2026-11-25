@@ -1,5 +1,6 @@
 // Weapon-family mastery in the HQ (workshop MASTERY tab) and the arena (mastery gain toast on the weapon card).
 import { useEffect, useState } from 'react';
+import { Bar } from './ds';
 import type { Flow } from '../core/Flow';
 import type { WeaponFamily } from '@riftwarden/rules/data/defs';
 import { STAT_DEFS } from '@riftwarden/rules/combat/stats';
@@ -38,6 +39,27 @@ function perkText(p: PerkDef): string {
   return `${v} ${d.label.toLowerCase()}`;
 }
 
+/** Rank track (final design): every reward of the family in rank order, done / next / locked. */
+function RankTrack({ fam, rank }: { fam: WeaponFamily; rank: number }) {
+  const items: { r: number; text: string }[] = [
+    ...COMPONENT_RANKS[fam].map(([c, r]) => ({ r, text: componentDef(c)?.name ?? c })),
+    ...FINISH_RANKS.map(([f, r]) => ({ r, text: `${f} finish` })),
+    ...Array.from({ length: MAX_RANK / PERK_EVERY }, (_, i) => ({ r: (i + 1) * PERK_EVERY, text: 'Perk choice' })),
+  ].sort((a, b) => a.r - b.r);
+  const next = items.find((x) => x.r > rank)?.r;
+  return (
+    <div className="ms-track" data-testid="mastery-track">
+      {items.filter((x) => x.r <= (next ?? MAX_RANK) + 15).map((x, i) => (
+        <span key={i} className={`ms-step ${x.r <= rank ? 'done' : x.r === next ? 'next' : ''}`}>
+          <b className="ds-d">{x.r}</b>
+          <span>{x.text}</span>
+          <em>{x.r <= rank ? 'Unlocked' : x.r === next ? `${x.r - rank} rank${x.r - rank === 1 ? '' : 's'}` : 'Locked'}</em>
+        </span>
+      ))}
+    </div>
+  );
+}
+
 /** Workshop tab: every family's rank, bonus, component unlocks, perk choices and finishes. */
 export function MasteryBench({ flow, save }: { flow: Flow; save: SaveData }) {
   const [fam, setFam] = useState<WeaponFamily>('plasma');
@@ -52,17 +74,16 @@ export function MasteryBench({ flow, save }: { flow: Flow; save: SaveData }) {
     setMsg(r.ok ? ok : (r as { reason?: string }).reason ?? 'Refused');
   };
   return (
-    <div className="grid grid-cols-[200px_minmax(0,1fr)] gap-[16px]" data-testid="mastery-bench">
+    <div className="grid grid-cols-[260px_minmax(0,1fr)] gap-[24px]" data-testid="mastery-bench">
       <div className="grid content-start gap-[6px]">
-        <div className="col-label">WEAPON FAMILIES</div>
+        <span className="ds-lbl">Weapon families</span>
         {[...MASTERY_FAMILIES].sort((a, b) => familyGateLevel(a) - familyGateLevel(b)).map((f) => {
           const r = rankInfo(save.progress.mastery?.[f]?.xp ?? 0);
           const gate = FAMILY_UNLOCK[f] && !isUnlocked(save, FAMILY_UNLOCK[f]!) ? unlockDef(FAMILY_UNLOCK[f]!) : undefined;
           return (
-            <button key={f} className={`m-0 text-left ${f === fam ? 'on [border-color:var(--amber)]' : ''} ${gate ? 'opacity-55' : ''}`} data-family={f} data-locked={gate ? 1 : undefined} onClick={() => (setFam(f), setMsg(null))}>
-              <b className="block">{FAMILY_NAME[f]}</b>
-              <span className="font-mono text-[10.5px] text-faint">{gate ? `${requirementText(gate).toUpperCase()}` : `RANK ${r.rank}/${MAX_RANK}`}</span>
-              <span className="block h-[3px] mt-[4px] bg-[rgb(255_255_255/0.08)]"><span className="block h-full bg-amber" style={{ width: `${Math.round((r.rank + r.frac) / MAX_RANK * 100)}%` }} /></span>
+            <button key={f} className={`ms-fam ${f === fam ? 'on ds-sel' : ''} ${gate ? 'opacity-55' : ''}`} data-family={f} data-locked={gate ? 1 : undefined} onClick={() => (setFam(f), setMsg(null))}>
+              <span className="ds-row"><b className="ds-d ds-grow">{FAMILY_NAME[f]}</b><span className="ds-meta">{gate ? requirementText(gate) : `Rank ${r.rank}`}</span></span>
+              <Bar value={(r.rank + r.frac) / MAX_RANK} color="#ff8a3d" height={3} />
             </button>
           );
         })}
@@ -70,22 +91,23 @@ export function MasteryBench({ flow, save }: { flow: Flow; save: SaveData }) {
       <div className="grid content-start gap-[12px] min-w-0">
         <div className="flex items-baseline justify-between gap-[12px]">
           <div>
-            <h3 className="m-0 font-display text-[24px] tracking-[-0.03em]">{masteryTitle(fam, info.rank)}</h3>
+            <h3 className="ds-h1" style={{ fontSize: 40 }}>{masteryTitle(fam, info.rank)}</h3>
             <span className="text-[13px] text-muted">Kills with a {FAMILY_NAME[fam].toLowerCase()} weapon earn mastery XP: banked at checkpoints like Warden XP (25% kept if the run is lost). In co-op every other warden adds +10%.</span>
           </div>
           <div className="text-right whitespace-nowrap">
-            <b className="font-display text-[28px]" data-testid="mastery-rank">R{info.rank}</b>
+            <b className="ds-numxl" data-testid="mastery-rank">R{info.rank}</b>
             <div className="font-mono text-[11px] text-amber">{pct(rankDamage(info.rank))} DAMAGE</div>
           </div>
         </div>
         {locked && <div className="prot-note">{FAMILY_NAME[fam]} weapons are not unlocked yet: mastery starts once they drop.</div>}
         <div className="grid gap-[4px]">
-          <div className="h-[6px] bg-[rgb(255_255_255/0.08)]"><div className="h-full bg-amber" style={{ width: `${Math.round(info.frac * 100)}%` }} /></div>
+          <Bar value={info.frac} color="#ff8a3d" height={6} />
+          <RankTrack fam={fam} rank={info.rank} />
           <span className="font-mono text-[11px] text-faint">{info.rank >= MAX_RANK ? 'MASTERED' : `${info.into.toLocaleString()} / ${info.need.toLocaleString()} XP to rank ${info.rank + 1}`}</span>
         </div>
         <div className="grid grid-cols-2 gap-[12px]">
           <div className="grid content-start gap-[5px]">
-            <div className="col-label">COMPONENT UNLOCKS</div>
+            <span className="ds-lbl">Component unlocks</span>
             {COMPONENT_RANKS[fam].map(([c, r]) => (
               <div key={c} className={`flex justify-between text-[13px] ${info.rank >= r ? '' : 'text-muted'}`}>
                 <span>{info.rank >= r ? '✓ ' : ''}{componentDef(c)?.name ?? c}</span>
@@ -95,7 +117,7 @@ export function MasteryBench({ flow, save }: { flow: Flow; save: SaveData }) {
             <span className="text-[12px] text-faint">Locked components never drop, craft or refit on this family's weapons.</span>
           </div>
           <div className="grid content-start gap-[5px]">
-            <div className="col-label">FINISHES</div>
+            <span className="ds-lbl">Finishes</span>
             <div className="flex flex-wrap gap-[5px]">
               <button className={`mini m-0 w-auto ${!m?.finish ? 'on' : ''}`} onClick={() => op('masteryFinish', [fam, null], 'Item finish restored')}>ITEM'S OWN</button>
               {FINISH_RANKS.map(([f, r]) => (
@@ -106,16 +128,16 @@ export function MasteryBench({ flow, save }: { flow: Flow; save: SaveData }) {
             </div>
           </div>
         </div>
-        <div className="col-label">PERKS · ONE OF TWO EVERY {PERK_EVERY} RANKS (FREE TO CHANGE)</div>
+        <span className="ds-lbl">Perks · one of two every {PERK_EVERY} ranks · free to change</span>
         <div className="grid grid-cols-2 gap-[6px]" data-testid="mastery-perks">
           {Array.from({ length: Math.min(MAX_RANK / PERK_EVERY, Math.max(1, tiers + 1)) }, (_, i) => i + 1).map((t) => {
             const opts = perkOptions(fam, t);
             const chosen = m?.perks[t - 1];
             const open = t <= tiers;
             return opts.map((p, o) => (
-              <button key={`${t}-${o}`} className={`m-0 text-left ${chosen === o ? 'on [border-color:var(--amber)] [background:rgb(255_181_71/0.12)] [box-shadow:inset_3px_0_0_var(--amber)]' : ''}`} disabled={!open} data-perk={`${t}-${o}`} onClick={() => op('masteryPerk', [fam, t, o], `${p.name} chosen`)}>
+              <button key={`${t}-${o}`} className={`ms-perk ${chosen === o ? 'on ds-sel' : ''}`} disabled={!open} data-perk={`${t}-${o}`} onClick={() => op('masteryPerk', [fam, t, o], `${p.name} chosen`)}>
                 <span className="font-mono text-[10px] text-faint">RANK {t * PERK_EVERY}{open ? '' : ' · LOCKED'}</span>
-                <b className="block">{chosen === o ? '✓ ' : ''}{p.name}</b>
+                <b className="block ds-h3">{chosen === o ? '✓ ' : ''}{p.name}</b>
                 <span className="text-[12.5px] text-muted">{perkText(p)} with {FAMILY_NAME[fam].toLowerCase()} weapons</span>
               </button>
             ));

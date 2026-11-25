@@ -4,7 +4,7 @@
 
 import type { GenEnum, GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { enumDesc, fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
-import type { GameMode } from "./common_pb";
+import type { Doc, GameMode } from "./common_pb";
 import { file_riftwarden_v1_common } from "./common_pb";
 import type { Message } from "@bufbuild/protobuf";
 
@@ -12,7 +12,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file riftwarden/v1/lobby.proto.
  */
 export const file_riftwarden_v1_lobby: GenFile = /*@__PURE__*/
-  fileDesc("ChlyaWZ0d2FyZGVuL3YxL2xvYmJ5LnByb3RvEg1yaWZ0d2FyZGVuLnYxIoYBCgtMb2JieVBsYXllchIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJEg0KBXJlYWR5GAMgASgIEhEKCWNvbm5lY3RlZBgEIAEoCBIMCgRob3N0GAUgASgIEg4KBndlYXBvbhgGIAEoCRIOCgZyYXJpdHkYByABKAkSDQoFbGV2ZWwYCCABKA0i9wEKCkxvYmJ5U3RhdGUSDAoEY29kZRgBIAEoCRIPCgdob3N0X2lkGAIgASgJEgwKBHRpZXIYAyABKA0SJQoEbW9kZRgEIAEoDjIXLnJpZnR3YXJkZW4udjEuR2FtZU1vZGUSDAoEbm9kZRgFIAEoCRIQCghtYXhfdGllchgGIAEoDRIQCghjYXBhY2l0eRgHIAEoDRIoCgVwaGFzZRgIIAEoDjIZLnJpZnR3YXJkZW4udjEuTG9iYnlQaGFzZRIrCgdwbGF5ZXJzGAkgAygLMhoucmlmdHdhcmRlbi52MS5Mb2JieVBsYXllchIMCgR3YXZlGAogASgNIhsKC0xvYmJ5Q3JlYXRlEgwKBHRpZXIYASABKA0iGQoJTG9iYnlKb2luEgwKBGNvZGUYASABKAkiDAoKTG9iYnlMZWF2ZSIbCgpMb2JieVJlYWR5Eg0KBXJlYWR5GAEgASgIIhkKCUxvYmJ5VGllchIMCgR0aWVyGAEgASgNIjIKCUxvYmJ5TW9kZRIlCgRtb2RlGAEgASgOMhcucmlmdHdhcmRlbi52MS5HYW1lTW9kZSIZCglMb2JieU5vZGUSDAoEbm9kZRgBIAEoCSIMCgpMb2JieVN0YXJ0KnQKCkxvYmJ5UGhhc2USGwoXTE9CQllfUEhBU0VfVU5TUEVDSUZJRUQQABIVChFMT0JCWV9QSEFTRV9MT0JCWRABEhkKFUxPQkJZX1BIQVNFX0RFUExPWUlORxACEhcKE0xPQkJZX1BIQVNFX1JVTk5JTkcQA2IGcHJvdG8z", [file_riftwarden_v1_common]);
+  fileDesc("ChlyaWZ0d2FyZGVuL3YxL2xvYmJ5LnByb3RvEg1yaWZ0d2FyZGVuLnYxIoYBCgtMb2JieVBsYXllchIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJEg0KBXJlYWR5GAMgASgIEhEKCWNvbm5lY3RlZBgEIAEoCBIMCgRob3N0GAUgASgIEg4KBndlYXBvbhgGIAEoCRIOCgZyYXJpdHkYByABKAkSDQoFbGV2ZWwYCCABKA0ihwIKCkxvYmJ5U3RhdGUSDAoEY29kZRgBIAEoCRIPCgdob3N0X2lkGAIgASgJEgwKBHRpZXIYAyABKA0SJQoEbW9kZRgEIAEoDjIXLnJpZnR3YXJkZW4udjEuR2FtZU1vZGUSDAoEbm9kZRgFIAEoCRIQCghtYXhfdGllchgGIAEoDRIQCghjYXBhY2l0eRgHIAEoDRIoCgVwaGFzZRgIIAEoDjIZLnJpZnR3YXJkZW4udjEuTG9iYnlQaGFzZRIrCgdwbGF5ZXJzGAkgAygLMhoucmlmdHdhcmRlbi52MS5Mb2JieVBsYXllchIMCgR3YXZlGAogASgNEg4KBmxpc3RlZBgLIAEoCCIbCgtMb2JieUNyZWF0ZRIMCgR0aWVyGAEgASgNIhkKCUxvYmJ5Sm9pbhIMCgRjb2RlGAEgASgJIgwKCkxvYmJ5TGVhdmUiGwoKTG9iYnlSZWFkeRINCgVyZWFkeRgBIAEoCCIZCglMb2JieVRpZXISDAoEdGllchgBIAEoDSIyCglMb2JieU1vZGUSJQoEbW9kZRgBIAEoDjIXLnJpZnR3YXJkZW4udjEuR2FtZU1vZGUiGQoJTG9iYnlOb2RlEgwKBG5vZGUYASABKAkiDAoKTG9iYnlTdGFydCIdCgtMb2JieUxpc3RlZBIOCgZsaXN0ZWQYASABKAgiRAoIVHJhZGVDbWQSCgoCb3AYASABKAkSDAoEd2l0aBgCIAEoCRINCgVpdGVtcxgDIAMoCRIPCgdjcmVkaXRzGAQgASgEInwKCVRyYWRlU2lkZRIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJEiEKBWl0ZW1zGAMgAygLMhIucmlmdHdhcmRlbi52MS5Eb2MSDwoHY3JlZGl0cxgEIAEoBBIOCgZsb2NrZWQYBSABKAgSEQoJY29uZmlybWVkGAYgASgIIpYBCgpUcmFkZVN0YXRlEgoKAmlkGAEgASgJEiMKAWEYAiABKAsyGC5yaWZ0d2FyZGVuLnYxLlRyYWRlU2lkZRIjCgFiGAMgASgLMhgucmlmdHdhcmRlbi52MS5UcmFkZVNpZGUSDgoGc3RhdHVzGAQgASgJEg4KBnJlYXNvbhgFIAEoCRISCgpleHBpcmVzX2F0GAYgASgBIjcKC1RyYWRlVXBkYXRlEigKBXRyYWRlGAEgASgLMhkucmlmdHdhcmRlbi52MS5UcmFkZVN0YXRlKnQKCkxvYmJ5UGhhc2USGwoXTE9CQllfUEhBU0VfVU5TUEVDSUZJRUQQABIVChFMT0JCWV9QSEFTRV9MT0JCWRABEhkKFUxPQkJZX1BIQVNFX0RFUExPWUlORxACEhcKE0xPQkJZX1BIQVNFX1JVTk5JTkcQA2IGcHJvdG8z", [file_riftwarden_v1_common]);
 
 /**
  * @generated from message riftwarden.v1.LobbyPlayer
@@ -125,6 +125,13 @@ export type LobbyState = Message<"riftwarden.v1.LobbyState"> & {
    * @generated from field: uint32 wave = 10;
    */
   wave: number;
+
+  /**
+   * Shown in the open-squad browser (host choice).
+   *
+   * @generated from field: bool listed = 11;
+   */
+  listed: boolean;
 };
 
 /**
@@ -265,6 +272,166 @@ export type LobbyStart = Message<"riftwarden.v1.LobbyStart"> & {
  */
 export const LobbyStartSchema: GenMessage<LobbyStart> = /*@__PURE__*/
   messageDesc(file_riftwarden_v1_lobby, 9);
+
+/**
+ * Host lists the squad in the open-squad browser (or takes it off).
+ *
+ * @generated from message riftwarden.v1.LobbyListed
+ */
+export type LobbyListed = Message<"riftwarden.v1.LobbyListed"> & {
+  /**
+   * @generated from field: bool listed = 1;
+   */
+  listed: boolean;
+};
+
+/**
+ * Describes the message riftwarden.v1.LobbyListed.
+ * Use `create(LobbyListedSchema)` to create a new message.
+ */
+export const LobbyListedSchema: GenMessage<LobbyListed> = /*@__PURE__*/
+  messageDesc(file_riftwarden_v1_lobby, 10);
+
+/**
+ * Client -> server. op: open (with = other player id), offer (items + credits), lock, unlock, confirm, cancel.
+ *
+ * @generated from message riftwarden.v1.TradeCmd
+ */
+export type TradeCmd = Message<"riftwarden.v1.TradeCmd"> & {
+  /**
+   * @generated from field: string op = 1;
+   */
+  op: string;
+
+  /**
+   * @generated from field: string with = 2;
+   */
+  with: string;
+
+  /**
+   * @generated from field: repeated string items = 3;
+   */
+  items: string[];
+
+  /**
+   * @generated from field: uint64 credits = 4;
+   */
+  credits: bigint;
+};
+
+/**
+ * Describes the message riftwarden.v1.TradeCmd.
+ * Use `create(TradeCmdSchema)` to create a new message.
+ */
+export const TradeCmdSchema: GenMessage<TradeCmd> = /*@__PURE__*/
+  messageDesc(file_riftwarden_v1_lobby, 11);
+
+/**
+ * @generated from message riftwarden.v1.TradeSide
+ */
+export type TradeSide = Message<"riftwarden.v1.TradeSide"> & {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * @generated from field: string name = 2;
+   */
+  name: string;
+
+  /**
+   * Offered items as JSON (ItemInstance), so the other side can inspect them.
+   *
+   * @generated from field: repeated riftwarden.v1.Doc items = 3;
+   */
+  items: Doc[];
+
+  /**
+   * @generated from field: uint64 credits = 4;
+   */
+  credits: bigint;
+
+  /**
+   * @generated from field: bool locked = 5;
+   */
+  locked: boolean;
+
+  /**
+   * @generated from field: bool confirmed = 6;
+   */
+  confirmed: boolean;
+};
+
+/**
+ * Describes the message riftwarden.v1.TradeSide.
+ * Use `create(TradeSideSchema)` to create a new message.
+ */
+export const TradeSideSchema: GenMessage<TradeSide> = /*@__PURE__*/
+  messageDesc(file_riftwarden_v1_lobby, 12);
+
+/**
+ * @generated from message riftwarden.v1.TradeState
+ */
+export type TradeState = Message<"riftwarden.v1.TradeState"> & {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * @generated from field: riftwarden.v1.TradeSide a = 2;
+   */
+  a?: TradeSide | undefined;
+
+  /**
+   * @generated from field: riftwarden.v1.TradeSide b = 3;
+   */
+  b?: TradeSide | undefined;
+
+  /**
+   * open | committing | done | failed
+   *
+   * @generated from field: string status = 4;
+   */
+  status: string;
+
+  /**
+   * @generated from field: string reason = 5;
+   */
+  reason: string;
+
+  /**
+   * @generated from field: double expires_at = 6;
+   */
+  expiresAt: number;
+};
+
+/**
+ * Describes the message riftwarden.v1.TradeState.
+ * Use `create(TradeStateSchema)` to create a new message.
+ */
+export const TradeStateSchema: GenMessage<TradeState> = /*@__PURE__*/
+  messageDesc(file_riftwarden_v1_lobby, 13);
+
+/**
+ * Server -> client: the trade this player is in (unset = no trade).
+ *
+ * @generated from message riftwarden.v1.TradeUpdate
+ */
+export type TradeUpdate = Message<"riftwarden.v1.TradeUpdate"> & {
+  /**
+   * @generated from field: riftwarden.v1.TradeState trade = 1;
+   */
+  trade?: TradeState | undefined;
+};
+
+/**
+ * Describes the message riftwarden.v1.TradeUpdate.
+ * Use `create(TradeUpdateSchema)` to create a new message.
+ */
+export const TradeUpdateSchema: GenMessage<TradeUpdate> = /*@__PURE__*/
+  messageDesc(file_riftwarden_v1_lobby, 14);
 
 /**
  * @generated from enum riftwarden.v1.LobbyPhase

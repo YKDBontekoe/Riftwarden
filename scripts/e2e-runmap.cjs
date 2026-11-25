@@ -317,9 +317,12 @@ async function forceNext(p, kind, anomaly) {
       check('E2 map records', e.rec.deepestAct >= 1 && e.rec.bestNodes === e.nodes);
       await ev(p, () => window.__rift.flow.enterHq());
       await ev(p, () => window.__rift.home.openTerminal('deploy'));
+      await p.getByTestId('war-globe').waitFor();
+      const planet = await ev(p, () => ({ globe: !!document.querySelector('[data-testid=war-globe]'), live: !!document.querySelector('[data-testid=dw-live]') }));
+      await p.getByTestId('dw-view-sector').click();
       await p.getByTestId('war-map').waitFor();
-      const d = await ev(p, () => ({ map: !!document.querySelector('[data-testid=war-map]'), globe: !!document.querySelector('[data-testid=war-globe]'), codex: !!document.querySelector('[data-testid=dm-codex]'), sectors: document.querySelectorAll('[data-testid^=wm-node-]').length, report: !!document.querySelector('[data-testid=war-report]') }));
-      check('E3 HQ deploy terminal shows the Rift War (globe, region map, report) + codex', d.map && d.globe && d.codex && d.report && d.sectors >= 10, JSON.stringify(d));
+      const d = await ev(p, () => ({ map: !!document.querySelector('[data-testid=war-map]'), codex: !!document.querySelector('[data-testid=dm-codex]'), sectors: document.querySelectorAll('[data-testid^=wm-node-]').length, report: !!document.querySelector('[data-testid=war-report]') }));
+      check('E3 HQ deploy terminal shows the Rift War (planet + live events, sector map on M, report) + codex', d.map && planet.globe && planet.live && d.codex && d.report && d.sectors >= 10, JSON.stringify({ ...d, planet }));
       const capital = p.locator('.wm-node[data-kind=boss]').first();
       await capital.press('Enter');
       const named = p.locator('[data-testid=dm-node] [data-testid=named-drops]');

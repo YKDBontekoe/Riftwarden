@@ -135,6 +135,10 @@ export class Director {
     return this.factionId;
   }
   private factionId: string | null | undefined;
+  /** Firing range: count the targets as another faction (null = neutral). */
+  setFaction(id: string | null): void {
+    this.factionId = id;
+  }
 
   /** Affinity multiplier of `element` against `e` in this sector. */
   affinityOf(e: Enemy, element: Element): number {

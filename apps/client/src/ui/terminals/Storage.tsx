@@ -5,12 +5,11 @@ import type { Flow } from '../../core/Flow';
 import { STORAGE_EXPANSION, storageExpansionCost } from '@riftwarden/rules/loot/economy';
 import { SLOTS } from '@riftwarden/rules/progression/items';
 import { equippedItem, type SaveData, storedItems } from '@riftwarden/rules/progression/save';
-import { useSave } from '../App';
-import { Shell } from '../shell';
-import { ResourceBar, useTx, TxMessage, CostLine } from '../economy';
+import { useSave } from '../useSave';
+import { useTx, TxMessage, CostLine } from '../economy';
 import { dismantleYield } from '@riftwarden/rules/economy/config';
-import { type InvEntry, InventoryView, RarityLegend } from '../items';
-import { useEquipped } from './Loadout';
+import { type InvEntry, InventoryView } from '../items';
+import { LoadoutTerminal, useEquipped } from './Loadout';
 
 export function saveEntries(save: SaveData): InvEntry[] {
   const out: InvEntry[] = [];
@@ -22,7 +21,7 @@ export function saveEntries(save: SaveData): InvEntry[] {
   return out;
 }
 
-export function StorageTerminal({ flow, close }: { flow: Flow; close: () => void }) {
+export function StoragePanel({ flow }: { flow: Flow }) {
   const save = useSave(flow);
   const equipped = useEquipped(save);
   const entries = useMemo(() => saveEntries(save), [save]);
@@ -35,7 +34,7 @@ export function StorageTerminal({ flow, close }: { flow: Flow; close: () => void
   };
   const tx = useTx(flow, 'salvage');
   return (
-    <Shell code="ST-03" title="SECURE STORAGE" sub="Persistent equipment · secured at checkpoints" close={close} wide>
+    <>
       <InventoryView
         entries={entries}
         equipped={equipped}
@@ -56,14 +55,13 @@ export function StorageTerminal({ flow, close }: { flow: Flow; close: () => void
           },
           extra: (e) =>
             e.status === 'stored' || e.status === 'equipped' ? (
-              <button className="mini" onClick={() => void tx.run('lock', 'setItemLock', [e.item.uid, !e.item.locked], () => (e.item.locked ? 'Unlocked' : 'Locked: protected from selling and dismantling'))}>
+              <button className="ds-btn" onClick={() => void tx.run('lock', 'setItemLock', [e.item.uid, !e.item.locked], () => (e.item.locked ? 'Unlocked' : 'Locked: protected from selling and dismantling'))}>
                 {e.item.locked ? 'UNLOCK' : 'LOCK'}
               </button>
             ) : null,
         }}
         header={
-          <div className="storage-bar">
-            <ResourceBar save={save} compact />
+          <div className="storage-bar ds-row">
             <div className={`cap ${over ? 'over' : ''}`}>
               <span>
                 BAYS {used} / {save.storage.capacity} {over && '· OVER CAPACITY: DEPLOYMENT LOCKED'}
@@ -75,11 +73,15 @@ export function StorageTerminal({ flow, close }: { flow: Flow; close: () => void
             <button className="mini expand" disabled={save.resources.salvage < cost} onClick={() => act('expandStorage', [])}>
               +{STORAGE_EXPANSION} BAYS · <CostLine cost={{ salvage: cost }} save={save} />
             </button>
-            <RarityLegend />
             <TxMessage msg={tx.msg} />
           </div>
         }
       />
-    </Shell>
+    </>
   );
+}
+
+/** The storage station opens the drone bay on its Storage tab (canvas: Loadout · Storage · Presets). */
+export function StorageTerminal({ flow, close }: { flow: Flow; close: () => void }) {
+  return <LoadoutTerminal flow={flow} close={close} initial="storage" />;
 }

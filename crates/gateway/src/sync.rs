@@ -154,3 +154,64 @@ async fn apply(state: &State, account: Uuid, conn: u64, req: SyncRequest, truste
     tracing::info!(account = %account, rev, entries = req.entries.len(), applied = result.applied, claimed, "profile synced");
     Ok(SyncResult { rev, doc: Some(to_doc(&new_doc)?), results, claimed })
 }
+
+/// Days an account must exist before it may trade (economy/trade.ts `TRADE.accountDays`; checked here because
+/// the profile's own creation time comes from the device).
+const TRADE_ACCOUNT_DAYS: i64 = 7;
+
+/// Apply both sides of a warden-to-warden trade in one transaction: either both profiles change or neither.
+/// Each side is one trusted `{trade}` entry on the log device `trade:<id>`, so a repeated request applies nothing.
+pub async fn apply_trade(state: &State, id: &str, a: Uuid, b: Uuid, entry_a: Doc, entry_b: Doc) -> Result<(), ApiError> {
+    if a == b || id.is_empty() || id.len() > 48 {
+        return Err(ApiError::bad("bad_trade", "Malformed trade"));
+    }
+    if !state.config.test_mode {
+        for acc in [a, b] {
+            let created = riftwarden_db::accounts::account_by_id(&state.db, acc).await?.map(|x| x.created_at);
+            if created.is_none_or(|c| chrono::Utc::now() - c < chrono::Duration::days(TRADE_ACCOUNT_DAYS)) {
+                return Err(ApiError::bad("trade_gate", "Trading opens 7 days after an account is created"));
+            }
+        }
+    }
+    let device = format!("trade:{id}");
+    let mut tx = state.db.begin().await.map_err(ApiError::internal)?;
+    // Lock in a fixed order so two trades between the same wardens cannot deadlock.
+    let mut sides = [(a, entry_a), (b, entry_b)];
+    sides.sort_by_key(|(acc, _)| *acc);
+    let mut stored = Vec::new();
+    for (acc, entry) in sides {
+        let Some((doc, _)) = riftwarden_db::profiles::lock(&mut tx, acc).await? else {
+            return Err(ApiError::bad("trade_profile", "A warden has no profile"));
+        };
+        if riftwarden_db::profiles::device_seq(&mut tx, acc, &device).await? >= 1 {
+            return Err(ApiError::bad("trade_done", "This trade was already applied"));
+        }
+        let replay = ReplayRequest {
+            doc: Some(to_doc(&doc)?),
+            genesis: None,
+            entries: vec![riftwarden_proto::v1::SyncEntry { seq: 1, at: chrono::Utc::now().timestamp_millis() as f64, body: Some(entry) }],
+            now: chrono::Utc::now().timestamp_millis() as f64,
+            trusted: true,
+        };
+        let result = match state.workers.call(worker_request::Call::Replay(replay)).await.map_err(ApiError::internal)? {
+            worker_response::Result::Replay(r) => r,
+            _ => return Err(ApiError::internal("unexpected worker answer")),
+        };
+        if let Some(bad) = result.results.iter().find(|r| !r.ok) {
+            // Dropping the transaction rolls back the other side too.
+            return Err(ApiError::bad("trade_refused", bad.reason.clone()));
+        }
+        let new_doc = doc_json(&result.doc)?.ok_or_else(|| ApiError::internal("worker returned no document"))?;
+        let rev = riftwarden_db::profiles::store(&mut tx, acc, &new_doc, result.rules_version as i32).await?;
+        riftwarden_db::profiles::set_device_seq(&mut tx, acc, &device, 1).await?;
+        stored.push((acc, rev, new_doc));
+    }
+    tx.commit().await.map_err(ApiError::internal)?;
+    for (acc, rev, doc) in stored {
+        // Devices rebase on the new copy; the sim worker (which only proposed the trade) gets it too.
+        state.hub.notify(acc, 0, rev);
+        state.coop.profile_changed(acc, &doc);
+    }
+    tracing::info!(trade = %id, a = %a, b = %b, "trade applied");
+    Ok(())
+}

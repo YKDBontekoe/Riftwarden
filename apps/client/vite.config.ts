@@ -13,7 +13,7 @@ export default defineConfig({
   plugins: [react(), tailwindcss(), serviceWorker()],
   optimizeDeps: { exclude: ['@babylonjs/havok'] },
   // Co-op: the dev server proxies /ws and /war to the co-op server (pnpm server) so the client always uses same-origin URLs.
-  server: { proxy: { '/ws': { target: `ws://localhost:${port}`, ws: true }, '/war': { target: gateway }, '/boards': { target: gateway }, '/auth': { target: gateway }, '/session': { target: gateway.replace(/^http/, 'ws'), ws: true } } },
+  server: { proxy: { '/ws': { target: `ws://localhost:${port}`, ws: true }, '/war': { target: gateway }, '/boards': { target: gateway }, '/rooms': { target: gateway }, '/auth': { target: gateway }, '/session': { target: gateway.replace(/^http/, 'ws'), ws: true } } },
   build: {
     // The server, the Docker image and CI expect the build at the repository root.
     outDir: fileURLToPath(new URL('../../dist', import.meta.url)),

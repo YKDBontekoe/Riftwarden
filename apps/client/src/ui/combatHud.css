@@ -1,53 +1,217 @@
-/* Compact combat instruments; cooldowns and warnings retain their space when needed. */
+/* Combat HUD (final design): no boxes, condensed type with a soft shadow over the world, segment meters.
+   Corners: objective top left, compass top centre, phase + cores top right, vitals bottom left, weapon bottom right. */
+.combat-hud { text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85), 0 0 12px rgba(0, 0, 0, 0.4); }
 .combat-hud kbd { white-space: nowrap; flex-shrink: 0; }
-.combat-hud .panel-frame { background: rgba(12, 22, 24, .72); border-color: rgba(207, 228, 226, .19); }
-.combat-hud .bottom-left { width: 236px; padding: 8px 10px; bottom: 14px; left: 14px; }
-.combat-hud .bottom-right { width: 246px; bottom: 14px; right: 14px; }
-.combat-hud .weapon-card { padding: 8px 10px; }
-.combat-hud .weapon { font-size: 13px; }
-.combat-hud .hp-num { min-width: 60px; }
-.combat-hud .hp-num b { font-size: 29px; }
-.combat-hud .hp-num span { font-size: 9px; }
-.combat-hud .vitals { gap: 9px; }
-.combat-hud .label { font-size: 9px; letter-spacing: .04em; }
-.combat-hud .dash { padding-top: 5px; margin-top: 5px; }
-.combat-hud .chev { width: 26px; }
-.combat-hud .mv-chip { padding: 3px 5px; font-size: 9px; gap: 3px; white-space: nowrap; }
-.combat-hud .movement-row { flex-wrap: wrap; }
-.combat-hud .bottom-center { width: 260px; bottom: 14px; }
-.combat-hud .tactical { padding: 4px 7px; }
-.combat-hud .tac-label { font-size: 9px; }
-.combat-hud .top-center { width: min(284px, 35vw); padding: 6px 10px; }
-.combat-hud .wave-tag b { font-size: 20px; }
-.combat-hud .hint { bottom: 128px; padding: 5px 9px; font-size: 11px; max-width: 58vw; white-space: normal; text-align: center; }
-.combat-hud .slots { margin-top: 4px; gap: 4px; }
-.combat-hud .slots span { padding: 2px 5px 2px 2px; }
+.combat-hud .panel-frame { background: rgba(10, 14, 18, 0.62); border-color: rgba(255, 255, 255, 0.14); backdrop-filter: blur(14px); }
+
+/* meters: skewed segments, design colours */
+.combat-hud .segbar { margin: 0; height: 6px; transform: skewX(-24deg); background: rgba(255, 255, 255, 0.18); }
+.combat-hud .segbar .grid { background: repeating-linear-gradient(90deg, transparent 0, transparent calc(100% / var(--segs) - 3px), rgba(0, 0, 0, 0.75) calc(100% / var(--segs) - 3px), rgba(0, 0, 0, 0.75) calc(100% / var(--segs))); }
+.combat-hud .segbar .trail { background: rgba(255, 255, 255, 0.45); }
+.combat-hud .segbar.white .fill { background: #f4f1e8; box-shadow: 0 0 8px rgba(244, 241, 232, 0.6); }
+.combat-hud .segbar.cyan .fill { background: #b9ece0; box-shadow: 0 0 8px rgba(185, 236, 224, 0.6); }
+.combat-hud .segbar.cyan { box-shadow: none; }
+.combat-hud .segbar.shield .fill { background: #9fd7ff; box-shadow: 0 0 8px rgba(159, 215, 255, 0.6); }
+.combat-hud .segbar.amber .fill { background: #ffd84d; }
+.combat-hud .segbar.red .fill { background: #ff5a4a; box-shadow: 0 0 10px rgba(255, 90, 74, 0.7); }
+.combat-hud .segbar.heat .fill { background: linear-gradient(90deg, #f4f1e8, #ffc49b 60%, #ff8a3d); }
+.combat-hud .segbar.violet .fill { background: #d4b2ff; }
+
+/* top left: objective */
+.hud-objective { position: fixed; left: 28px; top: 22px; width: 310px; display: flex; flex-direction: column; gap: 6px; }
+.hud-objective .obj-mark { width: 14px; height: 14px; border: 2px solid var(--ds-ember); transform: rotate(45deg); box-sizing: border-box; flex-shrink: 0; }
+.hud-objective .obj-clock { font: 700 16px var(--ds-m); }
+.hud-objective .obj-line { display: flex; align-items: center; gap: 10px; padding-left: 24px; }
+.hud-objective .obj-line .ds-meta { color: #e0e4dc; white-space: nowrap; }
+.hud-objective .obj-line .segbar { flex: 1; }
+.hud-objective .obj-bar.segbar { height: 4px; transform: none; }
+.hud-objective .obj-line b { font: 700 15px var(--ds-d); min-width: 36px; text-align: right; }
+.hud-objective .obj-warn { color: #ffd3cc; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
+.hud-objective .reactor.hit .segbar { animation: shake 0.25s linear; }
+.hud-objective .obj-risk, .hud-objective .obj-chips { margin-left: 24px; }
+.hud-objective .obj-chips .ds-chip { padding: 2px 8px; }
+
+/* top centre: compass */
+.hud-compass { position: fixed; left: 50%; top: 14px; width: 600px; height: 54px; margin-left: -300px; pointer-events: none; }
+.hud-compass .hc-ticks { position: absolute; left: 0; right: 0; top: 22px; height: 12px; background: repeating-linear-gradient(90deg, rgba(244, 241, 232, 0.55) 0 1px, transparent 1px 15px); -webkit-mask-image: linear-gradient(90deg, transparent, #000 20%, #000 80%, transparent); mask-image: linear-gradient(90deg, transparent, #000 20%, #000 80%, transparent); }
+.hud-compass .hc-strip { position: absolute; inset: 0; -webkit-mask-image: linear-gradient(90deg, transparent, #000 15%, #000 85%, transparent); mask-image: linear-gradient(90deg, transparent, #000 15%, #000 85%, transparent); }
+.hud-compass .hc-strip span { position: absolute; left: 0; top: 0; will-change: transform; }
+.hud-compass .hc-card { font: 700 18px var(--ds-d); }
+.hud-compass .hc-num { top: 2px !important; font: 500 11px var(--ds-m); color: var(--ds-dim); }
+.hud-compass .hc-caret { position: absolute; left: 296px; top: 36px; border-left: 4px solid transparent; border-right: 4px solid transparent; border-bottom: 6px solid #f4f1e8; }
+.hud-compass .hc-mark { position: absolute; left: 0; top: 26px; display: flex; flex-direction: column; align-items: center; width: 0; will-change: transform; transition: opacity 0.2s; }
+.hud-compass .hc-mark b { width: 10px; height: 10px; transform: rotate(45deg); flex-shrink: 0; }
+.hud-compass .hc-mark i { margin-top: 2px; font: 700 12px var(--ds-m); font-style: normal; white-space: nowrap; letter-spacing: 0.06em; }
+.hud-compass .hc-mark.reactor b { background: var(--ds-lib); box-shadow: 0 0 10px var(--ds-lib); }
+.hud-compass .hc-mark.reactor i { color: var(--ds-lib); }
+.hud-compass .hc-mark.threat b { background: var(--ds-danger); box-shadow: 0 0 10px var(--ds-danger); }
+.hud-compass .hc-mark.threat i { color: #ffd3cc; }
+
+/* top right: phase and cores */
+.hud-phase.cores { position: fixed; right: 28px; top: 24px; left: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; padding: 0; background: none; border: 0; clip-path: none; backdrop-filter: none; }
+.hud-phase .value { font-size: 24px; animation: bump 0.3s ease-out; }
+.hud-phase .hp-gain { font: 700 15px var(--ds-d); color: #ffcf73; animation: gain 1s ease-out forwards; }
+.hud-phase .hud-phase-sub { display: flex; align-items: center; gap: 6px; }
+.hud-phase .hud-phase-sub b { color: var(--ds-ink); }
+
+/* side rails (team, run badges, tutorial, loot feed) under the corners */
+.combat-hud .hud-rail { top: auto; gap: 6px; }
+.combat-hud .hud-port { left: 28px; top: 196px; }
+.combat-hud .hud-starboard { right: 28px; top: 104px; }
+.combat-hud .radar { display: none; }
+.combat-hud.show-radar .radar { display: block; }
+.combat-hud.show-radar .hud-port { top: 214px; }
+.combat-hud.show-radar .radar { position: fixed; left: 28px; bottom: 210px; }
+
+/* bottom left: abilities + vitals */
+.combat-hud .bottom-left.hud-vitals { position: fixed; left: 28px; bottom: 26px; width: auto; padding: 0; display: flex; flex-direction: column; gap: 8px; background: none; border: 0; }
+.combat-hud .ability-bar { display: flex; flex-direction: row; gap: 8px; margin: 0; }
+.combat-hud :is(.ab-slot, .ab-dash) { position: relative; width: 56px; height: 56px; padding: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; overflow: hidden; border: 0; clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px); background: rgba(5, 7, 9, 0.62); box-shadow: inset 0 0 0 1px #8d958f; text-shadow: none; }
+.combat-hud :is(.ab-slot, .ab-dash).ready, .combat-hud :is(.ab-slot, .ab-dash).active { box-shadow: inset 0 0 0 1px #f4f1e8; }
+.combat-hud :is(.ab-slot, .ab-dash).ult { box-shadow: inset 0 0 0 1px #8d958f; }
+.combat-hud :is(.ab-slot, .ab-dash).ult.ready { box-shadow: inset 0 0 0 1px #ffcf73, inset 0 0 20px rgba(255, 207, 115, 0.45); }
+.combat-hud :is(.ab-slot, .ab-dash) .ab-fill { position: absolute; left: 0; right: 0; bottom: 0; top: auto; width: 100%; height: 0; transform: none; background: rgba(255, 255, 255, 0.12); opacity: 1; }
+.combat-hud :is(.ab-slot, .ab-dash).ready .ab-fill { background: rgba(244, 241, 232, 0.1); }
+.combat-hud :is(.ab-slot, .ab-dash).ult .ab-fill { background: rgba(255, 207, 115, 0.2); }
+.combat-hud :is(.ab-slot, .ab-dash) .ab-name { position: relative; flex: none; max-width: 52px; font: 700 11px var(--ds-d); letter-spacing: 0.06em; color: #cfd4cc; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.combat-hud :is(.ab-slot, .ab-dash) .ab-state { position: relative; font: 700 16px var(--ds-d); letter-spacing: 0.06em; color: #8d958f; }
+.combat-hud :is(.ab-slot, .ab-dash).ready .ab-state { font-size: 13px; color: #f4f1e8; }
+.combat-hud :is(.ab-slot, .ab-dash).ult.ready .ab-state { color: #ffcf73; }
+.combat-hud :is(.ab-slot, .ab-dash) kbd { position: relative; margin: 1px 0 0; padding: 0; min-width: 0; border: 0; background: none; font: 700 10px var(--ds-m); color: #b9c0b8; }
+.combat-hud .hv-main { align-items: flex-end; gap: 12px; margin-top: 6px; }
+.combat-hud .hv-num { min-width: 96px; }
+.combat-hud .hv-bars { gap: 4px; width: 200px; padding-bottom: 2px; }
+.combat-hud .hv-shield.segbar { height: 4px; }
+.combat-hud .hv-hull.segbar { height: 12px; }
+.combat-hud .hv-label { color: #d2d7cf; }
+.combat-hud .bottom-left.low .hv-num { color: var(--ds-danger); text-shadow: 0 0 14px rgba(255, 60, 40, 0.8); animation: blink 0.6s infinite; }
+.combat-hud .mv-chip { padding: 3px 6px; font: 700 11px var(--ds-d); letter-spacing: 0.1em; gap: 4px; white-space: nowrap; }
+.combat-hud .movement-row, .combat-hud .cond-row { margin-top: 0 !important; flex-wrap: wrap; }
+
+/* bottom right: weapon */
+.combat-hud .bottom-right.hud-weapon { position: fixed; right: 28px; bottom: 26px; width: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.combat-hud .hud-weapon .wc-holster { gap: 8px; opacity: 0.8; margin: 0; padding: 0; border: 0; background: none; }
+.combat-hud .hud-weapon .wc-holster .wh-name { color: var(--ds-ink); }
+.combat-hud .hud-weapon .wc-holster.warn .wh-heat { color: var(--ds-danger); }
+.combat-hud .hud-weapon .weapon-card { align-items: flex-end; gap: 12px; padding: 0; background: none; border: 0; clip-path: none; backdrop-filter: none; }
+.combat-hud .hud-weapon .weapon { font-size: 24px; }
+.combat-hud .hud-weapon .hw-heat { min-width: 70px; text-align: right; }
+.combat-hud .hud-weapon .hw-pct { margin-left: -10px; font: 700 22px var(--ds-d); color: var(--ds-muted); }
+.combat-hud .hud-weapon .hw-bar.segbar { width: 230px; }
+.combat-hud .hud-weapon .heat-label { color: #d2d7cf; }
+.combat-hud .hud-weapon .el-tag { margin-left: 0; margin-right: 6px; }
+.combat-hud .hud-weapon .slots { margin-top: 2px; gap: 6px; }
+.combat-hud .hud-weapon .slots span { padding: 2px 6px 2px 2px; font: 700 12px var(--ds-d); letter-spacing: 0.12em; text-transform: uppercase; }
+.combat-hud .bottom-right.stowed .weapon-card { opacity: 0.45; }
 .combat-hud[data-phase='combat'][data-build='false'] .mv-chip.ready,
 .combat-hud[data-phase='combat'][data-build='false'] .slots { display: none; }
-.combat-hud .build-panel, .combat-hud .inspect-panel { padding: 8px 10px; }
-.combat-hud .hud-rail { top: 14px; gap: 5px; }
-.combat-hud .hud-port { left: 14px; }
-.combat-hud .hud-starboard { right: 14px; }
-.combat-hud .run-panel { width: 190px; padding: 7px 10px; font-size: 11px; }
-.combat-hud .rp-row { margin-top: 3px; }
-.combat-hud .cores { padding: 6px 10px; }
+
+/* bottom centre: tactical meter, build + inspect panels */
+.combat-hud .bottom-center { width: 300px; bottom: 26px; }
+.combat-hud .tactical { padding: 0; }
+.combat-hud .tac-label { font: 700 13px var(--ds-d); letter-spacing: 0.16em; }
+.combat-hud .build-panel, .combat-hud .inspect-panel { padding: 10px 14px; clip-path: var(--ds-cut-s); }
+.combat-hud .bp-title { font: 700 18px var(--ds-d); letter-spacing: 0.1em; }
+.combat-hud .hint { bottom: 150px; padding: 6px 12px; font-size: 13px; max-width: 58vw; white-space: normal; text-align: center; clip-path: var(--ds-cut-s); }
+
 @media (max-width: 1100px), (max-height: 640px) {
-  .combat-hud .bottom-left { width: 205px; }
-  .combat-hud .bottom-right { width: 220px; }
-  .combat-hud .bottom-center { width: 224px; }
-  .combat-hud .weapon { font-size: 12px; }
-  .combat-hud .hud-rail .radar canvas { width: 96px !important; height: 96px !important; }
-  .combat-hud .hud-rail .run-panel { width: 172px; font-size: 10px; }
-  .combat-hud .mv-chip { font-size: 8px; }
-  .combat-hud .mv-chip kbd { font-size: 8px; padding: 1px 3px; }
-  .combat-hud .hint { bottom: 111px; max-width: 55vw; }
+  .hud-compass { transform: scale(0.8); transform-origin: top center; }
+  .hud-objective { width: 270px; left: 16px; top: 14px; }
+  .combat-hud .hud-port { left: 16px; top: 170px; }
+  .combat-hud .bottom-left.hud-vitals { left: 16px; bottom: 14px; }
+  .combat-hud .bottom-right.hud-weapon { right: 16px; bottom: 14px; }
+  .combat-hud .hud-phase.cores { right: 16px; top: 14px; }
+  .combat-hud .hud-starboard { right: 16px; }
+  .combat-hud :is(.ab-slot, .ab-dash) { width: 48px; height: 48px; }
+  .combat-hud .hv-num, .combat-hud .hw-heat { font-size: 44px; }
+  .combat-hud .bottom-center { width: 240px; bottom: 14px; }
 }
 @media (max-width: 760px) {
-  .combat-hud .bottom-left { width: 27vw; padding: 6px; left: 8px; }
-  .combat-hud .bottom-right { width: 29vw; right: 8px; }
-  .combat-hud .bottom-center { width: 30vw; }
-  .combat-hud .top-center { width: 36vw; }
-  .combat-hud .hud-rail .run-panel { width: 24vw; }
-  .combat-hud .hp-num { min-width: 45px; }
-  .combat-hud .hp-num b { font-size: 24px; }
+  .hud-compass { transform: scale(0.6); }
+  .hud-objective { width: 34vw; }
+  .combat-hud .hv-bars { width: 22vw; }
+  .combat-hud .hud-weapon .hw-bar.segbar { width: 26vw; }
+  .combat-hud .bottom-center { width: 28vw; }
 }
+
+/* build mode bar (HudPrep artboard): the template as four cards, validity, keys */
+.combat-hud .bottom-center:has(.build-bar) { width: min(760px, 70vw); }
+.combat-hud .build-bar { display: flex; flex-direction: column; gap: 8px; padding: 0; background: none; border: 0; clip-path: none; }
+.combat-hud .bb-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) 110px; gap: 8px; }
+.combat-hud .bb-card { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; text-align: left; background: rgba(10, 14, 18, 0.7); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18); clip-path: var(--ds-cut-s); }
+.combat-hud .bb-card .ds-h3 { font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.combat-hud .bb-card kbd { margin: 0; }
+.combat-hud .bb-card.cost-card { align-items: flex-end; }
+.combat-hud .bb-card .cost.bad { color: var(--ds-down); }
+.combat-hud .bb-status { font: 700 14px var(--ds-d); letter-spacing: 0.14em; text-transform: uppercase; }
+.combat-hud .bb-keys { display: flex; flex-wrap: wrap; gap: 18px; justify-content: center; }
+.combat-hud .bb-keys .ds-hint { font-size: 13px; }
+
+/* critical hull (HudBoss artboard) */
+.hud-critical { position: fixed; left: 50%; top: 58%; transform: translateX(-50%); display: flex; align-items: center; gap: 14px; pointer-events: none; }
+.hud-critical b { font: 800 26px var(--ds-d); letter-spacing: 0.14em; color: #ffd3cc; text-shadow: 0 0 18px rgba(255, 90, 74, 0.8), 0 1px 2px #000; animation: critPulse 0.9s ease-in-out infinite; }
+.hud-critical .hc-rule { width: 70px; height: 4px; background: linear-gradient(90deg, rgba(255, 90, 74, 0), #ff5a4a); }
+.hud-critical .hc-rule.r { background: linear-gradient(270deg, rgba(255, 90, 74, 0), #ff5a4a); }
+@keyframes critPulse { 50% { opacity: 0.6; } }
+@media (prefers-reduced-motion: reduce) { .hud-critical b { animation: none; } }
+.hud-objective .obj-note { padding-left: 24px; color: #e0e4dc; }
+
+/* co-op squad panel (HudTeam artboard) */
+.combat-hud .team-panel { padding: 0; background: none; border: 0; }
+.combat-hud .team-panel .tm { display: flex; align-items: center; gap: 10px; padding: 6px 0; border: 0; border-bottom: 1px solid rgba(255, 255, 255, 0.1); background: none; }
+.combat-hud .team-panel .tm-name { font: 700 15px var(--ds-d); letter-spacing: 0.1em; text-transform: uppercase; }
+.combat-hud .team-panel .tm.down .tm-name { color: var(--ds-down); }
+.combat-hud .team-panel .tm-link { font: 500 11px var(--ds-m); color: var(--ds-dim); }
+.team-tag { font-family: var(--ds-d); letter-spacing: 0.12em; }
+
+/* Boss fights (canvas "HUD · boss and critical hull"): the boss bar takes the compass's place at the top centre,
+   and the hull warning sits on the hull readout instead of over the crosshair. */
+.combat-hud:has(.boss-bar) .hud-compass { display: none; }
+.combat-hud .boss-bar { top: 16px; }
+.combat-hud:has(.boss-bar) .hud-objective { top: 118px; }
+.hud-critical { left: 28px; top: auto; bottom: 178px; transform: none; gap: 10px; }
+.hud-critical b { font-size: 20px; }
+.hud-critical .hc-rule:first-child { display: none; }
+.hud-critical .hc-rule { display: none; }
+.hud-critical .ds-col { align-items: flex-start !important; }
+.hud-compass .hc-mark.up { flex-direction: column-reverse; top: -2px; }
+.hud-compass .hc-mark.up i { margin: 0 0 2px; }
+
+/* Preparation countdown under the compass (canvas "HUD · prep and build mode"). */
+.hud-prep { position: fixed; left: 50%; top: 74px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 4px; pointer-events: none; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9), 0 0 14px rgba(0, 0, 0, 0.5); }
+.hud-prep .hp-time { font: 800 64px/0.9 var(--ds-d); letter-spacing: 0.02em; color: var(--ds-ink); font-variant-numeric: tabular-nums; }
+.hud-prep .ds-hint { font-size: 13px; }
+.combat-hud.in-range .hud-prep { display: none; }
+html[data-touch] .hud-prep { top: 56px; zoom: 0.7; }
+.combat-hud[data-phase=prep] .surv-chips { top: 200px; }
+.combat-hud .boss-bar { width: min(520px, 56vw); }
+
+/* Boss bar (canvas "HUD · boss"): phase · name · encounter, one red bar with phase ticks, the charging attack. */
+.combat-hud .boss-bar { width: min(700px, 60vw); display: flex; flex-direction: column; gap: 6px; }
+.combat-hud .boss-head { display: grid; grid-template-columns: 1fr auto 1fr; align-items: baseline; gap: 12px; }
+.combat-hud .boss-head .boss-phase { font: 700 12px var(--ds-d); letter-spacing: 0.18em; text-transform: uppercase; color: #ff8a7a; }
+.combat-hud .boss-head .boss-name { font: 800 26px var(--ds-d); letter-spacing: 0.14em; color: var(--ds-ink); white-space: nowrap; }
+.combat-hud .boss-head .boss-enc { justify-self: end; font: 700 12px var(--ds-d); letter-spacing: 0.18em; text-transform: uppercase; color: rgba(244, 241, 232, 0.7); }
+.combat-hud .boss-track { height: 14px; transform: none; background: rgba(0, 0, 0, 0.55); outline: 0; box-shadow: inset 0 0 0 1px rgba(255, 138, 122, 0.6); overflow: visible; }
+.combat-hud .boss-track i { background: linear-gradient(90deg, #c8241c, #ff5a4a); box-shadow: 0 0 12px rgba(255, 90, 74, 0.7); }
+.combat-hud .boss-track b { top: -4px; bottom: -4px; background: var(--ds-ink); }
+.combat-hud .boss-foot { justify-content: center; align-items: center; gap: 14px; margin: 0; }
+.combat-hud .boss-attack { font: 800 20px var(--ds-d); letter-spacing: 0.12em; color: var(--ds-ink); animation: none; }
+.combat-hud .boss-need { font: 400 13px var(--font); letter-spacing: 0; color: var(--ds-ink); }
+.combat-hud .boss-int { position: relative; width: 140px; height: 6px; background: rgba(255, 255, 255, 0.2); }
+.combat-hud .boss-int i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--ds-ink); }
+.combat-hud .boss-left { font: 700 13px var(--ds-m); color: var(--ds-ink); }
+.combat-hud .boss-portrait { display: none; }
+/* Boss on the field: the screen edge glows red (reduced motion: steady). */
+.combat-hud:has(.boss-bar)::before { content: ''; position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse at 50% 50%, rgba(0, 0, 0, 0) 55%, rgba(170, 10, 8, 0.35) 100%); }
+
+/* Survival (canvas "HUD · survival mode") */
+.hud-objective.hunt { gap: 6px; }
+.hud-objective.hunt .hunt-count { font: 800 44px/0.9 var(--ds-d); color: var(--ds-ink); min-width: 40px; }
+.hud-objective.hunt .ds-chip.red { color: #ffd3cc; box-shadow: inset 0 0 0 1px rgba(255, 90, 74, 0.8); background: rgba(255, 90, 74, 0.18); }
+.hud-hunt-rules { position: fixed; right: 28px; top: 92px; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; pointer-events: none; text-shadow: 0 1px 2px #000; }
+.hud-threats { position: fixed; inset: 0; pointer-events: none; }
+.hud-threats .ht { position: absolute; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.hud-threats .ht i { width: 0; height: 0; border-left: 9px solid transparent; border-right: 9px solid transparent; border-bottom: 14px solid #ff5a4a; filter: drop-shadow(0 0 6px rgba(255, 90, 74, 0.8)); }
+.hud-threats .ht b { font: 700 12px var(--ds-m); color: #ffd3cc; text-shadow: 0 1px 2px #000; }
+html[data-touch] .hud-hunt-rules { display: none; }

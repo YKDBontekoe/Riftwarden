@@ -248,6 +248,8 @@ export function generateItem(spec: GenSpec): ItemInstance {
   // Sets: seed-decided (no stream draw); starter-grade and repaired kit never belongs to one.
   const set = fixed === undefined ? setFor(spec.seed, r.index, base.category, spec.dropSource) : null;
   if (set) item.set = set;
+  // Pinnacle loot stays with the warden who earned it (trade-locked).
+  if (spec.dropSource === 'pinnacle') item.bound = true;
   return item;
 }
 

@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { type ReactNode, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import type { Flow } from '../core/Flow';
 import type { Game } from '@riftwarden/game/core/Game';
 import { BLESSINGS, CURSES, isCombatKind, NODE_KINDS, type NodeKind } from '@riftwarden/rules/runmap/defs';
 import type { MapNode, SegmentEffect } from '@riftwarden/rules/runmap/map';
 import { findNode, liveNode, nodePlayable } from '@riftwarden/rules/war/world';
 import { regionLayout } from '@riftwarden/rules/war/regions';
-import { nodeLiberation, regionState } from '@riftwarden/rules/war/state';
+import { nodeLiberation, regionState, type WarState } from '@riftwarden/rules/war/state';
 import { Globe, OrderBanner, RegionMap, RegionStrip, RegionTabs, regionOfNode, WarHeader, WarReport } from './WarMap';
 import { type Lookahead, lookahead, type NodeIntel, nodeIntel } from '@riftwarden/rules/runmap/intel';
 import { getTier } from '@riftwarden/rules/progression/tiers';
@@ -16,6 +16,8 @@ import type { RunMapView, StationPanel } from '@riftwarden/rules/runmap/view';
 import { AffinityRow } from './LoadingScreen';
 import { ItemDetail, ItemGlyph, RarityTag } from './items';
 import { useHud } from './useHud';
+import { Backdrop, Crumb, Cur, Hint, pips, rarityCls, Seg } from './ds';
+import { GUARDIAN } from '@riftwarden/rules/runmap/hub';
 import { BIOMES } from '@riftwarden/rules/world/biomes';
 import { NamedDrops } from './NamedDrops';
 import { bossArtwork } from '@riftwarden/game/visuals/fieldArtwork';
@@ -76,6 +78,37 @@ function ActEffects({ curses, blessings }: { curses: readonly string[]; blessing
   );
 }
 
+/** Right panel head of the sector map (canvas "Region · sector map"): live events, name, the three numbers. */
+function SectorHeader({ node, view, war, lib }: { node: MapNode; view: RunMapView; war: WarState; lib: number }) {
+  const intel = useMemo(
+    () => nodeIntel(node, { plannerSeed: view.plannerSeed, tier: getTier(view.tier), mode: view.mode, lastWave: view.lastWave, act: { curses: view.curses, blessings: view.blessings }, dps: view.dps }),
+    [node, view.plannerSeed, view.tier, view.mode, view.lastWave, view.curses, view.blessings, view.dps],
+  );
+  const b = nodeBrief(node, view.lastWave, view.mode);
+  const live = war.events.filter((e) => e.node === node.id && e.until > Date.now());
+  const clock = (ms: number) => `${String(Math.floor(ms / 3_600_000)).padStart(2, '0')}:${String(Math.floor((ms % 3_600_000) / 60_000)).padStart(2, '0')}`;
+  const links = view.current ? (findNode(view.seed, view.current)?.links.includes(node.id) ? 1 : 0) : 0;
+  const clear = intel.fireSeconds;
+  return (
+    <div className="rm-head" data-testid="rm-card" style={{ ['--kc' as string]: KIND_COLOR[b.kind] }}>
+      <div className="ds-row rm-badges" style={{ gap: 8, flexWrap: 'wrap' }}>
+        {live.map((e) => <span key={e.id} className={`ds-chip rm-ev ${e.kind}`}>{e.kind.toUpperCase()} · {clock(e.until - Date.now())}</span>)}
+        <span className="ds-chip"><FieldIcon name={NODE_ICON[b.kind]} /> {b.actBoss ? 'CAPITAL' : `${NODE_KINDS[b.kind].name.toUpperCase()}`}</span>
+      </div>
+      <span className="ds-hero rm-name">{b.name.toUpperCase()}</span>
+      <span className="ds-meta">{b.waves ? `${b.waves[1] - b.waves[0] + 1} waves` : 'No waves · stations'} · {b.faction}{b.mods.length ? ` · ${b.mods.map((m) => m.name).join(' · ')}` : ''}{links ? ' · 1 link from you' : ''}</span>
+      {b.waves && (
+        <div className="rm-figs">
+          <div className="ds-col"><span className="ds-lbl">Threat</span><span className="ds-num" style={{ color: intel.threat >= 4 ? '#ff8a7a' : intel.threat >= 3 ? '#ffd84d' : 'var(--ds-ink)' }}>{intel.threat}<small> / 5</small></span></div>
+          <div className="ds-col"><span className="ds-lbl">Clear time</span><span className="ds-num">{clear ? `${Math.floor(clear / 60)}:${String(Math.round(clear % 60)).padStart(2, '0')}` : '—'}</span></div>
+          <div className="ds-col"><span className="ds-lbl">Liberation</span><span className="ds-num" style={{ color: '#b9ece0' }}>{Math.round(lib)}<small>%</small>{live.some((e) => e.kind === 'distress') && <small style={{ color: '#ffa294' }}> ×2</small>}</span></div>
+        </div>
+      )}
+      {!b.waves && <div className="rm-card-blurb">{b.blurb}</div>}
+    </div>
+  );
+}
+
 /** In-run war map: the region of the current sector on the Rift War, travel to a linked sector or extract. */
 export function RunMapScreen({ flow, game }: { flow: Flow; game: Game }) {
   const view = useHud((s) => s.runMap) as RunMapView | null | undefined;
@@ -85,6 +118,7 @@ export function RunMapScreen({ flow, game }: { flow: Flow; game: Game }) {
   const [hover, setHover] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [regionPick, setRegionPick] = useState<number | null>(null);
+  const [side, setSide] = useState(false);
   const reach = view?.reachable ?? [];
   const selected = sel && reach.includes(sel) ? sel : reach[0] ?? null;
   const war = wv.war;
@@ -108,6 +142,8 @@ export function RunMapScreen({ flow, game }: { flow: Flow; game: Game }) {
         setSel(reach[n - 1]);
       }
       if (e.key === 'Enter' && selected && !target?.closest('button, [role="button"], a, summary')) go(selected);
+      if (e.key === 'r' || e.key === 'R') setSide((v) => !v);
+      if ((e.key === 'x' || e.key === 'X') && view && war && !target?.closest('input')) extract();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -134,8 +170,14 @@ export function RunMapScreen({ flow, game }: { flow: Flow; game: Game }) {
   const def = node ? regionLayout(seed, node.act - 1) : null;
   const nodeLib = node && def ? nodeLiberation(war, node.id, def) : 0;
   return (
-    <div className="screen dim runmap" data-testid="runmap">
-      <div className="rm-wrap panel-frame">
+    <div className="screen dim runmap ds-scr" data-testid="runmap">
+      <Backdrop />
+      <div className="ds-top">
+        <Crumb parts={['Rift War', regionLayout(war.seed, k).name, node ? node.kind === 'combat' ? 'Sector map' : NODE_KINDS[node.kind].name : 'Sector map']} />
+        <span className="ds-grow" />
+        <span className="ds-mono">RL {view.tier} · {view.cleared} NODE{view.cleared === 1 ? '' : 'S'} · WAVE {view.lastWave} · BANKED</span>
+      </div>
+      <div className={`rm-wrap ${side ? 'show-side' : ''}`}>
         <div className="rm-side">
           <Globe war={war} selected={k} onSelect={onRegion} size={200} />
           <div className="cp-kicker">Rift War · sector secured{survival ? ' · Survival' : ''}</div>
@@ -166,11 +208,12 @@ export function RunMapScreen({ flow, game }: { flow: Flow; game: Game }) {
           <RegionTabs war={war} k={k} onPick={onRegion} />
           <RegionStrip war={war} k={k} />
           <RegionMap war={war} k={k} current={view.current} path={view.path} reachable={reach} selected={selected} onSelect={setSel} onHover={setHover} votes={votes} ahead={look?.reach} seenAt={wv.seenAt} />
-          <div className="rm-hint">Hover or focus a sector for intel · select a lit sector or press <kbd>1</kbd>–<kbd>{Math.max(1, reach.length)}</kbd> · links at the edge lead to other regions</div>
         </div>
         <div className="rm-detail">
           <div className="rm-detail-body">
-            {node && <NodeCard b={nodeBrief(node, view.lastWave, view.mode)} />}
+            {node && <SectorHeader node={node} view={view} war={war} lib={nodeLib} />}
+            {view.leftBehind > 0 && <div className="rm-note warn">{view.leftBehind} uncollected drop{view.leftBehind === 1 ? '' : 's'} will be left behind. Go back to collect them first.</div>}
+            {!survival && view.refund > 0 && <div className="rm-note">Towers stay behind: <b>+{view.refund} cores</b> refunded on travel.</div>}
             {node && def && regionState(war, def.k) && isCombatKind(node.kind) && (
               <div className="rm-liberation" data-testid="rm-liberation">
                 <span>SECTOR LIBERATION</span>
@@ -182,15 +225,24 @@ export function RunMapScreen({ flow, game }: { flow: Flow; game: Game }) {
             {node && inspect !== selected && <div className="rm-note">Inspecting · travel goes to the selected lit sector</div>}
           </div>
           {canSurgeHere && <SurgeOffer level={view.tier} busy={busy} onSurge={() => selected && go(selected, true)} />}
-          <button className="primary" data-testid="rm-travel" disabled={!selected || busy} onClick={() => selected && go(selected)}>
-            {coop ? 'VOTE: TRAVEL HERE' : canSurgeHere ? `TRAVEL · STAY ON RL ${view.tier}` : 'TRAVEL'}
-          </button>
-          <button className="home-btn" data-testid="rm-extract" disabled={busy} onClick={extract}>
-            {coop ? 'VOTE: EXTRACT' : 'EXTRACT TO HQ'}
-          </button>
-          <button className="mini" data-testid="rm-stay" onClick={() => void game.continueRun()}>BACK TO THE ARENA (MAP: H)</button>
+          <div className="rm-actions">
+            <span className="ds-meta rm-banked"><b className="ds-up">Banked at this node</b> · leaving keeps it</span>
+            <button className="ds-btn" data-testid="rm-extract" disabled={busy} onClick={extract}>
+              {coop ? 'VOTE: EXTRACT' : 'EXTRACT'} <span className="ds-k">X</span>
+            </button>
+            <button className="primary ds-btn-p" data-testid="rm-travel" disabled={!selected || busy} onClick={() => selected && go(selected)}>
+              <span className="ds-kd">ENTER</span>{coop ? 'VOTE: TRAVEL' : canSurgeHere ? `STAY ON RL ${view.tier}` : 'TRAVEL'}
+            </button>
+          </div>
         </div>
       </div>
+      <div className="ds-bot">
+        <span className="ds-meta">Hover a sector for intel · select a lit one or press 1–{Math.max(1, reach.length)} · edge links lead to other regions</span>
+        <span className="ds-grow" />
+        <Hint keys="R" onClick={() => setSide((v) => !v)}>{side ? 'Hide war report' : 'War report'}</Hint>
+        <Hint keys="H" testId="rm-stay" onClick={() => void game.continueRun()}>Back to the arena</Hint>
+      </div>
+      <div className="ds-grain" />
     </div>
   );
 }
@@ -296,13 +348,30 @@ function RoutePanel({ look }: { look: Lookahead }) {
 }
 
 /** Station panel (merchant / forge / rest / anomaly / vault). */
+/** Split an anomaly choice's honest odds text into outcome lines with their chance (100% when certain). */
+function outcomes(text: string): { text: string; p: number; color: string }[] {
+  return text.split(/(?<=\.)\s+/).filter(Boolean).map((line) => {
+    const m = /(\d+)%/.exec(line);
+    const bad = /curse|lose|guardian|ambush|attack|bleed|nothing|otherwise/i.test(line);
+    return { text: line.replace(/^\d+%:?\s*/, '').replace(/\.$/, ''), p: m ? Number(m[1]) : 100, color: bad ? (/nothing/i.test(line) ? '#cfd4cc' : '#ffa294') : '#8ff0b6' };
+  });
+}
+
 export function StationScreen({ game }: { game: Game }) {
   const [, tick] = useState(0);
   const [hover, setHover] = useState<string | null>(null);
   const [why, setWhy] = useState('');
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' || e.key === 'e' || e.key === 'E') void game.continueRun();
+      if (e.key === 'Escape' || e.key === 'e' || e.key === 'E') return void game.continueRun();
+      const panel = game.node?.panel();
+      if (!panel) return;
+      const n = Number(e.key);
+      const pick = panel.station === 'vault' && e.key === 'Enter' ? panel.options[0] : panel.station !== 'merchant' && n >= 1 && n <= panel.options.length ? panel.options[n - 1] : null;
+      if (pick && !pick.disabled) {
+        setWhy(game.node?.act(pick.id) ?? '');
+        tick((x) => x + 1);
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -310,44 +379,166 @@ export function StationScreen({ game }: { game: Game }) {
   const p: StationPanel | null = game.node?.panel() ?? null;
   if (!p) return null;
   const item = p.options.find((o) => o.id === hover && o.item)?.item;
-  return (
-    <div className="screen dim station" data-testid="station">
-      <div className={`st-wrap panel-frame st-${p.station}`}>
-        <div className="st-head">
-          <FieldArt name={`hub-${p.station}`} className="station-art" />
-          <div className="cp-kicker"><FieldIcon name={NODE_ICON[p.station]} /> Map node station · {p.cores} cores</div>
-          <h2 className="cp-title">{p.title}</h2>
-          <div className="cp-sub">{p.lore}</div>
-        </div>
-        <div className="st-body">
-          <div className="st-options">
-            {p.options.map((o) => (
-              <button
-                key={o.id}
-                className="st-opt"
-                data-testid={`st-${o.id}`}
-                disabled={!!o.disabled}
-                onMouseEnter={() => setHover(o.id)}
-                onClick={() => {
-                  const r = game.node?.act(o.id) ?? 'Unavailable';
-                  setWhy(r ?? '');
-                  tick((x) => x + 1);
-                }}
-              >
-                <span className="st-label">
-                  {o.item ? <ItemGlyph item={o.item} size={26} /> : <span className="st-ico"><FieldIcon name={serviceIcon(p.station, o.id)} /></span>}
-                  {o.item && <RarityTag id={o.item.rarity} />}{o.label}
-                </span>
-                <span className="st-text">{o.text}</span>
-                <span className="st-price">{o.disabled ?? (o.price !== null ? `${o.price} cores` : 'Free')}</span>
-              </button>
-            ))}
-          </div>
-          {item && <div className="st-item"><ItemDetail item={item} /></div>}
-        </div>
-        {(p.note || why) && <div className={`st-note${why ? ' bad' : ''}`} data-testid="st-note">{why || p.note}</div>}
-        <button className="mini" onClick={() => void game.continueRun()}>CLOSE (E / ESC)</button>
+  const goods = p.options.filter((o) => o.item);
+  const services = p.options.filter((o) => !o.item);
+  const buy = (id: string) => {
+    const r = game.node?.act(id) ?? 'Unavailable';
+    setWhy(r ?? '');
+    tick((x) => x + 1);
+  };
+  const price = (o: (typeof p.options)[number]) => o.disabled ?? (o.price !== null ? `${o.price}` : 'Free');
+  const frame = (body: ReactNode, opts: { meta?: ReactNode; bottom?: ReactNode; primary?: ReactNode } = {}) => (
+    <div className={`screen dim station ds-scr st-kind-${p.station}`} data-testid="station">
+      <div className={`st-art-bg st-${p.station}`} aria-hidden="true"><FieldArt name={`hub-${p.station}`} className="station-art" /></div>
+      <div className="ds-scrim-l" />
+      <div className="ds-vig" />
+      <div className="ds-top">
+        <Crumb parts={['Run', game.node?.hud()?.name ?? 'Node', p.title]} />
+        <span className="ds-grow" />
+        {opts.meta ?? <Cur k="cores" value={p.cores} note="cores · this run" />}
       </div>
+      {body}
+      <div className="ds-bot">
+        {(p.note || why) ? <span className={`st-note ds-meta${why ? ' bad' : ''}`} data-testid="st-note">{why || p.note}</span> : opts.bottom}
+        <span className="ds-grow" />
+        <Hint keys={['E', 'ESC']} onClick={() => void game.continueRun()}>Close</Hint>
+        {opts.primary}
+      </div>
+      <div className="ds-grain" />
+    </div>
+  );
+  if (p.station === 'event') {
+    return frame(
+      <>
+        <div className="st-anomaly-glow" aria-hidden="true" />
+        <div className="ds-abs ds-col" style={{ left: 0, right: 0, top: 70, alignItems: 'center', gap: 6 }}>
+          <span className="ds-ov" style={{ color: '#e5d6ff' }}>Anomaly · {p.title.toLowerCase()}</span>
+          <span className="ds-hero">{p.title}</span>
+          <span className="ds-meta" style={{ maxWidth: 640, textAlign: 'center', color: '#dfe3db' }}>{p.lore}</span>
+        </div>
+        <div className="st-cards" style={{ gridTemplateColumns: `repeat(${p.options.length}, minmax(0, 1fr))` }}>
+          {p.options.map((o, i) => (
+            <button key={o.id} className="st-card anomaly" data-testid={`st-${o.id}`} disabled={!!o.disabled || p.used} onClick={() => buy(o.id)}>
+              <span className="ds-row" style={{ width: '100%' }}><span className="ds-h3 ds-grow" style={{ fontSize: 26, textAlign: 'left' }}>{o.label.toUpperCase()}</span><span className="ds-k">{i + 1}</span></span>
+              {outcomes(o.text).map((x, j) => (
+                <span key={j} className="ds-col" style={{ width: '100%', gap: 4 }}>
+                  <span className="ds-row"><span className="ds-grow" style={{ fontSize: 14, textAlign: 'left' }}>{x.text}</span><b className="ds-d" style={{ fontSize: 18, color: x.color }}>{x.p}%</b></span>
+                  <span className="ds-bar" style={{ '--c': x.color } as React.CSSProperties}><i style={{ width: `${x.p}%` }} /></span>
+                </span>
+              ))}
+              {o.disabled && <span className="ds-meta">{o.disabled}</span>}
+            </button>
+          ))}
+        </div>
+      </>,
+      { meta: <span className="ds-mono">ODDS ARE EXACT · SEEDED PER NODE</span>, bottom: <span className="ds-meta">Curses last until the act ends · max 4 at once · you hold {game.node?.carry.curses.length ?? 0}</span> },
+    );
+  }
+  if (p.station === 'forge') {
+    const gem: Record<string, string> = { temper: '#ffa46b', plating: '#f4f1e8', coolant: '#9fe0ff', calibrate: '#b9ece0' };
+    const stacks = (game.node?.carry.forge ?? {}) as Record<string, number | undefined>;
+    return frame(
+      <>
+        <div className="ds-abs ds-col" style={{ left: 44, top: 70, gap: 4 }}>
+          <span className="ds-ov ds-em">Hub · act {game.node?.hud()?.act ?? 1}</span>
+          <span className="ds-hero">FORGE</span>
+          <span className="ds-meta">Run-only upgrades. Each stack costs 35% more. Max 4 per line.</span>
+        </div>
+        <div className="st-cards forge" style={{ gridTemplateColumns: `repeat(${p.options.length}, minmax(0, 1fr))` }}>
+          {p.options.map((o, i) => {
+            const n = stacks[o.id] ?? 0;
+            const full = o.disabled === 'Maxed';
+            return (
+              <button key={o.id} className={`st-card forge ${full ? 'full' : ''}`} data-testid={`st-${o.id}`} disabled={!!o.disabled} onClick={() => buy(o.id)}>
+                <span className="ds-row" style={{ width: '100%' }}><span className="ds-gem" style={{ '--c': gem[o.id] ?? '#f4f1e8', width: 34, height: 34 } as React.CSSProperties} /><span className="ds-grow" /><span className="ds-k">{i + 1}</span></span>
+                <span style={{ font: '800 30px/0.95 var(--ds-d)', textAlign: 'left' }}>{o.label.replace(/ \(.*\)$/, '').toUpperCase()}</span>
+                <span className="ds-meta" style={{ textAlign: 'left', color: '#dfe3db' }}>{o.text}</span>
+                <Seg value={n / 4} total={4} color="#f4f1e8" />
+                <span className="ds-row" style={{ width: '100%', marginTop: 'auto' }}><span className="ds-meta ds-grow">{full ? 'Maxed' : o.disabled ?? `Stack ${n + 1} of 4`}</span><b className="ds-d" style={{ fontSize: 24 }}>{full ? '—' : o.price}</b></span>
+              </button>
+            );
+          })}
+        </div>
+      </>,
+      { bottom: <span className="ds-meta">Forge stacks last until the run ends; towers reset per sector, stacks do not</span> },
+    );
+  }
+  if (p.station === 'vault') {
+    const o = p.options[0];
+    return frame(
+      <>
+        <div className="ds-abs ds-col" style={{ left: 44, top: 80, width: 520, gap: 14 }}>
+          <span className="ds-ov ds-em">Hub · sealed vault</span>
+          <span className="ds-hero">{p.used ? 'VAULT OPEN' : 'CRACK THE SEAL?'}</span>
+          <p className="ds-body" style={{ fontSize: 16, margin: 0 }}>Breaking the seal wakes its guardians: one wave built from this sector&apos;s roster at +25% hull. They go straight for the reactor. Clear them to open the vault.</p>
+          <div className="ds-col">
+            <div className="ds-list-row"><span className="ds-dot" style={{ background: '#ff5a4a' }} /><span className="ds-grow">Guardian wave · elite guardians · +25% hull</span></div>
+            <div className="ds-list-row"><span className="ds-dot" style={{ background: '#ff5a4a' }} /><span className="ds-grow">Extraction blocked until they are cleared</span></div>
+            <div className="ds-list-row"><span className="ds-dot" style={{ background: '#b9ece0' }} /><span className="ds-grow">Your towers here reset after the vault</span></div>
+          </div>
+        </div>
+        <section className="ds-abs ds-glass ds-cut ds-col" style={{ right: 44, top: 110, width: 470, padding: '22px 24px', gap: 12 }}>
+          <span className="ds-h2">INSIDE</span>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
+            <div className="ds-tile ds-re" style={{ height: 120 }}><span className="ds-abs ds-lbl" style={{ left: 10, top: 8, color: '#f4f1e8' }}>Elite cache</span></div>
+            <div className="ds-tile ds-ra" style={{ height: 120 }}><span className="ds-abs ds-col" style={{ left: 14, bottom: 16 }}><span className="ds-num" style={{ color: '#9ff5ff' }}>+{GUARDIAN.cacheShards}</span><span className="ds-lbl">Rift shards</span></span></div>
+          </div>
+          <div className="ds-list-row" style={{ border: 0 }}><span className="ds-grow">Cache floor</span><b className="ds-d" style={{ fontSize: 20, color: '#8cc4ff' }}>Rare or better</b></div>
+          <span className="ds-meta">Cache contents bank with this node when you travel on.</span>
+        </section>
+      </>,
+      { primary: <button className="ds-btn-p" data-testid={`st-${o.id}`} disabled={!!o.disabled} onClick={() => buy(o.id)}><span className="ds-kd">ENTER</span>{o.disabled ?? 'CRACK THE SEAL'}</button> },
+    );
+  }
+  return (
+    <div className="screen dim station ds-scr" data-testid="station">
+      <div className={`st-art-bg st-${p.station}`} aria-hidden="true"><FieldArt name={`hub-${p.station}`} className="station-art" /></div>
+      <div className="ds-scrim-l" />
+      <div className="ds-vig" />
+      <div className="ds-top">
+        <Crumb parts={['Run', game.node?.hud()?.name ?? 'Node', p.title]} />
+        <span className="ds-grow" />
+        <Cur k="cores" value={p.cores} note="cores · this run" />
+      </div>
+      <div className="ds-abs ds-col" style={{ left: 44, top: 78, width: 560, gap: 6 }}>
+        <span className="ds-ov ds-em"><FieldIcon name={NODE_ICON[p.station]} /> Map node station</span>
+        <span className="ds-hero">{p.title}</span>
+        <span className="ds-meta">{p.lore}</span>
+      </div>
+      {goods.length > 0 && (
+        <div className="st-goods ds-abs" style={{ left: 44, top: 230, width: 560, display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 16 }}>
+          {goods.map((o) => (
+            <button key={o.id} className={`st-good ds-col ${rarityCls(o.item!.rarity)}`} data-testid={`st-${o.id}`} disabled={!!o.disabled} onMouseEnter={() => setHover(o.id)} onFocus={() => setHover(o.id)} onClick={() => buy(o.id)}>
+              <span className={`ds-tile ${rarityCls(o.item!.rarity)} ${hover === o.id ? 'on' : ''}`} style={{ height: 130 }}>
+                <span className="ds-tile-art"><ItemGlyph item={o.item!} size={92} /></span>
+                <span className="ds-lv">{o.item!.level}</span>
+              </span>
+              <span className="ds-h3">{o.label}</span>
+              <span className="ds-meta ds-rt"><span className="ds-pips">{pips(o.item!.rarity)}</span> <RarityTag id={o.item!.rarity} /></span>
+              <span className="ds-row" style={{ gap: 6 }}><b className="ds-d" style={{ fontSize: 20 }}>{price(o)}</b>{o.price !== null && !o.disabled && <span className="ds-meta">cores</span>}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      {item && <div className="st-item ds-abs ds-glass ds-cut" style={{ left: 44, top: goods.length ? 470 : 230, width: 560, bottom: 90, overflowY: 'auto', padding: '12px 16px' }}><ItemDetail item={item} /></div>}
+      {services.length > 0 && (
+        <section className="st-options ds-abs ds-glass ds-cut ds-col" style={{ right: 44, top: 96, width: 'min(470px, calc(100% - 680px))', minWidth: 380, maxHeight: 'calc(100% - 190px)', overflowY: 'auto', padding: '22px 24px', gap: 4 }}>
+          <span className="ds-h2" style={{ marginBottom: 6 }}>{goods.length ? 'Services' : 'Choose'}</span>
+          {services.map((o) => (
+            <button key={o.id} className="st-opt ds-list-row" data-testid={`st-${o.id}`} disabled={!!o.disabled} onMouseEnter={() => setHover(o.id)} onClick={() => buy(o.id)}>
+              <span className="ds-gem" style={{ width: 34, height: 34 }}><span style={{ transform: 'rotate(-45deg)', display: 'flex' }}><FieldIcon name={serviceIcon(p.station, o.id)} /></span></span>
+              <span className="ds-col ds-grow" style={{ textAlign: 'left' }}><b className="st-label">{o.label}</b><span className="st-text ds-meta">{o.text}</span></span>
+              <b className="st-price ds-d">{price(o)}</b>
+            </button>
+          ))}
+        </section>
+      )}
+      <div className="ds-bot">
+        {(p.note || why) ? <span className={`st-note ds-meta${why ? ' bad' : ''}`} data-testid="st-note">{why || p.note}</span> : <span className="ds-meta">Paid in cores · items go to cargo and bank when you leave this node</span>}
+        <span className="ds-grow" />
+        <Hint keys={['E', 'ESC']} onClick={() => void game.continueRun()}>Close</Hint>
+      </div>
+      <div className="ds-grain" />
     </div>
   );
 }

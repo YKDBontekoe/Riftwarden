@@ -18,6 +18,7 @@ import { describeEffects } from '@riftwarden/rules/weapons/components';
 import { moduleTypeDef } from '@riftwarden/rules/weapons/modules';
 import { enhanceLevel, enhanceStatMult, maxEnhance } from '@riftwarden/rules/economy/config';
 import { EntryStatus, STATUS_LABEL, catLabel, itemTitle } from './entry';
+import { pips, rarityCls } from '../ds';
 import { ItemGlyph, RarityTag, TierPips } from './glyphs';
 import { ItemStage, STAGE_ENABLED } from '../ItemStage';
 import { FieldIcon, statIcon } from '../FieldIcon';
@@ -34,12 +35,13 @@ export function ItemDetail({ item, status, stage = true }: { item: ItemInstance;
   const ws = w ? weaponSummary(w) : null;
   return (
     <div className="idetail" style={{ ['--rc' as string]: r.color }}>
-      <div className="id-head">
-        <ItemGlyph item={item} size={54} portrait={false} />
-        <div>
-          <div className="font-display text-[21px] font-[700] tracking-[0.05em] [color:var(--rc)]">{itemTitle(item)}</div>
-          <div className="flex flex-wrap gap-[8px] items-center mt-[3px] font-mono text-[10.5px] tracking-[0.12em] text-muted">
-            <RarityTag id={item.rarity} /> <span>LV {fmtNum(item.level)}</span> <span>{catLabel(item.category)}</span>
+      <div className={`id-head ${rarityCls(item.rarity)}`}>
+        <div className={`ds-tile ${rarityCls(item.rarity)}`} aria-hidden="true"><span className="ds-tile-art"><ItemGlyph item={item} size={84} portrait={false} /></span></div>
+        <div className="ds-col id-titles">
+          <span className="ds-ov ds-rt"><span className="ds-pips">{pips(item.rarity)}</span> {r.label} · {catLabel(item.category).toLowerCase()} · lv {fmtNum(item.level)}</span>
+          <div className="id-name ds-h1">{itemTitle(item)}</div>
+          <div className="id-tags">
+            <RarityTag id={item.rarity} />
             {enhanceLevel(item) > 0 && (
               <span className="enh-tag">
                 ENHANCED +{enhanceLevel(item)}/{maxEnhance(item)}

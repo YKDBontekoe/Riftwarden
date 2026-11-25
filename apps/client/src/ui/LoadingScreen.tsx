@@ -1,7 +1,5 @@
-import { NodeCard } from './RunMap';
 import { useEffect, useMemo, useState } from 'react';
 import { FACTION_AFFINITY } from '@riftwarden/rules/combat/elements';
-import { ElementTag } from './ElementTag';
 import { arenaStats } from '@riftwarden/rules/world/arenaGen';
 import { biomeOf } from '@riftwarden/rules/world/biomes';
 import type { ArenaLayout } from '@riftwarden/rules/world/layout';
@@ -9,6 +7,7 @@ import { pickTip } from './loadingTips';
 import { type TransitInfo } from '@riftwarden/game/ui/store';
 import { useHud } from './useHud';
 import { FieldArt } from './FieldArt';
+import { Bar, ElementGem } from './ds';
 
 const STAGES = {
   arena: ['Charting sector', 'Raising structures', 'Calibrating optics', 'Drop clearance'],
@@ -16,7 +15,10 @@ const STAGES = {
   visit: ['Uplink to host', 'Mirroring headquarters', 'Warming systems', 'Docking'],
 } as const;
 
-/** Scene-swap loading screen: sector briefing with a live map of the generated arena, stages and tips. */
+const BIOME_ART: Record<string, string> = { cryo: 'ls-art-cryo', foundry: 'ls-art-foundry', outpost: 'ls-art-outpost' };
+
+/** Scene-swap loading screen (final design): sector briefing on the left (name, faction, modifiers, weak / resisted
+ * elements), the generated map in a glass frame on the right, load stages + tip along the bottom. */
 export function LoadingScreen() {
   const t = useHud((s) => s.transit);
   const kind = t?.kind ?? 'hq';
@@ -27,37 +29,47 @@ export function LoadingScreen() {
   }, []);
   const stage = t?.stage ?? 0;
   const labels = STAGES[kind];
+  const s = t?.sector ?? null;
+  const biome = s?.layout.biome ? biomeOf(s.layout) : null;
   return (
-    <div className={`screen transit load-screen load-${kind}`} data-testid="loading-screen">
-      <div className="ls-grid" aria-hidden="true" />
-      <div className="ls-sweep" aria-hidden="true" />
-      <div className="ls-body">
-        <div className="ls-side">
-          <div className="ls-kicker">{kind === 'arena' ? 'SECTOR BRIEFING' : kind === 'visit' ? 'CO-OP UPLINK' : 'WARDEN RECOVERY'}</div>
-          <div className="transit-title">{t?.title ?? 'TRANSFERRING'}</div>
-          <div className="transit-sub">{t?.sub ?? ''}</div>
-          {t?.sector && <SectorCard s={t.sector} />}
-          <ol className="ls-stages">
+    <div className={`screen transit load-screen load-${kind} ds-scr`} data-testid="loading-screen">
+      <div className={`ls-art ${BIOME_ART[s?.layout.biome ?? (kind === 'arena' ? 'outpost' : 'none')] ?? ''}`} aria-hidden="true" />
+      <div className="ds-scrim-l" />
+      <div className="ds-vig" />
+      <div className="ds-top">
+        <span className="ds-mono">{kind === 'arena' ? `DROP IN PROGRESS // ${s?.code ?? 'SECTOR'}` : kind === 'visit' ? 'CO-OP UPLINK' : 'WARDEN RECOVERY'}</span>
+        <span className="ds-grow" />
+        {s && <span className="ds-mono">{s.layout.seed !== undefined ? `SEED 0x${(s.layout.seed >>> 0).toString(16).toUpperCase()}` : ''}</span>}
+      </div>
+      <div className="ls-side ds-abs ds-col" style={{ left: 56, top: 92, width: 540, gap: 16 }}>
+        <span className="ds-ov ds-em">{s?.node ? `${s.node.kind} sector · ${s.node.region || `act ${s.node.act}`}` : kind === 'arena' ? 'Sector briefing' : kind === 'visit' ? 'Co-op uplink' : 'Warden recovery'}</span>
+        <span className="transit-title ls-name ds-hero" style={{ fontSize: 'clamp(56px, 6.5vw, 84px)' }}>{s?.name ?? t?.title ?? 'TRANSFERRING'}</span>
+        {(biome || t?.sub) && (
+          <span className="transit-sub ds-body" style={{ fontSize: 15 }}>
+            {biome ? <>{biome.blurb} Held by the <b>{biome.faction.name}</b>: {biome.faction.blurb}</> : t?.sub}
+          </span>
+        )}
+        {s && <SectorCard s={s} />}
+      </div>
+      <div className={`ls-map ds-abs ds-glass ds-cut ds-edge`} data-biome={s?.layout.biome} style={{ right: 56, top: 92, width: 'min(470px, 38vw)', aspectRatio: '470 / 420', padding: 0, overflow: 'hidden' }}>
+        {s ? <>{!s.layout.biome && <FieldArt className="ls-map-art" name="hub-reactor" />}<SectorMap layout={s.layout} /></> : <FieldArt className="recovery-illustration" name="operation-recovery" />}
+      </div>
+      <div className="ds-abs ds-col" style={{ left: 56, right: 56, bottom: 34, gap: 12 }}>
+        <div className="ds-row" style={{ gap: 24, flexWrap: 'wrap' }}>
+          <ol className="ls-stages ds-row" style={{ gap: 24, margin: 0, padding: 0, listStyle: 'none' }}>
             {labels.map((l, i) => (
-              <li key={l} className={i < stage ? 'done' : i === stage ? 'now' : ''}>
-                <i />
+              <li key={l} className={`ds-row ${i < stage ? 'done' : i === stage ? 'now' : ''}`} style={{ gap: 8, font: '700 14px var(--ds-d)', letterSpacing: '0.2em', textTransform: 'uppercase', color: i < stage ? 'var(--ds-ink)' : i === stage ? 'var(--ds-ember-soft)' : 'var(--ds-dim)' }}>
+                {i < stage ? <span className="ds-up">✓</span> : i === stage ? <span className="ds-dia" style={{ background: 'var(--ds-ember)' }} /> : null}
                 <span>{l}</span>
               </li>
             ))}
           </ol>
-          <div className="load-bar ls-bar">
-            <b style={{ transform: `scaleX(${Math.min(1, (stage + 0.5) / labels.length)})` }} />
-            <i />
-          </div>
-          <div className="ls-tip">
-            <em>TIP</em>
-            <span key={tipN}>{pickTip(kind === 'arena' ? 'arena' : 'hq', tipN)}</span>
-          </div>
+          <span className="ds-grow" />
+          <span className="ls-tip ds-meta"><b style={{ color: 'var(--ds-ink)' }}>Tip: </b><span key={tipN}>{pickTip(kind === 'arena' ? 'arena' : 'hq', tipN)}</span></span>
         </div>
-        <div className="ls-map" data-biome={t?.sector?.layout.biome}>
-          {t?.sector ? <>{!t.sector.layout.biome && <FieldArt className="ls-map-art" name="hub-reactor" />}<SectorMap layout={t.sector.layout} /></> : <FieldArt className="recovery-illustration" name="operation-recovery" />}
-        </div>
+        <Bar value={Math.min(1, (stage + 0.5) / labels.length)} color="#ff8a3d" height={3} />
       </div>
+      <div className="ds-grain" />
     </div>
   );
 }
@@ -73,43 +85,30 @@ const FEATURE_LABEL: Record<string, string> = {
   ring: 'Bastion ring',
 };
 
+const TONE_CHIP: Record<string, string> = { risk: 'red', reward: 'green' };
+
 function SectorCard({ s }: { s: NonNullable<TransitInfo['sector']> }) {
   const st = arenaStats(s.layout);
+  const biome = s.layout.biome ? biomeOf(s.layout) : null;
   return (
-    <div className="ls-card">
-      <div className="flex justify-between gap-[10px] font-mono text-[11px] tracking-[0.16em] text-muted">
-        <span className="text-cyan">{s.code}</span>
-        <span className="text-orange">{/^RL /.test(s.tier) ? s.tier : `TIER ${s.tier}`} · {s.tierName}</span>
+    <div className="ls-card ds-col" style={{ gap: 14 }}>
+      <div className="ds-row" style={{ gap: 8, flexWrap: 'wrap' }}>
+        {s.node?.mods.map((m) => <span key={m.id} className={`ds-chip ${TONE_CHIP[m.tone] ?? ''}`} title={m.text}>{m.name}</span>)}
+        {[...new Set(s.layout.features ?? [])].map((f) => <span key={f} className="ds-chip">{FEATURE_LABEL[f] ?? f}</span>)}
+        <span className="ds-chip">{/^RL /.test(s.tier) ? s.tier : `Rift Level ${s.tier}`} · {s.tierName}</span>
+        {s.players ? <span className="ds-chip">{s.players} wardens</span> : null}
       </div>
-      <div className="ls-name font-display font-[700] [font-size:clamp(18px,2vw,24px)] tracking-[0.08em] m-[6px_0_10px] uppercase">{s.name}</div>
-      {s.node && <NodeCard b={s.node} />}
-      {s.layout.biome && (
-        <div className={`ls-biome b-${s.layout.biome}`} data-testid="ls-biome">
-          <b>{biomeOf(s.layout).name}</b>
-          <span>{biomeOf(s.layout).blurb}</span>
-          <em>
-            HOSTILE FACTION · {biomeOf(s.layout).faction.name.toUpperCase()}
-          </em>
-          <span>{biomeOf(s.layout).faction.blurb}</span>
-          <AffinityRow faction={biomeOf(s.layout).faction.id} />
-        </div>
-      )}
-      <div className="ls-stats">
-        <div><b>{st.size} m</b><span>SPAN</span></div>
-        <div><b>{st.structures}</b><span>STRUCTURES</span></div>
-        <div><b>{st.platforms}</b><span>PLATEAUS</span></div>
-        <div><b>{st.rifts}</b><span>FWD RIFTS</span></div>
-        <div><b>{st.lanes}</b><span>OPEN GATES</span></div>
-        {s.players ? <div><b>{s.players}</b><span>WARDENS</span></div> : null}
+      {s.node && <span className="ds-meta">{s.node.blurb}{s.node.reward ? ` · ${s.node.reward}` : ''}</span>}
+      <div className="ds-hr" />
+      {biome && <div className={`ls-biome b-${s.layout.biome}`} data-testid="ls-biome"><AffinityRow faction={biome.faction.id} /></div>}
+      <div className="ds-row ds-meta" style={{ gap: 18, flexWrap: 'wrap' }}>
+        <span><b className="ds-d" style={{ fontSize: 18, color: 'var(--ds-ink)' }}>{st.size} m</b> span</span>
+        <span><b className="ds-d" style={{ fontSize: 18, color: 'var(--ds-ink)' }}>{st.structures}</b> structures</span>
+        <span><b className="ds-d" style={{ fontSize: 18, color: 'var(--ds-ink)' }}>{st.platforms}</b> plateaus</span>
+        <span><b className="ds-d" style={{ fontSize: 18, color: 'var(--ds-ink)' }}>{st.rifts}</b> forward rifts</span>
+        <span><b className="ds-d" style={{ fontSize: 18, color: 'var(--ds-ink)' }}>{st.lanes}</b> open gates</span>
       </div>
-      {!!s.layout.features?.length && (
-        <div className="ls-feats">
-          {[...new Set(s.layout.features)].map((f) => (
-            <span key={f}>{FEATURE_LABEL[f] ?? f}</span>
-          ))}
-        </div>
-      )}
-      {s.layout.mazing && <div className="mt-[10px] text-[12px] text-amber">Mazing sector: towers block ground lanes and can be breached.</div>}
+      {s.layout.mazing && <span className="ds-risk-tag" style={{ fontSize: 13 }}>Mazing sector: towers block ground lanes and can be breached</span>}
     </div>
   );
 }
@@ -174,11 +173,15 @@ export function AffinityRow({ faction }: { faction: string }) {
   const row = FACTION_AFFINITY[faction];
   if (!row) return null;
   return (
-    <div className="aff-row" data-testid="ls-affinity">
-      <span className="aff-label">WEAK</span>
-      {row.weak.map((e) => <ElementTag key={e} element={e} long />)}
-      <span className="aff-label" style={{ marginLeft: 8 }}>RESISTS</span>
-      {row.resist.map((e) => <ElementTag key={e} element={e} long />)}
+    <div className="aff-row ds-row" data-testid="ls-affinity" style={{ gap: 28, flexWrap: 'wrap' }}>
+      <div className="ds-col" style={{ gap: 8 }}>
+        <span className="ds-lbl">WEAK TO</span>
+        <span className="ds-row" style={{ gap: 10 }}>{row.weak.map((e) => <span key={e} title={e}><ElementGem el={e} /><span className="ds-sr">{e.toUpperCase()}</span></span>)}<span className="ds-h3 ds-up">▲ ×1.35</span></span>
+      </div>
+      <div className="ds-col" style={{ gap: 8 }}>
+        <span className="ds-lbl">RESISTS</span>
+        <span className="ds-row" style={{ gap: 10 }}>{row.resist.map((e) => <span key={e} title={e}><ElementGem el={e} /><span className="ds-sr">{e.toUpperCase()}</span></span>)}<span className="ds-h3 ds-bad">▼ ×0.65</span></span>
+      </div>
     </div>
   );
 }

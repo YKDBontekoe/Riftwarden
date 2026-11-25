@@ -9,7 +9,7 @@ import { WeaponViewer } from '../WeaponViewer';
 import { rarity } from '@riftwarden/rules/loot/rarity';
 import { type ItemInstance } from '@riftwarden/rules/progression/items';
 import { type EngineeringResult } from '@riftwarden/rules/progression/save';
-import { useSave } from '../App';
+import { useSave } from '../useSave';
 import { uiEvents } from '@riftwarden/game/ui/store';
 import { ItemCard, ItemDetail, sortEntries } from '../items';
 import { saveEntries } from './Storage';

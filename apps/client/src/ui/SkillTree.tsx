@@ -15,7 +15,7 @@ import {
   treeRules,
   type TreeNode,
 } from '@riftwarden/rules/progression/skilltree';
-import { useSave } from './App';
+import { useSave } from './useSave';
 import { ConfirmButton, CostLine, ResourceBar, TxMessage, useTx } from './economy';
 import { Shell } from './shell';
 
@@ -169,7 +169,7 @@ export function SkillTreeTerminal({ flow, close }: { flow: Flow; close: () => vo
               {have.has(node.id) ? (
                 <div className="term-msg">Allocated</div>
               ) : (
-                <button className="primary" data-testid="lattice-allocate" disabled={!!blocker} title={blocker ?? ''} onClick={() => run('allocate', 'treeAllocate', [node.id], () => `${node.name} allocated`)}>
+                <button className="primary term-primary" data-key="ENTER" data-enter data-testid="lattice-allocate" disabled={!!blocker} title={blocker ?? ''} onClick={() => run('allocate', 'treeAllocate', [node.id], () => `${node.name} allocated`)}>
                   {blocker ?? 'ALLOCATE · 1 POINT'}
                 </button>
               )}

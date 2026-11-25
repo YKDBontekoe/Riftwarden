@@ -123,7 +123,13 @@ const visible = (p, testId) => p.locator(`[data-testid="${testId}"]`).count();
       await t.drag(10, box.x + box.width / 2, box.y + box.height - 20, box.x + box.width / 2, box.y + 20, 10);
       await t.up(10);
       await p.waitForTimeout(400);
-      const top = await body.evaluate((el) => el.scrollTop);
+      // The finger may land on an inner list that scrolls by itself (inventory grid): any scroll container under it counts.
+      const top = await body.evaluate((el, pt) => {
+        let n = document.elementFromPoint(pt.x, pt.y);
+        let best = el.scrollTop;
+        for (; n && n !== el.parentElement; n = n.parentElement) best = Math.max(best, n.scrollTop);
+        return best;
+      }, { x: box.x + box.width / 2, y: box.y + 20 });
       check('G1 a terminal taller than the phone scrolls with a swipe', max <= 0 || top > 20, `scrollTop=${top} max=${max}`);
       const close = await p.locator('button.term-close').first().boundingBox();
       await t.down(11, close.x + close.width / 2, close.y + close.height / 2);
@@ -215,12 +221,12 @@ const visible = (p, testId) => p.locator(`[data-testid="${testId}"]`).count();
       check('D4 pause button opens the pause menu', (await S(p)).screen === 'paused' && (await visible(p, 'touch-layer')) === 0);
       // A tap, not a click: a mouse click would (correctly) switch auto mode back to mouse controls.
       {
-        const box = await p.locator('.modal .tabs button', { hasText: 'CONTROLS' }).first().boundingBox();
+        const box = await p.locator('[data-testid=pause-controls]').first().boundingBox();
         await t.down(8, box.x + box.width / 2, box.y + box.height / 2);
         await t.up(8);
       }
       check('D5 the controls tab shows the touch legend', (await visible(p, 'touch-legend')) === 1);
-      const [rx, ry] = await (async () => { const box = await p.locator('.modal button.primary').first().boundingBox(); return [box.x + box.width / 2, box.y + box.height / 2]; })();
+      const [rx, ry] = await (async () => { const box = await p.locator('[data-testid=pause-resume]').first().boundingBox(); return [box.x + box.width / 2, box.y + box.height / 2]; })();
       await t.down(7, rx, ry);
       await t.up(7);
       await H.waitFor(p, () => window.__rift.game.screen === 'playing', null, 10000);

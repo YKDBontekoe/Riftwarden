@@ -9,6 +9,7 @@ pub mod coop;
 pub mod error;
 mod health;
 pub mod limits;
+pub mod rooms;
 pub mod session;
 pub mod sync;
 pub mod telemetry;
@@ -46,8 +47,14 @@ pub fn router(state: State) -> Router {
         .allow_credentials(true)
         .allow_methods([Method::GET, Method::POST, Method::DELETE])
         .allow_headers([header::CONTENT_TYPE]);
-    let traced =
-        Router::new().merge(auth::routes()).merge(session::routes()).merge(war::routes()).merge(boards::routes()).layer(cors).layer(
+    let traced = Router::new()
+        .merge(auth::routes())
+        .merge(session::routes())
+        .merge(war::routes())
+        .merge(boards::routes())
+        .merge(rooms::routes())
+        .layer(cors)
+        .layer(
             TraceLayer::new_for_http()
                 .make_span_with(DefaultMakeSpan::new().level(tracing::Level::INFO))
                 .on_response(DefaultOnResponse::new().level(tracing::Level::INFO)),

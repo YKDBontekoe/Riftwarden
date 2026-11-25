@@ -221,9 +221,10 @@ async function openDeploy(p) {
       await ev(p3, () => window.__rift.home.openTerminal('loadout'));
       await p3.waitForSelector('[data-testid=slot-locked-weapon2]', { timeout: 20000 });
       const e3 = await ev(p3, () => document.querySelector('[data-testid=slot-locked-weapon2]')?.textContent ?? '');
-      check('E3 drone configuration shows locked slots with their requirement', /LOCKED/.test(e3) && /Warden level 4/.test(e3), e3);
+      check('E3 drone configuration shows locked slots with their requirement', /locked/i.test(e3) && /Warden level 4/.test(e3), e3);
       await ev(p3, () => window.__rift.home.closeTerminal());
       await ev(p3, () => window.__rift.home.openTerminal('command'));
+      await p3.click('.terminal [data-tab=progress]', { timeout: 20000 });
       await p3.waitForSelector('[data-testid=unlock-track]', { timeout: 20000 });
       const e4 = await ev(p3, () => document.querySelector('[data-testid=unlock-track]')?.textContent ?? '');
       check('E4 command console lists the unlock track (teasers with requirements)', /UNLOCK TRACK · 0\//.test(e4) && /Second ability slot/.test(e4), e4.slice(0, 120));
@@ -254,7 +255,7 @@ async function openDeploy(p) {
       await p3.click('[data-testid=unlock-card-ok]');
       await waitFor(p3, () => !document.querySelector('[data-testid=unlock-card]') && window.__rift.state().screen === 'home');
       const e6b = await ev(p3, () => ({ queued: localStorage.getItem(`riftwarden.unlockCard.${window.__rift.profile.save.profile.id}`) }));
-      check('E6 level-ups pause on the unlock card, the station powers up, GOT IT resumes', /NEW SYSTEMS ONLINE/.test(e6.card) && /Railgun family/.test(e6.card) && e6.screen === 'unlock' && !e6.lock && e6.glow === 1 && e6b.queued === null, JSON.stringify({ ...e6, card: e6.card.slice(0, 120), ...e6b }));
+      check('E6 level-ups pause on the unlock card, the station powers up, GOT IT resumes', /new systems online/i.test(e6.card) && /Railgun family/.test(e6.card) && e6.screen === 'unlock' && !e6.lock && e6.glow === 1 && e6b.queued === null, JSON.stringify({ ...e6, card: e6.card.slice(0, 120), ...e6b }));
       // Deep lattice: frontier view, search highlights.
       await ev(p3, () => window.__rift.profile.mutate((d) => { d.progress.xp = 9e8; return true; }));
       const lv = await ev(p3, async () => {
@@ -457,11 +458,12 @@ async function openDeploy(p) {
         window.__rift.home.setScreen('home');
         window.__rift.home.openTerminal('command');
       });
+      await p6.click('.terminal [data-tab=progress]', { timeout: 20000 });
       await p6.waitForSelector('[data-testid=claim-0]', { timeout: 20000 });
       const h4a = await ev(p6, () => ({ codex: document.querySelector('[data-testid=codex]')?.textContent ?? '', title: document.querySelector('[data-testid=warden-title]')?.textContent }));
       await p6.click('[data-testid=claim-0]');
       const h4 = await ev(p6, () => ({ claimed: window.__rift.profile.save.war.claimed, msg: document.querySelector('[data-testid=war-caches] .term-msg')?.textContent ?? '' }));
-      check('H4 command console: codex progress with teasers and the breakthrough title', /CODEX · \d+\/24/.test(h4a.codex) && /▒▒/.test(h4a.codex) && h4a.title === 'RIFT BREAKER', JSON.stringify(h4a).slice(0, 160));
+      check('H4 command console: codex progress with teasers and the breakthrough title', /CODEX · \d+\/\d+/.test(h4a.codex) && /▒▒/.test(h4a.codex) && h4a.title === 'RIFT BREAKER', JSON.stringify(h4a).slice(0, 160));
       check('H5 a liberated region pays its victory cache once', h4.claimed.includes(0) && /Victory cache/.test(h4.msg), JSON.stringify(h4));
       if (captureScreens) await shot(p6, 'rl-codex', { frames: 2 });
       const bad6 = errs6.filter((e) => !/compil(e|ing) effect|Trying next fallback|BJS - \[[\d:]+\]: (Uniforms|Attributes|Defines|Error: (VERTEX|FRAGMENT))|GPU stall|favicon/.test(e));
@@ -515,6 +517,7 @@ async function openDeploy(p) {
       check('I3 PLAY PERMANENT switches back to the untouched permanent profile', !i3.active && i3.unlocked === 1, JSON.stringify(i3));
       await ev(p7, () => { window.__rift.home.closeTerminal(); });
       await ev(p7, () => { window.__rift.home.setScreen('home'); window.__rift.home.openTerminal('command'); });
+      await p7.click('.terminal [data-tab=season]', { timeout: 20000 });
       await p7.waitForSelector('[data-testid=boards-offline]', { timeout: 20000 });
       const i4 = await ev(p7, () => ({ journey: document.querySelector('[data-testid=season-panel]')?.textContent ?? '', boards: document.querySelector('[data-testid=boards]')?.textContent ?? '' }));
       check('I4 command console shows the season journey and explains boards need the server', /JOURNEY · 0\/12/.test(i4.journey) && /Unlock Rift Level 3/.test(i4.journey) && /server/.test(i4.boards), JSON.stringify(i4).slice(0, 200));

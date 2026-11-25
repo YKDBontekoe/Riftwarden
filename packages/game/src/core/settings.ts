@@ -4,6 +4,8 @@ export type Level3 = 'low' | 'medium' | 'high';
 
 export interface Settings {
   sensitivity: number;
+  /** Invert vertical look (mouse and touch). */
+  invertY: boolean;
   fov: number; // horizontal-ish degrees shown to the user (applied as vertical fov)
   quality: Quality;
   /** Master volume. */
@@ -71,6 +73,7 @@ export const PRESETS: Record<Quality, Pick<Settings, 'particles' | 'shadows' | '
 
 export const DEFAULT_SETTINGS: Settings = {
   sensitivity: 1,
+  invertY: false,
   fov: 90,
   quality: 'high',
   volume: 0.7,
@@ -115,6 +118,7 @@ export function sanitizeSettings(raw: unknown, version = VERSION): Settings {
   }
   return {
     sensitivity: clampNum(r.sensitivity, 0.2, 3, DEFAULT_SETTINGS.sensitivity),
+    invertY: r.invertY === true,
     fov: clampNum(r.fov, 70, 110, DEFAULT_SETTINGS.fov),
     quality,
     volume: clampNum(r.volume, 0, 1, DEFAULT_SETTINGS.volume),

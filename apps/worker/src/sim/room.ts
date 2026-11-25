@@ -1,4 +1,4 @@
-import { CODE_ALPHABET, type LobbyState, MAX_PLAYERS, RECONNECT_WINDOW, type ServerMsg } from '@riftwarden/protocol/protocol';
+import { CODE_ALPHABET, type LobbyState, MAX_PLAYERS, type OpenSquad, RECONNECT_WINDOW, type ServerMsg } from '@riftwarden/protocol/protocol';
 import { equippedItem, deployBlocker } from '@riftwarden/rules/progression/save';
 import { MAX_RIFT_LEVEL } from '@riftwarden/rules/progression/tiers';
 import type { OnlineProfile, SimStore } from './store';
@@ -46,6 +46,8 @@ export class Room {
   /** Rift War node the host picked for the deployment (null = the front's landing). */
   node: string | null = null;
   state: LobbyState['state'] = 'lobby';
+  /** Shown in the open-squad browser (host choice; off by default: squads are private). */
+  listed = false;
   sim: CoopSim | null = null;
   readonly serial = ++roomCounter;
 
@@ -189,6 +191,20 @@ export class Room {
     return null;
   }
 
+  setListed(id: string, listed: boolean): string | null {
+    if (id !== this.hostId) return 'Only the host lists the squad';
+    this.listed = listed;
+    this.broadcastLobby();
+    return null;
+  }
+
+  /** Open-squad browser row: listed by the host, still in the lobby and not full. */
+  listing(): OpenSquad | null {
+    if (!this.listed || this.state !== 'lobby' || this.connected.length >= MAX_PLAYERS) return null;
+    const host = this.members.get(this.hostId);
+    return { code: this.code, host: host?.name ?? '?', players: this.connected.length, capacity: MAX_PLAYERS, tier: this.tier, mode: this.mode };
+  }
+
   /** Host starts the operation once everyone connected is ready and can deploy. */
   async start(id: string): Promise<string | null> {
     if (id !== this.hostId) return 'Only the host can deploy the team';
@@ -240,6 +256,7 @@ export class Room {
       capacity: MAX_PLAYERS,
       state: this.state,
       wave: this.sim?.wave ?? 0,
+      listed: this.listed,
       players: [...this.members.values()].map((m) => {
         const p = this.deps.store.get(m.id);
         const w = p ? equippedItem(p.data, 'weapon') : null;

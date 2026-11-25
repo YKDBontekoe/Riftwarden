@@ -2,10 +2,23 @@
    browser defaults, which preflight would reset. Layer order: Tailwind's theme, the hand-written component styles
    (style.css, migrated to utilities panel by panel), then utilities, so a utility always wins over a component rule. */
 @layer theme, components, utilities;
+@import '@fontsource/barlow-condensed/latin-400.css';
+@import '@fontsource/barlow-condensed/latin-500.css';
+@import '@fontsource/barlow-condensed/latin-600.css';
+@import '@fontsource/barlow-condensed/latin-700.css';
+@import '@fontsource/barlow-condensed/latin-800.css';
+@import '@fontsource/inter/latin-400.css';
+@import '@fontsource/inter/latin-500.css';
+@import '@fontsource/inter/latin-600.css';
+@import '@fontsource/inter/latin-700.css';
+@import '@fontsource/jetbrains-mono/latin-500.css';
+@import '@fontsource/jetbrains-mono/latin-700.css';
 @import 'tailwindcss/theme.css' layer(theme);
 @import './style.css' layer(components);
 @import './fieldArt.css' layer(components);
 @import './combatHud.css' layer(components);
+@import './ds.css' layer(components);
+@import './screens.css' layer(components);
 @import 'tailwindcss/utilities.css' layer(utilities);
 
 /* Design tokens: the colours and fonts of style.css's :root, usable as utilities (text-cyan, bg-glass, font-mono...). */

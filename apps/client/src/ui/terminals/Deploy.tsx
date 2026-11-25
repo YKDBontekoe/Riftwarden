@@ -9,16 +9,17 @@ import { CHECKPOINT_INTERVAL, getTier, type ThreatTier } from '@riftwarden/rules
 import { LevelLootCard, RiftLevelPicker, savePower, UnlockBar, WipeNotice } from '../RiftLevel';
 import { PinnacleCard } from '../Spikes';
 import { SeasonBar } from '../Seasons';
-import { useSave } from '../App';
+import { useSave } from '../useSave';
 import { Shell } from '../shell';
 import { CoopPanel } from '../Coop';
+import { RangeCard } from '../FiringRange';
 
 const multiplier = (value: number) => `${Number(value.toFixed(2))}×`;
 
 export function DeployTerminal({ flow, close }: { flow: Flow; close: () => void }) {
   const save = useSave(flow);
   const [busy, setBusy] = useState(false);
-  const [mode, setMode] = useState<'solo' | 'coop'>(flow.net ? 'coop' : 'solo');
+  const [mode, setMode] = useState<'solo' | 'coop' | 'range'>(flow.net ? 'coop' : 'solo');
   const selected = getTier(Math.min(save.threat.selected, save.threat.unlocked));
   const weapon = equippedItem(save, 'weapon');
   const blocker = deployBlocker(save);
@@ -31,6 +32,17 @@ export function DeployTerminal({ flow, close }: { flow: Flow; close: () => void 
       if (!ok) setBusy(false);
     });
   };
+  const pinnacle = () => {
+    if (busy) return;
+    setBusy(true);
+    void flow.deploy(selected.id, undefined, 'defense', true).then((ok) => !ok && setBusy(false));
+  };
+  const deployButton = (
+    <button className="primary deploy term-primary" data-key="ENTER" data-enter disabled={busy || !!blocker} onClick={deploy}>
+      <span>{busy ? 'LAUNCHING…' : `DEPLOY · RL ${selected.id}`}</span>
+      <span aria-hidden="true">↗</span>
+    </button>
+  );
   return (
     <Shell code="DP-01" title="DEPLOYMENT" sub="Launch bay · survival operations" close={close} wide>
       <WipeNotice save={save} />
@@ -41,17 +53,38 @@ export function DeployTerminal({ flow, close }: { flow: Flow; close: () => void 
         <button className={mode === 'coop' ? 'on' : ''} data-testid="deploy-coop" onClick={() => setMode('coop')}>
           CO-OP OPERATION · 2-4 WARDENS
         </button>
+        <button className={mode === 'range' ? 'on' : ''} data-testid="deploy-range" onClick={() => setMode('range')}>
+          FIRING RANGE
+        </button>
       </div>
-      {mode === 'coop' ? (
+      {mode === 'range' ? (
+        <RangeCard flow={flow} />
+      ) : mode === 'coop' ? (
         <CoopPanel flow={flow} />
       ) : (
       <>
       <SeasonBar flow={flow} save={save} />
-      <div className={`deploy-grid${flow.mapMode ? ' war' : ''}`}>
+      {flow.mapMode ? (
+        <>
+          <ResumeCard flow={flow} save={save} />
+          <DeployMapPanel flow={flow} save={save} entry={entry} onEntry={setEntry} aside={
+            <div className="dw-level">
+              <div className="ds-lbl">Rift level</div>
+              <RiftLevelPicker value={selected.id} unlocked={save.threat.unlocked} power={savePower(save)} disabled={busy} onPick={(rl) => flow.selectTier(rl)} />
+              <LevelLootCard rl={selected.id} />
+              <PinnacleCard flow={flow} save={save} rl={selected.id} busy={busy} onDeploy={pinnacle} />
+              <UnlockBar save={save} />
+              {blocker && <div className="deploy-block">{blocker}</div>}
+            </div>
+          } />
+          {deployButton}
+        </>
+      ) : (
+      <div className="deploy-grid">
         <div className="arena-card">
           <ResumeCard flow={flow} save={save} />
-          {flow.mapMode ? <DeployMapPanel flow={flow} save={save} entry={entry} onEntry={setEntry} /> : <><div className="operation-heading"><h2>Reactor yard</h2><span>Sector 07</span></div>
-          <FacilityPlan /></>}
+          <div className="operation-heading"><h2>Reactor yard</h2><span>Sector 07</span></div>
+          <FacilityPlan />
           <p>Hold the reactor. Build along the marked approaches and bank your haul every {CHECKPOINT_INTERVAL} waves.</p>
           <details className="field-notes">
             <summary>Survival rules</summary>
@@ -71,18 +104,12 @@ export function DeployTerminal({ flow, close }: { flow: Flow; close: () => void 
         <div className="tier-col">
           <div className="col-label">SELECT RIFT LEVEL</div>
           <RiftLevelPicker value={selected.id} unlocked={save.threat.unlocked} power={savePower(save)} disabled={busy} onPick={(rl) => flow.selectTier(rl)} />
-          <PinnacleCard flow={flow} save={save} rl={selected.id} busy={busy} onDeploy={() => {
-            if (busy) return;
-            setBusy(true);
-            void flow.deploy(selected.id, undefined, 'defense', true).then((ok) => !ok && setBusy(false));
-          }} />
+          <PinnacleCard flow={flow} save={save} rl={selected.id} busy={busy} onDeploy={pinnacle} />
           <TierBrief tier={selected} save={save} />
-          <button className="primary deploy" disabled={busy || !!blocker} onClick={deploy}>
-            <span>{busy ? 'LAUNCHING…' : `DEPLOY · RL ${selected.id}`}</span>
-            <span aria-hidden="true">↗</span>
-          </button>
+          {deployButton}
         </div>
       </div>
+      )}
       </>
       )}
     </Shell>

@@ -40,7 +40,7 @@ async function clearThrough(p, wave) {
   let s = await S(p);
   check('A1 boots into HQ title screen', s.location === 'home' && s.screen === 'menu', JSON.stringify({ loc: s.location, scr: s.screen }));
   check('A1 fresh profile', s.salvage === 0 && s.runs === 0 && s.tierUnlocked === 1);
-  await p.click('text=ENTER HEADQUARTERS');
+  await p.click('button.deploy');
   await waitFor(p, () => window.__rift.state().screen === 'home');
   check('A2 entered HQ (walking)', (await S(p)).screen === 'home');
   // Walk with the real controller: strafe right around the holo-table, then forward to the launch bay.

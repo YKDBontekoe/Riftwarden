@@ -6,6 +6,7 @@ import './headless';
 import { create, fromBinary, toBinary } from '@bufbuild/protobuf';
 import { decodeClient, encodeServer } from '@riftwarden/protocol/codec';
 import { type SimDown, SimDownSchema, SimUpSchema } from '@riftwarden/protocol/gen/riftwarden/v1/sim_pb';
+import { GameMode } from '@riftwarden/protocol/gen/riftwarden/v1/common_pb';
 import { type ClientMsg, normalizeCode, parseClientMsg, PROTOCOL_VERSION, RateLimiter, type ServerMsg } from '@riftwarden/protocol/protocol';
 import { fromDoc, toDoc } from '@riftwarden/protocol/value';
 import type { SaveData } from '@riftwarden/rules/progression/save';
@@ -13,6 +14,7 @@ import { openDoc } from '@riftwarden/rules/progression/sync';
 import { newWar, sanitizeWar } from '@riftwarden/rules/war/state';
 import { CoopSim, loadHavok } from './coopSim';
 import { type Peer, Room } from './room';
+import { TradeDesk } from './trade';
 import { RemoteStore } from './store';
 import { RemoteWar } from './war';
 
@@ -35,6 +37,15 @@ export class SimHost {
   /** Operations this worker runs at most (RIFT_SIM_CAPACITY). */
   private capacity = 6;
   private timers: NodeJS.Timeout[] = [];
+  private tradeSerial = 0;
+  private readonly trades = new TradeDesk({
+    profile: (id) => this.store.get(id) ?? null,
+    send: (id, msg) => void this.players.get(id)?.send(msg),
+    commit: (t) =>
+      this.up({ msg: { case: 'trade', value: { id: t.id, accountA: t.a, accountB: t.b, entryA: toDoc({ trade: t.entryA }), entryB: toDoc({ trade: t.entryB }) } } }),
+    now: () => Date.now(),
+    newId: () => `trade-${Date.now().toString(36)}-${++this.tradeSerial}`,
+  });
 
   constructor(private send: (up: Uint8Array) => void, private log: (m: string) => void) {
     this.store = new RemoteStore((account, device, entries) => this.up({ msg: { case: 'entries', value: { account, device, entries: entries.map((e) => ({ seq: BigInt(e.seq), at: e.at, body: toDoc({ run: e.run, op: e.op }) })) } } }));
@@ -89,6 +100,7 @@ export class SimHost {
         const p = this.players.get(m.msg.value);
         if (!p) return;
         p.attached = false;
+        this.trades.left(p.id);
         if (p.room) p.room.disconnected(p.id);
         return;
       }
@@ -114,6 +126,9 @@ export class SimHost {
       }
       case 'drain':
         this.draining = m.msg.value;
+        return;
+      case 'tradeResult':
+        this.trades.result(m.msg.value.id, m.msg.value.ok, m.msg.value.reason);
         return;
     }
   }
@@ -208,6 +223,7 @@ export class SimHost {
         return room.broadcastLobby();
       }
       case 'leave':
+        this.trades.left(me.id);
         if (me.room) {
           me.room.leave(me.id);
           me.room = null;
@@ -229,6 +245,21 @@ export class SimHost {
       case 'node': {
         const why = me.room?.setNode(me.id, msg.node);
         if (why) fail('node', why);
+        return;
+      }
+      case 'trade': {
+        const room = me.room;
+        const why = this.trades.command(
+          { me: { id: me.id, name: me.name }, roomMembers: room ? room.connected.map((m) => ({ id: m.id, name: m.name })) : null, inLobby: room?.state === 'lobby' },
+          msg,
+        );
+        if (why) fail('trade', why);
+        return;
+      }
+      case 'listed': {
+        const why = me.room?.setListed(me.id, msg.listed);
+        if (why) fail('listed', why);
+        this.reportLoad();
         return;
       }
       case 'start': {
@@ -272,13 +303,15 @@ export class SimHost {
   private reportLoad(force = false): void {
     const running = [...this.rooms.values()].filter((r) => r.sim).length;
     const codes = [...this.rooms.keys()];
-    const key = `${running}|${codes.join(',')}`;
+    const listed = [...this.rooms.values()].flatMap((r) => r.listing() ?? []);
+    const key = `${running}|${codes.join(',')}|${JSON.stringify(listed)}`;
     if (!force && key === this.lastLoad) return;
     this.lastLoad = key;
-    this.up({ msg: { case: 'load', value: { codes, running } } });
+    this.up({ msg: { case: 'load', value: { codes, running, listed: listed.map((l) => ({ ...l, mode: l.mode === 'survival' ? GameMode.SURVIVAL : GameMode.DEFENSE })) } } });
   }
 
   private housekeeping(): void {
+    this.trades.tick();
     for (const [code, r] of this.rooms) {
       r.tick();
       if (r.empty) {

@@ -30,6 +30,9 @@ catalog:
   '@bufbuild/protobuf': ^2.17.0
   '@bufbuild/protoc-gen-es': ^2.17.0
   '@bufbuild/buf': ^1.75.0
+  '@fontsource/barlow-condensed': ^5.3.0
+  '@fontsource/inter': ^5.3.0
+  '@fontsource/jetbrains-mono': ^5.3.0
 
 # Never run install scripts (the old npm ci used --ignore-scripts); esbuild works from its platform package.
 ignoredBuiltDependencies:

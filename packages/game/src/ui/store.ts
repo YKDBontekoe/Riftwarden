@@ -111,6 +111,8 @@ export interface BossHud {
   /** Current telegraphed attack name (empty when idle). */
   attack: string;
   encounter: number;
+  /** An interruptible charge in progress: share of the required damage dealt (0..1), seconds left, what it takes. */
+  interrupt?: { progress: number; left: number; need: string };
 }
 
 /** M6 survival director state for the HUD. */
