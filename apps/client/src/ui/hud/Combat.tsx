@@ -17,7 +17,6 @@ import { NODE_MODS } from '@riftwarden/rules/runmap/defs';
 
 const reactorOf = (s: HudState) => s.reactorHp / Math.max(1, s.reactorMax);
 const hullOf = (s: HudState) => s.playerHp / Math.max(1, s.playerMax);
-const clock = (t: number) => `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
 
 /** Top left: what to do right now. */
 export function Objective() {
@@ -39,7 +38,7 @@ export function Objective() {
         <span aria-hidden="true" className="obj-mark" />
         <span className="ds-h3">{build ? 'BUILD MODE' : title}</span>
         <span className="ds-grow" />
-        <LiveText as="b" className="obj-clock" select={(s) => (s.phase === 'prep' ? clock(Math.ceil(s.phaseTimer)) : s.phase === 'combat' ? `${s.enemiesLeft}` : '—')} />
+        <LiveText as="b" className="obj-clock" select={(s) => (s.phase === 'combat' ? `${s.enemiesLeft}` : '')} />
       </div>
       {phase === 'combat' && (
         <div className="obj-line">

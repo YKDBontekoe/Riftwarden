@@ -43,7 +43,7 @@ export function Shell({ code, title, sub, close, children, accent = 'cyan', wide
       <div className="term-shade" />
       <div className="ds-top term-top">
         <span className="term-code ds-mono">{terminal && <FieldIcon name={STATION_ICON[terminal]} />}{code}</span>
-        <Crumb parts={['HQ', name, title]} />
+        <Crumb parts={name.toLowerCase() === title.toLowerCase() ? ['HQ', title] : ['HQ', name, title]} />
         <span className="ds-grow" />
         <OfflineBanner chip />
         <span className="term-meta ds-mono" title={sub}>{sub}</span>

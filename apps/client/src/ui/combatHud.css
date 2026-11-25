@@ -183,3 +183,4 @@
 .combat-hud.in-range .hud-prep { display: none; }
 html[data-touch] .hud-prep { top: 56px; zoom: 0.7; }
 .combat-hud[data-phase=prep] .surv-chips { top: 200px; }
+.combat-hud .boss-bar { width: min(520px, 56vw); }
