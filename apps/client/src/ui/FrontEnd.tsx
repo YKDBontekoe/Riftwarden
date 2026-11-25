@@ -7,7 +7,7 @@ import { useAccount } from '../account/store';
 import { BoundKey } from './hud/widgets';
 import { CoopPanel } from './Coop';
 import { MENU_SECTIONS, type MenuSection, useMenuSection } from './router';
-import { SettingsPanel } from './SettingsPanel';
+import { SettingsScreen } from './SettingsPanel';
 import { getTier } from '@riftwarden/rules/progression/tiers';
 import { levelInfo } from '@riftwarden/rules/progression/level';
 import { freePoints } from '@riftwarden/rules/progression/skilltree';
@@ -172,7 +172,7 @@ export function MainMenu({ flow }: { flow: Flow }) {
     ...sections.map((s) => ({ id: s, title: MENU_SECTIONS[s], badge: s === 'account' && account.status === 'signedIn' ? 'SIGNED IN' : undefined, go: () => setTab(tab === s ? null : s) })),
   ];
   const all = [{ id: 'deploy', title: 'Deploy', go: () => void flow.enterHq() }, ...items];
-  const [sel, setSel] = useMenuKeys(all.length, (i) => all[i].go(), true);
+  const [sel, setSel] = useMenuKeys(all.length, (i) => all[i].go(), tab !== 'settings');
   const close = useRef(setTab);
   close.current = setTab;
   useEffect(() => {
@@ -181,6 +181,7 @@ export function MainMenu({ flow }: { flow: Flow }) {
     return () => document.removeEventListener('keydown', dismiss);
   }, []);
   const name = account.account?.name ?? 'GUEST';
+  if (tab === 'settings') return <SettingsScreen flow={flow} from="Main menu" close={() => setTab(null)} />;
   const sync = account.status === 'signedIn' ? 'synced' : account.status === 'offline' ? 'offline · playing locally' : 'progress on this device';
   return (
     <main className="screen menu ds-scr">
@@ -241,7 +242,6 @@ export function MainMenu({ flow }: { flow: Flow }) {
           {tab === 'briefing' && <Briefing />}
           {tab === 'co-op' && <CoopPanel flow={flow} compact />}
           {tab === 'account' && <AccountPanel />}
-          {tab === 'settings' && <SettingsPanel flow={flow} />}
           {tab === 'controls' && <Controls />}
         </Sheet>
       )}
@@ -288,7 +288,7 @@ export function PauseMenu({ flow }: { flow: Flow }) {
     { id: 'controls', label: 'Controls', go: () => setTab(tab === 'controls' ? null : 'controls') },
     ...(inArena ? [{ id: 'abandon', label: 'Abandon run', danger: true, go: () => setConfirm(true) }] : []),
   ];
-  const [sel, setSel] = useMenuKeys(rows.length, (i) => rows[i].go(), !confirm);
+  const [sel, setSel] = useMenuKeys(rows.length, (i) => rows[i].go(), !confirm && tab !== 'settings');
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.repeat || e.code !== 'Escape') return;
@@ -301,6 +301,7 @@ export function PauseMenu({ flow }: { flow: Flow }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [confirm, resume, tab]);
   const rl = flow.arena?.cfg.tier.id ?? flow.run?.tier ?? 1;
+  if (tab === 'settings') return <SettingsScreen flow={flow} from={inArena ? 'Pause' : 'Headquarters · pause'} close={() => setTab(null)} />;
   const at = run ? run.salvageUnsecured : 0;
   return (
     <div className="screen dim ds-scr">
@@ -331,10 +332,10 @@ export function PauseMenu({ flow }: { flow: Flow }) {
           </div>
         )}
       </nav>
-      {tab ? (
+      {tab === 'controls' ? (
         <section className="ds-abs ds-glass ds-cut ds-col" style={{ right: 44, top: 90, bottom: 90, width: 'min(560px, calc(100vw - 520px))', minWidth: 360, padding: '22px 24px', gap: 12, overflowY: 'auto' }}>
-          <span className="ds-h2">{tab === 'settings' ? 'SETTINGS' : 'CONTROLS'}</span>
-          {tab === 'settings' ? <SettingsPanel flow={flow} compact={inArena} /> : <Controls />}
+          <span className="ds-h2">CONTROLS</span>
+          <Controls />
         </section>
       ) : inArena && run ? (
         <aside className="ds-abs ds-glass ds-cut ds-col" style={{ right: 44, top: 110, width: 440, padding: '22px 24px', gap: 12 }}>
