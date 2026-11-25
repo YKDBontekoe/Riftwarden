@@ -8,107 +8,124 @@ import { useSave } from '../useSave';
 import { fmtTime } from '../format';
 import { Shell } from '../shell';
 import { StationDirectory, WardenProgress } from '../Directory';
-import { Stat } from './Deploy';
+import { useEffect, useState } from 'react';
+
+type CmdTab = 'record' | 'history' | 'progress' | 'season' | 'stations';
+const CMD_TABS: [CmdTab, string][] = [['record', 'Service record'], ['history', 'History'], ['progress', 'Milestones · codex'], ['season', 'Season'], ['stations', 'Stations']];
 
 export function CommandTerminal({ flow, close }: { flow: Flow; close: () => void }) {
   const save = useSave(flow);
+  const [tab, setTab] = useState<CmdTab>('record');
   const savedAt = flow.profile.store.get().savedAt || save.profile.lastSavedAt;
   const t = save.totals;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.repeat || e.target instanceof HTMLInputElement) return;
+      const i = CMD_TABS.findIndex(([id]) => id === tab);
+      if (e.code === 'KeyQ') setTab(CMD_TABS[(i + CMD_TABS.length - 1) % CMD_TABS.length][0]);
+      else if (e.code === 'KeyR') setTab(CMD_TABS[(i + 1) % CMD_TABS.length][0]);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [tab]);
+  const totals: [string, string][] = [
+    ['Operations', t.runs.toLocaleString()], ['Extracted', t.returned.toLocaleString()], ['Reactor lost', t.defeated.toLocaleString()],
+    ['Hostiles', t.kills.toLocaleString()], ['Bosses · elites', `${t.bossesDefeated} · ${t.elitesDefeated}`], ['Salvage secured', t.salvageSecured.toLocaleString()],
+  ];
   return (
     <Shell code="CC-00" title="COMMAND CONSOLE" sub={`Service record · ${save.profile.callsign}`} close={close} wide>
-      <div className="command-grid">
-        <div>
-          <div className="col-label">SERVICE RECORD</div>
-          <div className="stat-grid">
-            <Stat k="OPERATIONS" v={String(t.runs)} />
-            <Stat k="EXTRACTED AT CHECKPOINT" v={String(t.returned)} />
-            <Stat k="REACTOR LOST" v={String(t.defeated)} />
-            <Stat k="ABANDONED / INTERRUPTED" v={`${t.abandoned} / ${t.interrupted}`} />
-            <Stat k="HOSTILES DESTROYED" v={String(t.kills)} />
-            <Stat k="SALVAGE SECURED (TOTAL)" v={String(t.salvageSecured)} />
-            <Stat k="BOSSES · ELITES DESTROYED" v={`${t.bossesDefeated} · ${t.elitesDefeated}`} />
-            <Stat k="HIGHEST RIFT LEVEL UNLOCKED" v={`RL ${save.threat.unlocked}`} />
+      <div className="tabs term-tabs lo-tabs">
+        <span className="ds-sh">Q</span>
+        {CMD_TABS.map(([id, label]) => <button key={id} data-tab={id} className={tab === id ? 'on' : ''} onClick={() => setTab(id)}>{label}</button>)}
+        <span className="ds-sh">R</span>
+        <span className="ds-grow" />
+        <span className="ds-mono">ABANDONED / INTERRUPTED {t.abandoned} / {t.interrupted} · RL {save.threat.unlocked} UNLOCKED</span>
+      </div>
+      {tab === 'record' && (
+        <div className="cmd-record">
+          <div className="cmd-totals">
+            {totals.map(([k, v]) => <div key={k} className="ds-col"><span className="ds-num" style={{ fontSize: 38 }}>{v}</span><span className="ds-lbl">{k}</span></div>)}
           </div>
-          <WardenProgress flow={flow} />
-          <UnlockTrackPanel save={save} />
-          <SeasonPanel flow={flow} />
-          <Leaderboards online={flow.war.base !== null} />
-          <CodexPanel save={save} />
-          <WarCaches flow={flow} save={save} />
-          <div className="col-label">MILESTONES · {save.milestones.length}/{MILESTONES.length}</div>
-          <div className="milestones" data-testid="milestones">
-            {MILESTONES.map((m) => (
-              <span key={m.id} className={`ms ${save.milestones.includes(m.id) ? 'on' : ''}`} title={m.label}>
-                {m.label}
-              </span>
+          <div className="cmd-split">
+            <table className="rec-table cmd-table">
+              <thead>
+                <tr><th>Rift Level</th><th>Best wave</th><th>Reached</th><th>Bosses</th><th>Elites</th><th>Runs</th><th>Checkpoints</th><th>Longest</th></tr>
+              </thead>
+              <tbody>
+                {recordLevels(save).map((tier) => {
+                  const r = save.records[String(tier.id)];
+                  const locked = tier.id > save.threat.unlocked;
+                  return (
+                    <tr key={tier.id} className={locked ? 'locked' : ''}>
+                      <td><b className="ds-d">RL {tier.id}</b> {tier.name}</td>
+                      <td className="hi">{locked ? 'LOCKED' : (r?.bestWave ?? 0)}</td>
+                      <td>{r?.highestWave ?? 0}</td>
+                      <td>{r ? `${r.bossesDefeated}${r.bestBossesRun > 1 ? ` (best ${r.bestBossesRun})` : ''}` : 0}</td>
+                      <td>{r?.elitesDefeated ?? 0}</td>
+                      <td>{r?.runs ?? 0}</td>
+                      <td>{r?.checkpoints ?? 0}</td>
+                      <td>{r ? fmtTime(r.longestRun) : '—'}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            <div className="ds-col" style={{ gap: 10 }}>
+              <WardenProgress flow={flow} />
+              <span className="ds-meta">Profile saved {savedAt ? new Date(savedAt).toLocaleTimeString() : '—'}{flow.profile.store.get().lastWriteOk ? '' : ' · write failed (storage unavailable)'}</span>
+            </div>
+          </div>
+        </div>
+      )}
+      {tab === 'history' && (
+        save.history.length === 0 ? (
+          <div className="empty-state small">
+            <b>No operations on record</b>
+            <p>Use the deployment terminal in the launch bay to begin.</p>
+          </div>
+        ) : (
+          <div className="history cmd-history">
+            {save.history.map((h) => (
+              <div key={h.id} className={`hist ds-list-row ${h.outcome}`}>
+                <span className="h-out ds-d">{h.outcome === 'returned' ? 'EXTRACTED' : h.outcome === 'defeat' ? 'REACTOR LOST' : h.outcome.toUpperCase()}</span>
+                <span>RL {h.tier}</span>
+                <span className="ds-grow ds-meta">{h.path?.length ? h.path.join(' › ') : `${h.kills} kills`}{h.bosses.length > 0 ? ` · ${h.bosses.length} boss${h.bosses.length > 1 ? 'es' : ''}` : ''}{h.elites > 0 ? ` · ${h.elites} elites` : ''}</span>
+                <b className="ds-d" style={{ fontSize: 22 }}>W{h.finalWave}</b>
+                <span className="o">+{h.salvageSecured}</span>
+                {h.salvageLost > 0 && <span className="r">−{h.salvageLost}</span>}
+                {(h.newRecord || h.records.length > 0) && <span className="ds-chip solid">Record</span>}
+                {h.dev && <span className="dev">DEV</span>}
+              </div>
             ))}
           </div>
-          <div className="col-label">SURVIVAL RECORDS</div>
-          <table className="rec-table">
-            <thead>
-              <tr>
-                <th>RIFT LEVEL</th>
-                <th>BEST WAVE</th>
-                <th>REACHED</th>
-                <th>BOSSES</th>
-                <th>ELITES</th>
-                <th>RUNS</th>
-                <th>LONGEST</th>
-              </tr>
-            </thead>
-            <tbody>
-              {recordLevels(save).map((tier) => {
-                const r = save.records[String(tier.id)];
-                const locked = tier.id > save.threat.unlocked;
-                return (
-                  <tr key={tier.id} className={locked ? 'locked' : ''}>
-                    <td>
-                      RL {tier.id} · {tier.name}
-                    </td>
-                    <td className="hi">{locked ? 'LOCKED' : (r?.bestWave ?? 0)}</td>
-                    <td>{r?.highestWave ?? 0}</td>
-                    <td>{r ? `${r.bossesDefeated}${r.bestBossesRun > 1 ? ` (best ${r.bestBossesRun})` : ''}` : 0}</td>
-                    <td>{r?.elitesDefeated ?? 0}</td>
-                    <td>{r?.runs ?? 0}</td>
-                    <td>{r ? fmtTime(r.longestRun) : '—'}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-        <div>
-          <StationDirectory flow={flow} close={close} />
-          <div className="col-label">RECENT OPERATIONS</div>
-          {save.history.length === 0 ? (
-            <div className="empty-state small">
-              <b>No operations on record</b>
-              <p>Use the deployment terminal in the launch bay to begin.</p>
-            </div>
-          ) : (
-            <div className="history">
-              {save.history.map((h) => (
-                <div key={h.id} className={`hist ${h.outcome}`}>
-                  <span className="h-out">{h.outcome === 'returned' ? 'EXTRACTED' : h.outcome === 'defeat' ? 'REACTOR LOST' : h.outcome.toUpperCase()}</span>
-                  <span>RL{h.tier}</span>
-                  <span>W{h.finalWave}</span>
-                  <span>{h.kills} kills</span>
-                  {h.bosses.length > 0 && <span className="boss">{h.bosses.length} boss{h.bosses.length > 1 ? 'es' : ''}</span>}
-                  {h.elites > 0 && <span>{h.elites} elites</span>}
-                  <span className="o">+{h.salvageSecured}</span>
-                  {h.salvageLost > 0 && <span className="r">−{h.salvageLost}</span>}
-                  {(h.newRecord || h.records.length > 0) && <span className="rec">RECORD</span>}
-                  {h.dev && <span className="dev">DEV</span>}
-                </div>
+        )
+      )}
+      {tab === 'progress' && (
+        <div className="cmd-progress">
+          <div className="ds-col" style={{ gap: 10 }}>
+            <UnlockTrackPanel save={save} />
+            <span className="ds-lbl">Milestones · {save.milestones.length}/{MILESTONES.length}</span>
+            <div className="milestones" data-testid="milestones">
+              {MILESTONES.map((m) => (
+                <span key={m.id} className={`ms ds-chip ${save.milestones.includes(m.id) ? 'on green' : ''}`} title={m.label}>
+                  {m.label}
+                </span>
               ))}
             </div>
-          )}
-          <div className="mt-[14px] font-mono text-[10.5px] tracking-[0.14em] text-faint">
-            PROFILE SAVED LOCALLY · {savedAt ? new Date(savedAt).toLocaleTimeString() : '—'}
-            {flow.profile.store.get().lastWriteOk ? '' : ' · WRITE FAILED (storage unavailable)'}
+          </div>
+          <div className="ds-col" style={{ gap: 10 }}>
+            <CodexPanel save={save} />
+            <WarCaches flow={flow} save={save} />
           </div>
         </div>
-      </div>
+      )}
+      {tab === 'season' && (
+        <div className="cmd-progress">
+          <SeasonPanel flow={flow} />
+          <Leaderboards online={flow.war.base !== null} />
+        </div>
+      )}
+      {tab === 'stations' && <StationDirectory flow={flow} close={close} />}
     </Shell>
   );
 }

@@ -224,6 +224,7 @@ async function openDeploy(p) {
       check('E3 drone configuration shows locked slots with their requirement', /LOCKED/.test(e3) && /Warden level 4/.test(e3), e3);
       await ev(p3, () => window.__rift.home.closeTerminal());
       await ev(p3, () => window.__rift.home.openTerminal('command'));
+      await p3.click('.terminal [data-tab=progress]', { timeout: 20000 });
       await p3.waitForSelector('[data-testid=unlock-track]', { timeout: 20000 });
       const e4 = await ev(p3, () => document.querySelector('[data-testid=unlock-track]')?.textContent ?? '');
       check('E4 command console lists the unlock track (teasers with requirements)', /UNLOCK TRACK · 0\//.test(e4) && /Second ability slot/.test(e4), e4.slice(0, 120));
@@ -457,6 +458,7 @@ async function openDeploy(p) {
         window.__rift.home.setScreen('home');
         window.__rift.home.openTerminal('command');
       });
+      await p6.click('.terminal [data-tab=progress]', { timeout: 20000 });
       await p6.waitForSelector('[data-testid=claim-0]', { timeout: 20000 });
       const h4a = await ev(p6, () => ({ codex: document.querySelector('[data-testid=codex]')?.textContent ?? '', title: document.querySelector('[data-testid=warden-title]')?.textContent }));
       await p6.click('[data-testid=claim-0]');
@@ -515,6 +517,7 @@ async function openDeploy(p) {
       check('I3 PLAY PERMANENT switches back to the untouched permanent profile', !i3.active && i3.unlocked === 1, JSON.stringify(i3));
       await ev(p7, () => { window.__rift.home.closeTerminal(); });
       await ev(p7, () => { window.__rift.home.setScreen('home'); window.__rift.home.openTerminal('command'); });
+      await p7.click('.terminal [data-tab=season]', { timeout: 20000 });
       await p7.waitForSelector('[data-testid=boards-offline]', { timeout: 20000 });
       const i4 = await ev(p7, () => ({ journey: document.querySelector('[data-testid=season-panel]')?.textContent ?? '', boards: document.querySelector('[data-testid=boards]')?.textContent ?? '' }));
       check('I4 command console shows the season journey and explains boards need the server', /JOURNEY · 0\/12/.test(i4.journey) && /Unlock Rift Level 3/.test(i4.journey) && /server/.test(i4.boards), JSON.stringify(i4).slice(0, 200));

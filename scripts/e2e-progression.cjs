@@ -148,6 +148,7 @@ async function openTerminal(p, id) {
       check('E2 economy terminal states its purpose', /Buy equipment/i.test(pur), pur);
       await ev(p, () => window.__rift.home.closeTerminal());
       await openTerminal(p, 'command');
+      await p.click('.terminal [data-tab=stations]');
       const n = await p.$$eval('[data-testid="station-directory"] button', (els) => els.length);
       check('E3 command console lists every station', n >= 11, `stations=${n}`);
       await p.click('[data-testid="station-directory"] [data-station="lattice"]');
