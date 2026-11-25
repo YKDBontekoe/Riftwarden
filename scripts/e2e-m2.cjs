@@ -108,7 +108,7 @@ const savedItems = (p) => p.evaluate(() => JSON.parse(JSON.stringify(window.__ri
 (async () => {
   const t0 = Date.now();
   let { b, ctx, p, errs } = await launch();
-  await p.click('text=ENTER HEADQUARTERS');
+  await p.click('button.deploy');
   await waitFor(p, () => window.__rift.state().screen === 'home');
   const starterUid = await p.evaluate(() => window.__rift.profile.save.loadout.weapon);
 
@@ -389,7 +389,7 @@ const savedItems = (p) => p.evaluate(() => JSON.parse(JSON.stringify(window.__ri
 
   // ------------------------------------------------------------------ E: unsecured loss
   console.log('\n== Scenario E: bank at 5, collect in 6+, reactor lost before 10');
-  await p.click('text=ENTER HEADQUARTERS');
+  await p.click('button.deploy');
   await waitFor(p, () => window.__rift.state().screen === 'home');
   const preRun = await p.evaluate(() => ({ loadout: { ...window.__rift.profile.save.loadout }, items: window.__rift.profile.save.items.map((i) => i.uid) }));
   await deploy(p);
@@ -579,7 +579,7 @@ const savedItems = (p) => p.evaluate(() => JSON.parse(JSON.stringify(window.__ri
   const st1 = h.save.items.find((i) => i.uid === h.save.loadout.weapon);
   check('H2 the restarted profile deploys with a valid level-1 starter repeater', st1 && st1.level === 1 && st1.rarity === 'common' && st1.weapon.damage > 0);
   check('H3 storage expanded to the M2 capacity, presets added', h.save.storage.capacity === 50 && h.save.presets.length === 3);
-  await p.click('text=ENTER HEADQUARTERS');
+  await p.click('button.deploy');
   await waitFor(p, () => window.__rift.state().screen === 'home');
   await deploy(p, 2);
   st = await clearThrough(p, 5, { collect: true });

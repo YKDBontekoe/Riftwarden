@@ -970,8 +970,7 @@ export function applyGlobalSettings(s: Settings, input: Input): void {
   hudStore.set({ bindings: s.keys });
   if (typeof document !== 'undefined') {
     document.documentElement.style.setProperty('--ui-scale', String(s.uiScale));
-    document.documentElement.dataset.motion = s.reduceMotion ? 'reduced' : 'full';
-    document.documentElement.dataset.cvd = s.colorblind;
+    Object.assign(document.documentElement.dataset, { motion: s.reduceMotion ? 'reduced' : 'full', cvd: s.colorblind });
   }
   setRarityPalette(s.colorblind);
 }

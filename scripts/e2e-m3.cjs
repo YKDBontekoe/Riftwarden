@@ -467,7 +467,7 @@ const M = (p, fn, arg) => p.evaluate(fn, arg);
   await boot(p, true);
   const persisted = await M(p, (u) => { const d = window.__rift.profile.save; const w = d.items.find((i) => i.uid === u.uid); return { installed: w && w.socketed.some((m) => m && m.uid === u.mod), dup: d.items.filter((i) => i.uid === u.mod).length }; }, drop);
   check('C4 installed module persists after reload and exists exactly once', persisted.installed && persisted.dup === 0, JSON.stringify(persisted));
-  await p.click('text=ENTER HEADQUARTERS').catch(() => {});
+  await p.click('button.deploy').catch(() => {});
   await waitFor(p, () => window.__rift.state().location === 'home' && !window.__rift.state().busy && window.__rift.home);
   // D: remove via UI.
   await M(p, async () => { await window.__rift.home.takeControl(false); window.__rift.home.openTerminal('workshop'); });
@@ -517,7 +517,7 @@ const M = (p, fn, arg) => p.evaluate(fn, arg);
   const hm = await M(p, () => { const R = window.__rift; const d = R.profile.save; const w = d.items.find((i) => i.uid === 'm2_w'); return { status: R.profile.loadStatus, v: d.version, n: d.items.length, dmg: w.weapon.damage, build: w.build && w.build.family, chassis: w.build && w.build.chassis, sockets: w.sockets, kinds: w.build && w.build.sockets, salvage: d.resources.salvage }; });
   check('H1 M2 save loads, migrates to v3, keeps all items and stats', hm.status === 'loaded' && hm.v >= 3 && hm.n === 3 && hm.dmg === 31 && hm.salvage === 400, JSON.stringify(hm));
   check('H2 old weapon gets a valid default build for its chassis and M3 sockets (rare -> 2)', hm.build === 'plasma' && hm.chassis === 'heavy_repeater' && hm.sockets === 2, JSON.stringify(hm));
-  await p.click('text=ENTER HEADQUARTERS');
+  await p.click('button.deploy');
   await waitFor(p, () => window.__rift.state().location === 'home' && !window.__rift.state().busy && window.__rift.home);
   await M(p, async () => { await window.__rift.home.takeControl(false); window.__rift.home.openTerminal('workshop'); });
   await waitFor(p, () => !!window.__preview && window.__preview.builds > 0, null, 60000);
@@ -544,7 +544,7 @@ const M = (p, fn, arg) => p.evaluate(fn, arg);
   console.log('\n[I] regression + leaks');
   ({ b, p, errs } = await launch());
   await helpers(p);
-  await p.click('text=ENTER HEADQUARTERS');
+  await p.click('button.deploy');
   await waitFor(p, () => window.__rift.state().location === 'home' && !window.__rift.state().busy && window.__rift.home);
   // A plasma weapon with a splitter (barrel) and an arc conductor... both barrel modules: use a legendary with 1 barrel socket for splitter.
   const prep = await M(p, () => {
