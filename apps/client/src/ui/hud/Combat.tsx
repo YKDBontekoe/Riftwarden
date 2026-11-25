@@ -236,7 +236,7 @@ function AbilityBar() {
         const [slot, ...name] = k.split(':');
         return <AbilitySlot key={slot} slot={slot as AbilityRow['slot']} name={name.join(':')} />;
       })}
-      <div className={`ab-slot dash ${dash.startsWith('0/') ? 'cooling' : 'ready'}`} title="Dash">
+      <div className={`ab-dash ${dash.startsWith('0/') ? 'cooling' : 'ready'}`} title="Dash">
         <i className="ab-fill" ref={recharge} />
         <span className="ab-name">DASH</span>
         <span className="ab-state">{dash}</span>

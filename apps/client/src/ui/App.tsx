@@ -1,5 +1,5 @@
 import { RunRecap } from './RunRecap';
-import { MainMenu, PauseMenu } from './FrontEnd';
+import { MainMenu, PauseMenu, WardenMark } from './FrontEnd';
 import { CheckpointPanel, DefeatScreen, SummaryScreen } from './RunScreens';
 import { LoadingScreen } from './LoadingScreen';
 import { ConstructionPanel } from './Construction';
@@ -74,15 +74,20 @@ export function App({ getFlow }: Props) {
   );
 }
 
+/** Boot screen (title design): the warden mark and the name over the sector render while systems start. */
 function Loading() {
   return (
-    <div className="screen loading">
-      <div className="load-box">
-        <Logo small />
-        <div className="load-bar">
-          <i />
-        </div>
-        <div className="load-text">Initializing headquarters systems…</div>
+    <div className="screen loading menu ds-scr" data-testid="boot-screen">
+      <div className="ds-vig" />
+      <div className="ds-scrim-b" />
+      <div className="ds-abs ds-col" style={{ left: 0, right: 0, top: '30%', alignItems: 'center', gap: 14 }}>
+        <WardenMark size={84} />
+        <span style={{ font: '800 104px/0.9 var(--ds-d)', letterSpacing: '0.18em', paddingLeft: '0.18em' }}>RIFTWARDEN</span>
+        <span className="ds-ov ds-em" style={{ letterSpacing: '0.42em' }}>Hold the line · take the loot · bank it</span>
+      </div>
+      <div className="ds-bot">
+        <span className="ds-row" style={{ gap: 12, width: 360 }}><span className="ds-mono">INITIALIZING HEADQUARTERS</span><span className="load-bar ds-grow"><i /></span></span>
+        <span className="ds-grow" />
       </div>
     </div>
   );

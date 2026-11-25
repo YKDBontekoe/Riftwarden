@@ -66,18 +66,18 @@
 /* bottom left: abilities + vitals */
 .combat-hud .bottom-left.hud-vitals { position: fixed; left: 28px; bottom: 26px; width: auto; padding: 0; display: flex; flex-direction: column; gap: 8px; background: none; border: 0; }
 .combat-hud .ability-bar { display: flex; flex-direction: row; gap: 8px; margin: 0; }
-.combat-hud .ab-slot { position: relative; width: 56px; height: 56px; padding: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; overflow: hidden; border: 0; clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px); background: rgba(5, 7, 9, 0.62); box-shadow: inset 0 0 0 1px #8d958f; text-shadow: none; }
-.combat-hud .ab-slot.ready, .combat-hud .ab-slot.active { box-shadow: inset 0 0 0 1px #f4f1e8; }
-.combat-hud .ab-slot.ult { box-shadow: inset 0 0 0 1px #8d958f; }
-.combat-hud .ab-slot.ult.ready { box-shadow: inset 0 0 0 1px #ffcf73, inset 0 0 20px rgba(255, 207, 115, 0.45); }
-.combat-hud .ab-slot .ab-fill { position: absolute; left: 0; right: 0; bottom: 0; top: auto; width: 100%; height: 0; transform: none; background: rgba(255, 255, 255, 0.12); opacity: 1; }
-.combat-hud .ab-slot.ready .ab-fill { background: rgba(244, 241, 232, 0.1); }
-.combat-hud .ab-slot.ult .ab-fill { background: rgba(255, 207, 115, 0.2); }
-.combat-hud .ab-slot .ab-name { position: relative; flex: none; max-width: 52px; font: 700 11px var(--ds-d); letter-spacing: 0.06em; color: #cfd4cc; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.combat-hud .ab-slot .ab-state { position: relative; font: 700 16px var(--ds-d); letter-spacing: 0.06em; color: #8d958f; }
-.combat-hud .ab-slot.ready .ab-state { font-size: 13px; color: #f4f1e8; }
-.combat-hud .ab-slot.ult.ready .ab-state { color: #ffcf73; }
-.combat-hud .ab-slot kbd { position: relative; margin: 1px 0 0; padding: 0; min-width: 0; border: 0; background: none; font: 700 10px var(--ds-m); color: #b9c0b8; }
+.combat-hud :is(.ab-slot, .ab-dash) { position: relative; width: 56px; height: 56px; padding: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; overflow: hidden; border: 0; clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px); background: rgba(5, 7, 9, 0.62); box-shadow: inset 0 0 0 1px #8d958f; text-shadow: none; }
+.combat-hud :is(.ab-slot, .ab-dash).ready, .combat-hud :is(.ab-slot, .ab-dash).active { box-shadow: inset 0 0 0 1px #f4f1e8; }
+.combat-hud :is(.ab-slot, .ab-dash).ult { box-shadow: inset 0 0 0 1px #8d958f; }
+.combat-hud :is(.ab-slot, .ab-dash).ult.ready { box-shadow: inset 0 0 0 1px #ffcf73, inset 0 0 20px rgba(255, 207, 115, 0.45); }
+.combat-hud :is(.ab-slot, .ab-dash) .ab-fill { position: absolute; left: 0; right: 0; bottom: 0; top: auto; width: 100%; height: 0; transform: none; background: rgba(255, 255, 255, 0.12); opacity: 1; }
+.combat-hud :is(.ab-slot, .ab-dash).ready .ab-fill { background: rgba(244, 241, 232, 0.1); }
+.combat-hud :is(.ab-slot, .ab-dash).ult .ab-fill { background: rgba(255, 207, 115, 0.2); }
+.combat-hud :is(.ab-slot, .ab-dash) .ab-name { position: relative; flex: none; max-width: 52px; font: 700 11px var(--ds-d); letter-spacing: 0.06em; color: #cfd4cc; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.combat-hud :is(.ab-slot, .ab-dash) .ab-state { position: relative; font: 700 16px var(--ds-d); letter-spacing: 0.06em; color: #8d958f; }
+.combat-hud :is(.ab-slot, .ab-dash).ready .ab-state { font-size: 13px; color: #f4f1e8; }
+.combat-hud :is(.ab-slot, .ab-dash).ult.ready .ab-state { color: #ffcf73; }
+.combat-hud :is(.ab-slot, .ab-dash) kbd { position: relative; margin: 1px 0 0; padding: 0; min-width: 0; border: 0; background: none; font: 700 10px var(--ds-m); color: #b9c0b8; }
 .combat-hud .hv-main { align-items: flex-end; gap: 12px; margin-top: 6px; }
 .combat-hud .hv-num { min-width: 96px; }
 .combat-hud .hv-bars { gap: 4px; width: 200px; padding-bottom: 2px; }
@@ -122,7 +122,7 @@
   .combat-hud .bottom-right.hud-weapon { right: 16px; bottom: 14px; }
   .combat-hud .hud-phase.cores { right: 16px; top: 14px; }
   .combat-hud .hud-starboard { right: 16px; }
-  .combat-hud .ab-slot { width: 48px; height: 48px; }
+  .combat-hud :is(.ab-slot, .ab-dash) { width: 48px; height: 48px; }
   .combat-hud .hv-num, .combat-hud .hw-heat { font-size: 44px; }
   .combat-hud .bottom-center { width: 240px; bottom: 14px; }
 }
