@@ -6,6 +6,7 @@ import './headless';
 import { create, fromBinary, toBinary } from '@bufbuild/protobuf';
 import { decodeClient, encodeServer } from '@riftwarden/protocol/codec';
 import { type SimDown, SimDownSchema, SimUpSchema } from '@riftwarden/protocol/gen/riftwarden/v1/sim_pb';
+import { GameMode } from '@riftwarden/protocol/gen/riftwarden/v1/common_pb';
 import { type ClientMsg, normalizeCode, parseClientMsg, PROTOCOL_VERSION, RateLimiter, type ServerMsg } from '@riftwarden/protocol/protocol';
 import { fromDoc, toDoc } from '@riftwarden/protocol/value';
 import type { SaveData } from '@riftwarden/rules/progression/save';
@@ -231,6 +232,12 @@ export class SimHost {
         if (why) fail('node', why);
         return;
       }
+      case 'listed': {
+        const why = me.room?.setListed(me.id, msg.listed);
+        if (why) fail('listed', why);
+        this.reportLoad();
+        return;
+      }
       case 'start': {
         if (!me.room) return fail('start', 'Not in a session');
         if (!me.room.sim && [...this.rooms.values()].filter((r) => r.sim).length >= this.capacity) {
@@ -272,10 +279,11 @@ export class SimHost {
   private reportLoad(force = false): void {
     const running = [...this.rooms.values()].filter((r) => r.sim).length;
     const codes = [...this.rooms.keys()];
-    const key = `${running}|${codes.join(',')}`;
+    const listed = [...this.rooms.values()].flatMap((r) => r.listing() ?? []);
+    const key = `${running}|${codes.join(',')}|${JSON.stringify(listed)}`;
     if (!force && key === this.lastLoad) return;
     this.lastLoad = key;
-    this.up({ msg: { case: 'load', value: { codes, running } } });
+    this.up({ msg: { case: 'load', value: { codes, running, listed: listed.map((l) => ({ ...l, mode: l.mode === 'survival' ? GameMode.SURVIVAL : GameMode.DEFENSE })) } } });
   }
 
   private housekeeping(): void {

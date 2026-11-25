@@ -26,6 +26,7 @@ message ClientFrame {
     Input input = 14;
     Act act = 15;
     Ping ping = 16;
+    LobbyListed listed = 17;
   }
   // 10, 11: guest profile init / operations (profiles sync through the session socket since v13).
   reserved 10, 11;

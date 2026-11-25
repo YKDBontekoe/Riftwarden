@@ -84,4 +84,15 @@ message SimBind {
 message SimLoad {
   repeated string codes = 1;
   uint32 running = 2;
+  // Squads whose host listed them and that still have room (open-squad browser).
+  repeated RoomListing listed = 3;
+}
+
+message RoomListing {
+  string code = 1;
+  string host = 2;
+  uint32 players = 3;
+  uint32 capacity = 4;
+  uint32 tier = 5;
+  GameMode mode = 6;
 }

@@ -138,6 +138,8 @@ function clientInit(m: ClientMsg): ClientInit {
       return { msg: { case: 'mode', value: { mode: modeIn(m.mode) } } };
     case 'node':
       return { msg: { case: 'node', value: { node: m.node ?? '' } } };
+    case 'listed':
+      return { msg: { case: 'listed', value: { listed: m.listed } } };
     case 'start':
       return { msg: { case: 'start', value: {} } };
     case 'presence':
@@ -199,6 +201,8 @@ export function decodeClient(bytes: Uint8Array): unknown {
       return { t: 'mode', mode: modeOut(m.value.mode) ?? '?' };
     case 'node':
       return { t: 'node', node: m.value.node || null };
+    case 'listed':
+      return { t: 'listed', listed: m.value.listed };
     case 'start':
       return { t: 'start' };
     case 'presence':
@@ -228,7 +232,7 @@ const PHASE = { lobby: LobbyPhase.LOBBY, deploying: LobbyPhase.DEPLOYING, runnin
 const PHASE_OUT = invert(PHASE);
 
 function lobbyToProto(l: LobbyState) {
-  return { code: l.code, hostId: l.hostId, tier: l.tier, mode: modeIn(l.mode), node: l.node ?? '', maxTier: l.maxTier, capacity: l.capacity, phase: PHASE[l.state], players: l.players, wave: l.wave };
+  return { code: l.code, hostId: l.hostId, tier: l.tier, mode: modeIn(l.mode), node: l.node ?? '', maxTier: l.maxTier, capacity: l.capacity, phase: PHASE[l.state], players: l.players, wave: l.wave, listed: l.listed };
 }
 
 function lobbyFromProto(l: LobbyProto): LobbyState {
@@ -243,6 +247,7 @@ function lobbyFromProto(l: LobbyProto): LobbyState {
     state: PHASE_OUT[l.phase] ?? 'lobby',
     players: l.players.map((p) => ({ id: p.id, name: p.name, ready: p.ready, connected: p.connected, host: p.host, weapon: p.weapon, rarity: p.rarity, level: p.level })),
     wave: l.wave,
+    listed: l.listed,
   };
 }
 

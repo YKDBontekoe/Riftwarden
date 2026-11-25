@@ -7,7 +7,7 @@
  * rewards, online profiles); clients send intents (movement state, shot claims, actions) which
  * the server validates. Messages are validated structurally here before any game code sees them.
  */
-export const PROTOCOL_VERSION = 13;
+export const PROTOCOL_VERSION = 14;
 export const MAX_PLAYERS = 4;
 export const MAX_MESSAGE_BYTES = 64 * 1024;
 /** Authoritative simulation and snapshot rates (Hz). */
@@ -86,6 +86,8 @@ export type ClientMsg =
   | { t: 'tier'; tier: number }
   | { t: 'mode'; mode: 'defense' | 'survival' }
   | { t: 'node'; node: string | null }
+  /** Host: show the squad in the open-squad browser (GET /rooms) or take it off. */
+  | { t: 'listed'; listed: boolean }
   | { t: 'start' }
   | { t: 'presence'; p: V3; yaw: number }
   | { t: 'visit'; on: boolean }
@@ -121,6 +123,18 @@ export interface LobbyState {
   players: LobbyPlayer[];
   /** Run in progress (wave) for joiners/rejoiners. */
   wave: number;
+  /** Listed in the open-squad browser (host choice). */
+  listed: boolean;
+}
+
+/** One squad in the open-squad browser (`GET /rooms` on the gateway; lobby phase, listed by its host, not full). */
+export interface OpenSquad {
+  code: string;
+  host: string;
+  players: number;
+  capacity: number;
+  tier: number;
+  mode: 'defense' | 'survival';
 }
 
 export type ServerMsg =
@@ -237,6 +251,8 @@ export function parseClientMsg(raw: unknown): ClientMsg | null {
       return o.mode === 'defense' || o.mode === 'survival' ? (o as ClientMsg) : null;
     case 'node':
       return o.node === null || isStr(o.node, 16) ? (o as ClientMsg) : null;
+    case 'listed':
+      return typeof o.listed === 'boolean' ? (o as ClientMsg) : null;
     case 'presence':
       return isV3(o.p) && isNum(o.yaw, 100) ? (o as ClientMsg) : null;
     case 'visit':

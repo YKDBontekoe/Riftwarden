@@ -12,7 +12,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file riftwarden/v1/lobby.proto.
  */
 export const file_riftwarden_v1_lobby: GenFile = /*@__PURE__*/
-  fileDesc("ChlyaWZ0d2FyZGVuL3YxL2xvYmJ5LnByb3RvEg1yaWZ0d2FyZGVuLnYxIoYBCgtMb2JieVBsYXllchIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJEg0KBXJlYWR5GAMgASgIEhEKCWNvbm5lY3RlZBgEIAEoCBIMCgRob3N0GAUgASgIEg4KBndlYXBvbhgGIAEoCRIOCgZyYXJpdHkYByABKAkSDQoFbGV2ZWwYCCABKA0i9wEKCkxvYmJ5U3RhdGUSDAoEY29kZRgBIAEoCRIPCgdob3N0X2lkGAIgASgJEgwKBHRpZXIYAyABKA0SJQoEbW9kZRgEIAEoDjIXLnJpZnR3YXJkZW4udjEuR2FtZU1vZGUSDAoEbm9kZRgFIAEoCRIQCghtYXhfdGllchgGIAEoDRIQCghjYXBhY2l0eRgHIAEoDRIoCgVwaGFzZRgIIAEoDjIZLnJpZnR3YXJkZW4udjEuTG9iYnlQaGFzZRIrCgdwbGF5ZXJzGAkgAygLMhoucmlmdHdhcmRlbi52MS5Mb2JieVBsYXllchIMCgR3YXZlGAogASgNIhsKC0xvYmJ5Q3JlYXRlEgwKBHRpZXIYASABKA0iGQoJTG9iYnlKb2luEgwKBGNvZGUYASABKAkiDAoKTG9iYnlMZWF2ZSIbCgpMb2JieVJlYWR5Eg0KBXJlYWR5GAEgASgIIhkKCUxvYmJ5VGllchIMCgR0aWVyGAEgASgNIjIKCUxvYmJ5TW9kZRIlCgRtb2RlGAEgASgOMhcucmlmdHdhcmRlbi52MS5HYW1lTW9kZSIZCglMb2JieU5vZGUSDAoEbm9kZRgBIAEoCSIMCgpMb2JieVN0YXJ0KnQKCkxvYmJ5UGhhc2USGwoXTE9CQllfUEhBU0VfVU5TUEVDSUZJRUQQABIVChFMT0JCWV9QSEFTRV9MT0JCWRABEhkKFUxPQkJZX1BIQVNFX0RFUExPWUlORxACEhcKE0xPQkJZX1BIQVNFX1JVTk5JTkcQA2IGcHJvdG8z", [file_riftwarden_v1_common]);
+  fileDesc("ChlyaWZ0d2FyZGVuL3YxL2xvYmJ5LnByb3RvEg1yaWZ0d2FyZGVuLnYxIoYBCgtMb2JieVBsYXllchIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJEg0KBXJlYWR5GAMgASgIEhEKCWNvbm5lY3RlZBgEIAEoCBIMCgRob3N0GAUgASgIEg4KBndlYXBvbhgGIAEoCRIOCgZyYXJpdHkYByABKAkSDQoFbGV2ZWwYCCABKA0ihwIKCkxvYmJ5U3RhdGUSDAoEY29kZRgBIAEoCRIPCgdob3N0X2lkGAIgASgJEgwKBHRpZXIYAyABKA0SJQoEbW9kZRgEIAEoDjIXLnJpZnR3YXJkZW4udjEuR2FtZU1vZGUSDAoEbm9kZRgFIAEoCRIQCghtYXhfdGllchgGIAEoDRIQCghjYXBhY2l0eRgHIAEoDRIoCgVwaGFzZRgIIAEoDjIZLnJpZnR3YXJkZW4udjEuTG9iYnlQaGFzZRIrCgdwbGF5ZXJzGAkgAygLMhoucmlmdHdhcmRlbi52MS5Mb2JieVBsYXllchIMCgR3YXZlGAogASgNEg4KBmxpc3RlZBgLIAEoCCIbCgtMb2JieUNyZWF0ZRIMCgR0aWVyGAEgASgNIhkKCUxvYmJ5Sm9pbhIMCgRjb2RlGAEgASgJIgwKCkxvYmJ5TGVhdmUiGwoKTG9iYnlSZWFkeRINCgVyZWFkeRgBIAEoCCIZCglMb2JieVRpZXISDAoEdGllchgBIAEoDSIyCglMb2JieU1vZGUSJQoEbW9kZRgBIAEoDjIXLnJpZnR3YXJkZW4udjEuR2FtZU1vZGUiGQoJTG9iYnlOb2RlEgwKBG5vZGUYASABKAkiDAoKTG9iYnlTdGFydCIdCgtMb2JieUxpc3RlZBIOCgZsaXN0ZWQYASABKAgqdAoKTG9iYnlQaGFzZRIbChdMT0JCWV9QSEFTRV9VTlNQRUNJRklFRBAAEhUKEUxPQkJZX1BIQVNFX0xPQkJZEAESGQoVTE9CQllfUEhBU0VfREVQTE9ZSU5HEAISFwoTTE9CQllfUEhBU0VfUlVOTklORxADYgZwcm90bzM", [file_riftwarden_v1_common]);
 
 /**
  * @generated from message riftwarden.v1.LobbyPlayer
@@ -125,6 +125,13 @@ export type LobbyState = Message<"riftwarden.v1.LobbyState"> & {
    * @generated from field: uint32 wave = 10;
    */
   wave: number;
+
+  /**
+   * Shown in the open-squad browser (host choice).
+   *
+   * @generated from field: bool listed = 11;
+   */
+  listed: boolean;
 };
 
 /**
@@ -265,6 +272,25 @@ export type LobbyStart = Message<"riftwarden.v1.LobbyStart"> & {
  */
 export const LobbyStartSchema: GenMessage<LobbyStart> = /*@__PURE__*/
   messageDesc(file_riftwarden_v1_lobby, 9);
+
+/**
+ * Host lists the squad in the open-squad browser (or takes it off).
+ *
+ * @generated from message riftwarden.v1.LobbyListed
+ */
+export type LobbyListed = Message<"riftwarden.v1.LobbyListed"> & {
+  /**
+   * @generated from field: bool listed = 1;
+   */
+  listed: boolean;
+};
+
+/**
+ * Describes the message riftwarden.v1.LobbyListed.
+ * Use `create(LobbyListedSchema)` to create a new message.
+ */
+export const LobbyListedSchema: GenMessage<LobbyListed> = /*@__PURE__*/
+  messageDesc(file_riftwarden_v1_lobby, 10);
 
 /**
  * @generated from enum riftwarden.v1.LobbyPhase

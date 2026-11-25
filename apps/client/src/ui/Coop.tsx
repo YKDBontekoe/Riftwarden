@@ -12,6 +12,7 @@ import { useSave } from './useSave';
 import { inviteCode } from './router';
 import { useAccount } from '../account/store';
 import { NamedDrops } from './NamedDrops';
+import { SquadBrowser } from './SquadBrowser';
 
 function useNet(flow: Flow): NetState | null {
   const [s, setS] = useState<NetState | null>(flow.net?.state ?? null);
@@ -105,6 +106,7 @@ export function CoopPanel({ flow, compact }: { flow: Flow; compact?: boolean }) 
           </div>
         </div>
         {net.error && <div className="term-msg bad">{net.error}</div>}
+        <SquadBrowser maxTier={save.threat.unlocked} onJoin={(c) => flow.net?.send({ t: 'join', code: c })} />
         <button className="mini" data-testid="coop-disconnect" onClick={() => flow.coopDisconnect()}>
           LEAVE CO-OP
         </button>
@@ -131,6 +133,11 @@ export function CoopPanel({ flow, compact }: { flow: Flow; compact?: boolean }) 
         >
           {copied ? 'LINK COPIED' : 'COPY INVITE LINK'}
         </button>
+        {host && lobby.state === 'lobby' && (
+          <button className="ds-btn" data-testid="lobby-listed" aria-pressed={lobby.listed} onClick={() => flow.net?.send({ t: 'listed', listed: !lobby.listed })}>
+            {lobby.listed ? 'LISTED · OPEN SQUAD' : 'PRIVATE · LIST SQUAD'}
+          </button>
+        )}
         <div className="lobby-cap">
           {lobby.players.length}/{lobby.capacity} WARDENS · {lobby.state === 'lobby' ? 'IN LOBBY' : lobby.state === 'deploying' ? 'DEPLOYING…' : `OPERATION · WAVE ${lobby.wave}`}
         </div>

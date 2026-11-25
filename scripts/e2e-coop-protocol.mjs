@@ -386,6 +386,36 @@ async function profileRows(id) {
       check('S13 the player can open a new session on the restarted worker', !again.activeRun && (await (async () => { bots2[0].send({ t: 'create', tier: 1 }); return bots2[0].waitNew((m) => m.t === 'lobby' && m.lobby, 10000).then(() => true, () => false); })()));
       for (const b of bots2) b.close();
     }
+    // ------------------------------------------------------------ L: open-squad browser (GET /rooms)
+    if (want('L')) {
+      const rooms = async () => (await fetch(`${stack.url}/rooms`).then((r) => r.json())).rooms;
+      const until = async (fn, ms = 6000) => { for (let t = 0; t < ms; t += 250) { const v = await rooms(); if (fn(v)) return v; await sleep(250); } return rooms(); };
+      const a = await bot('Lister'), b = await bot('Seeker');
+      a.send({ t: 'create', tier: 1 });
+      await a.waitNew((m) => m.t === 'lobby' && m.lobby);
+      const code = a.lobby.code;
+      await sleep(1200);
+      check('L1 a new squad is private (not in the browser)', !(await rooms()).some((r) => r.code === code));
+      b.send({ t: 'join', code });
+      await a.wait((m) => m.t === 'lobby' && m.lobby?.players.length === 2);
+      b.send({ t: 'listed', listed: true });
+      const refused = await b.waitNew((m) => m.t === 'error');
+      check('L2 only the host lists the squad', refused.code === 'listed', JSON.stringify(refused));
+      a.send({ t: 'listed', listed: true });
+      await a.wait((m) => m.t === 'lobby' && m.lobby?.listed);
+      const listed = await until((v) => v.some((r) => r.code === code));
+      const row = listed.find((r) => r.code === code);
+      check('L3 listed squads appear with host, players, level and mode', row?.host === 'Lister' && row.players === 2 && row.capacity === 4 && row.tier === 1 && row.mode === 'defense', JSON.stringify(row));
+      b.send({ t: 'ready', ready: true });
+      await a.wait((m) => m.t === 'lobby' && m.lobby?.players.every((p) => p.host || p.ready));
+      const started = [a, b].map((x) => x.waitNew((m) => m.t === 'runStart', 40000));
+      a.send({ t: 'start' });
+      await Promise.all(started);
+      const after = await until((v) => !v.some((r) => r.code === code));
+      check('L4 a squad that deployed leaves the browser', !after.some((r) => r.code === code));
+      a.close(); b.close();
+      await sleep(400);
+    }
     // ------------------------------------------------------------ K: capacity (own stack, one operation slot)
     if (want('K')) {
       const main = stack;

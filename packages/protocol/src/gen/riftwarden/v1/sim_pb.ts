@@ -4,7 +4,7 @@
 
 import type { GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
-import type { Doc } from "./common_pb";
+import type { Doc, GameMode } from "./common_pb";
 import { file_riftwarden_v1_common } from "./common_pb";
 import type { SyncEntry } from "./session_pb";
 import { file_riftwarden_v1_session } from "./session_pb";
@@ -16,7 +16,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file riftwarden/v1/sim.proto.
  */
 export const file_riftwarden_v1_sim: GenFile = /*@__PURE__*/
-  fileDesc("ChdyaWZ0d2FyZGVuL3YxL3NpbS5wcm90bxINcmlmdHdhcmRlbi52MSLaAQoHU2ltRG93bhIqCgZhdHRhY2gYASABKAsyGC5yaWZ0d2FyZGVuLnYxLlNpbUF0dGFjaEgAEigKBWlucHV0GAIgASgLMhcucmlmdHdhcmRlbi52MS5TaW1JbnB1dEgAEhAKBmRldGFjaBgDIAEoCUgAEiwKB3Byb2ZpbGUYBCABKAsyGS5yaWZ0d2FyZGVuLnYxLlNpbVByb2ZpbGVIABIhCgN3YXIYBSABKAsyEi5yaWZ0d2FyZGVuLnYxLkRvY0gAEg8KBWRyYWluGAYgASgISABCBQoDbXNnIo4CCgVTaW1VcBIoCgVoZWxsbxgBIAEoCzIXLnJpZnR3YXJkZW4udjEuU2ltSGVsbG9IABIqCgZvdXRwdXQYAiABKAsyGC5yaWZ0d2FyZGVuLnYxLlNpbU91dHB1dEgAEiwKB2VudHJpZXMYAyABKAsyGS5yaWZ0d2FyZGVuLnYxLlNpbUVudHJpZXNIABIqCgZyZXBvcnQYBCABKAsyGC5yaWZ0d2FyZGVuLnYxLldhclJlcG9ydEgAEiYKBGJpbmQYBSABKAsyFi5yaWZ0d2FyZGVuLnYxLlNpbUJpbmRIABImCgRsb2FkGAYgASgLMhYucmlmdHdhcmRlbi52MS5TaW1Mb2FkSABCBQoDbXNnIisKCFNpbUhlbGxvEg0KBWJ1aWxkGAEgASgJEhAKCGNhcGFjaXR5GAIgASgNIk8KCVNpbUF0dGFjaBIPCgdhY2NvdW50GAEgASgJEgwKBG5hbWUYAiABKAkSIwoHcHJvZmlsZRgDIAEoCzISLnJpZnR3YXJkZW4udjEuRG9jIioKCFNpbUlucHV0Eg8KB2FjY291bnQYASABKAkSDQoFZnJhbWUYAiABKAwiQgoKU2ltUHJvZmlsZRIPCgdhY2NvdW50GAEgASgJEiMKB3Byb2ZpbGUYAiABKAsyEi5yaWZ0d2FyZGVuLnYxLkRvYyIsCglTaW1PdXRwdXQSEAoIYWNjb3VudHMYASADKAkSDQoFZnJhbWUYAiABKAwiWAoKU2ltRW50cmllcxIPCgdhY2NvdW50GAEgASgJEikKB2VudHJpZXMYAiADKAsyGC5yaWZ0d2FyZGVuLnYxLlN5bmNFbnRyeRIOCgZkZXZpY2UYAyABKAkiKAoHU2ltQmluZBIPCgdhY2NvdW50GAEgASgJEgwKBGNvZGUYAiABKAkiKQoHU2ltTG9hZBINCgVjb2RlcxgBIAMoCRIPCgdydW5uaW5nGAIgASgNYgZwcm90bzM", [file_riftwarden_v1_common, file_riftwarden_v1_session, file_riftwarden_v1_worker]);
+  fileDesc("ChdyaWZ0d2FyZGVuL3YxL3NpbS5wcm90bxINcmlmdHdhcmRlbi52MSLaAQoHU2ltRG93bhIqCgZhdHRhY2gYASABKAsyGC5yaWZ0d2FyZGVuLnYxLlNpbUF0dGFjaEgAEigKBWlucHV0GAIgASgLMhcucmlmdHdhcmRlbi52MS5TaW1JbnB1dEgAEhAKBmRldGFjaBgDIAEoCUgAEiwKB3Byb2ZpbGUYBCABKAsyGS5yaWZ0d2FyZGVuLnYxLlNpbVByb2ZpbGVIABIhCgN3YXIYBSABKAsyEi5yaWZ0d2FyZGVuLnYxLkRvY0gAEg8KBWRyYWluGAYgASgISABCBQoDbXNnIo4CCgVTaW1VcBIoCgVoZWxsbxgBIAEoCzIXLnJpZnR3YXJkZW4udjEuU2ltSGVsbG9IABIqCgZvdXRwdXQYAiABKAsyGC5yaWZ0d2FyZGVuLnYxLlNpbU91dHB1dEgAEiwKB2VudHJpZXMYAyABKAsyGS5yaWZ0d2FyZGVuLnYxLlNpbUVudHJpZXNIABIqCgZyZXBvcnQYBCABKAsyGC5yaWZ0d2FyZGVuLnYxLldhclJlcG9ydEgAEiYKBGJpbmQYBSABKAsyFi5yaWZ0d2FyZGVuLnYxLlNpbUJpbmRIABImCgRsb2FkGAYgASgLMhYucmlmdHdhcmRlbi52MS5TaW1Mb2FkSABCBQoDbXNnIisKCFNpbUhlbGxvEg0KBWJ1aWxkGAEgASgJEhAKCGNhcGFjaXR5GAIgASgNIk8KCVNpbUF0dGFjaBIPCgdhY2NvdW50GAEgASgJEgwKBG5hbWUYAiABKAkSIwoHcHJvZmlsZRgDIAEoCzISLnJpZnR3YXJkZW4udjEuRG9jIioKCFNpbUlucHV0Eg8KB2FjY291bnQYASABKAkSDQoFZnJhbWUYAiABKAwiQgoKU2ltUHJvZmlsZRIPCgdhY2NvdW50GAEgASgJEiMKB3Byb2ZpbGUYAiABKAsyEi5yaWZ0d2FyZGVuLnYxLkRvYyIsCglTaW1PdXRwdXQSEAoIYWNjb3VudHMYASADKAkSDQoFZnJhbWUYAiABKAwiWAoKU2ltRW50cmllcxIPCgdhY2NvdW50GAEgASgJEikKB2VudHJpZXMYAiADKAsyGC5yaWZ0d2FyZGVuLnYxLlN5bmNFbnRyeRIOCgZkZXZpY2UYAyABKAkiKAoHU2ltQmluZBIPCgdhY2NvdW50GAEgASgJEgwKBGNvZGUYAiABKAkiVQoHU2ltTG9hZBINCgVjb2RlcxgBIAMoCRIPCgdydW5uaW5nGAIgASgNEioKBmxpc3RlZBgDIAMoCzIaLnJpZnR3YXJkZW4udjEuUm9vbUxpc3RpbmcigQEKC1Jvb21MaXN0aW5nEgwKBGNvZGUYASABKAkSDAoEaG9zdBgCIAEoCRIPCgdwbGF5ZXJzGAMgASgNEhAKCGNhcGFjaXR5GAQgASgNEgwKBHRpZXIYBSABKA0SJQoEbW9kZRgGIAEoDjIXLnJpZnR3YXJkZW4udjEuR2FtZU1vZGViBnByb3RvMw", [file_riftwarden_v1_common, file_riftwarden_v1_session, file_riftwarden_v1_worker]);
 
 /**
  * @generated from message riftwarden.v1.SimDown
@@ -323,6 +323,13 @@ export type SimLoad = Message<"riftwarden.v1.SimLoad"> & {
    * @generated from field: uint32 running = 2;
    */
   running: number;
+
+  /**
+   * Squads whose host listed them and that still have room (open-squad browser).
+   *
+   * @generated from field: repeated riftwarden.v1.RoomListing listed = 3;
+   */
+  listed: RoomListing[];
 };
 
 /**
@@ -331,4 +338,46 @@ export type SimLoad = Message<"riftwarden.v1.SimLoad"> & {
  */
 export const SimLoadSchema: GenMessage<SimLoad> = /*@__PURE__*/
   messageDesc(file_riftwarden_v1_sim, 9);
+
+/**
+ * @generated from message riftwarden.v1.RoomListing
+ */
+export type RoomListing = Message<"riftwarden.v1.RoomListing"> & {
+  /**
+   * @generated from field: string code = 1;
+   */
+  code: string;
+
+  /**
+   * @generated from field: string host = 2;
+   */
+  host: string;
+
+  /**
+   * @generated from field: uint32 players = 3;
+   */
+  players: number;
+
+  /**
+   * @generated from field: uint32 capacity = 4;
+   */
+  capacity: number;
+
+  /**
+   * @generated from field: uint32 tier = 5;
+   */
+  tier: number;
+
+  /**
+   * @generated from field: riftwarden.v1.GameMode mode = 6;
+   */
+  mode: GameMode;
+};
+
+/**
+ * Describes the message riftwarden.v1.RoomListing.
+ * Use `create(RoomListingSchema)` to create a new message.
+ */
+export const RoomListingSchema: GenMessage<RoomListing> = /*@__PURE__*/
+  messageDesc(file_riftwarden_v1_sim, 10);
 

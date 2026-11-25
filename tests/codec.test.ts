@@ -22,6 +22,7 @@ const CLIENT: ClientMsg[] = [
   { t: 'mode', mode: 'defense' },
   { t: 'node', node: 'r0n4' },
   { t: 'node', node: null },
+  { t: 'listed', listed: true },
   { t: 'start' },
   { t: 'presence', p: [1.5, 2, -3.25], yaw: 0.75 },
   { t: 'visit', on: true },
@@ -168,9 +169,9 @@ describe('frame codec: server messages', () => {
     { t: 'lobby', lobby: null },
     {
       t: 'lobby',
-      lobby: { code: 'ABCDE', hostId: 'p1', tier: 2, mode: 'survival', node: 'r0n1', maxTier: 3, capacity: 4, state: 'running', wave: 7, players: [{ id: 'p1', name: 'Alpha', ready: true, connected: true, host: true, weapon: 'Repeater', rarity: 'rare', level: 12 }] },
+      lobby: { code: 'ABCDE', hostId: 'p1', tier: 2, mode: 'survival', node: 'r0n1', maxTier: 3, capacity: 4, state: 'running', wave: 7, listed: true, players: [{ id: 'p1', name: 'Alpha', ready: true, connected: true, host: true, weapon: 'Repeater', rarity: 'rare', level: 12 }] },
     },
-    { t: 'lobby', lobby: { code: 'ABCDE', hostId: 'p1', tier: 1, mode: 'defense', node: null, maxTier: 1, capacity: 4, state: 'lobby', wave: 0, players: [] } },
+    { t: 'lobby', lobby: { code: 'ABCDE', hostId: 'p1', tier: 1, mode: 'defense', node: null, maxTier: 1, capacity: 4, state: 'lobby', wave: 0, listed: false, players: [] } },
     { t: 'presence', players: [{ id: 'p2', name: 'Beta', p: [1, 2, 3], yaw: 0.5 }] },
     { t: 'hostHq', owner: 'p1', base: { structure: {} } },
     {

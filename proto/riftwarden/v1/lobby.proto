@@ -36,6 +36,8 @@ message LobbyState {
   repeated LobbyPlayer players = 9;
   // Run in progress (wave) for joiners / rejoiners.
   uint32 wave = 10;
+  // Shown in the open-squad browser (host choice).
+  bool listed = 11;
 }
 
 // Lobby commands (client -> server).
@@ -67,3 +69,8 @@ message LobbyNode {
 }
 
 message LobbyStart {}
+
+// Host lists the squad in the open-squad browser (or takes it off).
+message LobbyListed {
+  bool listed = 1;
+}
