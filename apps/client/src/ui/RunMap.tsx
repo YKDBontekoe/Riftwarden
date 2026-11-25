@@ -16,6 +16,7 @@ import type { RunMapView, StationPanel } from '@riftwarden/rules/runmap/view';
 import { AffinityRow } from './LoadingScreen';
 import { ItemDetail, ItemGlyph, RarityTag } from './items';
 import { useHud } from './useHud';
+import { Crumb, Cur, Hint, pips, rarityCls } from './ds';
 import { BIOMES } from '@riftwarden/rules/world/biomes';
 import { NamedDrops } from './NamedDrops';
 import { bossArtwork } from '@riftwarden/game/visuals/fieldArtwork';
@@ -310,44 +311,63 @@ export function StationScreen({ game }: { game: Game }) {
   const p: StationPanel | null = game.node?.panel() ?? null;
   if (!p) return null;
   const item = p.options.find((o) => o.id === hover && o.item)?.item;
+  const goods = p.options.filter((o) => o.item);
+  const services = p.options.filter((o) => !o.item);
+  const buy = (id: string) => {
+    const r = game.node?.act(id) ?? 'Unavailable';
+    setWhy(r ?? '');
+    tick((x) => x + 1);
+  };
+  const price = (o: (typeof p.options)[number]) => o.disabled ?? (o.price !== null ? `${o.price}` : 'Free');
   return (
-    <div className="screen dim station" data-testid="station">
-      <div className={`st-wrap panel-frame st-${p.station}`}>
-        <div className="st-head">
-          <FieldArt name={`hub-${p.station}`} className="station-art" />
-          <div className="cp-kicker"><FieldIcon name={NODE_ICON[p.station]} /> Map node station · {p.cores} cores</div>
-          <h2 className="cp-title">{p.title}</h2>
-          <div className="cp-sub">{p.lore}</div>
-        </div>
-        <div className="st-body">
-          <div className="st-options">
-            {p.options.map((o) => (
-              <button
-                key={o.id}
-                className="st-opt"
-                data-testid={`st-${o.id}`}
-                disabled={!!o.disabled}
-                onMouseEnter={() => setHover(o.id)}
-                onClick={() => {
-                  const r = game.node?.act(o.id) ?? 'Unavailable';
-                  setWhy(r ?? '');
-                  tick((x) => x + 1);
-                }}
-              >
-                <span className="st-label">
-                  {o.item ? <ItemGlyph item={o.item} size={26} /> : <span className="st-ico"><FieldIcon name={serviceIcon(p.station, o.id)} /></span>}
-                  {o.item && <RarityTag id={o.item.rarity} />}{o.label}
-                </span>
-                <span className="st-text">{o.text}</span>
-                <span className="st-price">{o.disabled ?? (o.price !== null ? `${o.price} cores` : 'Free')}</span>
-              </button>
-            ))}
-          </div>
-          {item && <div className="st-item"><ItemDetail item={item} /></div>}
-        </div>
-        {(p.note || why) && <div className={`st-note${why ? ' bad' : ''}`} data-testid="st-note">{why || p.note}</div>}
-        <button className="mini" onClick={() => void game.continueRun()}>CLOSE (E / ESC)</button>
+    <div className="screen dim station ds-scr" data-testid="station">
+      <div className={`st-art-bg st-${p.station}`} aria-hidden="true"><FieldArt name={`hub-${p.station}`} className="station-art" /></div>
+      <div className="ds-scrim-l" />
+      <div className="ds-vig" />
+      <div className="ds-top">
+        <Crumb parts={['Run', game.node?.hud()?.name ?? 'Node', p.title]} />
+        <span className="ds-grow" />
+        <Cur k="cores" value={p.cores} note="cores · this run" />
       </div>
+      <div className="ds-abs ds-col" style={{ left: 44, top: 78, width: 560, gap: 6 }}>
+        <span className="ds-ov ds-em"><FieldIcon name={NODE_ICON[p.station]} /> Map node station</span>
+        <span className="ds-hero">{p.title}</span>
+        <span className="ds-meta">{p.lore}</span>
+      </div>
+      {goods.length > 0 && (
+        <div className="st-goods ds-abs" style={{ left: 44, top: 230, width: 560, display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 16 }}>
+          {goods.map((o) => (
+            <button key={o.id} className={`st-good ds-col ${rarityCls(o.item!.rarity)}`} data-testid={`st-${o.id}`} disabled={!!o.disabled} onMouseEnter={() => setHover(o.id)} onFocus={() => setHover(o.id)} onClick={() => buy(o.id)}>
+              <span className={`ds-tile ${rarityCls(o.item!.rarity)} ${hover === o.id ? 'on' : ''}`} style={{ height: 130 }}>
+                <span className="ds-tile-art"><ItemGlyph item={o.item!} size={92} /></span>
+                <span className="ds-lv">{o.item!.level}</span>
+              </span>
+              <span className="ds-h3">{o.label}</span>
+              <span className="ds-meta ds-rt"><span className="ds-pips">{pips(o.item!.rarity)}</span> <RarityTag id={o.item!.rarity} /></span>
+              <span className="ds-row" style={{ gap: 6 }}><b className="ds-d" style={{ fontSize: 20 }}>{price(o)}</b>{o.price !== null && !o.disabled && <span className="ds-meta">cores</span>}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      {item && <div className="st-item ds-abs ds-glass ds-cut" style={{ left: 44, top: goods.length ? 470 : 230, width: 560, bottom: 90, overflowY: 'auto', padding: '12px 16px' }}><ItemDetail item={item} /></div>}
+      {services.length > 0 && (
+        <section className="st-options ds-abs ds-glass ds-cut ds-col" style={{ right: 44, top: 96, width: 'min(470px, calc(100% - 680px))', minWidth: 380, maxHeight: 'calc(100% - 190px)', overflowY: 'auto', padding: '22px 24px', gap: 4 }}>
+          <span className="ds-h2" style={{ marginBottom: 6 }}>{goods.length ? 'Services' : 'Choose'}</span>
+          {services.map((o) => (
+            <button key={o.id} className="st-opt ds-list-row" data-testid={`st-${o.id}`} disabled={!!o.disabled} onMouseEnter={() => setHover(o.id)} onClick={() => buy(o.id)}>
+              <span className="ds-gem" style={{ width: 34, height: 34 }}><span style={{ transform: 'rotate(-45deg)', display: 'flex' }}><FieldIcon name={serviceIcon(p.station, o.id)} /></span></span>
+              <span className="ds-col ds-grow" style={{ textAlign: 'left' }}><b className="st-label">{o.label}</b><span className="st-text ds-meta">{o.text}</span></span>
+              <b className="st-price ds-d">{price(o)}</b>
+            </button>
+          ))}
+        </section>
+      )}
+      <div className="ds-bot">
+        {(p.note || why) ? <span className={`st-note ds-meta${why ? ' bad' : ''}`} data-testid="st-note">{why || p.note}</span> : <span className="ds-meta">Paid in cores · items go to cargo and bank when you leave this node</span>}
+        <span className="ds-grow" />
+        <Hint keys={['E', 'ESC']} onClick={() => void game.continueRun()}>Close</Hint>
+      </div>
+      <div className="ds-grain" />
     </div>
   );
 }
