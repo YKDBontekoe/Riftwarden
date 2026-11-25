@@ -88,9 +88,18 @@ html[data-touch] .menu-nav button { min-height: 40px; }
    room for the menu row under the wave panel. Zoom scales offsets too, so offsets are divided by it. */
 html[data-touch] .combat-hud { --hz: 0.9; }
 @media (max-height: 600px) { html[data-touch] .combat-hud { --hz: 0.66; } }
-html[data-touch] .combat-hud :is(.hud-rail, .top-center, .bottom-center, .bottom-right, .hint) { zoom: var(--hz); }
-html[data-touch] .combat-hud .bottom-left { zoom: calc(var(--ui-scale, 1) * var(--hz)); }
-html[data-touch] .combat-hud .bottom-right { right: auto; left: 14px; bottom: calc(clamp(92px, 26vh, 150px) / var(--hz)); }
+html[data-touch] .combat-hud :is(.hud-rail, .hud-objective, .hud-phase, .bottom-center, .bottom-right, .hint, .boss-bar, .alert-feed) { zoom: var(--hz); }
+html[data-touch] .combat-hud .bottom-left { zoom: calc(var(--ui-scale, 1) * var(--hz)); left: calc(clamp(200px, 27vw, 260px) / var(--hz)); bottom: 12px; }
+/* Touch layout (canvas "Touch HUD"): no compass, weapon + heat under the top-right buttons, vitals beside the stick. */
+html[data-touch] .combat-hud .hud-compass { display: none; }
+html[data-touch] .combat-hud .bottom-left .ability-bar { display: none; }
+html[data-touch] .combat-hud .bottom-right.hud-weapon { right: 16px; left: auto; bottom: auto; top: calc(64px / var(--hz)); gap: 2px; }
+html[data-touch] .combat-hud .hud-weapon :is(.wc-holster, .heat-label, .slots) { display: none; }
+html[data-touch] .combat-hud .hud-weapon .hw-heat { font-size: 34px; min-width: 0; }
+html[data-touch] .combat-hud .hud-weapon .hw-bar.segbar { width: 170px; }
+html[data-touch] .combat-hud .hud-phase.cores { top: calc(120px / var(--hz)); }
+html[data-touch] .combat-hud .hud-phase .hud-phase-sub { display: none; }
+html[data-touch] .combat-hud .hv-bars { width: 120px; }
 html[data-touch] .combat-hud kbd, html[data-touch] .hq-prompt kbd { display: none; }
 @media (max-height: 600px) { html[data-touch] .combat-hud .node-chip { top: 108px; } }
 
