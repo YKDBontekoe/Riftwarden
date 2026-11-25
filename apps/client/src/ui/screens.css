@@ -464,3 +464,12 @@ html[data-touch] .range-panel { top: 70px; right: 12px; width: 220px; zoom: 0.8;
 .trade-foot .ds-hint { margin-right: auto; }
 .lp-trade { padding: 4px 10px; font-size: 11px; }
 @media (max-width: 860px) { .trade-body { grid-template-columns: 1fr; } .trade-mid { padding: 0; flex-direction: row; } }
+
+/* ---- Short / narrow screens (phones in landscape): terminals scroll as one page, inventory stacks */
+@media (max-height: 600px), (max-width: 760px) {
+  .terminal-screen .term-body, .terminal-screen .term-body:has(> .inv-ds), .terminal-screen .term-body:has(> * > .inv-ds) { display: block; overflow-y: auto; overscroll-behavior: contain; }
+  .inv.inv-ds { height: auto; }
+  .inv-ds .inv-main { grid-template-columns: 1fr; flex: none; }
+  .inv-ds .inv-list { overflow: visible; flex: none; }
+  .inv-ds .inv-detail-col { overflow: visible; flex: none; border-left: 0; padding: 0; }
+}

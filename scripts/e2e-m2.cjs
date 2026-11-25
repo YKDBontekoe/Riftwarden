@@ -376,10 +376,11 @@ const savedItems = (p) => p.evaluate(() => JSON.parse(JSON.stringify(window.__ri
   const levels = await p.$$eval('.inv-list .icard em', (els) => els.map((e) => +e.textContent.match(/LV (\d+)/)[1]));
   check('D7 storage filter by category and sort by level work', weaponsOnly && levels.every((v, i) => i === 0 || levels[i - 1] >= v), JSON.stringify(levels));
   await p.click('.inv-filters button:has-text("ALL")');
-  const firstStored = await p.$('.inv-list .icard.stored');
-  if (firstStored) await firstStored.click();
+  // First stored item that is not a module (modules have no slot to compare against).
+  const gearUid = await p.evaluate(() => { const d = window.__rift.profile.save; const byUid = new Map(d.items.map((i) => [i.uid, i])); return d.storage.uids.find((u) => byUid.get(u)?.category !== 'module') ?? null; });
+  if (gearUid) await p.click(`.inv-list .icard.stored[data-uid="${gearUid}"]`);
   const cmp = await p.$('.compare .cmp-table');
-  check('D8 selecting a stored item shows a comparison against the equipped slot', !!cmp || !(await p.$('.inv-list .icard.stored .ic-main em:not(:has-text("MODULE"))')));
+  check('D8 selecting a stored item shows a comparison against the equipped slot', !!cmp || !gearUid, String(gearUid));
   await shot(p, 'D_storage');
   await p.keyboard.press('Escape');
   await boot(p, true);
