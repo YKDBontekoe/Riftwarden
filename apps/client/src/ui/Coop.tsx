@@ -14,6 +14,9 @@ import { useAccount } from '../account/store';
 import { NamedDrops } from './NamedDrops';
 import { SquadBrowser } from './SquadBrowser';
 import { TradeWindow } from './Trade';
+import { Backdrop, Crumb, Hint, rarityCls } from './ds';
+import { FieldIcon } from './FieldIcon';
+import { nodeInfo } from '@riftwarden/rules/runmap/map';
 
 function useNet(flow: Flow): NetState | null {
   const [s, setS] = useState<NetState | null>(flow.net?.state ?? null);
@@ -50,6 +53,18 @@ export function CoopPanel({ flow, compact }: { flow: Flow; compact?: boolean }) 
   const account = useAccount();
   const [code, setCode] = useState(urlJoinCode());
   const [copied, setCopied] = useState(false);
+  const [sectors, setSectors] = useState(false);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const l = flow.net?.state.lobby;
+      if (!l || e.repeat || e.target instanceof HTMLInputElement || flow.net?.state.trade) return;
+      if (e.code === 'KeyM') setSectors((v) => !v);
+      else if (e.code === 'KeyV' && l.hostId !== flow.net?.state.playerId && l.state === 'lobby') void flow.visitHostHq(!flow.visiting);
+      else if (e.code === 'Enter' && !(document.activeElement instanceof HTMLButtonElement)) document.querySelector<HTMLButtonElement>('[data-testid=lobby-ready]:not(:disabled), [data-testid=lobby-start]:not(:disabled)')?.click();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [flow]);
   const status = net?.status ?? 'offline';
   const lobby = net?.lobby ?? null;
   const me = net?.playerId ?? '';
@@ -116,16 +131,24 @@ export function CoopPanel({ flow, compact }: { flow: Flow; compact?: boolean }) 
   }
 
   const link = `${location.origin}${location.pathname}#/join/${lobby.code}`;
-  const allReady = lobby.players.filter((p) => p.connected && !p.host).every((p) => p.ready);
+  const connected = lobby.players.filter((p) => p.connected);
+  const ready = connected.filter((p) => p.host || p.ready).length;
+  const allReady = connected.filter((p) => !p.host).every((p) => p.ready);
   const tier = getTier(lobby.tier);
+  const leave = () => {
+    flow.net?.send({ t: 'leave' });
+    if (flow.visiting) void flow.visitHostHq(false);
+  };
   return (
-    <div className="coop" data-testid="coop-lobby">
+    <div className="coop lobby-screen screen ds-scr" data-testid="coop-lobby">
+      <Backdrop />
+      <div className="lobby-shade" />
       {net.trade && <TradeWindow flow={flow} trade={net.trade} me={me} />}
-      <div className="lobby-head">
-        <div>
-          <div className="ds-lbl">Room code</div>
-          <div className="lobby-code" data-testid="lobby-code">{lobby.code}</div>
-        </div>
+      <div className="ds-top">
+        <Crumb parts={['Co-op', 'Squad lobby']} />
+        <span className="ds-grow" />
+        <span className="ds-meta">Room code</span>
+        <span className="lobby-code" data-testid="lobby-code">{lobby.code}</span>
         <button
           className="ds-btn"
           onClick={() => {
@@ -140,84 +163,99 @@ export function CoopPanel({ flow, compact }: { flow: Flow; compact?: boolean }) 
             {lobby.listed ? 'LISTED · OPEN SQUAD' : 'PRIVATE · LIST SQUAD'}
           </button>
         )}
-        <div className="lobby-cap">
-          {lobby.players.length}/{lobby.capacity} WARDENS · {lobby.state === 'lobby' ? 'IN LOBBY' : lobby.state === 'deploying' ? 'DEPLOYING…' : `OPERATION · WAVE ${lobby.wave}`}
+      </div>
+      <LobbyTitle flow={flow} host={host} node={lobby.node} tier={tier.id} />
+      <div className="lobby-modes ds-col">
+        <span className="ds-lbl">Mode</span>
+        <span className="set-seg">
+          {(['defense', 'survival'] as const).map((m) => (
+            <button key={m} data-testid={`lobby-mode-${m}`} className="set-opt" aria-pressed={lobby.mode === m} disabled={!host || lobby.state !== 'lobby'} onClick={() => flow.net?.send({ t: 'mode', mode: m })}>
+              {m.toUpperCase()}
+            </button>
+          ))}
+        </span>
+        <span className="ds-meta">{lobby.mode === 'survival' ? 'No towers · hunted · one life per node' : 'Towers on · reactor to protect · shared cores'}</span>
+      </div>
+      <div className="lobby-setup">
+        <div className="lobby-tier">
+          <span className="ds-lbl">Rift level</span>
+          <div className="min-w-[280px] flex-1" title="Every warden must have unlocked the level">
+            <RiftLevelPicker value={lobby.tier} unlocked={lobby.maxTier} power={savePower(save)} disabled={!host || lobby.state !== 'lobby'} onPick={(rl) => flow.net?.send({ t: 'tier', tier: rl })} />
+          </div>
         </div>
+        {sectors && <LobbyWar flow={flow} host={host} node={lobby.node} disabled={lobby.state !== 'lobby'} />}
       </div>
       <div className="lobby-list">
-        {lobby.players.map((p, i) => (
-          <div key={p.id} className={`lobby-player ${p.connected ? '' : 'away'}`} data-testid="lobby-player">
-            <i className="swatch" style={{ background: SLOT_CSS[i % SLOT_CSS.length] }} />
-            <span className="lp-slot ds-mono">SLOT {i + 1}</span>
-            <span className="lp-name">
-              {p.host && <b className="host">★</b>} {p.name}
-              {p.id === me && <em> (you)</em>}
-            </span>
-            <span className="lp-weapon" style={{ color: rarity(p.rarity as never)?.color }}>
-              {p.weapon} · LV {p.level}
-            </span>
-            <span className={`lp-ready ${p.host || p.ready ? 'ok' : ''}`}>{!p.connected ? 'RECONNECTING' : p.host ? 'HOST' : p.ready ? 'READY' : 'NOT READY'}</span>
-            {p.id !== me && p.connected && lobby.state === 'lobby' && !net.trade && (
-              <button className="ds-btn lp-trade" data-testid={`lobby-trade-${i}`} onClick={() => flow.net?.send({ t: 'trade', op: 'open', with: p.id })}>
-                TRADE
-              </button>
-            )}
-          </div>
-        ))}
-        {Array.from({ length: Math.max(0, lobby.capacity - lobby.players.length) }).map((_, i) => (
-          <div key={`e${i}`} className="lobby-player empty">
-            <i className="swatch" />
-            <span className="lp-slot ds-mono">SLOT {lobby.players.length + i + 1}</span>
-            <span className="lp-name">Open slot · share the code</span>
-          </div>
-        ))}
+        {Array.from({ length: lobby.capacity }, (_, i) => {
+          const p = lobby.players[i];
+          if (!p)
+            return (
+              <div key={`e${i}`} className="lobby-player empty">
+                <span className="ds-row"><span className="lp-slot">{String(i + 1).padStart(2, '0')}</span></span>
+                <span className="ds-tile empty" style={{ height: 100 }} />
+                <span className="ds-col"><span className="ds-h2 lp-name">OPEN SLOT</span><span className="ds-meta">Share the code or the invite link</span></span>
+              </div>
+            );
+          const you = p.id === me;
+          return (
+            <div key={p.id} className={`lobby-player ${p.connected ? '' : 'away'} ${you ? 'you' : ''}`} data-testid="lobby-player">
+              <i className="swatch" style={{ background: SLOT_CSS[i % SLOT_CSS.length] }} />
+              <span className="ds-row">
+                <span className="lp-slot">{String(i + 1).padStart(2, '0')}{p.host ? ' · HOST' : ''}{you ? ' · YOU' : ''}</span>
+                <span className="ds-grow" />
+                <span className={`lp-ready ${p.host || p.ready ? 'ok' : ''}`}>{!p.connected ? 'RECONNECTING' : p.host ? 'HOST' : p.ready ? 'READY' : 'NOT READY'}</span>
+              </span>
+              <span className={`ds-tile ${rarityCls(p.rarity)}`} style={{ height: 100 }}><span className="ds-tile-art lp-weapon-art"><FieldIcon name="firepower" /></span><span className="ds-lv">{p.level}</span></span>
+              <span className="ds-row" style={{ alignItems: 'flex-end' }}>
+                <span className="ds-col ds-grow">
+                  <span className="ds-h2 lp-name">{p.name}</span>
+                  <span className="ds-meta lp-weapon" style={{ color: rarity(p.rarity as never)?.color }}>{p.weapon} · LV {p.level}</span>
+                </span>
+                {!you && p.connected && lobby.state === 'lobby' && !net.trade && (
+                  <button className="ds-btn lp-trade" data-testid={`lobby-trade-${i}`} onClick={() => flow.net?.send({ t: 'trade', op: 'open', with: p.id })}>TRADE</button>
+                )}
+              </span>
+            </div>
+          );
+        })}
       </div>
-      <div className="lobby-tier">
-        <span>RIFT LEVEL</span>
-        <div className="min-w-[280px] flex-1" title="Every warden must have unlocked the level">
-          <RiftLevelPicker value={lobby.tier} unlocked={lobby.maxTier} power={savePower(save)} disabled={!host || lobby.state !== 'lobby'} onPick={(rl) => flow.net?.send({ t: 'tier', tier: rl })} />
-        </div>
-      </div>
-      <LobbyWar flow={flow} host={host} node={lobby.node} disabled={lobby.state !== 'lobby'} />
-      <div className="lobby-tier lobby-mode">
-        <span>GAME MODE</span>
-        <span className="set-seg">
-        {(['defense', 'survival'] as const).map((m) => (
-          <button key={m} data-testid={`lobby-mode-${m}`} className="set-opt" aria-pressed={lobby.mode === m} disabled={!host || lobby.state !== 'lobby'} onClick={() => flow.net?.send({ t: 'mode', mode: m })}>
-            {m.toUpperCase()}
-          </button>
-        ))}
-        </span>
-        <em>{lobby.mode === 'survival' ? 'No towers · hunted · one life per node' : 'Hold the reactor · build towers'}</em>
-      </div>
-      <div className="lobby-actions">
+      <div className="ds-bot">
+        <span className="ds-meta">{ready} of {connected.length} ready · starts when everyone is ready · {net.rtt} ms{lobby.state !== 'lobby' ? ` · ${lobby.state === 'deploying' ? 'deploying…' : `operation · wave ${lobby.wave}`}` : ''}</span>
+        {net.error && <span className="term-msg bad">{net.error}</span>}
+        <span className="ds-grow" />
+        <Hint keys="M" onClick={() => setSectors((v) => !v)}>{sectors ? 'Hide sectors' : host ? 'Change sector' : 'Sector'}</Hint>
+        {!host && lobby.state === 'lobby' && (
+          <button className="ds-hint" data-testid="lobby-visit" onClick={() => void flow.visitHostHq(!flow.visiting)}><span className="ds-k">V</span>{flow.visiting ? 'Return to my HQ' : 'Visit host HQ'}</button>
+        )}
+        <button className="ds-hint" data-testid="lobby-leave" onClick={leave}>Leave squad</button>
         {!host && (
-          <button className={mine?.ready ? '' : 'primary'} data-testid="lobby-ready" disabled={lobby.state !== 'lobby'} onClick={() => flow.net?.send({ t: 'ready', ready: !mine?.ready })}>
-            {mine?.ready ? 'NOT READY' : 'READY'}
+          <button className="ds-btn-p" data-testid="lobby-ready" disabled={lobby.state !== 'lobby'} onClick={() => flow.net?.send({ t: 'ready', ready: !mine?.ready })}>
+            <span className="ds-kd">ENTER</span>{mine?.ready ? 'NOT READY' : 'READY'}
           </button>
         )}
         {host && (
-          <button className="primary" data-testid="lobby-start" disabled={!allReady || lobby.state !== 'lobby'} onClick={() => flow.net?.send({ t: 'start' })}>
-            {allReady ? `DEPLOY TEAM · RL ${tier.id}` : 'WAITING FOR READY'}
+          <button className="ds-btn-p" data-testid="lobby-start" disabled={!allReady || lobby.state !== 'lobby'} onClick={() => flow.net?.send({ t: 'start' })}>
+            <span className="ds-kd">ENTER</span>{allReady ? `DEPLOY TEAM · RL ${tier.id}` : 'WAITING FOR READY'}
           </button>
         )}
-        {!host && lobby.state === 'lobby' && (
-          <button data-testid="lobby-visit" onClick={() => void flow.visitHostHq(!flow.visiting)}>
-            {flow.visiting ? 'RETURN TO MY HQ' : 'VISIT HOST HQ'}
-          </button>
-        )}
-        <button
-          data-testid="lobby-leave"
-          onClick={() => {
-            flow.net?.send({ t: 'leave' });
-            if (flow.visiting) void flow.visitHostHq(false);
-          }}
-        >
-          LEAVE SESSION
-        </button>
       </div>
-      {net.error && <div className="term-msg bad">{net.error}</div>}
-      <div className="text-faint text-[12px] leading-[1.4]">Prepare your loadout at HQ terminals while you wait: changes sync to your account before the operation starts.</div>
+      <div className="ds-grain" />
+    </div>
+  );
+}
+
+/** Lobby title (canvas "Co-op lobby"): the sector the squad deploys to, its region, level and live events. */
+function LobbyTitle({ flow, host, node, tier }: { flow: Flow; host: boolean; node: string | null; tier: number }) {
+  const war = useSyncExternalStore(flow.war.store.subscribe, flow.war.store.get).war;
+  const chosen = war ? (node && nodePlayable(war, node) ? node : defaultEntry(war)) : null;
+  const n = war && chosen ? liveNode(war.seed, war, chosen) : null;
+  const name = n ? nodeInfo(n).name : 'Rift War sector';
+  const extra = n?.mods.filter((m) => ['distress', 'defense', 'convoy', 'corrupted', 'stronghold'].includes(m)).map((m) => m) ?? [];
+  return (
+    <div className="lobby-title ds-col">
+      <span className="ds-ov ds-em">Operation · {host ? 'you are host' : 'the host chooses'}</span>
+      <span className="ds-hero">{name.toUpperCase()}</span>
+      <span className="ds-meta">{n ? `${n.region} · Rift Level ${tier} · ${n.actBoss ? 'capital' : `${n.kind} sector`}${extra.length ? ` · ${extra.join(' · ')}` : ''}` : `Rift Level ${tier}`}</span>
     </div>
   );
 }

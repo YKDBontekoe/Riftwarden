@@ -5,7 +5,7 @@ import { BLESSINGS, CURSES, isCombatKind, NODE_KINDS, type NodeKind } from '@rif
 import type { MapNode, SegmentEffect } from '@riftwarden/rules/runmap/map';
 import { findNode, liveNode, nodePlayable } from '@riftwarden/rules/war/world';
 import { regionLayout } from '@riftwarden/rules/war/regions';
-import { nodeLiberation, regionState } from '@riftwarden/rules/war/state';
+import { nodeLiberation, regionState, type WarState } from '@riftwarden/rules/war/state';
 import { Globe, OrderBanner, RegionMap, RegionStrip, RegionTabs, regionOfNode, WarHeader, WarReport } from './WarMap';
 import { type Lookahead, lookahead, type NodeIntel, nodeIntel } from '@riftwarden/rules/runmap/intel';
 import { getTier } from '@riftwarden/rules/progression/tiers';
@@ -78,6 +78,37 @@ function ActEffects({ curses, blessings }: { curses: readonly string[]; blessing
   );
 }
 
+/** Right panel head of the sector map (canvas "Region · sector map"): live events, name, the three numbers. */
+function SectorHeader({ node, view, war, lib }: { node: MapNode; view: RunMapView; war: WarState; lib: number }) {
+  const intel = useMemo(
+    () => nodeIntel(node, { plannerSeed: view.plannerSeed, tier: getTier(view.tier), mode: view.mode, lastWave: view.lastWave, act: { curses: view.curses, blessings: view.blessings }, dps: view.dps }),
+    [node, view.plannerSeed, view.tier, view.mode, view.lastWave, view.curses, view.blessings, view.dps],
+  );
+  const b = nodeBrief(node, view.lastWave, view.mode);
+  const live = war.events.filter((e) => e.node === node.id && e.until > Date.now());
+  const clock = (ms: number) => `${String(Math.floor(ms / 3_600_000)).padStart(2, '0')}:${String(Math.floor((ms % 3_600_000) / 60_000)).padStart(2, '0')}`;
+  const links = view.current ? (findNode(view.seed, view.current)?.links.includes(node.id) ? 1 : 0) : 0;
+  const clear = intel.fireSeconds;
+  return (
+    <div className="rm-head" data-testid="rm-card" style={{ ['--kc' as string]: KIND_COLOR[b.kind] }}>
+      <div className="ds-row rm-badges" style={{ gap: 8, flexWrap: 'wrap' }}>
+        {live.map((e) => <span key={e.id} className={`ds-chip rm-ev ${e.kind}`}>{e.kind.toUpperCase()} · {clock(e.until - Date.now())}</span>)}
+        <span className="ds-chip"><FieldIcon name={NODE_ICON[b.kind]} /> {b.actBoss ? 'CAPITAL' : `${NODE_KINDS[b.kind].name.toUpperCase()}`}</span>
+      </div>
+      <span className="ds-hero rm-name">{b.name.toUpperCase()}</span>
+      <span className="ds-meta">{b.waves ? `${b.waves[1] - b.waves[0] + 1} waves` : 'No waves · stations'} · {b.faction}{b.mods.length ? ` · ${b.mods.map((m) => m.name).join(' · ')}` : ''}{links ? ' · 1 link from you' : ''}</span>
+      {b.waves && (
+        <div className="rm-figs">
+          <div className="ds-col"><span className="ds-lbl">Threat</span><span className="ds-num" style={{ color: intel.threat >= 4 ? '#ff8a7a' : intel.threat >= 3 ? '#ffd84d' : 'var(--ds-ink)' }}>{intel.threat}<small> / 5</small></span></div>
+          <div className="ds-col"><span className="ds-lbl">Clear time</span><span className="ds-num">{clear ? `${Math.floor(clear / 60)}:${String(Math.round(clear % 60)).padStart(2, '0')}` : '—'}</span></div>
+          <div className="ds-col"><span className="ds-lbl">Liberation</span><span className="ds-num" style={{ color: '#b9ece0' }}>{Math.round(lib)}<small>%</small>{live.some((e) => e.kind === 'distress') && <small style={{ color: '#ffa294' }}> ×2</small>}</span></div>
+        </div>
+      )}
+      {!b.waves && <div className="rm-card-blurb">{b.blurb}</div>}
+    </div>
+  );
+}
+
 /** In-run war map: the region of the current sector on the Rift War, travel to a linked sector or extract. */
 export function RunMapScreen({ flow, game }: { flow: Flow; game: Game }) {
   const view = useHud((s) => s.runMap) as RunMapView | null | undefined;
@@ -87,6 +118,7 @@ export function RunMapScreen({ flow, game }: { flow: Flow; game: Game }) {
   const [hover, setHover] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [regionPick, setRegionPick] = useState<number | null>(null);
+  const [side, setSide] = useState(false);
   const reach = view?.reachable ?? [];
   const selected = sel && reach.includes(sel) ? sel : reach[0] ?? null;
   const war = wv.war;
@@ -110,6 +142,8 @@ export function RunMapScreen({ flow, game }: { flow: Flow; game: Game }) {
         setSel(reach[n - 1]);
       }
       if (e.key === 'Enter' && selected && !target?.closest('button, [role="button"], a, summary')) go(selected);
+      if (e.key === 'r' || e.key === 'R') setSide((v) => !v);
+      if ((e.key === 'x' || e.key === 'X') && view && war && !target?.closest('input')) extract();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -143,7 +177,7 @@ export function RunMapScreen({ flow, game }: { flow: Flow; game: Game }) {
         <span className="ds-grow" />
         <span className="ds-mono">RL {view.tier} · {view.cleared} NODE{view.cleared === 1 ? '' : 'S'} · WAVE {view.lastWave} · BANKED</span>
       </div>
-      <div className="rm-wrap">
+      <div className={`rm-wrap ${side ? 'show-side' : ''}`}>
         <div className="rm-side">
           <Globe war={war} selected={k} onSelect={onRegion} size={200} />
           <div className="cp-kicker">Rift War · sector secured{survival ? ' · Survival' : ''}</div>
@@ -177,7 +211,9 @@ export function RunMapScreen({ flow, game }: { flow: Flow; game: Game }) {
         </div>
         <div className="rm-detail">
           <div className="rm-detail-body">
-            {node && <NodeCard b={nodeBrief(node, view.lastWave, view.mode)} />}
+            {node && <SectorHeader node={node} view={view} war={war} lib={nodeLib} />}
+            {view.leftBehind > 0 && <div className="rm-note warn">{view.leftBehind} uncollected drop{view.leftBehind === 1 ? '' : 's'} will be left behind. Go back to collect them first.</div>}
+            {!survival && view.refund > 0 && <div className="rm-note">Towers stay behind: <b>+{view.refund} cores</b> refunded on travel.</div>}
             {node && def && regionState(war, def.k) && isCombatKind(node.kind) && (
               <div className="rm-liberation" data-testid="rm-liberation">
                 <span>SECTOR LIBERATION</span>
@@ -190,8 +226,9 @@ export function RunMapScreen({ flow, game }: { flow: Flow; game: Game }) {
           </div>
           {canSurgeHere && <SurgeOffer level={view.tier} busy={busy} onSurge={() => selected && go(selected, true)} />}
           <div className="rm-actions">
+            <span className="ds-meta rm-banked"><b className="ds-up">Banked at this node</b> · leaving keeps it</span>
             <button className="ds-btn" data-testid="rm-extract" disabled={busy} onClick={extract}>
-              {coop ? 'VOTE: EXTRACT' : 'EXTRACT'}
+              {coop ? 'VOTE: EXTRACT' : 'EXTRACT'} <span className="ds-k">X</span>
             </button>
             <button className="primary ds-btn-p" data-testid="rm-travel" disabled={!selected || busy} onClick={() => selected && go(selected)}>
               <span className="ds-kd">ENTER</span>{coop ? 'VOTE: TRAVEL' : canSurgeHere ? `STAY ON RL ${view.tier}` : 'TRAVEL'}
@@ -202,6 +239,7 @@ export function RunMapScreen({ flow, game }: { flow: Flow; game: Game }) {
       <div className="ds-bot">
         <span className="ds-meta">Hover a sector for intel · select a lit one or press 1–{Math.max(1, reach.length)} · edge links lead to other regions</span>
         <span className="ds-grow" />
+        <Hint keys="R" onClick={() => setSide((v) => !v)}>{side ? 'Hide war report' : 'War report'}</Hint>
         <Hint keys="H" testId="rm-stay" onClick={() => void game.continueRun()}>Back to the arena</Hint>
       </div>
       <div className="ds-grain" />
