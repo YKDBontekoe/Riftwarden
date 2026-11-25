@@ -19,6 +19,7 @@ import { GearUpgrades } from './GearUpgrades';
 import { savePower } from './RiftLevel';
 import { ItemGlyph } from './inventory/glyphs';
 import { BoundKey } from './hud/widgets';
+import { BreakthroughScreen, useBreakthrough } from './Breakthrough';
 import { Backdrop, Bar, Crumb, Hint, Mark, pips, rarityCls, RiskTag } from './ds';
 import type { Category, ItemInstance } from '@riftwarden/rules/loot/types';
 
@@ -87,9 +88,11 @@ export function CheckpointPanel({ flow, game }: { flow: Flow; game: Game }) {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   });
+  const [breakthrough, ackBreakthrough] = useBreakthrough(save, run?.tier ?? 0);
   if (!run) return null;
   const tier = getTier(run.tier);
   const wave = run.lastBankedWave;
+  if (breakthrough) return <BreakthroughScreen level={breakthrough} sector={node?.name ?? `RL ${tier.id}`} onContinue={ackBreakthrough} />;
   const items = game.cfg.run.secured.items;
   const finds = [...game.lastCache, ...items.filter((i) => !game.lastCache.includes(i))].slice(0, 3);
   const info = levelInfo(save.progress.xp);
