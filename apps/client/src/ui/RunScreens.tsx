@@ -134,7 +134,7 @@ export function CheckpointPanel({ flow, game }: { flow: Flow; game: Game }) {
         </button>
       </div>
       <div className="ds-bot">
-        <span className="ds-col" style={{ gap: 6, width: 420 }}>
+        <span className="ds-col" style={{ gap: 6, width: 420 }} data-testid="xp-gain">
           <span className="ds-row"><span className="ds-h3">WARDEN {info.level}</span><span className="ds-meta">+{(run.xpSecured ?? 0).toLocaleString()} XP banked · {(info.need - info.into).toLocaleString()} to level {info.level + 1}</span></span>
           <Bar value={info.frac} color="#d4b2ff" />
         </span>

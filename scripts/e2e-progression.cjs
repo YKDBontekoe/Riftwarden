@@ -64,7 +64,7 @@ async function openTerminal(p, id) {
       });
       check('A1 reached the wave-5 checkpoint', r === 'checkpoint', r);
       check('A2 checkpoint banked XP into the save', s.secured > 0 && s.saved === xp0 + s.secured, JSON.stringify(s));
-      check('A3 checkpoint panel shows the XP gain', /XP/.test(s.hudXp) && /LEVEL/.test(s.hudXp), s.hudXp.slice(0, 80));
+      check('A3 checkpoint panel shows the XP gain', /XP/.test(s.hudXp) && /WARDEN \d+/.test(s.hudXp), s.hudXp.slice(0, 80));
       await shot(p, 'prog-A-checkpoint');
       await ev(p, () => window.__rift.flow.returnHome());
       await toHq(p);
