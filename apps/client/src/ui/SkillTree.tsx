@@ -15,7 +15,7 @@ import {
   treeRules,
   type TreeNode,
 } from '@riftwarden/rules/progression/skilltree';
-import { useSave } from './App';
+import { useSave } from './useSave';
 import { ConfirmButton, CostLine, ResourceBar, TxMessage, useTx } from './economy';
 import { Shell } from './shell';
 

@@ -10,7 +10,7 @@ import { levelInfo, pointsAt } from '@riftwarden/rules/progression/level';
 import { uiEvents } from '@riftwarden/game/ui/store';
 import { getTier } from '@riftwarden/rules/progression/tiers';
 import { CurrencyIcon } from './inventory/thumbs';
-import { useSave } from './App';
+import { useSave } from './useSave';
 import { Banner, Perf } from './Hud';
 import { useHud } from './useHud';
 import { Cur } from './ds';

@@ -6,7 +6,7 @@ import { LIGHT_COLORS, LIMITS, PIECES, type PieceDef, pieceDef } from '@riftward
 import { blueprintStatus, CRAFT_PIECES } from '@riftwarden/rules/home/build/ops';
 import { MOVABLE_STATIONS } from '@riftwarden/rules/home/build/catalog';
 import { HQ_STATIONS } from '@riftwarden/rules/home/layout';
-import { useSave } from './App';
+import { useSave } from './useSave';
 import { CostLine, ResourceBar, TxMessage, useTx } from './economy';
 import { Shell } from './shell';
 import { useHud } from './useHud';

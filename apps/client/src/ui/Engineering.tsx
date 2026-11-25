@@ -15,7 +15,7 @@ import { CATEGORY_LABEL, type Category, type ItemInstance, type RolledAffix } fr
 import type { SaveData } from '@riftwarden/rules/progression/save';
 import { FAMILIES } from '@riftwarden/rules/weapons/build';
 import { componentDef, type ComponentSlot, describeEffects } from '@riftwarden/rules/weapons/components';
-import { useSave } from './App';
+import { useSave } from './useSave';
 import { ConfirmButton, CostLine, ResourceBar, TxMessage, useTx } from './economy';
 import { type InvEntry, ItemCard, ItemDetail, itemTitle, sortEntries, TierPips } from './items';
 import { Shell } from './shell';

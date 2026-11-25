@@ -5,7 +5,7 @@ import { CURRENCIES, currencyTooltip } from '@riftwarden/rules/economy/currencie
 import { HQ_STATIONS } from '@riftwarden/rules/home/layout';
 import { STATION_INFO } from '@riftwarden/rules/home/stationInfo';
 import { levelInfo, pointsAt, POINTS_PER_LEVEL, ringsAt } from '@riftwarden/rules/progression/level';
-import { useSave } from './App';
+import { useSave } from './useSave';
 import { stationArtwork } from '@riftwarden/game/visuals/fieldArtwork';
 import { FieldArt } from './FieldArt';
 import { FieldIcon, STATION_ICON } from './FieldIcon';

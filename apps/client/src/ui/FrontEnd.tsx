@@ -18,7 +18,7 @@ import { FieldArt } from './FieldArt';
 import { touchStore } from '../touch/touchMode';
 import { InstallApp } from '../touch/MobileUi';
 import { useHud } from './useHud';
-import { useSave } from './App';
+import { useSave } from './useSave';
 import { savePower } from './RiftLevel';
 import { Backdrop, Bar, Crumb, Cur, Hint, RiskTag } from './ds';
 

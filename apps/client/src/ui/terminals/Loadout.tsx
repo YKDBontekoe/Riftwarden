@@ -7,7 +7,7 @@ import { DroneStats } from '../DroneStats';
 import { rarity } from '@riftwarden/rules/loot/rarity';
 import { type ItemInstance, type SlotId, SLOTS } from '@riftwarden/rules/progression/items';
 import { equippedItem, type SaveData } from '@riftwarden/rules/progression/save';
-import { useSave } from '../App';
+import { useSave } from '../useSave';
 import { Shell } from '../shell';
 
 export function useEquipped(save: SaveData): Record<SlotId, ItemInstance | null> {

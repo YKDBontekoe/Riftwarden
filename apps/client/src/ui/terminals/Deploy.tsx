@@ -9,7 +9,7 @@ import { CHECKPOINT_INTERVAL, getTier, type ThreatTier } from '@riftwarden/rules
 import { LevelLootCard, RiftLevelPicker, savePower, UnlockBar, WipeNotice } from '../RiftLevel';
 import { PinnacleCard } from '../Spikes';
 import { SeasonBar } from '../Seasons';
-import { useSave } from '../App';
+import { useSave } from '../useSave';
 import { Shell } from '../shell';
 import { CoopPanel } from '../Coop';
 

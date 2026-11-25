@@ -5,7 +5,7 @@ import type { Flow } from '../../core/Flow';
 import { STORAGE_EXPANSION, storageExpansionCost } from '@riftwarden/rules/loot/economy';
 import { SLOTS } from '@riftwarden/rules/progression/items';
 import { equippedItem, type SaveData, storedItems } from '@riftwarden/rules/progression/save';
-import { useSave } from '../App';
+import { useSave } from '../useSave';
 import { Shell } from '../shell';
 import { ResourceBar, useTx, TxMessage, CostLine } from '../economy';
 import { dismantleYield } from '@riftwarden/rules/economy/config';

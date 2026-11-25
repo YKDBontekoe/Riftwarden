@@ -8,7 +8,7 @@ import { rarity } from '@riftwarden/rules/loot/rarity';
 import { getTier } from '@riftwarden/rules/progression/tiers';
 import { RiftLevelPicker, savePower } from './RiftLevel';
 import { SLOT_CSS } from '@riftwarden/game/visuals/droneModel';
-import { useSave } from './App';
+import { useSave } from './useSave';
 import { inviteCode } from './router';
 import { useAccount } from '../account/store';
 import { NamedDrops } from './NamedDrops';

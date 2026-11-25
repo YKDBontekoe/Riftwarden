@@ -14,7 +14,7 @@ import { ComparisonPriorityPicker, useComparisonPriority, useScore, useScoreCont
 import { type SaveData } from '@riftwarden/rules/progression/save';
 import { FAMILIES, SOCKET_LABEL } from '@riftwarden/rules/weapons/build';
 import { canInstall, moduleTypeDef } from '@riftwarden/rules/weapons/modules';
-import { useSave } from './App';
+import { useSave } from './useSave';
 import { ConfirmButton, CostLine, costText, ResourceBar, TxMessage, useTx } from './economy';
 import { ComparePanel, type InvEntry, ItemCard, ItemDetail, ItemGlyph, itemTitle, RarityTag, sortEntries } from './items';
 import { CurrencyIcon } from './inventory/thumbs';

@@ -5,7 +5,7 @@ import { FabricateTerminal, MerchantTerminal, SalvageTerminal } from './Market';
 import { useMemo } from 'react';
 import type { ScoreContext } from '@riftwarden/rules/loot/loadoutScore';
 import { treeModifiers } from '@riftwarden/rules/progression/skilltree';
-import { useSave } from './App';
+import { useSave } from './useSave';
 import { ScoreCtx } from './compare';
 import { ShellCurrencies, ShellResources } from './shell';
 import { visibleCurrencies } from '@riftwarden/rules/progression/unlocks';
