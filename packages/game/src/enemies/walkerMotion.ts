@@ -1,8 +1,9 @@
 import { Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector';
-import { WALKER_SHIN, WALKER_THIGH, type WalkerRig } from '../visuals/models';
+import { WALKER_SHIN, WALKER_THIGH, type WalkerLeg, type WalkerRig } from '../visuals/models';
 
 interface Foot {
   side: number;
+  leg: WalkerLeg;
   ground: Vector3;
   from: Vector3;
   to: Vector3;
@@ -16,19 +17,25 @@ const inverse = new Quaternion();
 const down = new Vector3(0, -1, 0);
 const ankleHeight = 0.075;
 
-function foot(side: number): Foot {
-  return { side, ground: new Vector3(), from: new Vector3(), to: new Vector3(), phase: 1 };
+function foot(side: number, leg: WalkerLeg): Foot {
+  return { side, leg, ground: new Vector3(), from: new Vector3(), to: new Vector3(), phase: 1 };
 }
 
 /** Presentation-only stance targets. A foot stays in world space until its next swing. */
 export class WalkerMotion {
-  private feet = [foot(-1), foot(1)];
+  private readonly feet: Foot[];
   private previous = new Vector3();
   private yaw = 0;
   private lean = 0;
   private shotAge = 1;
 
-  constructor(private rig: WalkerRig, private scale: number) {}
+  constructor(private rig: WalkerRig, private scale: number) {
+    this.feet = [
+      foot(-1, { thigh: rig.thighL, knee: rig.kneeL, ankle: rig.ankleL }),
+      foot(1, { thigh: rig.thighR, knee: rig.kneeR, ankle: rig.ankleR }),
+    ];
+    if (rig.forelegs) this.feet.push(foot(-1, rig.forelegs[0]), foot(1, rig.forelegs[1]));
+  }
 
   reset(position: Vector3, yaw: number): void {
     this.crawlT = 0;
@@ -37,7 +44,7 @@ export class WalkerMotion {
     this.lean = 0;
     this.shotAge = 1;
     for (const f of this.feet) {
-      this.place(f.ground, position, Math.sin(yaw), Math.cos(yaw), f.side, 0.08 + f.side * 0.17);
+      this.place(f.ground, position, Math.sin(yaw), Math.cos(yaw), f, 0.08 + f.side * 0.17);
       f.phase = 1;
     }
     this.pose(position, yaw, 0, false, 0, 0, 0);
@@ -85,7 +92,7 @@ export class WalkerMotion {
         if (p === 1) planted = f.ground;
         else swinging = true;
       } else {
-        this.place(direction, position, sin, cos, f.side, 0.06);
+        this.place(direction, position, sin, cos, f, 0.06);
         const offset = Vector3.Distance(f.ground, direction);
         if (offset > largestOffset) {
           largestOffset = offset;
@@ -96,7 +103,7 @@ export class WalkerMotion {
     if (!swinging && candidate) {
       candidate.phase = 0;
       candidate.from.copyFrom(candidate.ground);
-      this.place(candidate.to, position, sin, cos, candidate.side, lead);
+      this.place(candidate.to, position, sin, cos, candidate, lead);
     }
 
     const liftL = Math.sin(this.feet[0].phase * Math.PI);
@@ -119,20 +126,21 @@ export class WalkerMotion {
     barrel.position.z = -recoil * 0.28 - brace * 0.065;
     muzzleGlow.scaling.setAll(0.30 + brace * 0.37 + recoil * 0.18);
 
-    this.leg(this.feet[0], position, sin, cos, liftL, this.rig.thighL, this.rig.kneeL, this.rig.ankleL);
-    this.leg(this.feet[1], position, sin, cos, liftR, this.rig.thighR, this.rig.kneeR, this.rig.ankleR);
+    for (const f of this.feet) this.leg(f, position, sin, cos, Math.sin(f.phase * Math.PI));
     return planted;
   }
 
-  private place(out: Vector3, root: Vector3, sin: number, cos: number, side: number, ahead: number): void {
-    const spread = 0.46 * side;
+  private place(out: Vector3, root: Vector3, sin: number, cos: number, f: Foot, ahead: number): void {
+    const spread = f.leg.stanceX ?? f.leg.thigh.position.x + 0.04 * f.side;
+    ahead += f.leg.thigh.position.z;
     out.set(root.x + (cos * spread + sin * ahead) * this.scale, root.y, root.z + (-sin * spread + cos * ahead) * this.scale);
   }
 
-  private leg(f: Foot, root: Vector3, sin: number, cos: number, lift: number, thigh: WalkerRig['thighL'], kneePivot: WalkerRig['kneeL'], ankle: WalkerRig['ankleL']): void {
+  private leg(f: Foot, root: Vector3, sin: number, cos: number, lift: number): void {
+    const { thigh, knee: kneePivot, ankle } = f.leg;
     const dx = (f.ground.x - root.x) / this.scale;
     const dz = (f.ground.z - root.z) / this.scale;
-    direction.set(dx * cos - dz * sin - thigh.position.x, ankleHeight + lift * 0.25 - this.rig.hips.position.y - thigh.position.y, dx * sin + dz * cos);
+    direction.set(dx * cos - dz * sin - thigh.position.x, ankleHeight + lift * 0.25 - this.rig.hips.position.y - thigh.position.y, dx * sin + dz * cos - thigh.position.z);
     // Triangle formed by the hip, knee and ankle. Bend the knee toward the front.
     const length = Math.max(0.1, Math.min(WALKER_THIGH + WALKER_SHIN - 0.001, direction.length()));
     direction.normalize();

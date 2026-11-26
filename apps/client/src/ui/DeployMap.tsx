@@ -14,6 +14,7 @@ import { resumable } from '@riftwarden/rules/runmap/state';
 import type { RunMode } from '@riftwarden/rules/runmap/defs';
 import { KIND_COLOR, NodeCard } from './RunMap';
 import { NamedDrops } from './NamedDrops';
+import { FactionSigil } from './FactionIntel';
 
 const clock = (ms: number) => {
   const m = Math.max(0, Math.floor(ms / 60_000));
@@ -120,7 +121,10 @@ export function DeployMapPanel({ flow, save, entry, onEntry, aside }: { flow: Fl
         <div className="dw-legend"><span><i className="lib" />Liberated</span><span><i className="front" />Front (yours)</span><span><i className="fallen" />Corrupted</span><span><i className="locked" />Locked</span><Hint keys="M">{view === 'planet' ? 'Sector map' : 'Planet'}</Hint></div>
       </div>
       <div className="dw-right">
-        <div className="ds-kicker">Region {k + 1} · {biome.name} · {biome.faction.name}</div>
+        <div className="ds-kicker ds-row" style={{ gap: 8 }}>
+          <FactionSigil biome={biome.id} />
+          <span>Region {k + 1} · {biome.name} · {biome.faction.name}</span>
+        </div>
         <h2 className="dw-name">{region.name}</h2>
         <div className="dw-lib">
           <b>{lib}<small>%</small></b>

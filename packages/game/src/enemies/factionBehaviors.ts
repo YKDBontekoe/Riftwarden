@@ -5,8 +5,9 @@ import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { sfx } from '../audio/Sfx';
 import { isFrozen, isShocked, speedFactor } from '@riftwarden/rules/combat/status';
 import type { Turret } from '../defense/Turrets';
-import { buildCrawler, type CrawlerRig, enemyMats } from '../visuals/enemyModels';
-import { buildRusher, buildWalker } from '../visuals/models';
+import { enemyMats } from '../visuals/enemyModels';
+import { buildBurrower, buildSapper, buildSkimmer, BURROWER_SURFACE_Y, setBurrowerTravel, type BurrowerRig, type SapperRig } from '../visuals/factionModels';
+import { buildWalker } from '../visuals/models';
 import { animateCore, updateCore } from './coreBehaviors';
 import { hasLost } from '@riftwarden/rules/enemies/limbs';
 import { type Behavior, type Enemy, type EnemyContext, type EnemyManager, turnTowards } from './EnemyManager';
@@ -27,6 +28,7 @@ const disrupted = (e: Enemy) => isShocked(e.status) || isFrozen(e.status);
 export const SAPPER = { seek: 18, fuse: 2, charge: 460, blast: 4, playerDamage: 18, disable: 2.5 } as const;
 
 interface SapperAI {
+  rig: SapperRig;
   mode: 'lane' | 'hunt' | 'plant';
   tower: Turret | null;
   t: number;
@@ -43,16 +45,15 @@ function sapperDetonate(e: Enemy, ctx: EnemyContext, m: EnemyManager, at: Vector
 
 export const sapperBehavior: Behavior = {
   rig(m) {
-    const rig = buildWalker(m.kit, m.P, false);
-    const M = enemyMats(m.P.white.getScene(), m.P);
-    // Charge pack on the back: casing, two straps and a hot core (the weakpoint).
-    m.kit.part('box', m.P.graphite, rig.torso, { pos: [0, 0.15, -0.42], scale: [0.7, 0.62, 0.34] });
-    for (const x of [-0.24, 0.24]) m.kit.part('box', M.plate, rig.torso, { pos: [x, 0.15, -0.6], scale: [0.08, 0.66, 0.06] });
-    m.kit.part('sphere', M.chargeRed, rig.torso, { pos: [0, 0.2, -0.62], scale: [0.26, 0.26, 0.26], shadow: false });
+    const rig = buildSapper(m.kit, m.P);
     return { root: rig.root, walker: rig };
+  },
+  create(e) {
+    e.ai.rig = e.walker;
   },
   spawn(e) {
     Object.assign(e.ai, { mode: 'lane', tower: null, t: 0, scan: 0.5, mark: 0 });
+    (e.ai as unknown as SapperAI).rig.fuseLamp.setEnabled(false);
   },
   update(e, hdt, ctx, m) {
     const ai = e.ai as unknown as SapperAI;
@@ -96,6 +97,7 @@ export const sapperBehavior: Behavior = {
       ai.mark = 0;
       ai.tower = null;
       ai.mode = 'lane';
+      ai.rig.fuseLamp.setEnabled(false);
       e.navV = -1;
       return;
     }
@@ -105,13 +107,15 @@ export const sapperBehavior: Behavior = {
     e.yaw = turnTowards(e.yaw, Math.atan2(dx, dz), hdt * 6);
     if (ai.mode === 'hunt') {
       const reach = t.radius + e.def.radius + 0.3;
-      if (d > reach) {
+      // The capped approach can land a rounding error outside the exact radius.
+      if (d > reach + 0.001) {
         const step = Math.min(d - reach, e.def.speed * 1.15 * e.moveMult * sf * hdt);
         e.pos.x += (dx / d) * step;
         e.pos.z += (dz / d) * step;
       } else {
         ai.mode = 'plant';
         ai.t = SAPPER.fuse;
+        ai.rig.fuseLamp.setEnabled(true);
         ai.mark = ctx.tele.marker(new Vector3(t.pos.x, t.pos.y, t.pos.z), SAPPER.blast, SAPPER.fuse, 'orange');
         ctx.alert('SAPPER PLANTING A CHARGE', 'orange');
         sfx.play('charge', { pitch: 1.2, volume: 0.7, pan: ctx.panFor(t.pos).pan });
@@ -120,6 +124,8 @@ export const sapperBehavior: Behavior = {
     } else {
       // Planting: shock / freeze holds the fuse.
       if (!disrupted(e)) ai.t -= adt;
+      const elapsed = SAPPER.fuse - ai.t;
+      ai.rig.fuseLamp.setEnabled(Math.floor(elapsed * (3 + elapsed * 2.1)) % 2 === 0);
       e.state = 'attack';
       if (Math.random() < hdt * 6) ctx.effects.burst('sparks', t.head, 2, undefined, 0.6);
       if (ai.t <= 0) {
@@ -157,8 +163,7 @@ interface SkimmerAI {
 
 export const skimmerBehavior: Behavior = {
   rig(m) {
-    const rig = buildRusher(m.kit, m.P);
-    rig.body.scaling.setAll(0.62);
+    const rig = buildSkimmer(m.kit, m.P);
     return { root: rig.root, drone: rig };
   },
   spawn(e) {
@@ -331,12 +336,12 @@ export const marksmanBehavior: Behavior = {
 export const BURROWER = { down: 5.5, up: 3.2, rise: 0.55, depth: 2.4, surfaceAt: 11, bolt: 26 } as const;
 
 interface BurrowerAI {
-  rig: CrawlerRig;
+  rig: BurrowerRig;
   mode: 'buried' | 'rising' | 'up' | 'diving' | 'reactor';
   t: number;
-  gait: number;
   shot: number;
   wake: number;
+  driveDistance: number;
 }
 
 function setBuried(e: Enemy, buried: boolean): void {
@@ -346,22 +351,28 @@ function setBuried(e: Enemy, buried: boolean): void {
 
 export const burrowerBehavior: Behavior = {
   create(e, m) {
-    const rig = buildCrawler(m.kit, m.P);
+    const rig = m.kit.flashable(() => buildBurrower(m.kit, m.P));
     rig.root.parent = e.root;
-    rig.root.scaling.setAll(0.72);
-    for (const p of rig.pods) p.setEnabled(false);
     e.ai.rig = rig;
     m.addHitbox(e, e.root, e.def.bodyY, 0, e.def.bodyR, false);
     m.addHitbox(e, e.root, e.def.weakY, e.def.weakForward, e.def.weakR, true, 'drill');
   },
   spawn(e) {
-    Object.assign(e.ai, { mode: 'buried', t: BURROWER.down * (0.6 + Math.random() * 0.5), gait: Math.random() * 6, shot: 1, wake: 0 });
+    Object.assign(e.ai, { mode: 'buried', t: BURROWER.down * (0.6 + Math.random() * 0.5), shot: 1, wake: 0, driveDistance: 0 });
+    const { rig } = e.ai as unknown as BurrowerAI;
+    rig.root.rotation.x = 0;
+    rig.body.position.y = BURROWER_SURFACE_Y - BURROWER.depth;
+    rig.drill.rotation.z = 0;
+    setBurrowerTravel(rig, 0);
+    setBuried(e, true);
   },
   update(e, hdt, ctx, m) {
     const ai = e.ai as unknown as BurrowerAI;
     const sf = speedFactor(e.status);
     const adt = hdt * sf * e.rateMult;
     const speed = e.def.speed * e.moveMult * sf;
+    const startX = e.pos.x;
+    const startZ = e.pos.z;
     // Near the reactor it surfaces for good.
     if (ai.mode !== 'reactor' && ai.mode !== 'rising' && e.remaining < BURROWER.surfaceAt && e.remaining > 0) {
       ai.mode = 'rising';
@@ -442,14 +453,10 @@ export const burrowerBehavior: Behavior = {
     setBuried(e, ai.mode === 'buried');
     const depth = ai.mode === 'buried' ? 1 : ai.mode === 'rising' ? Math.max(0, ai.t / BURROWER.rise) : ai.mode === 'diving' ? 1 - Math.max(0, ai.t / BURROWER.rise) : 0;
     const r = ai.rig;
-    ai.gait += adt * 4;
-    for (const l of r.legs) {
-      const ph = ai.gait + l.phase;
-      l.hip.rotation.y = Math.sin(ph) * 0.35 * l.side;
-      l.hip.rotation.z = l.side * (-0.5 + Math.max(0, Math.sin(ph + Math.PI / 2)) * 0.25);
-    }
-    r.drill.rotation.z += hdt * (depth > 0.2 ? 18 : 6);
-    r.body.position.y = 1.25 - depth * BURROWER.depth / 0.72;
+    ai.driveDistance += Math.hypot(e.pos.x - startX, e.pos.z - startZ);
+    setBurrowerTravel(r, ai.driveDistance);
+    r.drill.rotation.z += adt * (depth > 0.2 ? 18 : 6);
+    r.body.position.y = BURROWER_SURFACE_Y - depth * BURROWER.depth;
     r.root.rotation.x = depth > 0 && depth < 1 ? -0.35 : 0;
     e.root.position.copyFrom(e.pos);
     e.root.rotation.y = e.yaw;
