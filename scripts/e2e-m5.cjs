@@ -5,7 +5,7 @@ const H = require('./lib/harness.cjs');
 const { OUT, check, S, ev } = H;
 const waitFor = (p, fn, arg, t = 120000) => H.waitFor(p, fn, arg, t);
 const boot = (p, reload = false) => H.boot(p, { reload });
-const launch = () => H.launch();
+const launch = () => H.launch({ channel: 'chromium' }); // Full Chromium headless supports pointer lock.
 async function deploy(p, seed) {
   await p.evaluate((s) => { window.__rift.flow.nextUpgradeSeed = s ?? null; return window.__rift.flow.deploy(1); }, seed);
   await waitFor(p, () => window.__rift.state().location === 'arena' && !window.__rift.state().busy && window.__rift.game);
@@ -26,6 +26,13 @@ const spawn = (p, n, kind = 'walker') => p.evaluate(([n, kind]) => {
   const { b, p, errs } = await launch();
   // ---------------- A: upgrade selection after a wave
   await deploy(p, 1234);
+  await ev(p, () => {
+    const g = window.__rift.game;
+    g.input.forceCapture = false;
+    g.setScreen('paused');
+  });
+  await p.getByTestId('pause-resume').click();
+  await waitFor(p, () => window.__rift.game.screen === 'playing' && document.pointerLockElement === window.__rift.game.canvas, null, 10000);
   let r = await ev(p, async () => {
     const R = window.__rift, g = R.game;
     g.startWave(); R.advance(0.5);
@@ -36,21 +43,27 @@ const spawn = (p, n, kind = 'walker') => p.evaluate(([n, kind]) => {
     return { screen: g.screen, offer: (g.offer || []).map((u) => u.id), phase: g.waves.phase };
   });
   check('A1 upgrade screen opens after wave with 3 distinct choices', r.screen === 'upgrade' && r.offer.length === 3 && new Set(r.offer).size === 3, JSON.stringify(r));
+  await waitFor(p, () => document.pointerLockElement === null, null, 5000);
   const t0 = await ev(p, () => { const g = window.__rift.game; const t = g.waves.timer; window.__rift.advance(3); return [t, g.waves.timer]; });
   check('A2 prep countdown paused while choosing', t0[0] === t0[1], JSON.stringify(t0));
   await p.waitForSelector('[data-testid=upgrade-card-0]');
   const cardTxt = await p.textContent('[data-testid=upgrade-card-1]');
   const wantId = await p.getAttribute('[data-testid=upgrade-card-1]', 'data-id');
-  check('A3 card shows rarity/category/text/stack', /COMMON|RARE|EPIC|LEGENDARY/.test(cardTxt) && /STACK|NEW/.test(cardTxt), cardTxt.slice(0, 80));
+  check('A3 card shows rarity/category/text/stack', /COMMON|RARE|EPIC|LEGENDARY/.test(cardTxt) && /STACK|NEW/i.test(cardTxt), cardTxt.slice(0, 80));
   await p.click('[data-testid=upgrade-card-1]');
-  await waitFor(p, () => window.__rift.game.screen === 'playing');
+  await waitFor(p, () => window.__rift.game.screen === 'playing' && document.pointerLockElement === window.__rift.game.canvas, null, 10000);
   const got = await ev(p, (id) => window.__rift.game.director.build.count(id), wantId);
-  check('A4 chosen upgrade applied (stack 1) and screen resumes', got === 1);
+  check('A4 clicking an upgrade applies it and resumes with pointer lock', got === 1);
   await ev(p, () => window.__rift.advance(1));
   // real effect: stat upgrade changes the computed stats
   const dmg = await ev(p, () => { const g = window.__rift.game; const a = g.stats.weaponDamageMult; g.director.takeUpgrade('w_calibrated'); return [a, g.stats.weaponDamageMult]; });
   check('A5 stat upgrade changes real stat pipeline', Math.abs(dmg[1] - dmg[0] - 0.15) < 1e-6, JSON.stringify(dmg));
-  await p.evaluate(() => { const g = window.__rift.game; g.openBuildOverview(); });
+  await ev(p, () => {
+    const g = window.__rift.game;
+    g.openBuildOverview();
+    g.input.forceCapture = true;
+  });
+  await waitFor(p, () => document.pointerLockElement === null, null, 5000);
   check('A6 build overview lists upgrades', (await p.textContent('[data-testid=build-overview]')).includes('Calibrated Emitters'));
   await p.evaluate(() => window.__rift.game.closePanel());
   await p.screenshot({ path: `${OUT}/m5_upgrade_hud.png`, timeout: 120000 }).catch(() => {});

@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 import type { Game } from '@riftwarden/game/core/Game';
 import { CATEGORY_LABEL, RARITY_COLOR, upgradeDef } from '@riftwarden/rules/roguelite/upgrades';
 import { useHud } from './useHud';
-import { Backdrop, Crumb, ElementGem, ELEMENT_PATH, Gem, Hint } from './ds';
+import { Backdrop, Crumb, ElementGem, ELEMENT_PATH, Gem } from './ds';
 
 // ------------------------------------------------------------------ upgrade selection
 
@@ -82,7 +82,6 @@ export function UpgradePanel({ game }: { game: Game }) {
         )}
         <span className="ds-grow" />
         {!waiting && <span className="ds-hint"><span className="ds-k">1</span><span className="ds-k">2</span><span className="ds-k">3</span>Pick</span>}
-        <Hint keys="ESC">Free cursor</Hint>
       </div>
       <div className="ds-grain" />
     </div>

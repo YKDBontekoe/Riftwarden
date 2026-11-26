@@ -1039,7 +1039,7 @@ export class Game {
     this.tactical.deactivate();
     this.setScreen('upgrade');
     this.publishHud(true);
-    // The mouse stays captured: 1/2/3 picks and drops straight back into the fight (Esc frees the cursor to click).
+    this.input.releaseLock();
     sfx.play('bank', { pitch: 1.4, volume: 0.6 });
   }
 
