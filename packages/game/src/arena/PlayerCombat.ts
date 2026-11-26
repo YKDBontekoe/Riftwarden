@@ -51,6 +51,7 @@ export interface CombatHost {
   /** Add a fraction (0..1) of a full ultimate charge to the drone firing right now. */
   chargeUlt(fraction: number): void;
   hitstop(seconds: number, scale: number): void;
+  panFor(at: Vector3): { pan: number; volume: number };
   /** A weapon kill by the drone firing right now (weapon-family mastery XP). */
   masteryKill(e: Enemy): void;
   /** Re-enter the (overridable) damage entry, used by Arc Conductor jumps. */
@@ -59,6 +60,8 @@ export interface CombatHost {
 
 const KILL_AT = new Vector3();
 const TMP_C = new Vector3();
+const AIM_FORWARD = Vector3.Forward();
+const AIM_DIR = new Vector3();
 
 /** Particle burst that draws a flamer stream per element (a cryo flamer is a frost spray). */
 const FLAME_KIND: Partial<Record<WeaponDef['element'], BurstKind>> = { thermal: 'fire', cryo: 'frost', corrosive: 'oil', electric: 'zap', void: 'plasma', kinetic: 'puff' };
@@ -84,6 +87,33 @@ export class PlayerCombat {
   private uHits = 0;
 
   constructor(private h: CombatHost) {}
+
+  /** Read the centre of the reticle without rolling spread, firing or altering weapon state. */
+  aimTarget(): 'body' | 'weak' | 'shield' | null {
+    const { scene, enemies, player, weapon, stats } = this.h;
+    const { family, mechanism, beamWidth, seekCone, spray } = weapon.def;
+    const origin = player.camera.position;
+    const dir = AIM_DIR;
+    player.camera.getDirectionToRef(AIM_FORWARD, dir);
+    const range = weapon.range(stats);
+    const width = mechanism === 'beam' ? beamWidth : 0;
+    const seek = family === 'swarm' ? seekCone : 0;
+    const cone = family === 'flamer' ? spray : 0;
+    // The HUD only needs a scene pick if a hostile is somewhere near the aim ray.
+    const nearAim = enemies.active.some((e) => {
+      if (!e.alive || e.hidden) return false;
+      const offset = e.center(TMP_C).subtractInPlace(origin);
+      const distance = Vector3.Dot(offset, dir);
+      const radius = Math.max(e.def.topY, e.def.bodyR * e.def.scale);
+      if (distance < -radius || distance > range + radius) return false;
+      const tolerance = radius + width + Math.max(seek, cone) * Math.max(0, distance);
+      return offset.lengthSquared() - distance * distance <= tolerance * tolerance;
+    });
+    if (!nearAim) return null;
+    const hit = traceShot(scene, enemies.active, { origin, dir, range, family, pierce: 0, damage: 0, width, seek, cone, targets: 1 }).struck[0];
+    if (!hit) return null;
+    return hit.enemy.shield > 0 ? 'shield' : hit.weak ? 'weak' : 'body';
+  }
 
   /** Resolve a shot from the camera ray and apply its damage immediately (`fxHooks` only visualise it). */
   shoot(r: ShotRequest): ShotOutcome {
@@ -159,6 +189,7 @@ export class PlayerCombat {
         if (out.target !== 'none') {
           fx.explode(out.point, { scale: 0.45, debris: 1, color: weapon.rig.energyBase.scale(1.4), style: 'plasma' });
           fx.ring(out.point, PULSE_SPLASH, 0.22, weapon.rig.energyBase.scale(0.8), false);
+          if (out.target === 'surface') this.surfaceSound(out.point, out.surface);
         }
         return;
       }
@@ -195,7 +226,7 @@ export class PlayerCombat {
 
   /** Rocket: a glowing projectile with a smoke trail; the explosion (and cluster bomblets) on arrival. */
   rocketFx(from: Vector3, out: ShotOutcome, speed: number, o: { splash: number; cluster: boolean; element: WeaponDef['element']; color: Color3 }): void {
-    rocketFx(this.h.wfx, this.h.fx, from, out, speed, o);
+    rocketFx(this.h.wfx, this.h.fx, from, out, speed, o, (at) => this.h.panFor(at));
   }
 
   /** Flamer tick: puffs of the element along the stream toward its end. */
@@ -209,6 +240,7 @@ export class PlayerCombat {
     if (out.target === 'surface' && out.normal) {
       const pos = p.add(out.normal.scale(0.03));
       fx.impact(pos, out.normal, out.surface, family === 'beam');
+      this.surfaceSound(pos, out.surface);
       if (family === 'rail') {
         fx.burst('sparks', pos, Math.round(8 + 10 * power), out.normal, 0.7);
         fx.ring(pos, 1.6 * power + 0.6, 0.25, weapon.rig.energyBase.scale(0.5), false);
@@ -228,6 +260,11 @@ export class PlayerCombat {
         fx.burst('flash', p, 1, undefined, 0.22);
       }
     }
+  }
+
+  private surfaceSound(at: Vector3, surface?: SurfaceImpact): void {
+    const { pan, volume } = this.h.panFor(at);
+    sfx.play('surfaceHit', { pan, volume: volume * 0.55, pitch: surface === 'wetDeck' ? 0.65 : surface === 'ceramic' ? 0.82 : 1.1 });
   }
 
   /**
@@ -281,8 +318,8 @@ export class PlayerCombat {
     if (kind === 'crit') h.fx.burst('crit', point, beam ? 3 : 10);
     else if (kind === 'hit' && !beam) h.fx.burst('enemySpark', point, 6);
     if (kind === 'kill') sfx.play('kill', { pitch: 1 + Math.min(0.45, (h.player.chain - 1) * 0.045) });
-    else if (!beam || kind === 'crit') sfx.play(kind === 'crit' ? 'crit' : kind === 'shield' ? 'shieldHit' : 'hit');
-    else sfx.play('hit', { volume: 0.35 });
+    else if (kind === 'crit') sfx.play('crit');
+    else sfx.play(kind === 'shield' ? 'shieldHit' : 'hit', { volume: beam ? 0.35 : 1 });
   }
 
   /**
@@ -428,7 +465,7 @@ export function shotOutcome(r: ShotRequest, struck: readonly { enemy: Enemy; poi
 }
 
 /** Rocket visual: projectile + smoke puffs released along the path; explosion (and cluster bomblets) on arrival. */
-export function rocketFx(wfx: WeaponFx, fx: Effects, from: Vector3, out: ShotOutcome, speed: number, o: { splash: number; cluster: boolean; element: WeaponDef['element']; color: Color3 }): void {
+export function rocketFx(wfx: WeaponFx, fx: Effects, from: Vector3, out: ShotOutcome, speed: number, o: { splash: number; cluster: boolean; element: WeaponDef['element']; color: Color3 }, soundAt: (at: Vector3) => { pan: number; volume: number }): void {
   const to = out.point.clone();
   const dist = Vector3.Distance(from, to);
   const splash = Math.max(0.5, o.splash);
@@ -437,6 +474,8 @@ export function rocketFx(wfx: WeaponFx, fx: Effects, from: Vector3, out: ShotOut
   const v = Math.max(10, speed);
   wfx.bolt(from, to, v, 0.55, out.target !== 'none' ? () => {
     fx.explode(to, { scale: 0.45 + splash * 0.16, debris: 2, color, style });
+    const { pan, volume } = soundAt(to);
+    sfx.play('explosion', { pan, volume: volume * 0.7, pitch: o.cluster ? 0.9 : 1.05 });
     fx.ring(to, splash, 0.3, color.scale(0.6), true);
     if (o.cluster) {
       for (let i = 0; i < 3; i++) {

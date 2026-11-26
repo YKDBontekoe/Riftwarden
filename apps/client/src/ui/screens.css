@@ -340,6 +340,8 @@
 .set-ctl .settings-range:focus-visible { outline: 2px solid var(--ds-ember); outline-offset: 6px; }
 .set-val { min-width: 54px; text-align: right; font: 700 18px var(--ds-d); }
 .set-seg { display: inline-flex; gap: 0; box-shadow: inset 0 0 0 1px rgba(244, 241, 232, 0.3); }
+.set-seg[aria-label='Audio previews'] { flex-wrap: wrap; }
+@media (max-width: 480px) { .set-ctl:has([aria-label='Audio previews']) { width: 100%; } }
 .set-opt { width: auto; margin: 0; padding: 8px 14px; border: 0; background: none; font: 700 14px var(--ds-d); letter-spacing: 0.14em; text-transform: uppercase; color: var(--ds-muted); border-radius: 0; }
 .set-opt:hover { color: var(--ds-ink); background: rgba(244, 241, 232, 0.08); }
 .set-opt[aria-pressed='true'] { background: var(--ds-ink); color: #0e1114; }

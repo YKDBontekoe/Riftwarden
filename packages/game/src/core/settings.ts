@@ -14,8 +14,15 @@ export interface Settings {
   sfxVolume: number;
   ambienceVolume: number;
   uiVolume: number;
+  /** Hit confirmations and combat warnings, relative to Effects. */
+  combatCueVolume: number;
   /** M7: interface scale (0.8..1.3). */
   uiScale: number;
+  reticle: 'dynamic' | 'fixed' | 'dot';
+  reticleSize: number;
+  aimFeedback: boolean;
+  damageNumbers: 'all' | 'personal' | 'off';
+  wheelSwap: boolean;
   /** M7: camera shake strength (0 = off). */
   shake: number;
   /** M7: reduce motion (no FOV kicks, roll, chromatic aberration, viewmodel bob). */
@@ -57,11 +64,15 @@ export const ACTIONS: readonly { id: string; label: string; def: string }[] = [
   { id: 'use', label: 'Use / pick up', def: 'KeyE' },
   { id: 'build', label: 'Build tower', def: 'KeyB' },
   { id: 'swap', label: 'Swap weapon', def: 'KeyZ' },
+  { id: 'primary', label: 'Draw primary weapon', def: 'Digit1' },
+  { id: 'secondary', label: 'Draw secondary weapon', def: 'Digit3' },
   { id: 'tactical', label: 'Tactical time', def: 'KeyQ' },
   { id: 'wave', label: 'Start wave', def: 'KeyG' },
   { id: 'inventory', label: 'Inventory', def: 'KeyI' },
   { id: 'recycle', label: 'Recycle tower (hold)', def: 'KeyX' },
   { id: 'repair', label: 'Repair tower / ability II', def: 'KeyF' },
+  { id: 'ability', label: 'Ability I', def: 'Digit4' },
+  { id: 'ultimate', label: 'Ultimate / tower panel', def: 'KeyT' },
   { id: 'checkpoint', label: 'Checkpoint / vote', def: 'KeyH' },
 ];
 
@@ -80,7 +91,13 @@ export const DEFAULT_SETTINGS: Settings = {
   sfxVolume: 1,
   ambienceVolume: 0.8,
   uiVolume: 0.8,
+  combatCueVolume: 1,
   uiScale: 1,
+  reticle: 'dynamic',
+  reticleSize: 1,
+  aimFeedback: true,
+  damageNumbers: 'all',
+  wheelSwap: true,
   shake: 1,
   reduceMotion: false,
   colorblind: 'off',
@@ -111,11 +128,21 @@ export function sanitizeSettings(raw: unknown, version = VERSION): Settings {
   const keys: Record<string, string> = {};
   const rk = (r.keys && typeof r.keys === 'object' ? r.keys : {}) as Record<string, unknown>;
   const used = new Set<string>();
-  for (const a of ACTIONS) {
-    const k = typeof rk[a.id] === 'string' && /^[A-Za-z0-9]{2,20}$/.test(rk[a.id] as string) ? (rk[a.id] as string) : a.def;
-    keys[a.id] = used.has(k) ? a.def : k;
-    used.add(keys[a.id]);
+  // Reserve explicit bindings first, then restore available defaults. A new action can borrow a
+  // free default if a legacy save already uses its key for another action.
+  for (const { id } of ACTIONS) {
+    const key = rk[id];
+    if (typeof key !== 'string' || !/^[A-Za-z0-9]{2,20}$/.test(key) || used.has(key)) continue;
+    keys[id] = key;
+    used.add(key);
   }
+  for (const { id, def } of ACTIONS) {
+    if (keys[id] || used.has(def)) continue;
+    keys[id] = def;
+    used.add(def);
+  }
+  const available = ACTIONS.map(({ def }) => def).filter((key) => !used.has(key));
+  for (const { id } of ACTIONS) if (!keys[id]) keys[id] = available.shift()!;
   return {
     sensitivity: clampNum(r.sensitivity, 0.2, 3, DEFAULT_SETTINGS.sensitivity),
     invertY: r.invertY === true,
@@ -125,7 +152,13 @@ export function sanitizeSettings(raw: unknown, version = VERSION): Settings {
     sfxVolume: clampNum(r.sfxVolume, 0, 1, 1),
     ambienceVolume: clampNum(r.ambienceVolume, 0, 1, 0.8),
     uiVolume: clampNum(r.uiVolume, 0, 1, 0.8),
+    combatCueVolume: clampNum(r.combatCueVolume, 0, 1, DEFAULT_SETTINGS.combatCueVolume),
     uiScale: clampNum(r.uiScale, 0.8, 1.3, 1),
+    reticle: pick(r.reticle, ['dynamic', 'fixed', 'dot'] as const, DEFAULT_SETTINGS.reticle),
+    reticleSize: clampNum(r.reticleSize, 0.75, 1.5, DEFAULT_SETTINGS.reticleSize),
+    aimFeedback: r.aimFeedback !== false,
+    damageNumbers: pick(r.damageNumbers, ['all', 'personal', 'off'] as const, DEFAULT_SETTINGS.damageNumbers),
+    wheelSwap: r.wheelSwap !== false,
     shake: clampNum(r.shake, 0, 1.5, 1),
     reduceMotion: r.reduceMotion === true,
     colorblind: pick(r.colorblind, ['off', 'deuteranopia', 'tritanopia'] as const, 'off'),

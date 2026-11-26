@@ -27,7 +27,7 @@ export function Hud({ game }: { game: Game }) {
       <HealthBars game={game} />
       <DamageNumbers game={game} />
       <LootLabels game={game} />
-      <DamageDirection />
+      <DamageDirection game={game} />
       <TeamTags />
       <Crosshair />
       <Hitmarker />

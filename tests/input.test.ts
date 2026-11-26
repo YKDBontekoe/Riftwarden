@@ -131,4 +131,20 @@ describe('Input pointer-lock capture', () => {
     expect(doc.exitPointerLock).not.toHaveBeenCalled();
     expect(preventDefault).not.toHaveBeenCalled();
   });
+
+  it('consumes a build click completely and clears captured input on blur', () => {
+    const { canvas, fire } = fakeDom();
+    const input = new Input(canvas);
+    input.forceCapture = true;
+    const onLockChange = vi.fn();
+    input.onLockChange = onLockChange;
+    input.simulateMouse(0, true);
+    input.consumeMouse(0);
+    expect(input.mouse(0) || input.mousePressed(0)).toBe(false);
+    input.simulateMouse(0, true);
+    input.simulateKey('KeyW', true);
+    fire('blur');
+    expect(input.mouse(0) || input.isDown('KeyW')).toBe(false);
+    expect(onLockChange).toHaveBeenCalledWith(false);
+  });
 });

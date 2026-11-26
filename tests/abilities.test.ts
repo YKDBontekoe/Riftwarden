@@ -6,6 +6,7 @@ import { Scene } from '@babylonjs/core/scene';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { ABILITIES, ABILITY_KINDS, abilityCooldown, abilityPower, abilityRadius, blinkDistance, BLINK_MARGIN, THROW, ultChargeNeeded, ultGain } from '@riftwarden/rules/abilities/defs';
 import { Abilities, type AbilityHost } from '@riftwarden/game/arena/Abilities';
+import { sfx } from '@riftwarden/game/audio/Sfx';
 import { BASE_STATS, computeStats, STAT_KEYS } from '@riftwarden/rules/combat/stats';
 import { itemModifiers } from '@riftwarden/rules/loot/equipment';
 import { BASES } from '@riftwarden/rules/loot/bases';
@@ -180,6 +181,22 @@ describe('ability runtime', () => {
     expect(ab.blocked('ability')).toBe('Still on cooldown');
     for (let i = 0; i < 300; i++) ab.update(1 / 60);
     expect(director.blast).not.toHaveBeenCalled();
+  });
+
+  it('plays the cooldown cue only on the local transition to ready', () => {
+    const { ab } = rig({ ability: gen('frag_charge') });
+    const play = vi.spyOn(sfx, 'play');
+    try {
+      ab.cd.ability = 0.1;
+      ab.update(0.2, false);
+      expect(play).not.toHaveBeenCalled();
+      ab.cd.ability = 0.1;
+      ab.update(0.2);
+      ab.update(0.2);
+      expect(play).toHaveBeenCalledExactlyOnceWith('abilityReady', { pitch: 1, volume: 0.65 });
+    } finally {
+      play.mockRestore();
+    }
   });
 });
 

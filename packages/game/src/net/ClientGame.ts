@@ -298,7 +298,7 @@ export class ClientGame extends Game {
   override useAbility(slot: AbilitySlot): boolean {
     const why = this.abilities.blocked(slot);
     if (why) {
-      if (why !== 'Not available right now') sfx.play('buildDeny');
+      this.abilities.reportBlocked(slot, why);
       return false;
     }
     const o = this.player.eye;
@@ -525,16 +525,7 @@ export class ClientGame extends Game {
       if (input.pressed('F3')) this.togglePerf();
       if (input.pressed('KeyG')) this.startWave();
       if (input.pressed('KeyQ')) this.toggleTactical();
-      if (input.pressed('Digit2') || input.pressed('KeyB')) this.setBuildMode(!this.construction.active);
-      if (input.pressed('Digit1')) {
-        this.setBuildMode(false);
-        this.swapWeapon('weapon');
-      }
-      if (input.pressed('KeyZ') || (input.wheel !== 0 && !this.construction.active)) this.swapWeapon();
-      if (this.construction.active && input.mousePressed(2)) this.setBuildMode(false);
-      else if (input.mousePressed(2)) this.useAbility('ability');
-      if (input.pressed('KeyF') && !(this.towers.inspected && this.layout.mazing)) this.useAbility('ability2');
-      if (input.pressed('KeyT') && this.waves.phase === 'combat') this.useAbility('ultimate');
+      this.combatKeys();
       if (input.pressed('KeyH') && this.voteOpen) this.openCheckpoint();
       if (input.pressed('KeyI') || input.pressed('Tab')) return this.openInventory();
       if (input.pressed('KeyU')) return this.openBuildOverview();
@@ -560,13 +551,9 @@ export class ClientGame extends Game {
       this.dashFlag = true;
     }
     this.movement.update();
-    if (this.construction.active) {
-      this.construction.update(this.player, this.wallet.cores, this.turrets.turrets, this.stats);
-      if (controls && input.mousePressed(0)) this.tryPlace();
-    }
-    const trigger = controls && input.mouse(0) && !this.construction.active;
+    this.updateConstruction(controls);
     this.weaponSlots.update(dt);
-    this.weapon.update(dt, trigger, this.stats, this.shoot, this.weaponFx);
+    const firing = this.updateWeapon(dt, controls);
     this.wfx.update(dt, this.player.camera.position);
     this.updateInspect(dt, controls);
     this.updateLootTarget(controls);
@@ -605,7 +592,7 @@ export class ClientGame extends Game {
     if (this.inputT <= 0 || this.pendingShots.length >= 8) {
       this.inputT = 1 / INPUT_HZ;
       const p = this.player.position;
-      const fl = (this.player.dashing ? 1 : 0) | (this.player.sprinting ? 2 : 0) | (trigger ? 4 : 0) | (this.construction.active ? 8 : 0) | (this.dashFlag ? 16 : 0) | (this.player.grounded ? 0 : 32);
+      const fl = (this.player.dashing ? 1 : 0) | (this.player.sprinting ? 2 : 0) | (firing || this.pendingShots.length ? 4 : 0) | (this.construction.active ? 8 : 0) | (this.dashFlag ? 16 : 0) | (this.player.grounded ? 0 : 32);
       this.dashFlag = false;
       this.link.send({ t: 'input', seq: ++this.seq, p: [round2(p.x), round2(p.y), round2(p.z)], yaw: round3(this.player.yaw), pitch: round3(this.player.pitch), sp: round2(this.player.speed), fl, heat: round2(this.weapon.heat / 100), shots: this.pendingShots.length ? this.pendingShots : undefined });
       this.pendingShots = [];
@@ -1148,7 +1135,7 @@ export class ClientGame extends Game {
     const from = r.rig.muzzle.getAbsolutePosition().clone();
     const a = this.panFor(from);
     if (family === 'launcher') {
-      rocketFx(this.wfx, this.fx, from, { point: to, normal: null, target: 'surface', enemyId: null }, LAUNCHER.boltSpeed, { splash: LAUNCHER.splash, cluster: false, element: 'thermal', color: REMOTE_ROCKET });
+      rocketFx(this.wfx, this.fx, from, { point: to, normal: null, target: 'surface', enemyId: null }, LAUNCHER.boltSpeed, { splash: LAUNCHER.splash, cluster: false, element: 'thermal', color: REMOTE_ROCKET }, (at) => this.panFor(at));
       sfx.play('rocketLaunch', { volume: a.volume * 0.5, pan: a.pan });
       return;
     }

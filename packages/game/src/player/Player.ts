@@ -250,7 +250,7 @@ export class Player implements KitBody {
   }
 
   /** Called for every hit taken; `from` is the damage source position when known. */
-  onHurt: ((amount: number, from: Vector3 | null) => void) | null = null;
+  onHurt: ((amount: number, from: Vector3 | null, toHull: boolean) => void) | null = null;
 
   /**
    * Apply equipment-derived stats. Max hull/shield changes keep current values in
@@ -286,9 +286,9 @@ export class Player implements KitBody {
     amount -= toShield;
     this.sinceShieldHit = 0;
     this.lastHit = { raw, mitigated: raw - raw * (1 - this.mitigation), toShield, toHull: amount };
-    this.onHurt?.(raw, from);
+    this.onHurt?.(raw, from, amount > 0);
     if (amount <= 0) {
-      sfx.play('shieldHit', { volume: 0.7 });
+      sfx.play('playerShieldHit');
       return;
     }
     this.hp -= amount;
@@ -311,7 +311,7 @@ export class Player implements KitBody {
    * co-op replicas set `vitalsLocal = false` (the server owns vitals) and the server ticks remote bodies.
    */
   vitalsLocal = true;
-  tickVitals(dt: number): void {
+  tickVitals(dt: number, localAudio = true): void {
     this.sinceHurt += dt;
     this.hurtFlash = Math.max(0, this.hurtFlash - dt * 1.6);
     if (!this.alive) {
@@ -326,6 +326,7 @@ export class Player implements KitBody {
     this.sinceShieldHit += dt;
     if (this.alive && this.shield < this.maxShield && this.sinceShieldHit >= this.shieldDelay) {
       this.shield = Math.min(this.maxShield, this.shield + this.shieldRegen * dt);
+      if (localAudio && this.shield === this.maxShield) sfx.play('shieldReady');
     }
   }
   /** Number of respawns (co-op: replicas reset their drone when this changes). */
@@ -336,6 +337,7 @@ export class Player implements KitBody {
 
   /** M7 replicas: adopt server vitals. */
   setVitals(hp: number, maxHp: number, shield: number, maxShield: number, alive: boolean, respawnT: number): void {
+    if (!this.vitalsLocal && alive && this.alive && maxShield === this.maxShield && this.shield < maxShield && shield >= maxShield) sfx.play('shieldReady');
     this.hp = hp;
     this.maxHp = maxHp;
     this.shield = shield;
@@ -351,9 +353,9 @@ export class Player implements KitBody {
 
   /** M7 replicas: feedback for a hit the server applied. */
   feelHit(amount: number, toHull: boolean, from: Vector3 | null): void {
-    this.onHurt?.(amount, from);
+    this.onHurt?.(amount, from, toHull);
     if (!toHull) {
-      sfx.play('shieldHit', { volume: 0.7 });
+      sfx.play('playerShieldHit');
       return;
     }
     this.sinceHurt = 0;
@@ -448,7 +450,10 @@ export class Player implements KitBody {
     if (this.grounded) {
       this.coyoteT = move.coyote;
       this.airBoost = true;
-      if (!wasGrounded && this.vy < -6) this.landDip = Math.min(0.22, -this.vy * 0.012);
+      if (!wasGrounded && this.vy < -6) {
+        this.landDip = Math.min(0.22, -this.vy * 0.012);
+        if (active && this.kit.state !== 'pound') sfx.play('land', { volume: Math.min(0.8, 0.22 - this.vy * 0.022) });
+      }
     } else this.coyoteT -= dt;
     const kit = move.advanced ? this.kit : null;
     kit?.tick(dt, this.grounded);

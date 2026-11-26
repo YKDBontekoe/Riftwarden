@@ -3,6 +3,8 @@ export type SfxName =
   | 'hit'
   | 'crit'
   | 'shieldHit'
+  | 'playerShieldHit'
+  | 'shieldReady'
   | 'kill'
   | 'turretShot'
   | 'enemyShot'
@@ -14,7 +16,12 @@ export type SfxName =
   | 'playerHurt'
   | 'dash'
   | 'jump'
+  | 'land'
   | 'overheat'
+  | 'weaponReady'
+  | 'abilityReady'
+  | 'abilityDenied'
+  | 'surfaceHit'
   | 'waveStart'
   | 'waveClear'
   | 'tacticalOn'
@@ -26,6 +33,7 @@ export type SfxName =
   | 'bank'
   | 'railCharge'
   | 'chargeReady'
+  | 'beamStart'
   | 'railFire'
   | 'swarmLaunch'
   | 'rocketLaunch'
@@ -48,6 +56,7 @@ export type SfxName =
   | 'bossRoar'
   | 'grind'
   | 'beep'
+  | 'worldBeep'
   | 'mortar'
   | 'step';
 
@@ -58,21 +67,29 @@ interface PlayOpts {
   pan?: number;
 }
 
-/**
- * Small procedural sound bank built on WebAudio. Each effect is a short synthesized
- * envelope; a global low-pass is swept during tactical slow-time.
- */
 /** Interface sounds (mixed on the UI bus). */
-const UI_SOUNDS: ReadonlySet<string> = new Set(['ui', 'equip', 'purchase', 'sell', 'install', 'uninstall', 'press', 'fabricate', 'enhance', 'reroll', 'buildDeny', 'beep', 'bank']);
+const UI_SOUNDS: ReadonlySet<SfxName> = new Set(['ui', 'equip', 'purchase', 'sell', 'install', 'uninstall', 'press', 'fabricate', 'enhance', 'reroll', 'buildDeny', 'beep', 'bank', 'pickup', 'lootDrop']);
+/** Preserve room for confirmations and warnings in dense fights. */
+const PRIORITY_SOUNDS: ReadonlySet<SfxName> = new Set(['crit', 'kill', 'playerHurt', 'playerShieldHit', 'reactorHit', 'overheat', 'weaponReady', 'shieldReady', 'abilityReady']);
+const COMBAT_CUES: ReadonlySet<SfxName> = new Set([...PRIORITY_SOUNDS, 'hit', 'shieldHit', 'abilityDenied']);
+const RESERVED_VOICES = 6;
 
+interface Voice {
+  output: StereoPannerNode;
+  pending: number;
+}
+
+type FeedbackCue = 'playerShieldHit' | 'shieldReady' | 'surfaceHit' | 'weaponReady' | 'abilityReady' | 'abilityDenied';
+
+/** Procedural WebAudio sound bank. Tactical slow-time filters the world mix. */
 export class Sfx {
   private ctx: AudioContext | null = null;
   private master!: GainNode;
-  /** M7 mix buses (master <- sfx / ui / ambience). */
   private sfxBus!: GainNode;
+  private cueBus!: GainNode;
   private uiBus!: GainNode;
   private ambBus!: GainNode;
-  private mix = { sfx: 1, ui: 0.8, amb: 0.8 };
+  private mix = { sfx: 1, ui: 0.8, amb: 0.8, cues: 1 };
   private filter!: BiquadFilterNode;
   private noise!: AudioBuffer;
   private lastPlay = new Map<SfxName, number>();
@@ -80,7 +97,7 @@ export class Sfx {
 
   init(): void {
     if (this.ctx) {
-      void this.ctx.resume();
+      if (this.ctx.state !== 'running') void this.ctx.resume().catch(() => {});
       return;
     }
     const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
@@ -95,14 +112,19 @@ export class Sfx {
     const comp = ctx.createDynamicsCompressor();
     comp.threshold.value = -14;
     comp.ratio.value = 4;
-    this.master.connect(this.filter).connect(comp).connect(ctx.destination);
+    this.filter.connect(this.master).connect(comp).connect(ctx.destination);
     this.sfxBus = ctx.createGain();
+    this.cueBus = ctx.createGain();
     this.uiBus = ctx.createGain();
     this.ambBus = ctx.createGain();
     this.sfxBus.gain.value = this.mix.sfx;
+    this.cueBus.gain.value = this.mix.cues;
     this.uiBus.gain.value = this.mix.ui;
     this.ambBus.gain.value = this.mix.amb;
-    for (const b of [this.sfxBus, this.uiBus, this.ambBus]) b.connect(this.master);
+    this.sfxBus.connect(this.filter);
+    this.cueBus.connect(this.sfxBus);
+    this.ambBus.connect(this.filter);
+    this.uiBus.connect(this.master);
     const len = ctx.sampleRate;
     this.noise = ctx.createBuffer(1, len, ctx.sampleRate);
     const d = this.noise.getChannelData(0);
@@ -162,7 +184,7 @@ export class Sfx {
 
   /** Rolling thunder; `delay` approximates the distance to the strike. */
   thunder(delay = 0.6): void {
-    if (!this.ctx || this.ctx.state !== 'running') return;
+    if (!this.ctx || this.ctx.state !== 'running' || this.volume === 0 || this.mix.amb === 0) return;
     const ctx = this.ctx;
     const t = ctx.currentTime + delay;
     const src = ctx.createBufferSource();
@@ -178,7 +200,8 @@ export class Sfx {
     g.gain.exponentialRampToValueAtTime(0.35, t + 0.12);
     g.gain.exponentialRampToValueAtTime(0.12, t + 0.7);
     g.gain.exponentialRampToValueAtTime(0.0001, t + 3.4);
-    src.connect(f).connect(g).connect(this.master);
+    src.connect(f).connect(g).connect(this.ambBus);
+    src.onended = () => g.disconnect();
     src.start(t);
     src.stop(t + 3.5);
   }
@@ -189,13 +212,27 @@ export class Sfx {
   }
 
   /** M7: category mix (effects, interface, ambience). */
-  setMix(sfxV: number, uiV: number, ambV: number): void {
-    this.mix = { sfx: sfxV, ui: uiV, amb: ambV };
+  setMix(sfxV: number, uiV: number, ambV: number, cuesV = 1): void {
+    this.mix = { sfx: sfxV, ui: uiV, amb: ambV, cues: cuesV };
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
     this.sfxBus.gain.setTargetAtTime(sfxV, t, 0.02);
+    this.cueBus.gain.setTargetAtTime(cuesV, t, 0.02);
     this.uiBus.gain.setTargetAtTime(uiV, t, 0.02);
     this.ambBus.gain.setTargetAtTime(ambV, t, 0.05);
+  }
+
+  /** Audition the current mix from a Settings button, including the first audio gesture. */
+  async preview(category: 'effects' | 'combat' | 'ambience' | 'interface'): Promise<void> {
+    this.init();
+    if (!this.ctx) return;
+    try {
+      if (this.ctx.state !== 'running') await this.ctx.resume();
+    } catch {
+      return;
+    }
+    if (category === 'ambience') this.thunder(0);
+    else this.play(category === 'effects' ? 'shoot' : category === 'combat' ? 'crit' : 'ui');
   }
 
   /** Bus for ambience loops (environment). */
@@ -214,8 +251,8 @@ export class Sfx {
     if (L.positionX) {
       L.positionX.setTargetAtTime(x, t, 0.02);
       L.positionY.setTargetAtTime(y, t, 0.02);
-      L.positionZ.setTargetAtTime(z, t, 0.02);
       // Babylon is left-handed (+z forward); WebAudio is right-handed: mirror z.
+      L.positionZ.setTargetAtTime(-z, t, 0.02);
       L.forwardX.setTargetAtTime(Math.sin(yaw), t, 0.02);
       L.forwardY.setTargetAtTime(0, t, 0.02);
       L.forwardZ.setTargetAtTime(-Math.cos(yaw), t, 0.02);
@@ -343,7 +380,16 @@ export class Sfx {
     this.filter.frequency.setTargetAtTime(active ? 1400 : 20000, this.ctx.currentTime, 0.08);
   }
 
-  private osc(type: OscillatorType, f0: number, f1: number, dur: number, vol: number, out: AudioNode, delay = 0): void {
+  private track(voice: Voice, source: AudioScheduledSourceNode): void {
+    voice.pending++;
+    source.onended = () => {
+      if (--voice.pending !== 0) return;
+      voice.output.disconnect();
+      this.voices--;
+    };
+  }
+
+  private osc(type: OscillatorType, f0: number, f1: number, dur: number, vol: number, out: Voice, delay = 0): void {
     const ctx = this.ctx!;
     const t = ctx.currentTime + delay;
     const o = ctx.createOscillator();
@@ -354,16 +400,18 @@ export class Sfx {
     g.gain.setValueAtTime(0.0001, t);
     g.gain.exponentialRampToValueAtTime(vol, t + 0.004);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    o.connect(g).connect(out);
+    o.connect(g).connect(out.output);
+    this.track(out, o);
     o.start(t);
     o.stop(t + dur + 0.02);
   }
 
-  private noiseBurst(dur: number, vol: number, f0: number, f1: number, out: AudioNode, type: BiquadFilterType = 'bandpass', q = 1, delay = 0): void {
+  private noiseBurst(dur: number, vol: number, f0: number, f1: number, out: Voice, type: BiquadFilterType = 'bandpass', q = 1, delay = 0): void {
     const ctx = this.ctx!;
     const t = ctx.currentTime + delay;
     const src = ctx.createBufferSource();
     src.buffer = this.noise;
+    src.loop = true;
     src.playbackRate.value = 0.8 + Math.random() * 0.4;
     const f = ctx.createBiquadFilter();
     f.type = type;
@@ -374,20 +422,24 @@ export class Sfx {
     g.gain.setValueAtTime(0.0001, t);
     g.gain.exponentialRampToValueAtTime(vol, t + 0.005);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    src.connect(f).connect(g).connect(out);
+    src.connect(f).connect(g).connect(out.output);
+    this.track(out, src);
     src.start(t, Math.random() * 0.5);
     src.stop(t + dur + 0.02);
   }
 
-  private beam: { gain: GainNode; osc: OscillatorNode; osc2: OscillatorNode; filter: BiquadFilterNode } | null = null;
+  private beam: { gain: GainNode; osc: OscillatorNode; osc2: OscillatorNode; noise: AudioBufferSourceNode; filter: BiquadFilterNode } | null = null;
 
-  /** Continuous beam hum (started/stopped with the beam; cheap: two oscillators + noise). */
+  /** Continuous beam hum with a short fade on release. */
   beamLoop(on: boolean): void {
-    if (!this.ctx || this.ctx.state !== 'running') return;
+    if (!this.ctx || on === !!this.beam) return;
     const ctx = this.ctx;
-    if (!this.beam) {
+    const t = ctx.currentTime;
+    if (on) {
+      if (ctx.state !== 'running') return;
       const gain = ctx.createGain();
       gain.gain.value = 0;
+      gain.gain.setTargetAtTime(0.09, t, 0.03);
       const filter = ctx.createBiquadFilter();
       filter.type = 'lowpass';
       filter.frequency.value = 1800;
@@ -410,17 +462,19 @@ export class Sfx {
       osc.connect(filter);
       osc2.connect(g2).connect(filter);
       src.connect(nf).connect(ng).connect(filter);
-      filter.connect(gain).connect(this.master);
+      filter.connect(gain).connect(this.sfxBus);
       osc.start();
       osc2.start();
       src.start();
-      this.beam = { gain, osc, osc2, filter };
-    }
-    const t = ctx.currentTime;
-    this.beam.gain.gain.cancelScheduledValues(t);
-    this.beam.gain.gain.setTargetAtTime(on ? 0.09 : 0, t, on ? 0.03 : 0.06);
-    if (on) {
-      this.osc('sine', 1800, 400, 0.12, 0.06, this.master);
+      this.beam = { gain, osc, osc2, noise: src, filter };
+      this.play('beamStart');
+    } else if (this.beam) {
+      const { gain, osc, osc2, noise } = this.beam;
+      this.beam = null;
+      const fade = ctx.state === 'running' ? 0.12 : 0;
+      gain.gain.setTargetAtTime(0, t, 0.02);
+      noise.onended = () => gain.disconnect();
+      for (const source of [osc, osc2, noise]) source.stop(t + fade);
     }
   }
 
@@ -442,8 +496,8 @@ export class Sfx {
   /** Voices dropped by the cap (diagnostics). */
   dropped = 0;
 
-  /** Launcher and flamer shots (kept out of `play` to hold its size). */
-  private heavyWeapon(name: 'rocketLaunch' | 'flame', v: number, p: number, j: number, out: AudioNode): void {
+  /** Launcher and flamer shots. */
+  private heavyWeapon(name: 'rocketLaunch' | 'flame', v: number, p: number, j: number, out: Voice): void {
     if (name === 'rocketLaunch') {
       // Ignition crack, low thump and a hissing motor that trails off.
       this.noiseBurst(0.06, 0.4 * v, 5200 * p, 1400, out, 'bandpass', 0.9);
@@ -457,24 +511,61 @@ export class Sfx {
   }
 
   play(name: SfxName, o: PlayOpts = {}): void {
-    if (this.suppress > 0 || !this.ctx || this.ctx.state !== 'running') return;
-    if (this.voices >= Sfx.MAX_VOICES && !UI_SOUNDS.has(name)) {
+    if (this.suppress > 0 || !this.ctx || this.ctx.state !== 'running' || this.volume === 0) return;
+    const ui = UI_SOUNDS.has(name);
+    const cue = COMBAT_CUES.has(name);
+    const v = o.volume ?? 1;
+    if (v <= 0 || (ui ? this.mix.ui : this.mix.sfx) === 0 || (cue && this.mix.cues === 0)) return;
+    // Rate-limit identical sounds so dense combat does not turn into noise.
+    const now = this.ctx.currentTime;
+    const minGap = name === 'surfaceHit' ? 0.07 : name === 'shoot' ? 0.03 : name === 'hit' || name === 'turretShot' ? 0.035 : 0.02;
+    if (now - (this.lastPlay.get(name) ?? -1) < minGap) return;
+    const limit = Sfx.MAX_VOICES - (ui || PRIORITY_SOUNDS.has(name) ? 0 : RESERVED_VOICES);
+    if (this.voices >= limit) {
       this.dropped++;
       return;
     }
-    this.voices++;
-    setTimeout(() => this.voices--, 450);
-    // Rate-limit identical sounds so dense combat does not turn into noise.
-    const now = this.ctx.currentTime;
-    const minGap = name === 'shoot' ? 0.03 : name === 'hit' || name === 'turretShot' ? 0.035 : 0.02;
-    if (now - (this.lastPlay.get(name) ?? -1) < minGap) return;
     this.lastPlay.set(name, now);
 
-    const v = o.volume ?? 1;
-    const p = o.pitch ?? 1;
-    const out = this.ctx.createStereoPanner();
-    out.pan.value = Math.max(-1, Math.min(1, o.pan ?? 0));
-    out.connect(UI_SOUNDS.has(name) ? this.uiBus : this.sfxBus);
+    const output = this.ctx.createStereoPanner();
+    output.pan.value = Math.max(-1, Math.min(1, o.pan ?? 0));
+    output.connect(ui ? this.uiBus : cue ? this.cueBus : this.sfxBus);
+    const voice = { output, pending: 0 };
+    this.synthesize(name, v, o.pitch ?? 1, voice);
+    if (voice.pending > 0) this.voices++;
+    else output.disconnect();
+  }
+
+  private feedbackCue(name: FeedbackCue, v: number, p: number, j: number, out: Voice): void {
+    switch (name) {
+      case 'playerShieldHit':
+        this.osc('triangle', 610 * j, 230, 0.15, 0.19 * v, out);
+        this.noiseBurst(0.10, 0.14 * v, 2800, 650, out, 'bandpass', 2);
+        break;
+      case 'shieldReady':
+        this.osc('sine', 470, 760, 0.20, 0.11 * v, out);
+        this.osc('sine', 760, 980, 0.18, 0.07 * v, out, 0.1);
+        break;
+      case 'surfaceHit':
+        this.noiseBurst(0.07, 0.20 * v, 4300 * p, 1150 * p, out, 'bandpass', 1.7);
+        this.osc('triangle', 720 * p * j, 230 * p, 0.09, 0.06 * v, out);
+        break;
+      case 'weaponReady':
+        this.noiseBurst(0.16, 0.10 * v, 2500, 5800, out, 'bandpass');
+        this.osc('triangle', 660, 880, 0.08, 0.10 * v, out, 0.04);
+        this.osc('sine', 1100, 1320, 0.12, 0.09 * v, out, 0.09);
+        break;
+      case 'abilityReady':
+        this.osc('sine', 660 * p, 880 * p, 0.08, 0.10 * v, out);
+        this.osc('triangle', 990 * p, 1320 * p, 0.10, 0.09 * v, out, 0.065);
+        break;
+      case 'abilityDenied':
+        this.osc('triangle', 370, 230, 0.10, 0.09 * v, out);
+        break;
+    }
+  }
+
+  private synthesize(name: SfxName, v: number, p: number, out: Voice): void {
     const j = 0.94 + Math.random() * 0.12; // pitch jitter
     if (name === 'rocketLaunch' || name === 'flame') return this.heavyWeapon(name, v, p, j, out);
     switch (name) {
@@ -504,6 +595,14 @@ export class Sfx {
       case 'shieldHit':
         this.osc('sine', 900 * j, 1300, 0.08, 0.1 * v, out);
         this.noiseBurst(0.08, 0.1 * v, 6000, 3000, out, 'bandpass', 3);
+        break;
+      case 'playerShieldHit':
+      case 'shieldReady':
+      case 'surfaceHit':
+      case 'weaponReady':
+      case 'abilityReady':
+      case 'abilityDenied':
+        this.feedbackCue(name, v, p, j, out);
         break;
       case 'kill':
         this.osc('square', 520 * p, 120, 0.18, 0.12 * v, out);
@@ -555,6 +654,10 @@ export class Sfx {
         break;
       case 'jump':
         this.noiseBurst(0.18, 0.12 * v, 400, 1800, out, 'bandpass', 2);
+        break;
+      case 'land':
+        this.osc('sine', 138 * p, 57, 0.12, 0.23 * v, out);
+        this.noiseBurst(0.10, 0.18 * v, 1800, 360, out, 'bandpass', 1.2);
         break;
       case 'overheat':
         this.noiseBurst(0.9, 0.18 * v, 7000, 1500, out, 'highpass');
@@ -649,6 +752,7 @@ export class Sfx {
         this.osc('sawtooth', 48, 62, 2.2, 0.12 * v, out);
         break;
       case 'beep':
+      case 'worldBeep':
         this.osc('square', 1500 * p, 1500 * p, 0.06, 0.05 * v, out);
         break;
       case 'mortar':
@@ -662,6 +766,9 @@ export class Sfx {
       case 'arc':
         for (let i = 0; i < 3; i++) this.noiseBurst(0.04, 0.12 * v, 7000, 3000, out, 'highpass', 1, i * 0.03);
         this.osc('square', 1200 * j, 600, 0.08, 0.04 * v, out);
+        break;
+      case 'beamStart':
+        this.osc('sine', 1800, 400, 0.12, 0.06 * v, out);
         break;
       case 'weaponSwitch':
         this.noiseBurst(0.08, 0.14 * v, 1800, 600, out, 'bandpass', 2);

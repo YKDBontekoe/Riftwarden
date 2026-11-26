@@ -316,7 +316,6 @@ export function PhaseCores() {
   );
 }
 
-const ABILITY_KEY = { ability: 'RMB', ability2: 'F', ultimate: 'T' } as const;
 type AbilityRow = HudState['abilities'][number];
 
 function AbilitySlot({ slot, name }: { slot: AbilityRow['slot']; name: string }) {
@@ -344,7 +343,7 @@ function AbilitySlot({ slot, name }: { slot: AbilityRow['slot']; name: string })
           return !r ? '' : r.active > 0 ? `${r.active.toFixed(1)}s` : r.ready ? 'READY' : ult ? `${Math.floor(r.cd * 100)}%` : `${r.cd.toFixed(1)}`;
         }}
       />
-      <kbd>{ABILITY_KEY[slot]}</kbd>
+      {slot === 'ability' ? <kbd>RMB</kbd> : <BoundKey action={ult ? 'ultimate' : 'repair'} />}
     </div>
   );
 }
@@ -408,7 +407,7 @@ export function WeaponBlock() {
           <ElementTag element={holster.element} />
           {holster.aff !== 0 && <span className={`el-aff ${holster.aff > 0 ? 'weak' : 'resist'}`}>{holster.aff > 0 ? '▲' : '▼'}</span>}
           <span className="ds-meta wh-heat">{holster.overheated ? 'VENTING' : holster.heat > 0.01 ? `${Math.round(holster.heat * 100)}%` : 'ready'}</span>
-          <BoundKey action="swap" />
+          <BoundKey action={holster.secondary ? 'secondary' : 'primary'} />
         </div>
       )}
       <div className="weapon-card ds-row">
@@ -425,7 +424,7 @@ export function WeaponBlock() {
       <LiveBar segments={20} className="hw-bar" select={(s) => ({ value: s.heat, tone: s.overheated ? 'red' : s.heat > 0.7 ? 'amber' : 'heat' })} />
       <LiveText as="div" className="ds-lbl heat-label" select={(s) => (s.overheated ? 'Overheated · venting' : 'Heat · locks out at 100')} />
       <div className="slots">
-        <span className={!build ? 'on' : ''}><kbd>1</kbd> weapon</span>
+        <span className={!build ? 'on' : ''}><BoundKey action={holster?.secondary === false ? 'secondary' : 'primary'} /> weapon</span>
         {!survival && <span className={build ? 'on' : ''}><kbd>2</kbd> build</span>}
       </div>
     </div>

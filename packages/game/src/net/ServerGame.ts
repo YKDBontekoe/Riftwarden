@@ -279,9 +279,8 @@ export class ServerGame extends Game {
       p.ledger.xpMult = treeRules(p.tree.seed, p.tree.allocated).xpMult;
     }
     a.player.vitalsLocal = true;
-    a.player.onHurt = (amount, from) => {
-      const h = a.player.lastHit;
-      this.rec.push(['h', Math.round(amount * 10) / 10, h.toHull > 0 ? 1 : 0, from ? arr(from) : null], a.id);
+    a.player.onHurt = (amount, from, toHull) => {
+      this.rec.push(['h', Math.round(amount * 10) / 10, toHull ? 1 : 0, from ? arr(from) : null], a.id);
     };
     a.player.knockback = (dir: Vector3, strength: number) => this.rec.push(['k', arr(dir), strength], a.id);
     const g = this;
@@ -1024,7 +1023,7 @@ export class ServerGame extends Game {
       if (!a.active) continue;
       // Deaths happen anywhere (enemy updates, acts): compare with the state seen on the previous tick.
       const was = a.wasAlive;
-      pl.tickVitals(dt);
+      pl.tickVitals(dt, false);
       if (was && !pl.alive) {
         a.deaths++;
         this.team.survival.deaths++;
@@ -1034,7 +1033,7 @@ export class ServerGame extends Game {
         this.rec.push(['u', 'alert', { text: this.hunt ? `${a.name.toUpperCase()} IS DOWN · OUT FOR THIS NODE` : `${a.name.toUpperCase()} DOWN · RESPAWNING`, tone: 'red' }]);
         if (this.hunt && !this.avatars.some((x) => x.active && x.player.alive)) this.serverDefeat();
       }
-      this.as(a, () => a.abilities.update(dt));
+      this.as(a, () => a.abilities.update(dt, false));
       if (!was && pl.alive) {
         a.lastPos.copyFrom(pl.position);
         this.rec.push(['mv', arr(pl.position)], a.id);

@@ -168,6 +168,7 @@ export interface CoopHud {
 
 export interface HudState {
   bindings: Settings['keys'];
+  combatUi: Pick<Settings, 'reticle' | 'reticleSize' | 'aimFeedback' | 'damageNumbers' | 'reduceMotion'>;
   /** M7 onboarding card. */
   tutorial?: (import('@riftwarden/rules/progression/tutorial').TutorialStep & { index: number; total: number }) | null;
   coop?: CoopHud | null;
@@ -234,6 +235,7 @@ export interface HudState {
   inspect: InspectInfo | null;
   hint: string;
   spread: number; // crosshair gap in px
+  aimTarget: 'body' | 'weak' | 'shield' | null;
   stats: { kills: number; time: number; wave: number; coresEarned: number; turretsBuilt: number };
   perf: { fps: number; enemies: number; draws: number; particles: number; towers?: number; projectiles?: number; pending?: number; statuses?: number; triggers?: number; dpsPlayer?: number; dpsTower?: number; effects?: number; dropped?: number; frameMs?: number; aiMs?: number; telegraphs?: number; ordnance?: number; wave?: number; tier?: number; event?: string; boss?: string; budget?: number; hpMult?: number; dmgMult?: number; spawnQueue?: number; elites?: number; dev?: boolean } | null;
   m5: M5Hud | null;
@@ -247,6 +249,7 @@ export interface HudState {
 
 export const initialHud: HudState = {
   bindings: DEFAULT_SETTINGS.keys,
+  combatUi: { reticle: 'dynamic', reticleSize: 1, aimFeedback: true, damageNumbers: 'all', reduceMotion: false },
   screen: 'loading',
   location: 'home',
   terminal: null,
@@ -283,6 +286,7 @@ export const initialHud: HudState = {
   heat: 0,
   overheated: false,
   charge: 0,
+  aimTarget: null,
   dashCharges: 2,
   dashMax: 2,
   dashRecharge: 1,
@@ -362,8 +366,8 @@ type EventMap = {
   banner: BannerEvent;
   /** Weapon-family mastery XP earned by a kill (HUD float). */
   mastery: { family: string; xp: number };
-  /** severity 0..1; angle = source direction relative to view (radians, 0 = ahead, + = right), null if unknown. */
-  hurt: { severity: number; angle: number | null };
+  /** Bearing in world space (radians from +Z), null when there is no horizontal direction. */
+  hurt: { severity: number; bearing: number | null; shield: boolean };
   coresGained: number;
   /** Salvage collected (unsecured) during a run. */
   salvageGained: number;

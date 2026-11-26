@@ -1,5 +1,6 @@
 // Browser automation API (`window.__rift` with `?test`): state, fixed-step simulation, debug actions.
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { sfx } from '@riftwarden/game/audio/Sfx';
 import { buildWeaponModel } from '@riftwarden/game/weapons/model';
 import { rarity, type RarityId } from '@riftwarden/rules/loot/rarity';
 import { generateUnique, uniqueDef } from '@riftwarden/rules/loot/uniques';
@@ -26,6 +27,7 @@ export function debugApi(flow: Flow) {
   };
   return {
     flow,
+    sfx,
     profile: flow.profile,
     get game() {
       return flow.arena;

@@ -783,7 +783,8 @@ export class Flow {
 /** Settings that live outside any world: key remapping, interface scale, colour accessibility. */
 export function applyGlobalSettings(s: Settings, input: Input): void {
   input.remap = keyRemap(s);
-  hudStore.set({ bindings: s.keys });
+  const { reticle, reticleSize, aimFeedback, damageNumbers, reduceMotion } = s;
+  hudStore.set({ bindings: s.keys, combatUi: { reticle, reticleSize, aimFeedback, damageNumbers, reduceMotion } });
   if (typeof document !== 'undefined') {
     document.documentElement.style.setProperty('--ui-scale', String(s.uiScale));
     Object.assign(document.documentElement.dataset, { motion: s.reduceMotion ? 'reduced' : 'full', cvd: s.colorblind });

@@ -34,6 +34,7 @@ const RAY = new Ray(Vector3.Zero(), Vector3.Forward(), 1);
 export function traceShot(scene: Scene, enemies: readonly Enemy[], r: ShotRequest, accept: (e: Enemy) => boolean = () => true): ShotTrace {
   // Hitboxes must reflect this frame's enemy poses, not last frame's render.
   for (const e of enemies) {
+    if (!e.alive || e.hidden || !accept(e)) continue;
     e.root.computeWorldMatrix(true);
     for (const h of e.hitboxes) h.computeWorldMatrix(true);
   }
@@ -62,12 +63,12 @@ export function traceShot(scene: Scene, enemies: readonly Enemy[], r: ShotReques
     if (h.distance > maxDist) break;
     const meta = h.pickedMesh!.metadata as Partial<EnemyHitboxMeta>;
     const e = meta.enemy;
-    if (!e || !e.alive || struck.some((s) => s.enemy === e) || !accept(e)) continue;
+    if (!e || !e.alive || e.hidden || struck.some((s) => s.enemy === e) || !accept(e)) continue;
     let weak = !!meta.weak;
     if (!weak) {
       // A weakpoint overlapping the body sphere still counts if the ray passes through it.
       const w = hits.find((x) => (x.pickedMesh!.metadata as EnemyHitboxMeta | null)?.enemy === e && (x.pickedMesh!.metadata as EnemyHitboxMeta).weak);
-      if (w && w.distance - h.distance < 0.6) weak = true;
+      if (w && w.distance <= maxDist && w.distance - h.distance < 0.6) weak = true;
     }
     struck.push({ enemy: e, point: h.pickedPoint!.clone(), weak, assisted: false });
     if (struck.length > r.pierce) break;
@@ -84,7 +85,7 @@ function beamAssist(enemies: readonly Enemy[], r: ShotRequest, maxDist: number, 
   let best: Enemy | null = null;
   let bestT = Infinity;
   for (const e of enemies) {
-    if (!e.alive || !accept(e)) continue;
+    if (!e.alive || e.hidden || !accept(e)) continue;
     const c = e.center(TMP);
     const t = (c.x - r.origin.x) * r.dir.x + (c.y - r.origin.y) * r.dir.y + (c.z - r.origin.z) * r.dir.z;
     if (t <= 0 || t > maxDist || t >= bestT) continue;

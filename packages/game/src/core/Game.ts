@@ -504,14 +504,16 @@ export class Game {
     this.arenaVisuals.setSealed('south', true);
     this.atmosphere.setGateOpen(3, false);
 
-    this.player.onHurt = (amount, from) => {
-      let angle: number | null = null;
+    this.player.onHurt = (amount, from, toHull) => {
+      let bearing: number | null = null;
       if (from) {
         const pp = this.player.position;
-        angle = Math.atan2(from.x - pp.x, from.z - pp.z) - this.player.yaw;
+        const dx = from.x - pp.x;
+        const dz = from.z - pp.z;
+        if (Math.hypot(dx, dz) > 0.1) bearing = Math.atan2(dx, dz);
       }
-      uiEvents.emit('hurt', { severity: Math.min(1, amount / 30), angle });
-      this.post.kick(Math.min(0.6, amount / 40));
+      uiEvents.emit('hurt', { severity: Math.min(1, amount / 30), bearing, shield: !toHull });
+      this.post.kick(Math.min(toHull ? 0.6 : 0.22, amount / 40));
     };
     this.input.onLockChange = (locked) => {
       if (!locked && this.screen === 'playing') this.setScreen('paused');
@@ -790,9 +792,10 @@ export class Game {
   // ---------------------------------------------------------------- lifecycle
 
   setScreen(s: Screen): void {
+    if (this.screen === 'playing' && s !== 'playing') this.weapon.cancelFire();
     this.screen = s;
     this.weapon.setVisible(s !== 'menu' && s !== 'loading');
-    hudStore.set({ screen: s, location: 'arena' });
+    hudStore.set({ screen: s, location: 'arena', ...(s === 'playing' ? {} : { aimTarget: null }) });
   }
 
   applySettings(s: Settings): void {
@@ -808,7 +811,7 @@ export class Game {
     this.atmosphere.setDensity(s.particles === 'low' ? 0.45 : s.particles === 'medium' ? 0.75 : 1, s.reduceMotion);
     this.post.setOptions({ bloom: s.bloom, reduceMotion: s.reduceMotion });
     sfx.setVolume(s.volume);
-    sfx.setMix(s.sfxVolume, s.uiVolume, s.ambienceVolume);
+    sfx.setMix(s.sfxVolume, s.uiVolume, s.ambienceVolume, s.combatCueVolume);
     saveSettings(s);
   }
 
@@ -1364,17 +1367,7 @@ export class Game {
       if (input.pressed('F3')) this.togglePerf();
       if (input.pressed('KeyG')) this.startWave();
       if (input.pressed('KeyQ')) this.toggleTactical();
-      if (input.pressed('Digit2') || input.pressed('KeyB')) this.setBuildMode(!this.construction.active);
-      if (input.pressed('Digit1')) {
-        this.setBuildMode(false);
-        this.swapWeapon('weapon');
-      }
-      if (input.pressed('KeyZ') || (input.wheel !== 0 && !this.construction.active)) this.swapWeapon();
-      if (this.construction.active && input.mousePressed(2)) this.setBuildMode(false);
-      else if (input.mousePressed(2)) this.useAbility('ability');
-      // F repairs the tower under the crosshair on mazing arenas; otherwise it fires ability II.
-      if (input.pressed('KeyF') && !(this.towers.inspected && this.layout.mazing)) this.useAbility('ability2');
-      if (input.pressed('KeyT') && this.waves.phase === 'combat') this.useAbility('ultimate');
+      this.combatKeys();
       if (input.pressed('KeyH') && this.canReturnHome) {
         this.checkpointOpen = true;
         this.openCheckpoint();
@@ -1422,17 +1415,13 @@ export class Game {
     this.movement.update();
 
     // ---- building
-    if (this.construction.active) {
-      this.construction.update(this.player, this.wallet.cores, this.turrets.turrets, this.stats);
-      if (controls && input.mousePressed(0)) this.tryPlace();
-    }
+    this.updateConstruction(controls);
 
     // ---- shooting
-    const trigger = controls && input.mouse(0) && !this.construction.active;
     this.weaponSlots.update(dt);
     this.abilities.update(dt);
     this.deployables.update(dt);
-    this.weapon.update(dt, trigger, this.stats, this.shoot, this.weaponFx);
+    this.updateWeapon(dt, controls);
     if (this.weapon.overheated && !this.wasOverheated) this.director.bus.emit({ type: 'overheat', chain: this.director.bus.newChain(), source: { kind: 'weapon', id: 'heat' }, value: 1 });
     this.wasOverheated = this.weapon.overheated;
     this.wfx.update(dt, this.player.camera.position);
@@ -1575,6 +1564,39 @@ export class Game {
     sfx.play('ui');
   }
 
+  /** The same input precedence applies to solo and co-op wardens. */
+  protected combatKeys(): void {
+    const input = this.input;
+    if (input.pressed('Digit2') || input.pressed('KeyB')) this.setBuildMode(!this.construction.active);
+    if (input.pressed('Digit1')) {
+      this.setBuildMode(false);
+      this.swapWeapon('weapon');
+    } else if (input.pressed('Digit3') && this.weaponSlots.item('weapon2')) {
+      this.setBuildMode(false);
+      this.swapWeapon('weapon2');
+    } else if (input.pressed('KeyZ') || (this.settings.wheelSwap && input.wheel !== 0)) this.swapWeapon();
+    if (this.construction.active && input.mousePressed(2)) this.setBuildMode(false);
+    else if (input.mousePressed(2) || input.pressed('Digit4')) this.useAbility('ability');
+    if (input.pressed('KeyF') && !(this.towers.inspected && this.layout.mazing)) this.useAbility('ability2');
+    if (input.pressed('KeyT') && this.waves.phase === 'combat') this.useAbility('ultimate');
+  }
+
+  protected updateConstruction(controls: boolean): void {
+    if (!this.construction.active) return;
+    this.construction.update(this.player, this.wallet.cores, this.turrets.turrets, this.stats);
+    if (controls && this.input.mousePressed(0)) {
+      this.input.consumeMouse(0);
+      this.tryPlace();
+    }
+  }
+
+  protected updateWeapon(dt: number, controls: boolean): boolean {
+    const armed = controls && !this.construction.active;
+    const trigger = armed && this.input.mouse(0);
+    const fired = this.weapon.update(dt, trigger, this.stats, this.shoot, this.weaponFx, armed && this.input.mousePressed(0));
+    return trigger || fired;
+  }
+
   protected tryPlace(): void {
     const built = this.towers.placeLocal();
     if (!built) return;
@@ -1637,6 +1659,7 @@ export class Game {
         this.abilities.ult = Math.min(1, this.abilities.ult + f);
       },
       hitstop: (s, k) => this.hitstop(s, k),
+      panFor: (p) => this.panFor(p),
       masteryKill: (e) => {
         this.conditions.note('kill', this.runTime);
         this.gainMastery(this.weapon.def.family, killMastery(e.def.role, e.elite));
@@ -2353,6 +2376,7 @@ export class Game {
       inspect: t ? { name: t.name, kills: t.kills, damage: Math.round(t.damageDealt), refund: t.recycleValue, recycle: this.towers.recycleT, card: this.towerInfo(t), edit: this.towerEditReason(), hp: this.layout.mazing ? { hp: Math.round(t.hp), max: t.maxHp, wrecked: t.wrecked, repair: t.repairCost } : null } : null,
       hint,
       spread: 6 + this.weapon.spread * 900,
+      aimTarget: this.settings.aimFeedback && this.screen === 'playing' && this.player.alive && !c.active ? this.combat.aimTarget() : null,
       perf: this.perfOn
         ? this.perfHud()
         : null,

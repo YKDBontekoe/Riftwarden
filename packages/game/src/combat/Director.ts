@@ -328,7 +328,8 @@ export class Director {
     this.byElement[r.element] = (this.byElement[r.element] ?? 0) + dealt;
     this.damageBy[r.source.kind] += dealt;
     // M6 run statistics: who dealt it (towers incl. tower-caused reactions; hazards are the environment).
-    if (r.source.towerId !== undefined || r.source.kind === 'tower') this.dealt.tower += dealt;
+    const towerSource = r.source.towerId !== undefined || r.source.kind === 'tower';
+    if (towerSource) this.dealt.tower += dealt;
     else if (r.source.id === 'hazard') this.dealt.environment += dealt;
     else {
       this.dealt.player += dealt;
@@ -365,7 +366,7 @@ export class Director {
       this.g.onEnemyKilled(e);
     }
     const sign = affinitySign(aff);
-    if (!r.quiet && !r.dot) this.g.showNumber(r.point, amount, kind, r.source.kind === 'weapon', this.numbers++ < NUMBERS_PER_FRAME, e.id * 4096 + (e.gen & 4095), r.element, sign);
+    if (!r.quiet && !r.dot) this.g.showNumber(r.point, amount, kind, !towerSource && r.source.id !== 'hazard', this.numbers++ < NUMBERS_PER_FRAME, e.id * 4096 + (e.gen & 4095), r.element, sign);
     return { dealt, killed: res.killed, kind, aff: sign };
   }
 
@@ -576,7 +577,7 @@ export class Director {
     if (st.archetype === 'support') {
       // Field pulse (presentation; the boost itself is applied through towerInput / exposure).
       this.g.fx.ring(new Vector3(t.pos.x, t.pos.y + 0.12, t.pos.z), st.range, 0.9, new Color3(0.4, 2.2, 1.4), true);
-      sfx.play('beep', { volume: a.volume * 0.15, pan: a.pan, pitch: 0.7 });
+      sfx.play('worldBeep', { volume: a.volume * 0.15, pan: a.pan, pitch: 0.7 });
       if (this.build.count('t_overload')) {
         for (const e of this.enemiesNear(t.pos, st.range)) {
           if (Math.random() > UP.overload.chance) continue;
