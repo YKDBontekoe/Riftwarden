@@ -9,6 +9,7 @@ import type { SaveData } from '@riftwarden/rules/progression/save';
 import { sfx } from '@riftwarden/game/audio/Sfx';
 import { BIOMES, BIOME_IDS, type BiomeId } from '@riftwarden/rules/world/biomes';
 import { FactionIntel } from './FactionIntel';
+import { FieldArt } from './FieldArt';
 
 const KIND: Record<CodexKind, string> = { family: 'WEAPON FAMILIES', rarity: 'RARITIES', unique: 'UNIQUES' };
 
@@ -62,12 +63,20 @@ export function WarCaches({ flow, save }: { flow: Flow; save: SaveData }) {
   const fought = save.war?.fought ?? [];
   if (!fought.length) return null;
   const rows = fought.map((k) => ({ k, name: war ? regionLayout(war.seed, k).name : `Region ${k + 1}`, liberated: !!war && regionState(war, k)?.status === 'liberated', claimed: save.war?.claimed.includes(k) ?? false }));
+  const ready = rows.filter((r) => r.liberated && !r.claimed).length;
   return (
-    <div className="grid gap-[5px]" data-testid="war-caches">
-      <div className="col-label">RIFT WAR VICTORIES</div>
+    <section className="reward-card reward-card-cache" aria-label="Rift War victories" data-testid="war-caches">
+      <div className="reward-hero">
+        <FieldArt name="war-victory-cache" className="reward-art" />
+        <div className="reward-heading">
+          <span className="ds-lbl">Rift War victories</span>
+          <b className="ds-h3">Victory caches</b>
+          {ready > 0 && <span className="ds-up ds-meta">{ready} ready to claim</span>}
+        </div>
+      </div>
       {rows.map((r) => (
-        <div key={r.k} className="flex items-center justify-between gap-[8px] text-[13px]">
-          <span>{r.name} <span className="font-mono text-[10.5px] text-faint">{r.claimed ? 'CACHE CLAIMED' : r.liberated ? 'LIBERATED' : 'FIGHTING'}</span></span>
+        <div key={r.k} className="reward-cache-row">
+          <span>{r.name}<small className="ds-mono">{r.claimed ? 'CACHE CLAIMED' : r.liberated ? 'LIBERATED' : 'FIGHTING'}</small></span>
           {r.liberated && !r.claimed && (
             <button className="mini m-0 w-auto" data-testid={`claim-${r.k}`} onClick={() => {
               const res = flow.profile.op('claimWarCache', [r.k]);
@@ -78,7 +87,7 @@ export function WarCaches({ flow, save }: { flow: Flow; save: SaveData }) {
         </div>
       ))}
       {msg && <div className="term-msg">{msg}</div>}
-    </div>
+    </section>
   );
 }
 
@@ -89,13 +98,17 @@ export function PinnacleCard({ flow, save, rl, busy, onDeploy }: { flow: Flow; s
   const keys = save.pinnacle?.keys ?? 0;
   const why = pinnacleBlocker(keys, rl);
   return (
-    <div className="grid gap-[6px] border border-orange/40 bg-[rgb(255_150_90/0.06)] p-[10px]" data-testid="pinnacle">
-      <div className="flex items-baseline justify-between">
-        <span className="font-mono text-[11px] tracking-[0.14em] text-orange">PINNACLE BOSS</span>
-        <b className="font-mono text-[12px]" data-testid="pinnacle-keys">{keys} KEY{keys === 1 ? '' : 'S'}</b>
+    <section className="reward-card reward-card-key" aria-label="Pinnacle boss" data-testid="pinnacle">
+      <div className="reward-hero">
+        <FieldArt name="pinnacle-key" className="reward-art" />
+        <div className="reward-heading">
+          <span className="ds-lbl">Pinnacle boss</span>
+          <b className="ds-h3">Pinnacle key</b>
+          <b className="ds-mono" data-testid="pinnacle-keys">{keys} KEY{keys === 1 ? '' : 'S'}</b>
+        </div>
       </div>
       <p className="m-0 text-[12.5px] text-muted">Spend a key to start a run whose first wave is a pinnacle boss (machines +50% hull, +30% luck). It drops an extra legendary-floor cache.</p>
-      <div className="flex gap-[6px]">
+      <div className="reward-actions">
         <button className="m-0 w-auto flex-1 primary whitespace-nowrap px-[12px] py-[10px] text-[13px]" disabled={busy || !!why} title={why ?? undefined} data-testid="pinnacle-go" onClick={onDeploy}>SUMMON · RL {rl}</button>
         <button className="m-0 w-auto whitespace-nowrap px-[12px] py-[10px] text-[12px]" disabled={busy || save.resources.shards < PINNACLE.craftShards} data-testid="pinnacle-craft" onClick={() => {
           const r = flow.profile.op('craftKey', []);
@@ -105,6 +118,6 @@ export function PinnacleCard({ flow, save, rl, busy, onDeploy }: { flow: Flow; s
       </div>
       {why && rl < PINNACLE.minRl && <span className="text-[11.5px] text-faint">{why}</span>}
       {msg && <div className="term-msg">{msg}</div>}
-    </div>
+    </section>
   );
 }

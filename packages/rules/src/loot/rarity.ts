@@ -36,17 +36,17 @@ export interface RarityDef {
 
 export const RARITIES: readonly RarityDef[] = [
   { id: 'common', index: 0, label: 'Common', weight: 620, affixes: [0, 1], quality: 0, tierBias: 0, minTopTier: 0, baseMult: 1, affixMult: 1, sockets: 0, color: '#c4d0d6', glow: [0.9, 1.0, 1.05], beam: 0 },
-  { id: 'uncommon', index: 1, label: 'Uncommon', weight: 260, affixes: [1, 2], quality: 0.08, tierBias: 0.25, minTopTier: 0, baseMult: 1.04, affixMult: 1, sockets: 1, color: '#5fe07a', glow: [0.35, 2.2, 0.55], beam: 2.2 },
-  { id: 'rare', index: 2, label: 'Rare', weight: 95, affixes: [2, 3], quality: 0.16, tierBias: 0.55, minTopTier: 2, baseMult: 1.08, affixMult: 1, sockets: 2, color: '#46a8ff', glow: [0.4, 1.3, 3.2], beam: 4 },
-  { id: 'epic', index: 3, label: 'Epic', weight: 28, affixes: [3, 4], quality: 0.24, tierBias: 0.9, minTopTier: 3, baseMult: 1.12, affixMult: 1, sockets: 3, color: '#b866ff', glow: [1.9, 0.6, 3.6], beam: 6 },
-  { id: 'legendary', index: 4, label: 'Legendary', weight: 6, affixes: [4, 4], quality: 0.32, tierBias: 1.4, minTopTier: 4, baseMult: 1.16, affixMult: 1.05, sockets: 4, color: '#ffc23d', glow: [4.2, 2.4, 0.35], beam: 9 },
-  { id: 'exotic', index: 5, label: 'Exotic', weight: 1.2, affixes: [4, 5], quality: 0.4, tierBias: 2, minTopTier: 5, baseMult: 1.2, affixMult: 1.15, sockets: 4, color: '#ff4f86', glow: [4.6, 0.7, 2.2], beam: 12 },
+  { id: 'uncommon', index: 1, label: 'Uncommon', weight: 260, affixes: [1, 2], quality: 0.08, tierBias: 0.25, minTopTier: 0, baseMult: 1.04, affixMult: 1, sockets: 1, color: '#5fe07a', glow: [0.35, 2.2, 0.55], beam: 0 },
+  { id: 'rare', index: 2, label: 'Rare', weight: 95, affixes: [2, 3], quality: 0.16, tierBias: 0.55, minTopTier: 2, baseMult: 1.08, affixMult: 1, sockets: 2, color: '#46a8ff', glow: [0.4, 1.3, 3.2], beam: 0.8 },
+  { id: 'epic', index: 3, label: 'Epic', weight: 28, affixes: [3, 4], quality: 0.24, tierBias: 0.9, minTopTier: 3, baseMult: 1.12, affixMult: 1, sockets: 3, color: '#b866ff', glow: [1.9, 0.6, 3.6], beam: 1.2 },
+  { id: 'legendary', index: 4, label: 'Legendary', weight: 6, affixes: [4, 4], quality: 0.32, tierBias: 1.4, minTopTier: 4, baseMult: 1.16, affixMult: 1.05, sockets: 4, color: '#ffc23d', glow: [4.2, 2.4, 0.35], beam: 1.8 },
+  { id: 'exotic', index: 5, label: 'Exotic', weight: 1.2, affixes: [4, 5], quality: 0.4, tierBias: 2, minTopTier: 5, baseMult: 1.2, affixMult: 1.15, sockets: 4, color: '#ff4f86', glow: [4.6, 0.7, 2.2], beam: 2.4 },
   /**
    * Chase tier above Exotic: never rolled by weight (0). An exotic drop is promoted (see `ascendDrop` in drops.ts:
    * deep waves / high tiers only, ~1 in 10 exotics) or an Exotic is ascended at the HQ for rift shards. Exotic rolls
    * plus one extra affix at the level's top tier with a perfect roll (`generateItem` / `ascendItem`).
    */
-  { id: 'ascended', index: 6, label: 'Ascended', weight: 0, affixes: [4, 5], quality: 0.46, tierBias: 2.4, minTopTier: 5, baseMult: 1.24, affixMult: 1.18, sockets: 4, color: '#7ef9ff', glow: [2.6, 4.8, 5.4], beam: 16 },
+  { id: 'ascended', index: 6, label: 'Ascended', weight: 0, affixes: [4, 5], quality: 0.46, tierBias: 2.4, minTopTier: 5, baseMult: 1.24, affixMult: 1.18, sockets: 4, color: '#7ef9ff', glow: [2.6, 4.8, 5.4], beam: 3.2 },
 ];
 
 export const RARITY_IDS: readonly RarityId[] = RARITIES.map((r) => r.id);
