@@ -4,6 +4,7 @@ import { enemyMats } from './enemyModels';
 import type { Kit } from './kit';
 import type { Palette } from './materials';
 import { loftData, smoothLatheData } from './sculpt';
+import { colossusFlankData, overseerGimbalData } from './bossParts';
 
 // ============================================================================ Siege Colossus
 
@@ -51,10 +52,7 @@ export function buildColossus(kit: Kit, P: Palette): ColossusRig {
     { t: 1.65, w: 2.24, h: 1.04, n: 7 }, { t: 2.48, w: 2.0, h: 0.96, v: 0.06, n: 6 },
     { t: 3.12, w: 1.39, h: 0.65, v: 0.17, n: 5 },
   ], 'z', 32));
-  const flankPlate = kit.sculpt('colossusFlank', () => loftData([
-    { t: -1.24, w: 0.10, h: 0.38, v: 0.13, n: 5 }, { t: -0.86, w: 0.29, h: 0.73, n: 6 },
-    { t: 0.68, w: 0.28, h: 0.68, n: 7 }, { t: 1.16, w: 0.12, h: 0.4, v: -0.13, n: 5 },
-  ], 'z', 16));
+  const flankPlate = kit.sculpt('colossusFlank', colossusFlankData);
   const shin = kit.sculpt('colossusShin', () => loftData([
     { t: -2.68, w: 0.40, h: 0.47, n: 5 }, { t: -2.27, w: 0.57, h: 0.52, n: 6 },
     { t: -0.82, w: 0.42, h: 0.47, n: 5 }, { t: -0.28, w: 0.32, h: 0.34, n: 4 },
@@ -200,13 +198,7 @@ export function buildOverseer(kit: Kit, P: Palette): OverseerRig {
     [0.42, -1.19], [0.92, -0.96], [1.15, -0.48], [1.19, -0.18],
     [1.19, 0.18], [1.15, 0.48], [0.91, 0.98], [0.41, 1.24],
   ], 32));
-  const gimbalPlate = kit.sculpt('overseerGimbalPlate', () => loftData([
-    { t: -0.75, w: 0.09, h: 0.16, u: -0.16, n: 4 },
-    { t: -0.55, w: 0.16, h: 0.28, u: -0.065, n: 6 },
-    { t: 0, w: 0.19, h: 0.35, n: 6 },
-    { t: 0.55, w: 0.16, h: 0.28, u: -0.065, n: 6 },
-    { t: 0.75, w: 0.09, h: 0.16, u: -0.16, n: 4 },
-  ], 'x', 16));
+  const gimbalPlate = kit.sculpt('overseerGimbalPlate', overseerGimbalData);
   kit.part(housing, M.bossDark, body);
   const inner = kit.part('sphere', M.violet, body, { scale: [1.7, 1.7, 1.7], shadow: false });
   // Equator band + lens

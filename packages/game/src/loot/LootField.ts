@@ -28,12 +28,12 @@ import { HOLO_HEIGHT, isExpired } from '@riftwarden/rules/loot/lifetime';
 
 const FLIGHT = 0.6;
 /** Rarity rim thickness (metres). */
-const RIM_WIDTH = 0.009;
+const RIM_WIDTH = 0.005;
 /** HDR teal of the set-gear marker (matches the SET tags in the UI). */
 const SET_GLOW: [number, number, number] = [0.35, 1.7, 1.2];
 
 /** Height where the rarity beam starts (above the hovering model). */
-const BEAM_BASE = 1.45;
+const BEAM_BASE = 1.63;
 
 export interface Pickup {
   id: number;
@@ -44,9 +44,6 @@ export interface Pickup {
   focus: Vector3;
   root: TransformNode;
   holo: TransformNode;
-  halo: AbstractMesh | null;
-  /** Ascended: a second, counter-rotating halo crossing the first and an outer ground ring. */
-  halo2: AbstractMesh | null;
   ring: AbstractMesh;
   /** Spinning model node (instances of a template, or an owned detailed model). */
   model: TransformNode;
@@ -86,17 +83,18 @@ export class LootField {
     const grad = new DynamicTexture('lootBeamGrad', { width: 4, height: 128 }, scene, false);
     const ctx = grad.getContext();
     const g = ctx.createLinearGradient(0, 0, 0, 128);
-    // Canvas top maps to the beam's base: bright at the ground, fading upward.
+    // Canvas top maps to the beam's base, just above the item.
     g.addColorStop(0, 'rgba(255,255,255,1)');
-    g.addColorStop(0.45, 'rgba(255,255,255,0.35)');
+    g.addColorStop(0.28, 'rgba(255,255,255,0.32)');
     g.addColorStop(1, 'rgba(255,255,255,0)');
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, 4, 128);
     grad.hasAlpha = true;
     grad.update(false);
     for (const r of RARITIES) {
-      this.glow.set(r.id, unlit(scene, `lootGlow_${r.id}`, r.glow));
-      const c = r.glow.map((v) => v * 0.42) as [number, number, number];
+      const ground = r.glow.map((v) => v * 0.48) as [number, number, number];
+      this.glow.set(r.id, unlit(scene, `lootGlow_${r.id}`, ground));
+      const c = r.glow.map((v) => v * 0.2) as [number, number, number];
       this.beam.set(r.id, unlit(scene, `lootBeam_${r.id}`, c, { tex: grad, opacity: grad, additive: true, twoSided: true }));
     }
     // Compile every loot shader up front (instanced variant), so the first drop of each
@@ -107,7 +105,7 @@ export class LootField {
     for (const r of RARITIES) {
       for (const [shape, mat] of [
         ['torusThin', this.glow.get(r.id)!],
-        ['cyl', this.beam.get(r.id)!],
+        ['cone', this.beam.get(r.id)!],
       ] as const) {
         const t = kit.template(shape, mat);
         jobs.push(mat.forceCompilationAsync(t, { useInstances: true }).catch(() => {}));
@@ -143,28 +141,23 @@ export class LootField {
     const glow = this.glow.get(r.id)!;
     const { model, own } = this.placeModel(item, holo);
     const k = this.kit;
-    const ring = k.part('torusThin', glow, root, { pos: [0, 0.05, 0], scale: [1.15, 1, 1.15], shadow: false });
-    k.part('cyl', this.P.graphite, root, { pos: [0, 0.03, 0], scale: [0.7, 0.05, 0.7], shadow: false });
-    let halo: AbstractMesh | null = null;
-    if (r.index >= 3) halo = k.part('torusThin', glow, holo, { scale: [1.15, 1, 1.15], rot: [0.22, 0, 0], shadow: false });
+    const ring = k.part('torusThin', glow, root, { pos: [0, 0.045, 0], scale: [0.88, 0.3, 0.88], shadow: false });
+    k.part('cyl6', this.P.graphite, root, { pos: [0, 0.03, 0], scale: [0.62, 0.06, 0.62], shadow: false });
     if (r.index >= 3 || item.uniqueId) for (const i of [0, 1, 2, 3]) {
       const turn = Math.PI * i / 2 + Math.PI / 4;
-      const radius = item.uniqueId ? 0.8 : 0.66;
-      k.part('box', glow, root, { pos: [Math.sin(turn) * radius, 0.06, Math.cos(turn) * radius], rot: [0, turn, 0], scale: [0.29, 0.025, 0.065], shadow: false });
+      const radius = item.uniqueId ? 0.68 : 0.54;
+      k.part('box', glow, root, { pos: [Math.sin(turn) * radius, 0.055, Math.cos(turn) * radius], rot: [0, turn, 0], scale: [0.19, 0.018, 0.035], shadow: false });
     }
     if (item.set) for (let i = 0; i < 6; i++) {
       const turn = (Math.PI * i) / 3;
       k.part('box', this.setGlow, root, { pos: [Math.sin(turn) * 1.02, 0.07, Math.cos(turn) * 1.02], rot: [0, turn + Math.PI / 2, 0], scale: [0.42, 0.03, 0.05], shadow: false });
     }
-    let halo2: AbstractMesh | null = null;
     if (r.id === 'ascended') {
-      halo2 = k.part('torusThin', glow, holo, { scale: [1.3, 1, 1.3], rot: [-0.3, 0, 0.35], shadow: false });
-      k.part('torusThin', glow, root, { pos: [0, 0.04, 0], scale: [1.9, 1, 1.9], shadow: false });
+      k.part('torusThin', glow, root, { pos: [0, 0.047, 0], scale: [1.13, 0.25, 1.13], shadow: false });
     }
     if (r.beam > 0) {
-      const width = 0.1 + r.index * 0.02;
-      // The beam rises from above the model so it never hides it.
-      k.part('cyl', this.beam.get(r.id)!, root, { pos: [0, BEAM_BASE + r.beam / 2, 0], scale: [width, r.beam, width], shadow: false });
+      const width = 0.04 + r.index * 0.007;
+      k.part('cone', this.beam.get(r.id)!, root, { pos: [0, BEAM_BASE + r.beam / 2, 0], scale: [width, r.beam, width], shadow: false });
     }
     const p: Pickup = {
       id: this.nextId++,
@@ -174,8 +167,6 @@ export class LootField {
       focus: ground.add(new Vector3(0, HOLO_HEIGHT, 0)),
       root,
       holo,
-      halo,
-      halo2,
       ring,
       model,
       own,
@@ -193,8 +184,8 @@ export class LootField {
   }
 
   /** Longest side of a dropped model (metres). */
-  static sizeFor(category: string): number {
-    return category === 'weapon' ? 1.15 : category === 'armor' || category === 'ultimate' ? 0.82 : 0.72;
+  static sizeFor(category: ItemInstance['category']): number {
+    return category === 'weapon' ? 1.34 : category === 'armor' || category === 'ultimate' ? 1.08 : 0.94;
   }
 
   /** Shared instanced template per (base, rarity); its meshes stay hidden below the arena. */
@@ -202,7 +193,7 @@ export class LootField {
     const key = lookKey(look);
     let t = this.templates.get(key);
     if (!t) {
-      const model = buildItemModel(this.scene, look, { size: LootField.sizeFor(look.category), name: `lootTpl${this.templates.size}` });
+      const model = buildItemModel(this.scene, look, { size: LootField.sizeFor(look.category), pickup: true, name: `lootTpl${this.templates.size}` });
       model.root.position.y = -500;
       for (const m of model.meshes) {
         m.isVisible = false;
@@ -217,7 +208,7 @@ export class LootField {
   private rimMat(id: RarityId): PBRMaterial {
     let m = this.rims.get(id);
     if (!m) {
-      m = rimMaterial(this.scene, id);
+      m = rimMaterial(this.scene, id, 0.58);
       this.rims.set(id, m);
     }
     return m;
@@ -237,11 +228,12 @@ export class LootField {
   private placeModel(item: ItemInstance, holo: TransformNode): { model: TransformNode; own: ItemModel | null } {
     const look = lookOf(item);
     const r = rarity(item.rarity);
-    const tilt = item.category === 'weapon' ? 0.22 : 0;
+    const tilt = item.category === 'weapon' ? 0.28 : 0.12;
+    const pitch = item.category === 'processor' || item.category === 'module' ? 0.42 : 0.16;
     if (item.category === 'weapon' && item.build && r.index >= 2) {
-      const own = buildItemModel(this.scene, look, { size: LootField.sizeFor('weapon'), detailed: true, name: `loot${this.nextId}` });
+      const own = buildItemModel(this.scene, look, { size: LootField.sizeFor('weapon'), detailed: true, pickup: true, name: `loot${this.nextId}` });
       own.root.parent = holo;
-      own.root.rotation.z = tilt;
+      own.root.rotation.set(pitch, 0, tilt);
       rimHull(this.scene, own, this.rimMat(item.rarity), RIM_WIDTH, `lootRim${this.nextId}`);
       this.detailedBuilds++;
       return { model: own.root, own };
@@ -250,7 +242,7 @@ export class LootField {
     const node = new TransformNode('lootModel', this.scene);
     node.parent = holo;
     node.scaling.setAll(t.model.scale);
-    node.rotation.z = tilt;
+    node.rotation.set(pitch, 0, tilt);
     for (const m of [...t.model.meshes, this.rimOf(t, item.rarity)]) {
       const inst = m.createInstance('lootPart');
       inst.parent = node;
@@ -303,11 +295,8 @@ export class LootField {
       }
       p.holo.position.set(0, HOLO_HEIGHT + Math.sin(p.t * 2.1) * 0.08, 0);
       p.holo.rotation.y += dt * 1.3;
-      // Tilted rings precess around the model (spinning about z would tip them upright).
-      if (p.halo) p.halo.rotation.y += dt * 1.8;
-      if (p.halo2) p.halo2.rotation.y -= dt * 2.6;
-      const pulse = 1.1 + Math.sin(p.t * 3) * 0.06;
-      p.ring.scaling.set(pulse, 1, pulse);
+      const pulse = 0.88 + Math.sin(p.t * 3) * 0.035;
+      p.ring.scaling.set(pulse, 0.3, pulse);
       // Expiring soon: blink at 3 Hz.
       p.holo.setEnabled(!p.expiring || Math.sin(p.t * 19) > -0.4);
     }

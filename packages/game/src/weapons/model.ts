@@ -68,6 +68,8 @@ export interface ModelOpts {
   name?: string;
   /** Include the drone hardpoint arm (viewmodel only). Default true. */
   mount?: boolean;
+  /** Lift the receiver finish in arena lighting, where the weapon is viewed at a distance. */
+  pickup?: boolean;
   /** Damage element: non-kinetic elements tint the energy parts. */
   element?: string;
   uniqueId?: string;
@@ -661,8 +663,10 @@ function cooling(c: Ctx, m: Mounts): void {
     case 'cl_jacket': {
       // Ribbed jacket around the barrel root with heat bands.
       const n = a.frame('jacket', c.rig.slide!, [0, m.axisY, m.barrelZ]);
-      a.add(cylZ(c.b.family === 'rail' ? 0.024 : 0.03, 0, 0.07, 0.003), M.graphite, n);
-      for (let i = 0; i < 6; i++) a.add(tubeZ(c.b.family === 'rail' ? 0.028 : 0.035, 0.022, 0.006 + i * 0.011, 0.01 + i * 0.011), i % 2 ? c.heat : M.dark, n);
+      const radius = c.b.family === 'rail' ? 0.028 : 0.035;
+      a.add(cylZ(radius - 0.006, 0, 0.074, 0.004), M.graphite, n);
+      for (let i = 0; i < 5; i++) a.add(tubeZ(radius, radius - 0.012, 0.009 + i * 0.013, 0.015 + i * 0.013), i % 2 ? c.heat : M.dark, n);
+      for (const z of [0, 0.067]) a.add(tubeZ(radius + 0.002, radius - 0.011, z, z + 0.008, 12), c.trim, n);
       break;
     }
     case 'cl_sink': {
@@ -670,8 +674,9 @@ function cooling(c: Ctx, m: Mounts): void {
       const f = m.flank;
       const len = Math.min(0.13, f.z1 - f.z0);
       const zc = f.z0 + len / 2 + 0.02;
-      a.add(boxData(0.018, 0.04, len, 0.004), M.graphite, root, [-f.x - 0.009, f.y, zc]);
-      for (let i = 0; i < 9; i++) a.add(boxData(0.008, 0.032, 0.0035, 0.0008), c.heat, root, [-f.x - 0.02, f.y, zc - len / 2 + 0.01 + (i * (len - 0.02)) / 8]);
+      a.add(boxData(0.021, 0.046, len, 0.006), M.graphite, root, [-f.x - 0.009, f.y, zc]);
+      for (let i = 0; i < 7; i++) a.add(boxData(0.01, 0.034, 0.005, 0.001), i % 2 ? c.heat : M.satin, root, [-f.x - 0.021, f.y, zc - len / 2 + 0.015 + (i * (len - 0.03)) / 6], [0.2, 0, 0]);
+      for (const side of [-1, 1]) a.add(boxData(0.012, 0.008, len, 0.002), c.trim, root, [-f.x - 0.021, f.y + side * 0.018, zc]);
       break;
     }
     default: {
@@ -680,8 +685,8 @@ function cooling(c: Ctx, m: Mounts): void {
       const n = 6;
       const vane = loftData([
         { t: -0.026, w: 0.0017, h: 0.003, v: 0.004, n: 4 },
-        { t: -0.018, w: 0.003, h: 0.0075, v: 0.008, n: 5 },
-        { t: 0.018, w: 0.003, h: 0.0075, v: 0.008, n: 5 },
+        { t: -0.017, w: 0.004, h: 0.01, v: 0.009, n: 5 },
+        { t: 0.017, w: 0.004, h: 0.01, v: 0.009, n: 5 },
         { t: 0.026, w: 0.0017, h: 0.003, v: 0.004, n: 4 },
       ], 'x', 12);
       for (let i = 0; i < n; i++) {
@@ -690,6 +695,10 @@ function cooling(c: Ctx, m: Mounts): void {
         c.rig.fins.push({ node, max: -0.55 });
       }
       a.add(prismData([[t.z0 - 0.012, t.y - 0.019], [t.z1 + 0.017, t.y - 0.02], [t.z1, t.y + 0.003], [t.z0, t.y + 0.003]], 0.056, 0.004), c.trim, root);
+      for (const side of [-1, 1]) {
+        a.add(prismData([[t.z0 - 0.009, t.y - 0.008], [t.z1 + 0.009, t.y - 0.008], [t.z1 - 0.002, t.y + 0.007], [t.z0 + 0.001, t.y + 0.007]], 0.008, 0.002), c.shell, root, [side * 0.028, 0, 0]);
+        for (const z of [t.z0 + 0.004, t.z1 - 0.004]) a.add(cylX(0.004, -0.002, 0.002, 0.001, 6), M.satin, root, [side * 0.033, t.y, z]);
+      }
     }
   }
 }
@@ -851,7 +860,7 @@ export function buildWeaponModel(scene: Scene, build: WeaponBuild, installed: (I
   const ledOff = weaponGlow(scene, 'wpnLedOff', [0.02, 0.025, 0.03]);
   const owned = [energy, chargeGlow, heat, ledOn, ledHot, ledOff];
   const rig: Ctx['rig'] = { spin: [], fins: [], charge: [], muzzles: [] };
-  const c: Ctx = { mount: opts.mount !== false, a, M, shell: M.shell(build.finish), trim: rarityIndex >= 2 ? M.trim(build.finish) : M.satin, energy, chargeGlow, heat, b: build, rarity: rarityIndex, rig };
+  const c: Ctx = { mount: opts.mount !== false, a, M, shell: M.shell(build.finish, opts.pickup), trim: rarityIndex >= 2 ? M.trim(build.finish) : M.satin, energy, chargeGlow, heat, b: build, rarity: rarityIndex, rig };
   rig.slide = a.node('slide', root);
 
   const f = build.family;

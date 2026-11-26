@@ -755,9 +755,10 @@ button.mini.expand { border-color: var(--amber-dim); color: #ffe2b5; }
 .lf-item.r-common b { color: var(--white); }
 .lf-item em { font-style: normal; font-family: var(--mono); font-size: 9.5px; color: var(--faint); }
 .lf-item.r-legendary, .lf-item.r-exotic { box-shadow: 0 0 22px color-mix(in srgb, var(--rc) 30%, transparent); }
-.loot-label { position: absolute; left: 0; top: 0; padding: 1px 6px; font-family: var(--display); font-size: 12px; letter-spacing: 0.04em; color: var(--rc); background: rgba(3, 8, 12, 0.55); border-bottom: 2px solid var(--rc); white-space: nowrap; will-change: transform; }
+.loot-label { position: absolute; left: 0; top: 0; max-width: min(260px, 48vw); overflow: hidden; text-overflow: ellipsis; padding: 1px 6px; font-family: var(--display); font-size: 12px; letter-spacing: 0.04em; color: var(--rc); background: rgba(3, 8, 12, 0.55); border-bottom: 2px solid var(--rc); white-space: nowrap; opacity: var(--label-opacity, 1); will-change: transform; }
 .loot-label.r-common { color: #dfe8ec; }
-.loot-label.expiring { animation: blink 0.7s infinite; border-bottom-color: var(--red); }
+.loot-label.expiring { animation: loot-label-expiry 0.7s infinite; border-bottom-color: var(--red); }
+@keyframes loot-label-expiry { 50% { opacity: calc(var(--label-opacity, 1) * 0.45); } }
 
 
 
