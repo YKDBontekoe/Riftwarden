@@ -9,7 +9,15 @@ The backend runs on one server with Docker Compose; the static client is on Clou
 2. Log Docker in to GHCR for the deploy script: `DOCKER_CONFIG=~/stacks/riftwarden/.docker docker login ghcr.io`.
 3. Install the systemd user units from `systemd/` (`riftwarden-deploy.timer`, `riftwarden-deploy.service`,
    `riftwarden-tunnel.service`) and `systemctl --user enable --now riftwarden-deploy.timer riftwarden-tunnel.service`.
-4. Point the tunnel at the gateway (`cloudflared.example.yml`).
+4. In the active tunnel config, route `riftwarden-api.ykdbonte.dev` to the gateway's local port. The
+   default is `18084` (`cloudflared.example.yml`). Use `18085` if the v2 stack was staged alongside the old stack.
+   Keep the existing client ingress until Pages takes over the client domain. Validate the config and restart
+   `riftwarden-tunnel.service`, then create the proxied DNS record with
+   `cloudflared tunnel route dns riftwarden riftwarden-api.ykdbonte.dev`. If this host has only tunnel credentials,
+   create the proxied CNAME in the Cloudflare dashboard instead, targeting the existing tunnel's
+   `<tunnel-uuid>.cfargotunnel.com` hostname.
+   Verify `curl --fail https://riftwarden-api.ykdbonte.dev/health` returns the gateway's revision and worker count.
+   The first-level hostname is covered by Cloudflare Universal SSL on a full zone.
 5. Cloudflare Pages: create the project `riftwarden` (custom domain `riftwarden.ykdbonte.dev`) and add the repository
    secrets `CLOUDFLARE_API_TOKEN` (Pages: edit) and `CLOUDFLARE_ACCOUNT_ID`. Until they exist the deploy job skips
    the client with a warning.

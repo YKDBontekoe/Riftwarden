@@ -15,7 +15,7 @@ Status: **approved 2026-11-21, implemented** (steps 1-11, section 13; the open i
 | Protocol | Binary, schema-first (Protobuf); transport WebSocket (best performance and stability across browsers today). |
 | Networking | Add lag compensation and better prediction for co-op. |
 | Scale | Hundreds of concurrent players, one machine for now (4 cores, **4 GB RAM allocated** to the stack); topology must not block more later. |
-| Hosting | The owner's personal server (Docker Compose, Cloudflare Tunnel, pull-based deploy timer kept). Static client on Cloudflare (CDN). API at `api.riftwarden.ykdbonte.dev`. No staging. |
+| Hosting | The owner's personal server (Docker Compose, Cloudflare Tunnel, pull-based deploy timer kept). Static client on Cloudflare (CDN). API at `riftwarden-api.ykdbonte.dev`. No staging. |
 | Deploys | Running co-op sessions are **drained**, not dropped. |
 | Observability | (Postponed, see section 10.) OpenTelemetry traces, logs and metrics stored in **ClickHouse**, viewed in **Grafana** (no Sentry). Grafana behind Cloudflare Access. |
 | Frontend | Vite + React 19 + TanStack Router (chosen over Next.js: the game is one canvas, no SSR, no website), Tailwind v4 with design tokens keeping the current look, lighter in-game HUD, Babylon **WebGPU** with WebGL2 fallback. |
@@ -36,7 +36,7 @@ Status: **approved 2026-11-21, implemented** (steps 1-11, section 13; the open i
                   Cloudflare (CDN)                        personal server (Docker Compose)
  browser ──HTTPS── riftwarden.ykdbonte.dev  (static client: Pages)
     │
-    └──WSS / HTTPS── api.riftwarden.ykdbonte.dev ── cloudflared ──► gateway (Rust, axum)
+    └──WSS / HTTPS── riftwarden-api.ykdbonte.dev ── cloudflared ──► gateway (Rust, axum)
                                                                     │  ├─ PostgreSQL 18
                                                                     │  ├─ Redis 8
                                                                     │  └─ Unix sockets (protobuf frames)
@@ -148,7 +148,7 @@ As built in step 8 (operator notes: `deploy/README.md`):
 - **Compose** (`deploy/compose.yml`): `gateway` (127.0.0.1:18084), `rules`, two sim slots `sim-blue` / `sim-green`, `db` (PostgreSQL 18), `redis` (no persistence, LRU), all with memory limits (~2 GB of 4 GB; the observability services were removed, section 10). cloudflared stays a systemd unit (`deploy/cloudflared.example.yml`: `api.` -> gateway). Secrets in `.env` (`deploy/.env.example`); image digests in `images.env`, written by the deploy script.
 - **Gateway admin listener** (`crates/gateway/src/admin.rs`, `RIFT_ADMIN_LISTEN`, never published): sim workers with connected / draining / running, per-worker drain.
 - **Pull-based deploy** (`deploy/deploy.sh`, systemd timer every minute, flock): pull both `:production` images; skip when they are from different builds or the build already failed here (`.failed-build`). Then infrastructure `up` (no-op unless compose changed), rules worker, gateway (migrations run at gateway start; players' sockets drop and reconnect, operations keep running in the sims, which re-send their room bindings to the new gateway so rejoining players are routed back), health + build check with rollback of gateway and rules. Then each sim slot in turn: drain, wait until its operations end (`DRAIN_TIMEOUT`, default 30 min; then SIGTERM ends them: secured rewards stay), replace, undrain. The other slot takes new rooms meanwhile. Verified locally on the real images: first deploy, rolling update with an operation held on a slot (rejoin after the gateway restart, drain until the operation ended), drain timeout, broken gateway rollback, no retry of a failed build.
-- **Static client**: Cloudflare Pages (`wrangler pages deploy` in the deploy job, after the API is live; skipped with a warning until the `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` secrets exist). The production build sets `VITE_API_URL=https://api.riftwarden.ykdbonte.dev`; the session cookie is host-only on `api.` (same site as the client, SameSite=Lax), WebAuthn RP id `riftwarden.ykdbonte.dev`.
+- **Static client**: Cloudflare Pages (`wrangler pages deploy` in the deploy job, after the API is live; skipped with a warning until the `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` secrets exist). The production build sets `VITE_API_URL=https://riftwarden-api.ykdbonte.dev`; the session cookie is host-only on `riftwarden-api.ykdbonte.dev` (same site as the client, SameSite=Lax), WebAuthn RP id `riftwarden.ykdbonte.dev`.
 - **CI** (`.github/workflows/ci.yml`): build + unit tests + lint + protocol codegen check; Rust (`fmt`, `clippy -D warnings`, `cargo test`, then the co-op protocol and map suites against a real stack); browser suites (accounts, sync, run map, browser co-op X; `scripts/with-stack.mjs`); on `main`: both images, a compose smoke test (`scripts/smoke-stack.mjs`: health with both sims, build id, war, auth, no test login), GHCR push, live API verification, Pages publish.
 
 ## 10. Observability (OpenTelemetry -> ClickHouse -> Grafana)

@@ -10,6 +10,9 @@ on:
 permissions:
   contents: read
 
+env:
+  PRODUCTION_API_URL: https://riftwarden-api.ykdbonte.dev
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -55,7 +58,7 @@ jobs:
       - run: pnpm build
         env:
           # The production client talks to the gateway on its own host (Cloudflare Pages serves the client).
-          VITE_API_URL: ${{ github.ref == 'refs/heads/main' && 'https://api.riftwarden.ykdbonte.dev' || '' }}
+          VITE_API_URL: ${{ github.ref == 'refs/heads/main' && env.PRODUCTION_API_URL || '' }}
       - if: github.ref == 'refs/heads/main'
         name: Stamp the release version and commit
         run: |
@@ -257,6 +260,13 @@ jobs:
         with:
           node-version: '24'
           package-manager-cache: false
+      - name: Check production API DNS
+        run: |
+          host=${PRODUCTION_API_URL#https://}
+          if ! getent ahosts "$host" >/dev/null; then
+            echo "::error::Cannot resolve $host. Check the proxied Cloudflare Tunnel DNS record in deploy/README.md."
+            exit 1
+          fi
       - name: Build the images
         run: |
           version=$(node -p "require('./dist/version.json').version")
@@ -301,10 +311,10 @@ jobs:
         if: steps.publish.outputs.published == 'true'
         run: |
           for ((attempt = 1; attempt <= 60; attempt++)); do
-            if node scripts/smoke-stack.mjs https://api.riftwarden.ykdbonte.dev "$GITHUB_SHA"; then exit 0; fi
+            if node scripts/smoke-stack.mjs "$PRODUCTION_API_URL" "$GITHUB_SHA"; then exit 0; fi
             sleep 15
           done
-          echo "api.riftwarden.ykdbonte.dev did not serve $GITHUB_SHA in time." >&2
+          echo "$PRODUCTION_API_URL did not serve $GITHUB_SHA in time." >&2
           exit 1
       # Static client on Cloudflare Pages, after the API it calls is live (needs the CLOUDFLARE_API_TOKEN and
       # CLOUDFLARE_ACCOUNT_ID secrets; skipped until they exist).
