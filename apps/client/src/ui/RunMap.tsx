@@ -23,6 +23,7 @@ import { NamedDrops } from './NamedDrops';
 import { bossArtwork } from '@riftwarden/game/visuals/fieldArtwork';
 import { FieldArt } from './FieldArt';
 import { FieldIcon, NODE_ICON, serviceIcon } from './FieldIcon';
+import { FactionIntel } from './FactionIntel';
 
 /** Node colours per kind (map badges, chips). */
 export const KIND_COLOR: Record<NodeKind, string> = {
@@ -303,6 +304,7 @@ function IntelPanel({ node, intel }: { node: MapNode; intel: NodeIntel }) {
   return (
     <div className="rm-intel" data-testid="rm-intel">
       {intel.boss && <FieldArt name={bossArtwork(intel.boss)} className="intel-boss-art" />}
+      {!intel.boss && <FactionIntel biome={node.biome} />}
       <div className="rm-threat">
         <span>THREAT</span>
         <span className="rm-risk">{[1, 2, 3, 4, 5].map((i) => <i key={i} className={i <= intel.threat ? 'on' : ''} />)}</span>

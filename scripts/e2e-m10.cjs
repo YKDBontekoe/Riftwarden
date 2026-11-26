@@ -158,17 +158,24 @@ const SPAWN = () => {
       const e = window.__sp('sapper', [], sp.x + 18, sp.z + 6);
       let hunted = false;
       let planted = false;
+      let lampLit = false;
+      let lampDark = false;
       for (let i = 0; i < 60 * 12 && e.alive; i++) {
         R.advance(1 / 60);
         e.hp = e.maxHp;
         hunted ||= e.ai.mode === 'hunt';
         planted ||= e.ai.mode === 'plant';
+        if (e.ai.mode === 'plant' && e.alive) {
+          if (e.ai.rig.fuseLamp.isEnabled()) lampLit = true;
+          else lampDark = true;
+        }
         g.reactorHp = Math.max(g.reactorHp, 300);
       }
-      return { hunted, planted, sapperDead: !e.alive, wrecked: t.wrecked, hp: Math.round(t.hp) };
+      return { hunted, planted, lampLit, lampDark, sapperDead: !e.alive, wrecked: t.wrecked, hp: Math.round(t.hp) };
     });
     check('C1 sapper hunts a tower in sight, plants and detonates', sap.hunted && sap.planted && sap.sapperDead, JSON.stringify(sap));
     check('C2 the charge wrecks a fresh tower', sap.wrecked, JSON.stringify(sap));
+    check('C2a planting flashes the charge lamp', sap.lampLit && sap.lampDark, JSON.stringify(sap));
     const skim = await p.evaluate(() => {
       const R = window.__rift;
       const g = R.game;
@@ -209,6 +216,8 @@ const SPAWN = () => {
       let hiddenSeen = false;
       let upSeen = false;
       let hitWhileHidden = 0;
+      const frames = new Set();
+      let overlappingTreads = false;
       for (let i = 0; i < 60 * 14 && e.alive; i++) {
         R.advance(1 / 60);
         if (e.hidden) {
@@ -218,14 +227,19 @@ const SPAWN = () => {
           if (e.hitboxes.some((h) => h.isPickable)) hitWhileHidden++;
         }
         // Surfaced (mid-route or for good at the reactor): hittable again.
-        if ((e.ai.mode === 'up' || e.ai.mode === 'reactor') && !e.hidden && e.hitboxes.every((h) => h.isPickable)) upSeen = true;
+        if ((e.ai.mode === 'up' || e.ai.mode === 'reactor') && !e.hidden && e.hitboxes.every((h) => h.isPickable)) {
+          upSeen = true;
+          frames.add(e.ai.rig.treadFrame);
+          overlappingTreads ||= e.ai.rig.treads.some(belt => belt.filter(mesh => mesh.isEnabled()).length !== 1);
+        }
         g.reactorHp = Math.max(g.reactorHp, 300);
       }
       const tgt = g.turrets.turrets.length;
-      return { hiddenSeen, upSeen, hitWhileHidden, tgt };
+      return { hiddenSeen, upSeen, hitWhileHidden, tgt, frames: frames.size, overlappingTreads };
     });
     check('C5 burrower travels buried: untargetable and unhittable', bur.hiddenSeen && bur.hitWhileHidden === 0, JSON.stringify(bur));
     check('C6 burrower surfaces (vulnerable)', bur.upSeen);
+    check('C6a moving burrower cycles one belt frame per side', bur.frames > 1 && !bur.overlappingTreads, JSON.stringify(bur));
   }
 
   if (want('D')) {

@@ -33,6 +33,15 @@ export interface WalkerRig {
   barrel: TransformNode;
   muzzleGlow: AbstractMesh;
   shield: AbstractMesh | null;
+  /** Optional forelegs on a four-legged walker. */
+  forelegs?: readonly [WalkerLeg, WalkerLeg];
+}
+
+export interface WalkerLeg {
+  thigh: TransformNode;
+  knee: TransformNode;
+  ankle: TransformNode;
+  stanceX?: number;
 }
 
 export const WALKER_THIGH = 0.69;

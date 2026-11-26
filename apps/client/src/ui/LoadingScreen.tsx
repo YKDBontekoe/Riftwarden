@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { FACTION_AFFINITY } from '@riftwarden/rules/combat/elements';
 import { arenaStats } from '@riftwarden/rules/world/arenaGen';
-import { biomeOf } from '@riftwarden/rules/world/biomes';
+import { biomeOf, type BiomeId } from '@riftwarden/rules/world/biomes';
 import type { ArenaLayout } from '@riftwarden/rules/world/layout';
 import { pickTip } from './loadingTips';
 import { type TransitInfo } from '@riftwarden/game/ui/store';
 import { useHud } from './useHud';
 import { FieldArt } from './FieldArt';
 import { Bar, ElementGem } from './ds';
+import { FactionSigil } from './FactionIntel';
 
 const STAGES = {
   arena: ['Charting sector', 'Raising structures', 'Calibrating optics', 'Drop clearance'],
@@ -15,7 +16,7 @@ const STAGES = {
   visit: ['Uplink to host', 'Mirroring headquarters', 'Warming systems', 'Docking'],
 } as const;
 
-const BIOME_ART: Record<string, string> = { cryo: 'ls-art-cryo', foundry: 'ls-art-foundry', outpost: 'ls-art-outpost' };
+const BIOME_ART: Record<BiomeId, string> = { cryo: 'ls-art-cryo', foundry: 'ls-art-foundry', outpost: 'ls-art-outpost' };
 
 /** Scene-swap loading screen (final design): sector briefing on the left (name, faction, modifiers, weak / resisted
  * elements), the generated map in a glass frame on the right, load stages + tip along the bottom. */
@@ -33,7 +34,7 @@ export function LoadingScreen() {
   const biome = s?.layout.biome ? biomeOf(s.layout) : null;
   return (
     <div className={`screen transit load-screen load-${kind} ds-scr`} data-testid="loading-screen">
-      <div className={`ls-art ${BIOME_ART[s?.layout.biome ?? (kind === 'arena' ? 'outpost' : 'none')] ?? ''}`} aria-hidden="true" />
+      <div className={`ls-art ${biome ? BIOME_ART[biome.id] : kind === 'arena' ? 'ls-art-classic' : ''}`} aria-hidden="true" />
       <div className="ds-scrim-l" />
       <div className="ds-vig" />
       <div className="ds-top">
@@ -45,8 +46,9 @@ export function LoadingScreen() {
         <span className="ds-ov ds-em">{s?.node ? `${s.node.kind} sector · ${s.node.region || `act ${s.node.act}`}` : kind === 'arena' ? 'Sector briefing' : kind === 'visit' ? 'Co-op uplink' : 'Warden recovery'}</span>
         <span className="transit-title ls-name ds-hero" style={{ fontSize: 'clamp(56px, 6.5vw, 84px)' }}>{s?.name ?? t?.title ?? 'TRANSFERRING'}</span>
         {(biome || t?.sub) && (
-          <span className="transit-sub ds-body" style={{ fontSize: 15 }}>
-            {biome ? <>{biome.blurb} Held by the <b>{biome.faction.name}</b>: {biome.faction.blurb}</> : t?.sub}
+          <span className="transit-sub ds-body ds-row" style={{ fontSize: 15, gap: 10 }}>
+            <FactionSigil biome={biome?.id} />
+            <span>{biome ? <>{biome.blurb} Held by the <b>{biome.faction.name}</b>: {biome.faction.blurb}</> : t?.sub}</span>
           </span>
         )}
         {s && <SectorCard s={s} />}
