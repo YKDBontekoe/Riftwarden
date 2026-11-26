@@ -80,7 +80,7 @@ See the [security policy](.github/SECURITY.md) for private vulnerability reporti
 
 Merges to `main` run the tests (unit, Rust, co-op protocol suites against a real stack, browser suites), build the gateway and worker images, smoke-test the whole Compose stack, and publish both images to GitHub Container Registry. The server's deploy timer pulls them: it restarts the gateway in place (players reconnect; co-op operations keep running in the sim workers), then drains and replaces each sim slot only when its operations have finished, and rolls back a gateway that does not come up healthy. The static client is published to Cloudflare Pages once the API serves the new build. Details, first-time setup and operating notes: [deploy/README.md](deploy/README.md).
 
-Play at [riftwarden.ykdbonte.dev](https://riftwarden.ykdbonte.dev) (API: `api.riftwarden.ykdbonte.dev`). Logs are JSON on stdout (observability with ClickHouse + Grafana is postponed).
+Play at [riftwarden.ykdbonte.dev](https://riftwarden.ykdbonte.dev) (API: `riftwarden-api.ykdbonte.dev`). Logs are JSON on stdout (observability with ClickHouse + Grafana is postponed).
 
 ## Controls
 

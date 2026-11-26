@@ -407,7 +407,7 @@ async function profileRows(id) {
       const row = listed.find((r) => r.code === code);
       check('L3 listed squads appear with host, players, level and mode', row?.host === 'Lister' && row.players === 2 && row.capacity === 4 && row.tier === 1 && row.mode === 'defense', JSON.stringify(row));
       b.send({ t: 'ready', ready: true });
-      await a.wait((m) => m.t === 'lobby' && m.lobby?.players.every((p) => p.host || p.ready));
+      await a.wait((m) => m.t === 'lobby' && m.lobby?.players.length === 2 && m.lobby.players.every((p) => p.host || p.ready));
       const started = [a, b].map((x) => x.waitNew((m) => m.t === 'runStart', 40000));
       a.send({ t: 'start' });
       await Promise.all(started);

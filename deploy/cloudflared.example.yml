@@ -3,6 +3,6 @@
 tunnel: riftwarden
 credentials-file: /home/USER/.cloudflared/riftwarden.json
 ingress:
-  - hostname: api.riftwarden.ykdbonte.dev
+  - hostname: riftwarden-api.ykdbonte.dev
     service: http://127.0.0.1:18084
   - service: http_status:404
