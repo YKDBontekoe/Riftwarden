@@ -18,9 +18,11 @@ The backend runs on one server with Docker Compose; the static client is on Clou
    `<tunnel-uuid>.cfargotunnel.com` hostname.
    Verify `curl --fail https://riftwarden-api.ykdbonte.dev/health` returns the gateway's revision and worker count.
    The first-level hostname is covered by Cloudflare Universal SSL on a full zone.
+   Set the `PRODUCTION_API_URL` repository secret to the HTTPS API origin used by the main-branch build and deploy jobs.
 5. Cloudflare Pages: create the project `riftwarden` (custom domain `riftwarden.ykdbonte.dev`) and add the repository
    secrets `CLOUDFLARE_API_TOKEN` (Pages: edit) and `CLOUDFLARE_ACCOUNT_ID`. Until they exist the deploy job skips
-   the client with a warning.
+   the client with a warning. Set `PRODUCTION_CLIENT_URL` in the GitHub Actions `production` environment to the
+   client's HTTPS origin so the deploy job can verify the published build.
 
 The first run of `deploy.sh` starts everything; later runs roll the stack (below). The previous Node image and its
 `profiles` volume are no longer used (everyone starts fresh; `docker volume rm riftwarden_profiles` once happy).
