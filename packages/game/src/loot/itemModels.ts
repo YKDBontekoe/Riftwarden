@@ -10,7 +10,7 @@ import type { CurrencyKey } from '@riftwarden/rules/economy/currencies';
 import { baseDef } from '@riftwarden/rules/loot/bases';
 import { rarity, type RarityId } from '@riftwarden/rules/loot/rarity';
 import type { Category, ItemInstance } from '@riftwarden/rules/loot/types';
-import { defaultBuild, type Finish, type WeaponBuild } from '@riftwarden/rules/weapons/build';
+import { defaultBuild, type WeaponBuild } from '@riftwarden/rules/weapons/build';
 import { moduleTypeDef } from '@riftwarden/rules/weapons/modules';
 import { Assembler, buildWeaponModel, type V3 } from '../weapons/model';
 import { weaponGlow, weaponMaterials } from '../weapons/materials';
@@ -48,6 +48,8 @@ export interface ModelBuildOpts {
   size?: number;
   /** Weapons: show the item's own rolled build, modules, element and unique hardware. */
   detailed?: boolean;
+  /** Use the arena finish on weapon shells. */
+  pickup?: boolean;
   name?: string;
 }
 
@@ -63,8 +65,17 @@ export function lookKey(look: ItemLook, detailed = false): string {
   return `${look.defId}|${look.category === 'weapon' ? 'stock' : look.rarity}`;
 }
 
-const CATEGORY_FINISH: Record<Category, Finish> = {
-  weapon: 'gunmetal', armor: 'gunmetal', shield: 'arctic', reactor: 'slate', processor: 'gunmetal', accessory: 'sand', module: 'slate', ability: 'arctic', ultimate: 'gunmetal',
+const CATEGORY_PAINT: Record<Exclude<Category, 'weapon'>, string> = {
+  armor: '#646b62', shield: '#c7cbb9', reactor: '#407c84', processor: '#56746c',
+  accessory: '#94a2a8', module: '#565f82', ability: '#9c8758', ultimate: '#a95c39',
+};
+const BASE_PAINT: Partial<Record<string, string>> = {
+  composite_armor: '#798d99', bulwark_plating: '#87765b', colossus_plating: '#774b36',
+  barrier_lattice: '#7ba6a2', fusion_cell: '#b79150', overseer_logic: '#776588',
+  tactical_processor: '#7a8d80', field_uplink: '#a49673', targeting_lens: '#687584',
+  frag_charge: '#9f6743', cryo_charge: '#8eb1c0', arc_pulse: '#627fa6', blink_drive: '#837490',
+  aegis_cell: '#bb9b56', shield_wall: '#789cad', holo_decoy: '#6e9890', mini_sentry: '#99896c',
+  overdrive_core: '#9f5439', siege_module: '#865641', prism_module: '#886477',
 };
 const BOSS_BASES = new Set(['colossus_plating', 'overseer_logic', 'siege_module', 'prism_module']);
 const HEAVY_MODULES = new Set(['siege_module', 'prism_module']);
@@ -78,13 +89,12 @@ export function sculptFor(defId: string): ((s: Sculptor) => void) | null {
   return null;
 }
 
-function sculpted(scene: Scene, name: string, build: (s: Sculptor) => void, accent: V3, finish: Finish, boss: boolean) {
+function sculpted(scene: Scene, name: string, build: (s: Sculptor) => void, accent: V3, materials: Pick<Sculptor, 'M' | 'shell' | 'dark' | 'trim'>) {
   const root = new TransformNode(`${name}Src`, scene);
   const a = new Assembler(scene, root, { name });
-  const M = weaponMaterials(scene);
   const glow = weaponGlow(scene, `${name}Glow`, accent);
   const dim = weaponGlow(scene, `${name}Dim`, [accent[0] * 0.18, accent[1] * 0.18, accent[2] * 0.18]);
-  build({ a, root, M, shell: boss ? M.dark : M.shell(finish), dark: boss ? M.graphite : M.dark, trim: M.trim(finish), glow, dim });
+  build({ a, root, glow, dim, ...materials });
   a.finalize();
   return { root, meshes: a.meshes, owned: [glow, dim] as Material[] };
 }
@@ -120,18 +130,29 @@ export function buildItemModel(scene: Scene, look: ItemLook, opts: ModelBuildOpt
     const family = baseDef(look.defId)?.weapon?.family ?? 'plasma';
     const detailed = !!opts.detailed && !!look.build;
     const build = detailed ? look.build! : defaultBuild(look.defId, family);
-    const rig = buildWeaponModel(scene, build, detailed ? (look.socketed ?? []) : [], { name, mount: false, element: detailed ? look.element : undefined, uniqueId: detailed ? look.uniqueId : undefined }, detailed ? r.index : 0);
+    const rig = buildWeaponModel(scene, build, detailed ? (look.socketed ?? []) : [], {
+      name, mount: false, pickup: opts.pickup,
+      element: detailed ? look.element : undefined, uniqueId: detailed ? look.uniqueId : undefined,
+    }, detailed ? r.index : 0);
     src = { root: rig.root, meshes: rig.meshes, owned: [rig.energy, rig.chargeGlow, rig.heat, rig.ledOn, rig.ledHot, rig.ledOff] };
   } else {
     const fn = sculptFor(look.defId) ?? crateSculpt;
-    src = sculpted(scene, name, fn, ACCENT[look.defId] ?? [1.6, 1.6, 1.8], CATEGORY_FINISH[look.category] ?? 'gunmetal', BOSS_BASES.has(look.defId));
+    const paint = BASE_PAINT[look.defId] ?? CATEGORY_PAINT[look.category];
+    const M = weaponMaterials(scene);
+    src = sculpted(scene, name, fn, ACCENT[look.defId] ?? [1.6, 1.6, 1.8], {
+      M, shell: M.equipmentPaint(paint), dark: BOSS_BASES.has(look.defId) ? M.graphite : M.dark, trim: M.satin,
+    });
   }
   return finish(scene, src, name, opts.size ?? 1);
 }
 
 export function buildCurrencyModel(scene: Scene, key: CurrencyKey, opts: ModelBuildOpts = {}): ItemModel {
   const name = opts.name ?? `cur_${key}`;
-  const src = sculpted(scene, name, CURRENCY_SCULPTS[key] ?? crateSculpt, CURRENCY_ACCENT[key] ?? [1.6, 1.6, 1.8], key === 'credits' ? 'slate' : 'gunmetal', false);
+  const M = weaponMaterials(scene);
+  const currencyFinish = key === 'credits' ? 'slate' : 'gunmetal';
+  const src = sculpted(scene, name, CURRENCY_SCULPTS[key] ?? crateSculpt, CURRENCY_ACCENT[key] ?? [1.6, 1.6, 1.8], {
+    M, shell: M.shell(currencyFinish), dark: M.dark, trim: M.trim(currencyFinish),
+  });
   return finish(scene, src, name, opts.size ?? 1);
 }
 

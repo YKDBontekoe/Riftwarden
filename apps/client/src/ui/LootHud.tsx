@@ -114,53 +114,69 @@ export function LootLabels({ game }: { game: Game }) {
   useEffect(() => {
     const pool: HTMLDivElement[] = [];
     let raf = 0;
-    const MAX = 8;
+    const POOL_SIZE = 12;
     const tick = () => {
       raf = requestAnimationFrame(tick);
       const h = host.current;
       if (!h) return;
-      while (pool.length < MAX) {
+      while (pool.length < POOL_SIZE) {
         const el = document.createElement('div');
         el.className = 'loot-label';
-        el.style.display = 'none';
+        el.style.visibility = 'hidden';
         h.appendChild(el);
         pool.push(el);
       }
       const eye = game.player.eye;
+      const target = game.lootTarget;
+      const viewportWidth = h.clientWidth;
+      const viewportHeight = h.clientHeight;
+      const prompt = target ? h.parentElement?.querySelector('.loot-prompt')?.getBoundingClientRect() : null;
       const near = game.loot.pickups
-        .filter((p) => game.loot.landed(p))
-        .map((p) => ({ p, d: Math.hypot(p.focus.x - eye.x, p.focus.z - eye.z) }))
-        .filter((x) => x.d < 7 + rarity(x.p.item.rarity).index * 3.5)
-        .sort((a, b) => a.d - b.d)
-        .slice(0, MAX);
-      const placed: { x: number; y: number }[] = [];
-      for (let i = 0; i < MAX; i++) {
-        const el = pool[i];
-        const n = near[i];
-        const pos = n ? game.project(n.p.focus.x, n.p.focus.y + 0.75, n.p.focus.z) : null;
-        // Stack labels that would overlap a nearer one (nearest first keeps priority).
-        if (pos) {
-          for (let guard = 0; guard < 6 && placed.some((q) => Math.abs(q.x - pos.x) < 120 && Math.abs(q.y - pos.y) < 17); guard++) pos.y -= 17;
-          placed.push({ x: pos.x, y: pos.y });
-        }
-        if (!n || !pos || game.lootTarget === n.p) {
-          el.style.display = 'none';
-          continue;
-        }
-        const r = rarity(n.p.item.rarity);
-        // Verdicts are cached per item and reset when the inventory changes (the key follows that version).
-        const best = game.verdicts.of(n.p.item, n.p.droppedWave).newBest;
-        const key = `${n.p.id}|${n.p.expiring}|${best}|${game.inventoryVersion}`;
+        .filter((p) => p !== target && game.loot.landed(p))
+        .map((p) => ({ p, r: rarity(p.item.rarity), d: Math.hypot(p.focus.x - eye.x, p.focus.z - eye.z) }))
+        .filter(({ d, r }) => d < 7 + r.index * 3.5)
+        .sort((a, b) => a.d - b.d || b.r.index - a.r.index);
+      const candidates: { el: HTMLDivElement; pos: { x: number; y: number }; d: number }[] = [];
+      for (const { p, r, d } of near) {
+        const pos = game.project(p.focus.x, p.focus.y + 0.75, p.focus.z);
+        if (!pos || pos.x <= 0 || pos.x >= viewportWidth || pos.y <= 0 || pos.y >= viewportHeight) continue;
+        const el = pool[candidates.length];
+        // The verdict cache refreshes when the inventory changes.
+        const best = game.verdicts.of(p.item, p.droppedWave).newBest;
+        const key = `${p.id}|${p.expiring}|${best}|${r.color}`;
         if (el.dataset.key !== key) {
           el.dataset.key = key;
-          el.textContent = best ? `★ ${n.p.item.name}` : n.p.item.name;
+          el.textContent = best ? `★ ${p.item.name}` : p.item.name;
           el.style.setProperty('--rc', r.color);
-          el.className = `loot-label r-${r.id} ${n.p.expiring ? 'expiring' : ''}`;
+          el.className = `loot-label r-${r.id} ${p.expiring ? 'expiring' : ''}`;
         }
-        el.style.display = 'block';
-        el.style.opacity = String(Math.max(0.35, Math.min(1, 1.4 - n.d / 14)));
-        el.style.transform = `translate(${pos.x}px, ${pos.y}px) translate(-50%, -100%)`;
+        candidates.push({ el, pos, d });
+        if (candidates.length === POOL_SIZE) break;
       }
+
+      // Measure after setting the pooled text, then place the labels in a separate write pass.
+      const boxes = candidates.map(({ el, pos, d }) => {
+        const half = el.offsetWidth / 2;
+        return { el, pos, d, left: pos.x - half, right: pos.x + half, top: pos.y - el.offsetHeight, bottom: pos.y };
+      });
+      const placed: Pick<DOMRect, 'left' | 'right' | 'top' | 'bottom'>[] = prompt ? [prompt] : [];
+      const visibleLimit = target ? 2 : 5;
+      let visible = 0;
+      for (const { el, pos, d, ...box } of boxes) {
+        const fits = box.left >= 4 && box.right <= viewportWidth - 4 && box.top >= 4;
+        // Keep tags anchored to their items. Suppress tags that would touch a closer tag or the pickup prompt.
+        const overlaps = placed.some((p) => box.left < p.right + 8 && box.right > p.left - 8 && box.top < p.bottom + 5 && box.bottom > p.top - 5);
+        if (!fits || overlaps || visible >= visibleLimit) {
+          el.style.visibility = 'hidden';
+          continue;
+        }
+        placed.push(box);
+        visible++;
+        el.style.transform = `translate(${pos.x}px, ${pos.y}px) translate(-50%, -100%)`;
+        el.style.setProperty('--label-opacity', String(Math.max(0.35, Math.min(0.86, 1.28 - d / 14)) * (target ? 0.42 : 1)));
+        el.style.visibility = 'visible';
+      }
+      for (let i = candidates.length; i < pool.length; i++) pool[i].style.visibility = 'hidden';
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);

@@ -22,8 +22,12 @@ export interface WeaponMaterials {
   frostCeramic: PBRMaterial;
   glass: PBRMaterial;
   markings: PBRMaterial;
-  shell(f: Finish): PBRMaterial;
+  shell(f: Finish, pickup?: boolean): PBRMaterial;
   trim(f: Finish): PBRMaterial;
+  equipmentPaint(color: string): PBRMaterial;
+  equipmentFin: PBRMaterial;
+  equipmentContacts: PBRMaterial;
+  equipmentCeramic: PBRMaterial;
 }
 
 interface Micro {
@@ -38,8 +42,10 @@ const LIBS = new WeakMap<Scene, WeaponMaterials>();
 const SEAMS_U = [0.07, 0.31, 0.49, 0.78];
 
 /** Brushed and lightly worn finish shared by the viewmodel and the workshop preview. */
-function micro(scene: Scene, finish: 'paint' | 'metal' | 'polymer'): Micro {
+function micro(scene: Scene, finish: 'paint' | 'metal' | 'polymer' | 'equipment'): Micro {
   const size = 256;
+  const chipped = finish === 'equipment';
+  const coated = finish === 'paint' || chipped;
   const { c: ac, ctx: a } = canvas(size);
   const { c: oc, ctx: o } = canvas(size);
   const albedo = a.createImageData(size, size);
@@ -47,7 +53,7 @@ function micro(scene: Scene, finish: 'paint' | 'metal' | 'polymer'): Micro {
   const height = new Float32Array(size * size);
   const { ctx: scratch } = canvas(size);
   const random = rng(721);
-  for (let i = 0; i < (finish === 'polymer' ? 0 : 96); i++) {
+  for (let i = 0; i < (finish === 'polymer' ? 0 : chipped ? 138 : 96); i++) {
     const x = random() * size, y = random() * size;
     const length = 0.8 + random() ** 2.5 * 16;
     scratch.strokeStyle = `rgba(255,255,255,${0.19 + random() * 0.55})`;
@@ -81,24 +87,25 @@ function micro(scene: Scene, finish: 'paint' | 'metal' | 'polymer'): Micro {
         if (d < 2.6) bolt = Math.max(bolt, 1 - d / 2.6);
       }
       const rim = Math.min(u, 1 - u, v, 1 - v);
-      const wear = finish === 'paint' ? Math.max(0, 1 - rim / .018) * Math.max(0, .6 + grain * 3) : 0;
-      if (finish !== 'paint') { seam *= finish === 'polymer' ? 0 : .25; bolt = 0; }
+      const wear = coated ? Math.max(0, 1 - rim / .018) * Math.max(0, .6 + grain * 3) : 0;
+      const brokenPaint = chipped ? Math.min(1, Math.max(0, grain + brush * .44 - .035) * 7 * (wear + seam * .48 + bolt * 1.6 + scrape * .36)) : 0;
+      if (!coated) { seam *= finish === 'polymer' ? 0 : .25; bolt = 0; }
       const stipple = finish === 'polymer' ? Math.sin(u * 420) * Math.sin(v * 420) * .035 : 0;
-      const tint = (0.88 + grain * 0.10 + brush * (finish === 'metal' ? .12 : .035) + rub * .22 + scrape * .25 + wear * .22 - grime) * (1 - seam * .45) + bolt * .2 + stipple;
+      const tint = (0.88 + grain * 0.10 + brush * (finish === 'metal' ? .12 : .035) + rub * .22 + scrape * .25 + wear * .22 - grime) * (1 - seam * .45) + bolt * .2 + stipple + brokenPaint * .35;
       albedo.data[i] = albedo.data[i + 1] = albedo.data[i + 2] = Math.min(1, tint) * 255;
       albedo.data[i + 3] = 255;
       orm.data[i] = (1 - seam * 0.5) * 255;
-      const rough = finish === 'polymer' ? .97 + stipple : (finish === 'metal' ? .64 : .88) + grain * .10 + brush * .06 - rub * .25 - scrape * .2 - wear * .48 + seam * .1;
+      const rough = finish === 'polymer' ? .97 + stipple : (finish === 'metal' ? .64 : .88) + grain * .10 + brush * .06 - rub * .25 - scrape * .2 - wear * .48 + seam * .1 - brokenPaint * .45;
       orm.data[i + 1] = Math.max(.15, Math.min(1, rough)) * 255;
-      orm.data[i + 2] = (finish === 'paint' ? Math.min(1, .045 + wear * .9 + scrape * .55) : 1) * 255;
+      orm.data[i + 2] = (coated ? Math.min(1, .045 + wear * .9 + scrape * .55 + brokenPaint) : 1) * 255;
       orm.data[i + 3] = 255;
-      height[y * size + x] = grain * .04 + brush * (finish === 'metal' ? .025 : .008) - scrape * .022 - seam * .2 + bolt * .16 + stipple;
+      height[y * size + x] = grain * .04 + brush * (finish === 'metal' ? .025 : .008) - scrape * .022 - seam * .2 + bolt * .16 + stipple - brokenPaint * .05;
     }
   }
   a.putImageData(albedo, 0, 0);
   o.putImageData(orm, 0, 0);
   const normal = toTexture(`wpn${finish}Nrm`, heightToNormal(height, size, 2.2), scene, { srgb: false });
-  normal.level = finish === 'polymer' ? .32 : .22;
+  normal.level = finish === 'polymer' ? .32 : chipped ? .36 : .22;
   return {
     albedo: toTexture(`wpn${finish}Alb`, ac, scene),
     orm: toTexture(`wpn${finish}Orm`, oc, scene, { srgb: false }),
@@ -191,7 +198,13 @@ export function weaponMaterials(scene: Scene): WeaponMaterials {
   const paint = micro(scene, 'paint');
   const polymer = micro(scene, 'polymer');
   const shells = new Map<Finish, PBRMaterial>();
+  const pickupShells = new Map<Finish, PBRMaterial>();
   const trims = new Map<Finish, PBRMaterial>();
+  const equipmentPaints = new Map<string, PBRMaterial>();
+  let equipmentCoating: Micro | undefined;
+  let fin: PBRMaterial | undefined;
+  let contacts: PBRMaterial | undefined;
+  let ceramic: PBRMaterial | undefined;
   const glass = new PBRMaterial('wpnGlass', scene);
   glass.albedoColor = new Color3(0.05, 0.09, 0.11);
   glass.metallic = 0;
@@ -212,12 +225,19 @@ export function weaponMaterials(scene: Scene): WeaponMaterials {
     frostCeramic: surface(scene, m, 'wpnFrostCeramic', [0.68, 0.82, 0.9], 0.06, 0.73),
     glass,
     markings: markingMaterial(scene),
-    shell(f) {
-      let mat = shells.get(f);
+    shell(f, pickup = false) {
+      const finishes = pickup ? pickupShells : shells;
+      let mat = finishes.get(f);
       if (!mat) {
         const [a, met, r, cc] = SHELL[f];
         const painted = f === 'arctic' || f === 'sand' || f === 'slate';
-        mat = surface(scene, painted ? paint : m, `wpnShell_${f}`, a, painted ? 1 : met, r, cc);
+        mat = surface(scene, painted ? paint : m, `${pickup ? 'pickupShell' : 'wpnShell'}_${f}`, a, painted ? 1 : met, r, cc);
+        if (pickup) {
+          mat.albedoColor = Color3.Lerp(mat.albedoColor, new Color3(0.62, 0.65, 0.68), 0.18);
+          if (!painted && f !== 'iridescent') mat.metallic = Math.min(met, 0.42);
+          mat.emissiveColor = mat.albedoColor.scale(0.095);
+          mat.emissiveTexture = mat.albedoTexture;
+        }
         if (f === 'iridescent') {
           mat.iridescence.isEnabled = true;
           mat.iridescence.intensity = 1;
@@ -225,7 +245,7 @@ export function weaponMaterials(scene: Scene): WeaponMaterials {
           mat.iridescence.minimumThickness = 250;
           mat.iridescence.maximumThickness = 650;
         }
-        shells.set(f, mat);
+        finishes.set(f, mat);
       }
       return mat;
     },
@@ -237,6 +257,27 @@ export function weaponMaterials(scene: Scene): WeaponMaterials {
         trims.set(f, mat);
       }
       return mat;
+    },
+    equipmentPaint(color) {
+      let mat = equipmentPaints.get(color);
+      if (!mat) {
+        const coating = equipmentCoating ??= micro(scene, 'equipment');
+        const { r, g, b } = Color3.FromHexString(color);
+        mat = surface(scene, coating, `equipmentPaint_${color.slice(1)}`, [r, g, b], 0.82, 0.68);
+        mat.emissiveColor = mat.albedoColor.scale(0.11);
+        mat.emissiveTexture = coating.albedo;
+        equipmentPaints.set(color, mat);
+      }
+      return mat;
+    },
+    get equipmentFin() {
+      return fin ??= surface(scene, { ...m, albedo: temperTexture(scene) }, 'equipmentHeatTint', [0.72, 0.73, 0.75], 0.8, 0.58);
+    },
+    get equipmentContacts() {
+      return contacts ??= surface(scene, m, 'equipmentWornContacts', [0.81, 0.61, 0.32], 0.84, 0.5);
+    },
+    get equipmentCeramic() {
+      return ceramic ??= surface(scene, polymer, 'equipmentMatteCeramic', [0.72, 0.8, 0.8], 0, 0.88);
     },
   };
   LIBS.set(scene, lib);
