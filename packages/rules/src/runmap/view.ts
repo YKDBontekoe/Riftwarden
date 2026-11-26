@@ -39,6 +39,11 @@ export interface RunMapView {
   blessings: BlessingId[];
   /** Waves completed so far (the next combat node starts at lastWave + 1). */
   lastWave: number;
+  /**
+   * Extra waves were played on the secured node after its last checkpoint: their rewards are still at risk
+   * (they bank at the next checkpoint wave; extracting now loses them). Optional: co-op omits it.
+   */
+  atRisk?: { nextCheckpoint: number };
   /** Node intel inputs: the arena planner's seed, the base threat tier, the game mode, current weapon DPS. */
   plannerSeed: number;
   /** The run's current Rift Level (deploy level + surges). */

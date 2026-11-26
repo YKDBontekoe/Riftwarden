@@ -125,6 +125,35 @@ async function forceNext(p, kind, anomaly) {
       await ev(p, () => { window.__rift.game.setScreen('playing'); window.__rift.advance(0.1); });
       await ev(p, () => { window.__rift.game.input.simulateKey('KeyH', true); window.__rift.advance(1 / 60); window.__rift.game.input.simulateKey('KeyH', false); window.__rift.advance(1 / 60); });
       check('B4 H reopens the map', (await S(p)).screen === 'runmap');
+      // Keep fighting in the secured node: G calls the next wave in the same arena, the map stays available after it.
+      await p.click('[data-testid=rm-stay]');
+      const on = await ev(p, async () => {
+        const tick = () => new Promise((res) => setTimeout(res, 0));
+        const r = window.__rift;
+        const g = r.game;
+        const id = g.node.node.id;
+        g.setScreen('playing');
+        g.startWave();
+        r.advance(1 / 60);
+        const started = g.waves.phase === 'combat' && g.waves.number === 6 && g.node.node.id === id;
+        for (let i = 0; i < 200 && !(g.waves.phase === 'prep' && g.waves.number === 7); i++) {
+          if (g.screen === 'upgrade' && g.offer) { g.chooseUpgrade(g.offer[0].id); await tick(); }
+          if (g.screen !== 'playing' && !(g.screen === 'upgrade' && g.offer)) g.setScreen('playing');
+          r.advance(0.5);
+          r.killAll();
+        }
+        for (let i = 0; i < 12; i++) {
+          if (g.screen === 'upgrade' && g.offer) { g.chooseUpgrade(g.offer[0].id); await tick(); }
+          r.advance(0.25);
+        }
+        g.setScreen('playing');
+        r.advance(1 / 60);
+        g.input.simulateKey('KeyH', true); r.advance(1 / 60); g.input.simulateKey('KeyH', false); r.advance(1 / 60);
+        await tick();
+        return { started, same: g.node.node.id === id, wave: g.waves.number, phase: g.waves.phase, hold: g.waves.hold, leave: g.canReturnHome, last: g.node.lastCleared, carry: g.node.exportCarry().wave, screen: g.screen, risk: !!document.querySelector('[data-testid=rm-at-risk]'), extractTxt: document.querySelector('[data-testid=rm-extract]')?.textContent ?? '' };
+      });
+      check('B10 a secured node keeps fighting: G plays wave 6 in the same arena, then holds', on.started && on.same && on.wave === 7 && on.phase === 'prep' && on.hold && on.last === 6 && on.carry === 6, JSON.stringify(on));
+      check('B11 after extra waves H reopens the map, travel/extract stay open and the map warns the extra rewards are at risk', on.leave && on.screen === 'runmap' && on.risk && /LOSE AT RISK/.test(on.extractTxt), JSON.stringify(on));
       const w = await ev(p, () => {
         const r = window.__rift;
         const war = r.flow.war.state;
@@ -140,7 +169,7 @@ async function forceNext(p, kind, anomaly) {
       firstCarry = await ev(p, () => {
         const g = window.__rift.game;
         g.wallet.cores = 777;
-        return { cores: 777, ups: g.director.build.total, kills: window.__rift.flow.run.kills };
+        return { cores: 777, ups: g.director.build.total, kills: window.__rift.flow.run.kills, next: g.node.exportCarry().wave + 1 };
       });
     }
 
@@ -164,7 +193,7 @@ async function forceNext(p, kind, anomaly) {
         const g = window.__rift.game;
         return { from: g.node.from, wave: g.waves.number, cores: g.wallet.cores, ups: g.director.build.total, run: window.__rift.flow.run.id, kills: window.__rift.flow.run.kills, towers: g.turrets.turrets.length, path: window.__rift.profile.save.activeRun.map.path.length, resum: !!window.__rift.profile.save.activeRun.map.carry, row: g.node.node.row };
       });
-      check('C1 travel builds a new arena on row 1, waves continue at 6', c.row === 1 && c.from === 6 && c.wave === 6, JSON.stringify(c));
+      check('C1 travel builds a new arena on row 1, waves continue after the last cleared wave', c.row === 1 && c.from === firstCarry.next && c.wave === firstCarry.next, JSON.stringify({ c, firstCarry }));
       check('C2 cores and upgrades carry, same run ledger', c.cores >= firstCarry.cores && c.ups === firstCarry.ups && c.run === prevRun && c.kills === firstCarry.kills, JSON.stringify({ c, firstCarry }));
       check('C3 resume point stored', c.resum && c.path === 2);
       const wm = await ev(p, () => ({ mods: window.__rift.game.node.node.mods, hp: window.__rift.game.cfg.tier.hpMult }));

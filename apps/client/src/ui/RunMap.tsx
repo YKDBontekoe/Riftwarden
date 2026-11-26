@@ -176,7 +176,7 @@ export function RunMapScreen({ flow, game }: { flow: Flow; game: Game }) {
       <div className="ds-top">
         <Crumb parts={['Rift War', regionLayout(war.seed, k).name, node ? node.kind === 'combat' ? 'Sector map' : NODE_KINDS[node.kind].name : 'Sector map']} />
         <span className="ds-grow" />
-        <span className="ds-mono">RL {view.tier} · {view.cleared} NODE{view.cleared === 1 ? '' : 'S'} · WAVE {view.lastWave} · BANKED</span>
+        <span className="ds-mono">RL {view.tier} · {view.cleared} NODE{view.cleared === 1 ? '' : 'S'} · WAVE {view.lastWave} · {view.atRisk ? 'AT RISK' : 'BANKED'}</span>
       </div>
       <div className={`rm-wrap ${side ? 'show-side' : ''}`}>
         <div className="rm-side">
@@ -227,9 +227,11 @@ export function RunMapScreen({ flow, game }: { flow: Flow; game: Game }) {
           </div>
           {canSurgeHere && <SurgeOffer level={view.tier} busy={busy} onSurge={() => selected && go(selected, true)} />}
           <div className="rm-actions">
-            <span className="ds-meta rm-banked"><b className="ds-up">Banked at this node</b> · leaving keeps it</span>
+            {view.atRisk
+              ? <span className="ds-meta rm-banked" data-testid="rm-at-risk"><b className="ds-warn">Extra waves at risk</b> · they bank at wave {view.atRisk.nextCheckpoint} · extracting now loses them</span>
+              : <span className="ds-meta rm-banked"><b className="ds-up">Banked at this node</b> · leaving keeps it</span>}
             <button className="ds-btn" data-testid="rm-extract" disabled={busy} onClick={extract}>
-              {coop ? 'VOTE: EXTRACT' : 'EXTRACT'} <span className="ds-k">X</span>
+              {coop ? 'VOTE: EXTRACT' : view.atRisk ? 'EXTRACT · LOSE AT RISK' : 'EXTRACT'} <span className="ds-k">X</span>
             </button>
             <button className="primary ds-btn-p" data-testid="rm-travel" disabled={!selected || busy} onClick={() => selected && go(selected)}>
               <span className="ds-kd">ENTER</span>{coop ? 'VOTE: TRAVEL' : canSurgeHere ? `STAY ON RL ${view.tier}` : 'TRAVEL'}

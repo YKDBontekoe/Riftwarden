@@ -112,6 +112,8 @@ export class RunNode {
   complete: boolean;
   /** The map should open at the next chance (node just completed). */
   mapDue = false;
+  /** Highest wave cleared in this arena (extra waves after securing the node continue the global count). */
+  lastCleared = 0;
   private stations: { kind: StationKind; rig: StationRig; at: Vector3; used: boolean }[] = [];
   private target: (typeof this.stations)[number] | null = null;
   panelStation: StationKind | null = null;
@@ -139,6 +141,11 @@ export class RunNode {
 
   get combat(): boolean {
     return isCombatKind(this.node.kind);
+  }
+
+  /** A secured combat node can keep playing waves in the same arena (the player calls each one). */
+  get canFightOn(): boolean {
+    return this.combat && this.complete && !this.replica;
   }
 
   get noTowers(): boolean {
@@ -199,6 +206,7 @@ export class RunNode {
 
   /** A wave of the segment was cleared (after the arena's own wave-clear rewards and banking). */
   waveCleared(n: number): void {
+    if (this.combat) this.lastCleared = Math.max(this.lastCleared, n);
     if (!this.combat || this.complete || n < this.to) return;
     this.complete = true;
     this.mapDue = true;
@@ -216,7 +224,7 @@ export class RunNode {
       this.h.actCleared(this.node.act);
       uiEvents.emit('banner', { title: `ACT ${this.node.act} CLEARED`, sub: 'Act chest dropped at the reactor · curses lifted · the next act is harder', tone: 'orange' });
       sfx.play('bank', { pitch: 0.8 });
-    } else uiEvents.emit('alert', { text: 'NODE SECURED · OPEN THE MAP (H) WHEN READY', tone: 'blue' });
+    } else uiEvents.emit('alert', { text: 'NODE SECURED · MAP (H) OR KEEP FIGHTING (G)', tone: 'blue' });
     this.showExit();
   }
 
@@ -224,7 +232,7 @@ export class RunNode {
   exportCarry(): RunCarry {
     const h = this.h;
     const c = structuredClone(this.carry);
-    c.wave = Math.max(c.wave, this.combat ? this.to : c.wave);
+    c.wave = Math.max(c.wave, this.combat ? Math.max(this.to, this.lastCleared) : c.wave);
     c.cores = h.cores + towerRefund(h.towers());
     c.reactorHp = h.reactorHp;
     c.ult = h.ult;

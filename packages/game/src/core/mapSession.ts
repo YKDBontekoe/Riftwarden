@@ -2,7 +2,7 @@ import type { ItemInstance } from '@riftwarden/rules/loot/types';
 import type { Profile } from '../progression/Profile';
 import type { RunLedger } from '@riftwarden/rules/progression/run';
 import { emptyRewards } from '@riftwarden/rules/progression/run';
-import { getTier, type ThreatTier } from '@riftwarden/rules/progression/tiers';
+import { CHECKPOINT_INTERVAL, getTier, type ThreatTier } from '@riftwarden/rules/progression/tiers';
 import { actEffects, type RunCarry, towerRefund } from '@riftwarden/rules/runmap/carry';
 import { type MapNode, nodeEffect, segmentTier } from '@riftwarden/rules/runmap/map';
 import { defaultEntry, findNode, liveNode, nodePlayable, pathCode, reachable } from '@riftwarden/rules/war/world';
@@ -169,6 +169,7 @@ export class MapSession {
       curses: [...(carry?.curses ?? [])],
       blessings: [...(carry?.blessings ?? [])],
       lastWave: this.run.wavesCleared,
+      ...(this.run.atCheckpoint || !arena?.node?.complete ? {} : { atRisk: { nextCheckpoint: (Math.floor(this.run.wavesCleared / CHECKPOINT_INTERVAL) + 1) * CHECKPOINT_INTERVAL } }),
       plannerSeed: arena?.planner.seed ?? 0,
       tier: this.level,
       deployTier: this.run.tier,

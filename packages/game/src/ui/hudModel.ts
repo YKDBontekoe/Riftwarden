@@ -21,11 +21,14 @@ export interface HintState {
   suppress: boolean;
   /** Survival mode: no towers, the machines hunt the drone. */
   survival?: boolean;
+  /** Run map: the node on screen is secured and the map can open (travel, or keep fighting here). */
+  nodeSecured?: boolean;
 }
 
 /** The one-line contextual hint under the HUD ('' = none). */
 export function hintFor(s: HintState, keys: Settings['keys'] = DEFAULT_SETTINGS.keys): string {
   if (!s.playing || !s.playerAlive || s.suppress) return '';
+  if (s.nodeSecured && s.phase === 'prep') return `Node secured. Press ${keyLabel(keys.checkpoint)} for the run map, or keep fighting here with ${keyLabel(keys.wave)}.`;
   if (s.canReturnHome) return `Checkpoint secured. Press ${keyLabel(keys.checkpoint)} to return to HQ, or start the next wave with ${keyLabel(keys.wave)}.`;
   if (s.survival && s.phase === 'prep') return `Survival: no towers, every machine hunts you, one life. Press ${keyLabel(keys.wave)} when ready.`;
   if (s.survival && s.phase === 'combat' && s.kills < 3) return 'Keep moving: walls break their line of fire, and dashes break their chase.';

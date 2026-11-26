@@ -722,6 +722,8 @@ export class Game {
     this.survival.prep(w);
     this.cfg.run.waveReached(w.number);
     // Run map: the map (not the checkpoint panel) opens once the node's segment is complete.
+    // Extra waves on a secured node: hold the clock again so the player picks travel or the next wave.
+    if (this.node?.canFightOn) this.waves.hold = true;
     if (this.node) this.checkpointOpen = this.node.complete;
     else if (w.number > 1 && this.cfg.run.atCheckpoint) this.checkpointOpen = true;
     // Mandatory upgrade choice first (the prep countdown is frozen while it is open), then the checkpoint choice.
@@ -1112,6 +1114,11 @@ export class Game {
   /** G / early start. Every skipped second pays a few cores (fast play is rewarded); Rapid Deployment adds more. */
   startWave(): void {
     if (this.waves.phase !== 'prep') return;
+    // A secured node holds its prep clock; calling a wave keeps fighting in the same node (the map stays open between waves).
+    if (this.waves.hold && this.node?.canFightOn && !this.range) {
+      this.waves.hold = false;
+      this.checkpointOpen = false;
+    }
     const remaining = Math.max(0, this.waves.timer);
     this.waves.startNow();
     const bonus = earlyCallBonus(remaining);
@@ -1257,8 +1264,13 @@ export class Game {
     if (this.screen === was) this.setScreen('paused');
   }
 
+  /**
+   * Map, travel and extraction. Run map: any preparation phase of a secured node, also after extra waves played
+   * there (`startWave` on a secured node): rewards earned since the last checkpoint stay at risk, they bank at the
+   * next checkpoint wave (in this node or a later one) and are lost on extraction (the map warns).
+   */
   get canReturnHome(): boolean {
-    if (this.node) return this.node.complete && !this.node.guardiansActive && this.cfg.run.atCheckpoint && this.waves.phase === 'prep' && this.screen !== 'defeat';
+    if (this.node) return this.node.complete && !this.node.guardiansActive && this.waves.phase === 'prep' && this.screen !== 'defeat';
     return this.checkpointOpen && this.cfg.run.atCheckpoint && this.waves.phase === 'prep' && this.screen !== 'defeat';
   }
 
@@ -2315,6 +2327,7 @@ export class Game {
       playerAlive: this.player.alive,
       suppress: c.active || !!this.tut?.showing,
       survival: !!this.hunt,
+      nodeSecured: !!this.node?.combat && this.canReturnHome,
     }, this.settings.keys);
     const run = this.cfg.run;
     const lt = this.lootTarget;
