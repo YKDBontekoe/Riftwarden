@@ -97,7 +97,10 @@ export class Input {
       this.skipMouse = 2; // some browsers report a large delta right after locking
       this.onLockChange(this.locked);
     });
-    window.addEventListener('blur', () => this.clear());
+    window.addEventListener('blur', () => {
+      this.clear();
+      if (this.captured) this.onLockChange(false);
+    });
   }
 
   get captured(): boolean {
@@ -187,6 +190,11 @@ export class Input {
     return this.buttonsPressed[button];
   }
 
+  /** Consume a button when another mode used the click, including its held state. */
+  consumeMouse(button: number): void {
+    this.buttons[button] = this.buttonsPressed[button] = false;
+  }
+
   /** Touch look: mouse-equivalent pixels, consumed by the next frame. */
   look(dx: number, dy: number): void {
     if (Number.isFinite(dx)) this.mouseDx += dx;
@@ -227,6 +235,7 @@ export class Input {
 
   clear(): void {
     this.down.clear();
+    this.wheelAcc = 0;
     this.setStick(0, 0, false);
     this.buttons[0] = this.buttons[1] = this.buttons[2] = false;
     this.endFrame();

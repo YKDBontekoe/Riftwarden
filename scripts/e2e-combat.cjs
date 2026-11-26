@@ -1,4 +1,4 @@
-// Combat kit browser suite (A two weapons ... H loot depth: swarm, salvo, uniques, ascended) against a running dev server.
+// Combat kit browser suite (A two weapons ... L combat controls and cues) against a running dev server.
 // Usage: pnpm dev (port 5173), then: node scripts/e2e-combat.cjs [A]
 const H = require('./lib/harness.cjs');
 const { check, S, ev, stats } = H;
@@ -911,6 +911,213 @@ async function deploy(p) {
       check('J4 set gear shows its hexagon marker and the set line on the pickup prompt', j4.ticks === 6 && /BASTION PROTOCOL/.test(j4.line) && /1\/4/.test(j4.line), JSON.stringify(j4));
       await ev(p, () => window.__rift.flow.abandonRun());
       await H.waitFor(p, () => window.__rift.state().location === 'home' && !window.__rift.state().busy);
+    }
+    if (want('K')) {
+      await ev(p, () => {
+        const R = window.__rift;
+        const unlock = document.createElement('button');
+        unlock.textContent = 'Enable test audio';
+        unlock.style.cssText = 'position:fixed;top:0;left:0;z-index:9999';
+        unlock.onclick = () => { R.sfx.init(); unlock.remove(); };
+        document.body.appendChild(unlock);
+        const beam = R.makeItem({ seed: 6, rarity: 'rare', baseId: 'beam_prism', level: 5 });
+        const rail = R.makeItem({ seed: 77, rarity: 'rare', baseId: 'rail_lancer', level: 5 });
+        beam.build.mechanism = 'mc_beam';
+        rail.build.mechanism = 'mc_charge';
+        R.profile.mutate((d) => {
+          d.items.push(beam, rail);
+          d.loadout.weapon = beam.uid;
+          d.loadout.weapon2 = rail.uid;
+          return true;
+        });
+      });
+      await p.getByRole('button', { name: 'Enable test audio' }).click();
+      await H.waitFor(p, () => window.__rift.sfx.ready);
+      await deploy(p);
+      const beam = await ev(p, () => {
+        const R = window.__rift, g = R.game, sfx = R.sfx;
+        const emitting = () => [g.weapon.beaming, g.wfx.beamCore.isEnabled(), !!sfx.beam];
+        sfx.setVolume(0.5);
+        g.input.simulateMouse(0, true);
+        R.advance(1 / 60);
+        const firing = emitting();
+        g.setScreen('paused');
+        const paused = emitting();
+        g.setScreen('playing');
+        R.advance(1 / 60);
+        const resumed = emitting();
+        g.weapon.heat = 99.9;
+        for (let i = 0; i < 30 && !g.weapon.overheated; i++) R.advance(1 / 60);
+        g.input.simulateMouse(0, false);
+        g.publishHud(true);
+        return { firing, paused, resumed, hot: g.weapon.overheated, overheated: emitting() };
+      });
+      check('K1 pause and overheat stop the beam, its visual and its hum together', beam.firing.every(Boolean) && !beam.paused.some(Boolean) && beam.resumed.every(Boolean) && beam.hot && !beam.overheated.some(Boolean), JSON.stringify(beam));
+      await p.locator('.reticle-venting').waitFor({ state: 'visible' });
+      const ready = await ev(p, () => {
+        const R = window.__rift;
+        for (let i = 0; i < 600 && R.game.weapon.overheated; i++) R.advance(1 / 60);
+        R.game.publishHud(true);
+        return !R.game.weapon.overheated && R.sfx.lastPlay.has('weaponReady');
+      });
+      await p.locator('.reticle-venting').waitFor({ state: 'hidden' });
+      check('K2 the reticle shows venting until the weapon-ready sound plays', ready);
+
+      const charge = await ev(p, () => {
+        const R = window.__rift, g = R.game, input = g.input;
+        g.swapWeapon();
+        input.simulateMouse(0, true);
+        R.advance(1.1);
+        const before = g.weapon.charge;
+        const shots = g.weapon.shotsFired;
+        g.setScreen('paused');
+        input.simulateMouse(0, false);
+        g.setScreen('playing');
+        R.advance(1 / 60);
+        return { before, after: g.weapon.charge, fired: g.weapon.shotsFired - shots };
+      });
+      check('K3 pausing a charged weapon cancels the shot', charge.before > 0.12 && charge.after === 0 && charge.fired === 0, JSON.stringify(charge));
+
+      const markerTime = new Date();
+      await p.clock.install({ time: markerTime });
+      await p.clock.pauseAt(new Date(markerTime.getTime() + 1000));
+      await ev(p, () => {
+        const R = window.__rift, g = R.game;
+        const killed = R.dev.spawn('walker');
+        const hit = R.dev.spawn('walker');
+        g.damageEnemy('player', killed, 1e6, killed.center(new R.V3()), false);
+        g.damageEnemy('player', hit, 1, hit.center(new R.V3()), false);
+      });
+      await p.clock.runFor(32);
+      check('K4 a routine hit leaves a recent kill marker visible', await p.locator('.hitmarker.kill').count() === 1);
+      await p.clock.resume();
+    }
+    if (want('L')) {
+      if (await ev(p, () => !!window.__rift.game)) {
+        await ev(p, () => window.__rift.flow.abandonRun());
+        await H.waitFor(p, () => window.__rift.state().location === 'home' && !window.__rift.state().busy);
+      }
+      await ev(p, () => {
+        const R = window.__rift;
+        const plasma = R.makeItem({ seed: 11, rarity: 'common', baseId: 'plasma_repeater', level: 1 });
+        const rail = R.makeItem({ seed: 77, rarity: 'rare', baseId: 'rail_lancer', level: 5 });
+        plasma.build.mechanism = 'mc_auto';
+        rail.build.mechanism = 'mc_charge';
+        R.profile.mutate((d) => {
+          d.items.push(plasma, rail);
+          d.loadout.weapon = plasma.uid;
+          d.loadout.weapon2 = rail.uid;
+          return true;
+        });
+      });
+      await deploy(p);
+      const taps = await ev(p, () => {
+        const R = window.__rift, g = R.game, input = g.input;
+        const tap = () => { input.simulateMouse(0, true); input.simulateMouse(0, false); R.advance(1 / 60); };
+        const before = g.weapon.shotsFired;
+        tap();
+        const first = g.weapon.shotsFired - before;
+        R.advance(0.04);
+        tap();
+        const cooling = g.weapon.shotsFired - before;
+        R.advance(0.2);
+        const buffered = g.weapon.shotsFired - before;
+        // Match a successful placement, which exits build mode immediately in solo play.
+        const place = g.tryPlace.bind(g);
+        g.tryPlace = () => g.setBuildMode(false);
+        g.setBuildMode(true);
+        input.simulateMouse(0, true);
+        R.advance(0.2);
+        input.simulateMouse(0, false);
+        g.tryPlace = place;
+        return { first, cooling, buffered, afterBuild: g.weapon.shotsFired - before };
+      });
+      check('L1 taps survive between frames and buffer through a short cooldown, while a build click stays consumed', taps.first === 1 && taps.cooling === 1 && taps.buffered === 2 && taps.afterBuild === 2, JSON.stringify(taps));
+
+      await ev(p, () => window.__rift.game.setScreen('paused'));
+      await p.getByRole('button', { name: 'Settings', exact: true }).click();
+      await p.getByRole('button', { name: 'Controls', exact: true }).click();
+      await p.getByRole('group', { name: 'Scroll to swap weapons' }).getByRole('button', { name: 'Off', exact: true }).click();
+      await p.getByRole('button', { name: 'Interface', exact: true }).click();
+      await p.getByRole('group', { name: 'Reticle style' }).getByRole('button', { name: 'Dot' }).click();
+      await p.getByRole('group', { name: 'Damage numbers' }).getByRole('button', { name: 'My hits' }).click();
+      await p.getByRole('button', { name: 'Audio', exact: true }).click();
+      await p.getByRole('slider', { name: 'Master volume' }).press('End');
+      const cue = p.getByRole('button', { name: 'Combat cue', exact: true });
+      await cue.click();
+      await H.waitFor(p, () => window.__rift.sfx.lastPlay.has('crit'));
+      await p.getByRole('slider', { name: 'Combat cues' }).press('Home');
+      await ev(p, () => window.__rift.sfx.lastPlay.delete('crit'));
+      await cue.click();
+      const saved = await ev(p, () => ({ ...JSON.parse(localStorage.getItem('riftwarden.settings')).data, silentCue: !window.__rift.sfx.lastPlay.has('crit') }));
+      check('L2 the options persist, and the combat preview follows the cue slider', saved.silentCue && saved.combatCueVolume === 0 && saved.reticle === 'dot' && saved.damageNumbers === 'personal' && !saved.wheelSwap);
+      await p.keyboard.press('Escape');
+      const slots = await ev(p, () => {
+        const R = window.__rift, g = R.game, input = g.input;
+        input.clear();
+        g.setScreen('playing');
+        input.simulateWheel(1);
+        R.advance(1 / 60);
+        const wheel = g.weaponSlots.active;
+        input.simulateKey('Digit3', true);
+        R.advance(1 / 60);
+        input.simulateKey('Digit3', false);
+        const alternate = g.weaponSlots.active;
+        input.simulateKey('Digit1', true);
+        R.advance(1 / 60);
+        input.simulateKey('Digit1', false);
+        return { wheel, alternate, primary: g.weaponSlots.active };
+      });
+      check('L3 dedicated keys draw either slot while scroll swapping is disabled', slots.wheel === 'weapon' && slots.alternate === 'weapon2' && slots.primary === 'weapon', JSON.stringify(slots));
+      await p.locator('.crosshair[data-reticle=dot]').waitFor({ state: 'attached' });
+
+      await ev(p, () => {
+        const R = window.__rift, g = R.game;
+        const e = R.dev.spawn('walker');
+        const pp = g.player.position;
+        const yaw = Math.atan2(-pp.x, -pp.z);
+        e.pos.set(pp.x + Math.sin(yaw) * 8, 0, pp.z + Math.cos(yaw) * 8);
+        e.root.position.copyFrom(e.pos);
+        e.shield = e.maxShield = 100;
+        e.shotT = 99;
+        const dy = e.center(new R.V3()).y - g.player.camera.position.y;
+        R.look(yaw, -Math.atan2(dy, 8));
+        R.advance(1 / 60);
+        g.publishHud(true);
+      });
+      await p.locator('.crosshair[data-target=shield]').waitFor({ state: 'attached', timeout: 5000 });
+      check('L4 the dot reticle identifies a shielded target in range', true);
+
+      const numbers = await ev(p, () => {
+        const R = window.__rift, g = R.game;
+        const position = g.player.eye.add(g.player.forward(new R.V3()).scale(5));
+        g.showNumber(position, 3, 'hit', false, true, 1);
+        g.showNumber(position, 7, 'hit', true, true, 1);
+        return { own: document.querySelectorAll('.dmg-host .dmg.own').length, ally: document.querySelectorAll('.dmg-host .dmg.ally').length };
+      });
+      check('L5 My hits filters allied damage numbers', numbers.own === 1 && numbers.ally === 0, JSON.stringify(numbers));
+
+      const markerTime = new Date();
+      await p.clock.install({ time: markerTime });
+      await p.clock.pauseAt(new Date(markerTime.getTime() + 1000));
+      const shieldAngle = await ev(p, () => {
+        const R = window.__rift, pl = R.game.player;
+        pl.yaw = 0;
+        pl.shield = pl.maxShield = 100;
+        pl.damage(5, pl.position.add(new R.V3(5, 0, 0)));
+        pl.yaw = Math.PI / 2;
+        return parseFloat(document.querySelector('.dmg-dir .shield').style.transform.slice(7));
+      });
+      await p.clock.runFor(32);
+      const direction = await ev(p, () => {
+        const R = window.__rift, pl = R.game.player;
+        const angle = parseFloat(document.querySelector('.dmg-dir .shield').style.transform.slice(7));
+        pl.shield = 0;
+        pl.damage(5, pl.position.add(new R.V3(5, 0, 0)));
+        return { angle, hull: document.querySelectorAll('.dmg-dir .hull').length, shield: document.querySelectorAll('.dmg-dir .shield').length };
+      });
+      check('L6 incoming damage follows the turn and a hull hit replaces the shield marker from the same direction', Math.abs(shieldAngle - Math.PI / 2) < 0.001 && Math.abs(direction.angle) < 0.001 && direction.hull === 1 && direction.shield === 0, JSON.stringify(direction));
+      await p.clock.resume();
     }
     const bad = errs.filter((e) => !/Error compiling effect/.test(e));
     check('Z no page/console errors', bad.length === 0, bad.slice(0, 3).join(' | '));

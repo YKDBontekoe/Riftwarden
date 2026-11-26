@@ -579,7 +579,7 @@ export class HomeBase {
     this.player.shakeScale = s.shake;
     this.post?.setOptions({ bloom: s.bloom, reduceMotion: s.reduceMotion });
     sfx.setVolume(s.volume);
-    sfx.setMix(s.sfxVolume, s.uiVolume, s.ambienceVolume);
+    sfx.setMix(s.sfxVolume, s.uiVolume, s.ambienceVolume, s.combatCueVolume);
   }
 
   /** Give the player control (pointer lock); falls back to the pause overlay. */

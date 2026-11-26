@@ -12,16 +12,23 @@ export function Overlays() {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     let raf = 0;
-    let level = 0;
-    const off = uiEvents.on('hurt', (v) => {
-      level = Math.min(1, level + 0.35 + v.severity * 0.8);
-    });
-    const tick = () => {
-      if (level > 0) level = Math.max(0, level - 0.025);
-      if (ref.current) ref.current.style.setProperty('--hurt', level.toFixed(3));
-      raf = requestAnimationFrame(tick);
+    let hull = 0;
+    let shield = 0;
+    let last = 0;
+    const tick = (now: number) => {
+      const elapsed = (now - last) / 1000;
+      last = now;
+      if (hull > 0) hull = Math.max(0, hull - elapsed * 1.75);
+      if (shield > 0) shield = Math.max(0, shield - elapsed * 2);
+      ref.current?.style.setProperty('--hull-hit', hull.toFixed(3));
+      ref.current?.style.setProperty('--shield-hit', shield.toFixed(3));
+      raf = hull > 0 || shield > 0 ? requestAnimationFrame(tick) : 0;
     };
-    raf = requestAnimationFrame(tick);
+    const off = uiEvents.on('hurt', (v) => {
+      if (v.shield) shield = Math.min(0.7, shield + 0.2 + v.severity * 0.45);
+      else hull = Math.min(1, hull + 0.35 + v.severity * 0.8);
+      if (!raf) tick(last = performance.now());
+    });
     return () => {
       off();
       cancelAnimationFrame(raf);
@@ -29,11 +36,12 @@ export function Overlays() {
   }, []);
   const low = hp < 0.35 && alive ? (0.35 - hp) / 0.35 : 0;
   return (
-    <div ref={ref} className="overlays fixed inset-[0] [--hurt:0] [--low:0]" style={{ ['--low' as string]: low.toFixed(3) }}>
+    <div ref={ref} className="overlays fixed inset-[0] [--low:0]" style={{ ['--low' as string]: low.toFixed(3) }}>
       <div className={`tactical-tint ${tactical ? 'on' : ''}`}>
         <div className="absolute inset-[18px] [border:1px_solid_rgba(167,123,255,0.35)] [clip-path:polygon(0_0,60px_0,60px_1px,1px_1px,1px_60px,0_60px,0_100%,60px_100%,60px_calc(100%_-_1px),1px_calc(100%_-_1px),1px_calc(100%_-_60px),0_calc(100%_-_60px),0_0,100%_0,100%_60px,calc(100%_-_1px)_60px,calc(100%_-_1px)_1px,calc(100%_-_60px)_1px,calc(100%_-_60px)_0,100%_0,100%_100%,calc(100%_-_60px)_100%,calc(100%_-_60px)_calc(100%_-_1px),calc(100%_-_1px)_calc(100%_-_1px),calc(100%_-_1px)_calc(100%_-_60px),100%_calc(100%_-_60px))]" />
       </div>
-      <div className="fixed inset-[0] [opacity:var(--hurt)] [background:radial-gradient(ellipse_at_center,transparent_45%,rgba(255,30,10,0.25)_75%,rgba(255,20,10,0.6)_100%)]" />
+      <div className="damage-tint shield" />
+      <div className="damage-tint hull" />
       <div className={`lowhp ${low > 0 ? 'on' : ''}`} />
     </div>
   );

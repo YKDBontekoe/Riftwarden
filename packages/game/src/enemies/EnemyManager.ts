@@ -646,7 +646,7 @@ export class EnemyManager {
     const ground = new Vector3(c.x, Math.max(0, e.pos.y), c.z);
     const marker = ctx.tele.marker(ground, ELITE.volatileRadius, ELITE.volatileDelay, 'red');
     this.blasts.push({ pos: c, t: ELITE.volatileDelay, radius: ELITE.volatileRadius, damage: e.dmg(ELITE.volatileDamage), marker, mesh });
-    sfx.play('beep', { pitch: 1.2, pan: ctx.panFor(c).pan });
+    sfx.play('worldBeep', { pitch: 1.2, ...ctx.panFor(c) });
   }
 
   /** The enemy leaves the arena alive (no kill rewards). */

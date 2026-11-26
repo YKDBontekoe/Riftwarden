@@ -108,11 +108,13 @@ export class Weapon {
   private burstLeft = 0;
   private burstT = 0;
   private triggerWas = false;
+  private fireBuffer = 0;
   private beamTick = 0;
   private rampT = 0;
   private rampTarget: number | null = null;
   private beamDist = 0;
   private beamContact = false;
+  private beamFx: WeaponFxHooks | null = null;
   private chargeSfx = false;
   private holster = 0;
   private switchT = 0;
@@ -225,9 +227,7 @@ export class Weapon {
     this.flashMat.emissiveColor.set(1.4 + e.r * 0.9, 1.4 + e.g * 0.9, 1.4 + e.b * 0.9);
     this.light.diffuse.copyFrom(e).scaleInPlace(0.4);
     this.light.specular.copyFrom(e).scaleInPlace(0.2);
-    this.charge = 0;
-    this.burstLeft = 0;
-    this.beaming = false;
+    this.cancelFire();
     this.flashRoot.parent = this.rig.muzzles[0] ?? this.rig.root;
     if (!initial) {
       // A quick swap (between the two carried weapons) is ready to fire after ~70 ms instead of ~200 ms.
@@ -245,9 +245,7 @@ export class Weapon {
   restoreHeat(s: HeatState): void {
     this.heat = s.heat;
     this.overheated = s.overheated;
-    this.charge = 0;
-    this.burstLeft = 0;
-    this.beaming = false;
+    this.cancelFire();
   }
 
   /** Swap the weapon parameters only (same model). */
@@ -271,12 +269,32 @@ export class Weapon {
     this.heat = 0;
     this.overheated = false;
     this.cooldown = 0;
+    this.cancelFire();
+    this.spread = this.def.spreadMin;
+  }
+
+  /** Interrupt an attack when leaving play, holstering or changing weapons. */
+  cancelFire(): void {
     this.charge = 0;
+    this.chargeSfx = false;
+    this.triggerWas = false;
+    this.fireBuffer = 0;
     this.burstLeft = 0;
     this.beaming = false;
+    this.beamTick = 0;
+    this.beamDist = 0;
+    this.beamContact = false;
     this.ramp = 1;
     this.rampT = 0;
-    this.spread = this.def.spreadMin;
+    this.rampTarget = null;
+    if (this.beamFx) {
+      const zero = Vector3.ZeroReadOnly;
+      this.beamFx.beam(false, zero, zero, 0, false);
+      this.beamFx = null;
+      this.flashMeshes[2].setEnabled(false);
+      this.light.intensity = 0;
+      sfx.beamLoop(false);
+    }
   }
 
   setVisible(v: boolean): void {
@@ -285,6 +303,7 @@ export class Weapon {
   }
 
   setHolstered(h: boolean): void {
+    if (h && this.holster === 0) this.cancelFire();
     this.holster = h ? 1 : 0;
   }
 
@@ -375,12 +394,16 @@ export class Weapon {
   }
 
   /** Returns true if a shot (or beam tick) was fired this frame. */
-  update(dt: number, trigger: boolean, stats: CombatStats, shoot: (r: ShotRequest) => ShotOutcome, fx: WeaponFxHooks = NO_FX): boolean {
+  update(dt: number, trigger: boolean, stats: CombatStats, shoot: (r: ShotRequest) => ShotOutcome, fx: WeaponFxHooks = NO_FX, pressed = false): boolean {
     const d = this.def;
     this.cooldown -= dt;
     this.sinceShot += dt;
     this.lastShot = null;
-    const ready = this.holster === 0 && this.switchT < 0.4 && this.player.alive && !this.overheated;
+    const armed = this.holster === 0 && this.player.alive && !this.overheated;
+    const ready = armed && this.switchT < 0.4;
+    // A short press survives an animation frame or the end of a cycle. It never carries through a lockout.
+    this.fireBuffer = !armed ? 0 : pressed ? 0.12 : Math.max(0, this.fireBuffer - dt);
+    const requested = trigger || this.fireBuffer > 0;
     const rate = d.fireRate * stats.fireRateMult;
     let fired = false;
     let active = 0;
@@ -393,7 +416,8 @@ export class Weapon {
       case 'swarm':
       case 'rocket':
       case 'cluster':
-        if (trigger && ready && this.cooldown <= 0) {
+        if (requested && ready && this.cooldown <= 0) {
+          this.fireBuffer = 0;
           this.cooldown = Math.max(0, this.cooldown) + 1 / rate;
           this.fireShot(stats, shoot, fx, 1, 1);
           fired = true;
@@ -403,7 +427,8 @@ export class Weapon {
       case 'burst': {
         const n = Math.max(2, d.burstCount);
         const inner = 1 / (rate * 2);
-        if (this.burstLeft === 0 && trigger && ready && this.cooldown <= 0) {
+        if (this.burstLeft === 0 && requested && ready && this.cooldown <= 0) {
+          this.fireBuffer = 0;
           this.burstLeft = n;
           this.burstT = 0;
         }
@@ -449,7 +474,7 @@ export class Weapon {
       case 'spray':
       case 'jet': {
         // Flamer: continuous ticks; each reaches every machine in the cone (up to `targets`).
-        const on = trigger && ready;
+        const on = (trigger || pressed) && ready;
         if (on) {
           active = 1;
           this.beamTick -= dt;
@@ -479,7 +504,7 @@ export class Weapon {
         break;
       }
       case 'beam': {
-        const on = trigger && ready;
+        const on = (trigger || pressed) && ready;
         if (on) {
           active = 1;
           this.beamTick -= dt;
@@ -509,20 +534,16 @@ export class Weapon {
               break;
             }
           }
-          if (!this.beaming) sfx.beamLoop(true);
           this.beaming = !this.overheated;
           this.player.recoil += d.recoilPitch * dt * 20 * stats.spreadMult;
         } else {
-          if (this.beaming) sfx.beamLoop(false);
           this.beaming = false;
           this.beamTick = 0;
           this.rampT = Math.max(0, this.rampT - dt * 2);
           this.ramp = 1;
         }
-        if (this.beaming && this.overheated) {
-          sfx.beamLoop(false);
-          this.beaming = false;
-        }
+        this.beamFx = this.beaming ? fx : null;
+        sfx.beamLoop(this.beaming);
         // Visual endpoint follows the current aim at the last resolved distance.
         // Reused vectors: this runs every frame for beam weapons (allocation-free).
         const from = this.muzzleWorld(this.tmpPos);
@@ -544,7 +565,7 @@ export class Weapon {
         this.heat = Math.max(0, this.heat - r * dt);
         if (this.overheated && this.heat <= d.overheatRecover) {
           this.overheated = false;
-          sfx.play('vent');
+          sfx.play('weaponReady');
           this.anim.impulse(-1.2, 0);
         }
       }

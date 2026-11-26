@@ -145,12 +145,19 @@ b.v { color: var(--violet); }
 .tactical-tint.on { opacity: 1; }
 
 /* crosshair */
-.crosshair { position: fixed; left: 50%; top: 50%; width: 0; height: 0; }
+.crosshair { position: fixed; left: 50%; top: 50%; width: 0; height: 0; scale: var(--reticle-scale, 1); }
 .crosshair .ch { position: absolute; left: 0; top: 0; width: 2px; height: 8px; background: rgba(255, 255, 255, 0.95); box-shadow: 0 0 3px rgba(0, 0, 0, 0.9); transition: transform 0.05s linear; }
 .crosshair .ch.h { width: 8px; height: 2px; }
 .crosshair .dot { position: absolute; left: -1.5px; top: -1.5px; width: 3px; height: 3px; background: var(--cyan); border-radius: 50%; box-shadow: 0 0 6px var(--cyan); }
+.crosshair[data-reticle='dot'] .dot { left: -2px; top: -2px; width: 4px; height: 4px; box-shadow: 0 0 0 1px #081014, 0 0 5px #081014; }
+.crosshair .aim-mark { display: none; position: absolute; left: -5px; top: -5px; width: 10px; height: 10px; border: 1px solid currentColor; box-shadow: 0 0 2px 1px #081014; }
+.crosshair[data-target='body'] .aim-mark { display: block; color: #ff9473; border-radius: 50%; }
+.crosshair[data-target='shield'] .aim-mark { display: block; color: #8ddfff; border-width: 2px; border-radius: 2px; }
+.crosshair[data-target='weak'] .aim-mark { display: block; color: #ffdb76; transform: rotate(45deg); }
 .crosshair.build .ch { background: rgba(255, 138, 61, 0.6); }
 .crosshair.hot .ch { background: var(--red); }
+.crosshair.hot .dot { background: var(--red); }
+.reticle-venting { position: absolute; top: 44px; left: 0; transform: translateX(-50%); color: var(--amber); font: 700 11px var(--mono); letter-spacing: 0.12em; text-transform: uppercase; text-shadow: 0 1px 3px #000, 0 0 5px #000; }
 .heat-arc { position: absolute; left: -40px; top: -40px; overflow: visible; }
 .heat-arc path { fill: none; stroke-width: 2.5; stroke-linecap: butt; }
 .heat-arc .bg { stroke: rgba(255, 255, 255, 0.12); }
@@ -199,8 +206,19 @@ b.v { color: var(--violet); }
 
 .dmg-dir { position: fixed; left: 50%; top: 50%; width: 0; height: 0; }
 .dmg-dir .arc { position: absolute; left: -130px; top: -130px; width: 260px; height: 260px; }
-.dmg-dir .arc i { position: absolute; left: 50%; top: 0; width: 90px; height: 26px; margin-left: -45px; border-top: 4px solid rgba(255, 50, 30, 0.95); border-radius: 50% 50% 0 0 / 100% 100% 0 0; filter: drop-shadow(0 0 8px rgba(255, 40, 20, 0.9)); opacity: var(--sev); animation: dmgdir 1.1s ease-out forwards; }
-@keyframes dmgdir { 0% { opacity: 0; transform: translateY(10px); } 10% { opacity: var(--sev); transform: none; } 70% { opacity: var(--sev); } 100% { opacity: 0; } }
+.dmg-dir .arc i { position: absolute; left: 50%; top: 0; width: 84px; height: 23px; margin-left: -42px; border-top: 4px solid #ff6454; border-radius: 50% 50% 0 0 / 100% 100% 0 0; filter: drop-shadow(0 1px 1px #080d13) drop-shadow(0 0 5px #b1251d); }
+.dmg-dir .arc.shield i { border-top: 5px double #8bdfff; filter: drop-shadow(0 1px 1px #080d13) drop-shadow(0 0 5px #297ba8); }
+.damage-tint { position: fixed; inset: 0; }
+.damage-tint.hull { opacity: var(--hull-hit, 0); background: radial-gradient(ellipse at center, transparent 48%, #ff2a1640 78%, #ff211a80 100%); }
+.damage-tint.shield { opacity: var(--shield-hit, 0); background: radial-gradient(ellipse at center, transparent 60%, #3ea8e135 83%, #58ceff65 100%); }
+[data-motion='reduced'] :is(.hitmarker, .hitmarker .limb-label, .kill-ring, .kill-chain b, .heat-arc .fg.over, .charge-arc .ready) { animation: none; }
+[data-motion='reduced'] .crosshair .ch { transition: none; }
+[data-motion='reduced'] .damage-tint { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  :is(.hitmarker, .hitmarker .limb-label, .kill-ring, .kill-chain b, .heat-arc .fg.over, .charge-arc .ready) { animation: none; }
+  .crosshair .ch { transition: none; }
+  .damage-tint { display: none; }
+}
 
 .dmg-host, .ehp-host { position: fixed; inset: 0; overflow: hidden; }
 .dmg { position: absolute; left: 0; top: 0; font-family: var(--display); font-weight: 700; font-size: 17px; color: #fff; will-change: transform, opacity; text-shadow: 0 0 6px rgba(0, 0, 0, 0.9), 0 1px 0 #000; }

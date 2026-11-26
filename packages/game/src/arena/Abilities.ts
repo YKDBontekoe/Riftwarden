@@ -96,6 +96,7 @@ export class Abilities {
   used = 0;
   private charges: Charge[] = [];
   private strikes: Strike[] = [];
+  private nextDeniedAt = 0;
   private ray = new PhysicsRaycastResult();
   private pickRay = new Ray(Vector3.Zero(), Vector3.Forward(), 140);
 
@@ -131,7 +132,7 @@ export class Abilities {
     const before = this.ult;
     this.ult = Math.min(1, this.ult + ultGain(damage, ultChargeNeeded(d, item), this.h.stats));
     if (before < 1 && this.ult >= 1) {
-      sfx.play('chargeReady', { pitch: 0.7 });
+      sfx.play('abilityReady', { pitch: 0.8 });
       uiEvents.emit('notice', { text: `${d.name.toUpperCase()} READY`, tone: 'blue' });
     }
   }
@@ -144,13 +145,24 @@ export class Abilities {
     return this.cd[slot] > 0 ? 'Still on cooldown' : null;
   }
 
+  reportBlocked(slot: AbilitySlot, why: string): void {
+    if (why === 'Not available right now' || !this.h.canAct()) return;
+    const now = performance.now();
+    if (now < this.nextDeniedAt) return;
+    this.nextDeniedAt = now + 650;
+    const name = this.def(slot)?.name ?? (slot === 'ultimate' ? 'Ultimate' : slot === 'ability2' ? 'Ability II' : 'Ability I');
+    const state = why === 'No ability equipped in that slot' ? 'empty slot' : slot === 'ultimate' ? `${Math.floor(this.ult * 100)}% charged` : `${Math.ceil(this.cd[slot] * 10) / 10}s remaining`;
+    sfx.play('abilityDenied');
+    uiEvents.emit('notice', { text: `${name} · ${state}`, tone: 'orange' });
+  }
+
   /** Use a slot from the drone's eye along its aim. */
   use(slot: AbilitySlot, origin?: Vector3, dir?: Vector3): boolean {
     const why = this.blocked(slot);
     const d = this.def(slot);
     const item = this.item(slot);
     if (why || !d || !item) {
-      if (why !== 'Not available right now') sfx.play('buildDeny');
+      if (why) this.reportBlocked(slot, why);
       return false;
     }
     const st = this.h.stats;
@@ -202,8 +214,14 @@ export class Abilities {
     this.used++;
   }
 
-  update(dt: number): void {
-    for (const s of ['ability', 'ability2'] as const) this.cd[s] = Math.max(0, this.cd[s] - dt);
+  update(dt: number, localAudio = true): void {
+    for (const slot of ['ability', 'ability2'] as const) {
+      const previous = this.cd[slot];
+      this.cd[slot] = Math.max(0, previous - dt);
+      if (localAudio && previous > 0 && this.cd[slot] === 0 && this.h.player.alive && this.def(slot)) {
+        sfx.play('abilityReady', { pitch: slot === 'ability2' ? 1.15 : 1, volume: 0.65 });
+      }
+    }
     if (this.aegisT > 0) this.aegisT = Math.max(0, this.aegisT - dt);
     if (this.overdriveT > 0) {
       this.overdriveT = Math.max(0, this.overdriveT - dt);

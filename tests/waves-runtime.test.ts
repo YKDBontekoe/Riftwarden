@@ -106,6 +106,13 @@ describe('settings persistence', () => {
     expect(m.get('KeyC')).toBe('Space');
     expect(m.get('Space')).toBe('__unbound');
   });
+  it('adds combat settings and new shortcuts to legacy profiles without taking a custom key', () => {
+    const settings = sanitizeSettings({ keys: { swap: 'Digit3', forward: 'KeyS' }, reticle: 'invalid', reticleSize: 99, combatCueVolume: -1, damageNumbers: 'personal' }, 2);
+    expect(settings).toMatchObject({ reticle: 'dynamic', reticleSize: 1.5, combatCueVolume: 0, aimFeedback: true, damageNumbers: 'personal', wheelSwap: true });
+    expect(settings.keys).toMatchObject({ forward: 'KeyS', swap: 'Digit3' });
+    expect(settings.keys.secondary).not.toBe('Digit3');
+    expect(new Set(Object.values(settings.keys)).size).toBe(Object.keys(settings.keys).length);
+  });
   it('recovers from corrupt storage', () => {
     localStorage.setItem('riftwarden.settings', '{not json');
     expect(loadSettings()).toEqual(DEFAULT_SETTINGS);

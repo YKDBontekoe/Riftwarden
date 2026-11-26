@@ -101,6 +101,12 @@ describe('traceShot', () => {
     expect(t.struck.map((s) => s.enemy)).toEqual([b]);
   });
 
+  it('ignores hidden enemies in direct picks and beam aim assist', () => {
+    const e = walkerAt(12);
+    e.hidden = true;
+    expect(traceShot(scene, [e], { ...aimAt(e), width: 1.5 }).struck).toEqual([]);
+  });
+
   it('a miss ends at the wall or at the range', () => {
     const up = shot({ origin: new Vector3(0, 30, 0), range: 20 });
     const t = traceShot(scene, [], up);

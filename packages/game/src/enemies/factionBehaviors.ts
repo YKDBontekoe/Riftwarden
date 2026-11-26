@@ -85,7 +85,8 @@ export const sapperBehavior: Behavior = {
         if (best) {
           ai.tower = best;
           ai.mode = 'hunt';
-          sfx.play('beep', { pitch: 1.4, volume: 0.5, pan: ctx.panFor(c).pan });
+          const { pan, volume } = ctx.panFor(c);
+          sfx.play('worldBeep', { pitch: 1.4, pan, volume: volume * 0.5 });
         }
       }
       return;

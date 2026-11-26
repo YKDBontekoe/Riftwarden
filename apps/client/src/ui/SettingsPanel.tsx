@@ -7,6 +7,7 @@ import type { Flow } from '../core/Flow';
 import { InstallApp } from '../touch/MobileUi';
 import { AccountPanel } from '../account/AccountPanel';
 import { keyLabel, ACTIONS, DEFAULT_SETTINGS, PRESETS, type Quality, type Settings } from '@riftwarden/game/core/settings';
+import { sfx } from '@riftwarden/game/audio/Sfx';
 import { RARITY_IDS } from '@riftwarden/rules/loot/rarity';
 import { Backdrop, Crumb, Hint, pips, rarityCls } from './ds';
 
@@ -83,6 +84,7 @@ export function SettingsPanel({ flow, compact, page, onTab }: { flow: Flow; comp
       e.preventDefault();
       e.stopPropagation();
       if (e.code === 'Escape') return setBinding(null);
+      if (e.repeat || !e.code || e.code === 'Unidentified') return;
       const keys = { ...s.keys };
       // Swap with whatever action already used that key (no dead bindings).
       const clash = Object.entries(keys).find(([, k]) => k === e.code);
@@ -144,7 +146,7 @@ export function SettingsPanel({ flow, compact, page, onTab }: { flow: Flow; comp
                   ))}
                 </div>
               )}
-              {inArena && <span className="ds-meta">Scene effects apply from the next sector.</span>}
+              {inArena && <span className="ds-meta">Scene quality and shadows apply from the next sector.</span>}
               <Slider label="Field of view" help="Wider shows more, narrower feels faster" min={70} max={110} step={1} value={s.fov} fmt={(v) => `${v}°`} onChange={(v) => update({ fov: v })} />
               <Seg label="Shadows" help="Sun shadows from structures and machines" value={s.shadows} options={[['off', 'Off'], ['low', 'Low'], ['high', 'High']]} onChange={(v) => update({ shadows: v })} />
               <Seg label="Particles" help="Sparks, smoke and debris density" value={s.particles} options={[['low', 'Low'], ['medium', 'Medium'], ['high', 'High']]} onChange={(v) => update({ particles: v })} />
@@ -157,9 +159,17 @@ export function SettingsPanel({ flow, compact, page, onTab }: { flow: Flow; comp
             <>
               <Slider label="Master volume" help="Everything" testId="vol-master" min={0} max={1} step={0.05} value={s.volume} fmt={pct} onChange={(v) => update({ volume: v })} />
               <Slider label="Effects" help="Weapons, hits, explosions" min={0} max={1} step={0.05} value={s.sfxVolume} fmt={pct} onChange={(v) => update({ sfxVolume: v })} />
+              <Slider label="Combat cues" help="Hit confirmations and combat warnings, within the Effects mix" min={0} max={1} step={0.05} value={s.combatCueVolume} fmt={pct} onChange={(v) => update({ combatCueVolume: v })} />
               <Slider label="Ambience" help="Reactor hum, machinery, weather" min={0} max={1} step={0.05} value={s.ambienceVolume} fmt={pct} onChange={(v) => update({ ambienceVolume: v })} />
               <Slider label="Interface" help="Menus, pickups, alerts" min={0} max={1} step={0.05} value={s.uiVolume} fmt={pct} onChange={(v) => update({ uiVolume: v })} />
-              <span className="ds-meta">Every alert is also text on screen: sound is never the only signal.</span>
+              <Row label="Preview current mix">
+                <span className="set-seg" role="group" aria-label="Audio previews">
+                  <button className="set-opt" type="button" onClick={() => void sfx.preview('effects')}>Weapon</button>
+                  <button className="set-opt" type="button" onClick={() => void sfx.preview('combat')}>Combat cue</button>
+                  <button className="set-opt" type="button" onClick={() => void sfx.preview('ambience')}>Weather</button>
+                  <button className="set-opt" type="button" onClick={() => void sfx.preview('interface')}>Menu</button>
+                </span>
+              </Row>
             </>
           )}
           {tab === 'controls' && (
@@ -174,7 +184,7 @@ export function SettingsPanel({ flow, compact, page, onTab }: { flow: Flow; comp
                       <b>{a.label.replace(/ \(.*\)$/, '')}</b>
                     </button>
                     <span className={`sbt-key ${binding === a.id ? 'listen' : ''}`}><kbd>{binding === a.id ? 'PRESS A KEY…' : keyLabel(s.keys[a.id])}</kbd></span>
-                    <span className="sbt-alt"><kbd>{ALTERNATE[a.id] ?? '—'}</kbd></span>
+                    <span className="sbt-alt"><kbd>{a.id === 'swap' && s.wheelSwap ? 'WHEEL' : ALTERNATE[a.id] ?? '—'}</kbd></span>
                   </Fragment>
                 ))}
               </div>
@@ -184,6 +194,10 @@ export function SettingsPanel({ flow, compact, page, onTab }: { flow: Flow; comp
           {tab === 'interface' && (
             <>
               <Slider label="Interface scale" help="Size of every menu and HUD element" min={0.8} max={1.3} step={0.05} value={s.uiScale} fmt={pct} onChange={(v) => update({ uiScale: v })} />
+              <Seg label="Reticle style" value={s.reticle} options={[['dynamic', 'Dynamic'], ['fixed', 'Fixed'], ['dot', 'Dot']]} onChange={(v) => update({ reticle: v })} />
+              <Slider label="Reticle size" min={0.75} max={1.5} step={0.05} value={s.reticleSize} fmt={pct} onChange={(v) => update({ reticleSize: v })} />
+              <Seg label="Target indication" help="Mark targets, shields and weakpoints under the reticle" value={s.aimFeedback ? 'on' : 'off'} options={[['off', 'Off'], ['on', 'On']]} onChange={(v) => update({ aimFeedback: v === 'on' })} />
+              <Seg label="Damage numbers" value={s.damageNumbers} options={[['all', 'All'], ['personal', 'My hits'], ['off', 'Off']]} onChange={(v) => update({ damageNumbers: v })} />
               <MinimapToggle />
               <TutorialToggle flow={flow} />
             </>
@@ -216,16 +230,16 @@ export function SettingsPanel({ flow, compact, page, onTab }: { flow: Flow; comp
 }
 
 /** Built-in second inputs the game always accepts next to the binding. */
-const ALTERNATE: Record<string, string> = { grapple: 'MMB', swap: 'WHEEL', jump: '—', use: '—' };
+const ALTERNATE: Record<string, string> = { grapple: 'MMB', ability: 'RMB' };
 
 /** Defaults for one tab (DEL on the settings page). */
 function resetTab(tab: Tab): Partial<Settings> {
   const d = DEFAULT_SETTINGS;
   switch (tab) {
     case 'display': return { quality: d.quality, ...PRESETS[d.quality], fov: d.fov, renderer: d.renderer };
-    case 'audio': return { volume: d.volume, sfxVolume: d.sfxVolume, ambienceVolume: d.ambienceVolume, uiVolume: d.uiVolume };
-    case 'controls': return { sensitivity: d.sensitivity, invertY: d.invertY, touchControls: d.touchControls, touchLook: d.touchLook, touchOpacity: d.touchOpacity, keys: { ...d.keys } };
-    case 'interface': return { uiScale: d.uiScale };
+    case 'audio': return { volume: d.volume, sfxVolume: d.sfxVolume, ambienceVolume: d.ambienceVolume, uiVolume: d.uiVolume, combatCueVolume: d.combatCueVolume };
+    case 'controls': return { sensitivity: d.sensitivity, invertY: d.invertY, touchControls: d.touchControls, touchLook: d.touchLook, touchOpacity: d.touchOpacity, wheelSwap: d.wheelSwap, keys: { ...d.keys } };
+    case 'interface': return { uiScale: d.uiScale, reticle: d.reticle, reticleSize: d.reticleSize, aimFeedback: d.aimFeedback, damageNumbers: d.damageNumbers };
     case 'access': return { colorblind: d.colorblind, reduceMotion: d.reduceMotion, shake: d.shake };
     default: return {};
   }
@@ -239,6 +253,7 @@ function MouseAndTouch({ s, update }: { s: Settings; update: (p: Partial<Setting
       <Slider label="Mouse sensitivity" min={0.2} max={3} step={0.05} value={s.sensitivity} fmt={(v) => v.toFixed(2)} onChange={(v) => update({ sensitivity: v })} />
       <Slider label="Touch look speed" testId="touch-look" min={0.3} max={3} step={0.05} value={s.touchLook} fmt={(v) => `${v.toFixed(1)}×`} onChange={(v) => update({ touchLook: v })} />
       <Seg label="Invert vertical look" value={s.invertY ? 'on' : 'off'} options={[['off', 'Off'], ['on', 'On']]} onChange={(v) => update({ invertY: v === 'on' })} />
+      <Seg label="Scroll to swap weapons" value={s.wheelSwap ? 'on' : 'off'} options={[['off', 'Off'], ['on', 'On']]} onChange={(v) => update({ wheelSwap: v === 'on' })} />
       <Seg label="Touch controls" help="Auto turns on for touch screens" value={s.touchControls} options={[['auto', 'Auto'], ['on', 'On'], ['off', 'Off']]} onChange={(v) => update({ touchControls: v })} />
       <Slider label="Touch button opacity" min={0.2} max={1} step={0.05} value={s.touchOpacity} fmt={pct} onChange={(v) => update({ touchOpacity: v })} />
       <InstallApp />
@@ -285,7 +300,7 @@ export function SettingsScreen({ flow, from, close }: { flow: Flow; from: string
       <div className="ds-top">
         <Crumb parts={[from, 'Settings', tabLabel]} />
         <span className="ds-grow" />
-        <span className="ds-mono">{flow.location === 'arena' ? 'ARENA CHANGES APPLY ON THE NEXT SECTOR' : 'CHANGES APPLY AT ONCE'}</span>
+        {flow.location === 'arena' && tabLabel === 'Graphics' && <span className="ds-mono">SCENE QUALITY APPLIES NEXT SECTOR</span>}
       </div>
       <div className="set-page ds-abs">
         <SettingsPanel flow={flow} page onTab={setTabLabel} />
