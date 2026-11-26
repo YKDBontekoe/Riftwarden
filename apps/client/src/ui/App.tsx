@@ -17,6 +17,7 @@ import { DevPanel } from './DevPanel';
 import { RunMapScreen, StationScreen } from './RunMap';
 import { TouchControls } from '../touch/TouchControls';
 import { RotateHint, UpdateToast } from '../touch/MobileUi';
+import { DesktopUpdate } from '../desktop/DesktopUpdate';
 
 interface Props {
   getFlow: () => Flow | null;
@@ -55,6 +56,7 @@ export function App({ getFlow }: Props) {
       {flow && <TouchControls flow={flow} />}
       <RotateHint />
       <UpdateToast flow={flow} />
+      <DesktopUpdate flow={flow} />
     </>
   );
 }

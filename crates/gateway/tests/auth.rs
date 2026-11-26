@@ -161,3 +161,39 @@ async fn rate_limits_count_per_key() {
     assert_eq!(limits::hit(&state, "t", &key, 2, 60).await.unwrap_err().status, StatusCode::TOO_MANY_REQUESTS);
     assert!(limits::hit(&state, "t", &unique("ip-"), 2, 60).await.is_ok(), "other keys are unaffected");
 }
+
+#[tokio::test]
+async fn desktop_approval_requires_a_matching_verifier_and_is_single_use() {
+    use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+    use sha2::{Digest, Sha256};
+    let Some(cfg) = config() else { return eprintln!("skipped") };
+    let state = connect(cfg).await.unwrap();
+    let app = router(state.clone());
+    let id = uuid::Uuid::new_v4();
+    let name = unique("Desktop");
+    riftwarden_db::accounts::create_account(&state.db, id, &name, id.as_bytes(), &json!({}), "test").await.unwrap();
+    let cookie = riftwarden_gateway::auth::session::start(&state, id, "test").await.unwrap();
+    let cookie = cookie.to_str().unwrap().split(';').next().unwrap().to_owned();
+    let verifier = riftwarden_gateway::auth::session::new_token();
+    let challenge = URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()));
+    let (status, body, _) = call(&app, "POST", "/auth/desktop/start", Some(json!({ "challenge": challenge })), None).await;
+    assert_eq!(status, 200);
+    let request = body["id"].as_str().unwrap();
+    let (status, _, _) = call(&app, "POST", "/auth/desktop/poll", Some(json!({ "id": request, "verifier": verifier })), None).await;
+    assert_eq!(status, 202);
+    let (status, _, _) = call(&app, "POST", "/auth/desktop/approve", Some(json!({ "id": request })), None).await;
+    assert_eq!(status, 401);
+    let (status, _, _) = call(&app, "POST", "/auth/desktop/approve", Some(json!({ "id": request })), Some(&cookie)).await;
+    assert_eq!(status, 204);
+    let wrong = riftwarden_gateway::auth::session::new_token();
+    let (status, _, _) = call(&app, "POST", "/auth/desktop/poll", Some(json!({ "id": request, "verifier": wrong })), None).await;
+    assert_eq!(status, 401);
+    let (status, body, _) = call(&app, "POST", "/auth/desktop/poll", Some(json!({ "id": request, "verifier": verifier })), None).await;
+    assert_eq!(status, 200);
+    let desktop_cookie = body["cookie"].as_str().unwrap().split(';').next().unwrap();
+    let (status, body, _) = call(&app, "GET", "/auth/me", None, Some(desktop_cookie)).await;
+    assert_eq!(status, 200);
+    assert_eq!(body["account"]["name"], name);
+    let (status, _, _) = call(&app, "POST", "/auth/desktop/poll", Some(json!({ "id": request, "verifier": verifier })), None).await;
+    assert_eq!(status, 400);
+}

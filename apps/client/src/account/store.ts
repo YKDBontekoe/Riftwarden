@@ -2,6 +2,7 @@
 import { useSyncExternalStore } from 'react';
 import { Store } from '@riftwarden/game/ui/store';
 import type { SyncStatus } from '@riftwarden/game/net/SessionClient';
+import { isDesktop } from '../desktop/update';
 import { type Account, accountApi, ApiError, type PasskeyInfo } from './api';
 
 export interface AccountState {
@@ -25,11 +26,19 @@ export function useAccount(): AccountState {
 export async function refreshAccount(): Promise<void> {
   try {
     const me = await accountApi.me();
+    if (isDesktop()) localStorage.setItem('riftwarden.desktop.account', JSON.stringify(me));
     accountStore.set({ status: 'signedIn', account: me.account, passkeys: me.passkeys, error: '' });
   } catch (e) {
     const err = e as ApiError;
-    if (err.status === 401) accountStore.set({ status: 'signedOut', account: null, passkeys: [], error: '' });
-    else accountStore.set({ status: 'offline', account: null, passkeys: [], error: '' });
+    if (err.status === 401) {
+      if (isDesktop()) localStorage.removeItem('riftwarden.desktop.account');
+      accountStore.set({ status: 'signedOut', account: null, passkeys: [], error: '' });
+    } else {
+      let cached: { account: Account; passkeys: PasskeyInfo[] } | null = null;
+      try { if (isDesktop()) cached = JSON.parse(localStorage.getItem('riftwarden.desktop.account') ?? 'null') as { account: Account; passkeys: PasskeyInfo[] } | null; } catch { /* ignore invalid cache */ }
+      if (cached?.account?.id) accountStore.set({ status: 'signedIn', account: cached.account, passkeys: cached.passkeys ?? [], error: '' });
+      else accountStore.set({ status: 'offline', account: null, passkeys: [], error: '' });
+    }
   }
 }
 

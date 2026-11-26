@@ -1,0 +1,166 @@
+name: Desktop release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-release
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    if: github.actor == 'YKDBontekoe'
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - id: release
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          test "$GITHUB_REF" = refs/heads/main
+          test "$(curl -fsS https://riftwarden.ykdbonte.dev/build.txt)" = "$EXPECTED_SHA"
+          test "$(curl -fsS https://riftwarden-api.ykdbonte.dev/health | node -p 'JSON.parse(require("fs").readFileSync(0)).build')" = "$EXPECTED_SHA"
+          version=$(node -p 'require("./package.json").version')
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          existing=$(gh api "repos/$GH_REPO/commits/v$version" --jq .sha 2>/dev/null || true)
+          if [[ -n "$existing" && "$existing" != "$EXPECTED_SHA" ]]; then
+            echo 'The release tag points to a different commit.' >&2
+            exit 1
+          fi
+          draft=$(gh release view "v$version" --json isDraft --jq .isDraft 2>/dev/null || true)
+          if [[ "$draft" == false ]]; then
+            echo 'This release is already published. Bump the version first.' >&2
+            exit 1
+          fi
+          latest=$(gh release view --json tagName --jq .tagName 2>/dev/null || true)
+          node - "$version" "$latest" <<'NODE'
+          const current = process.argv[2].split('.').map(Number);
+          const match = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(process.argv[3]);
+          if (match) {
+            const previous = match.slice(1).map(Number);
+            const firstDifference = current.findIndex((part, index) => part !== previous[index]);
+            if (firstDifference < 0 || current[firstDifference] < previous[firstDifference]) {
+              throw new Error('The desktop release version must be newer than the latest release');
+            }
+          }
+          NODE
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+  build:
+    needs: verify
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - os: windows-latest
+            args: --target x86_64-pc-windows-msvc --bundles nsis
+          - os: macos-latest
+            args: --target universal-apple-darwin --bundles app,dmg
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.97'
+          targets: ${{ matrix.os == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || 'x86_64-pc-windows-msvc' }}
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - name: Check signing configuration
+        shell: bash
+        env:
+          UPDATER_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          APPLE_CERT: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_USER: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          test -n "$UPDATER_KEY"
+          if [[ "${{ matrix.os }}" == macos-latest ]]; then
+            test -n "$APPLE_CERT" && test -n "$APPLE_CERT_PASSWORD" && test -n "$APPLE_IDENTITY" && test -n "$APPLE_USER" && test -n "$APPLE_APP_PASSWORD" && test -n "$APPLE_TEAM"
+          fi
+      - name: Import Apple signing certificate
+        if: matrix.os == 'macos-latest'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          keychain_password=$(openssl rand -hex 32)
+          certificate_path="$RUNNER_TEMP/riftwarden-certificate.p12"
+          keychain_path="$RUNNER_TEMP/riftwarden-signing.keychain-db"
+          printf '%s' "$APPLE_CERTIFICATE" | base64 --decode > "$certificate_path"
+          security create-keychain -p "$keychain_password" "$keychain_path"
+          security default-keychain -s "$keychain_path"
+          security unlock-keychain -p "$keychain_password" "$keychain_path"
+          security set-keychain-settings -t 3600 -u "$keychain_path"
+          security import "$certificate_path" -k "$keychain_path" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          rm -f "$certificate_path"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain_path"
+      - uses: tauri-apps/tauri-action@944946e3e4cac6603d1fe8f514171e9ecd3c78aa # v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          VITE_API_URL: https://riftwarden-api.ykdbonte.dev
+        with:
+          projectPath: apps/client
+          tagName: v__VERSION__
+          releaseName: Riftwarden v__VERSION__
+          releaseDraft: true
+          uploadWorkflowArtifacts: true
+          prerelease: false
+          args: ${{ matrix.args }}
+  publish:
+    needs: [verify, build]
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ needs.verify.outputs.version }}
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          test "$(curl -fsS https://riftwarden.ykdbonte.dev/build.txt)" = "$EXPECTED_SHA"
+          test "$(curl -fsS https://riftwarden-api.ykdbonte.dev/health | node -p 'JSON.parse(require("fs").readFileSync(0)).build')" = "$EXPECTED_SHA"
+          mkdir release
+          gh release download "v$VERSION" --dir release
+          node - "$VERSION" <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+          const version = process.argv[2];
+          const manifest = JSON.parse(fs.readFileSync('release/latest.json', 'utf8'));
+          for (const target of ['windows-x86_64', 'darwin-x86_64', 'darwin-aarch64']) {
+            if (!manifest.platforms[target]?.url || !manifest.platforms[target]?.signature) throw Error(`Missing ${target}`);
+          }
+          if (manifest.version !== version) throw Error('Incorrect release version');
+          const files = fs.readdirSync('release');
+          if (!files.some(f => f.endsWith('-setup.exe')) || !files.some(f => f.endsWith('.dmg'))) throw Error('Missing installer');
+          NODE
+          gh release edit "v$VERSION" --draft=false --latest

@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { accountApi } from './api';
 import { accountAction, accountStore, refreshAccount, useAccount } from './store';
 import { passkeysSupported } from './webauthn';
+import { desktopSignIn, manageAccount } from '../desktop/account';
+import { isDesktop } from '../desktop/update';
 
 type Mode = 'signin' | 'create' | 'recover';
 
@@ -52,6 +54,14 @@ function SignedOut() {
     else if (mode === 'create') void accountAction(() => accountApi.register(name));
     else void accountAction(() => accountApi.recover(name, code));
   };
+  if (isDesktop()) return (
+    <div className="grid gap-2.5">
+      <p>Sign in or create your account in your browser to sync your progress and play co-op.</p>
+      <button className="primary" disabled={s.busy} onClick={() => void accountAction(desktopSignIn)}>SIGN IN IN BROWSER</button>
+      {s.busy && <p>Complete sign-in in your browser…</p>}
+      {s.error && <p className="text-bad">{s.error}</p>}
+    </div>
+  );
   return (
     <div className="grid gap-2.5">
       <p className="m-0 opacity-80">An account keeps your progress on the server and on every device. Sign in with a passkey: no password.</p>
@@ -107,7 +117,8 @@ function SignedIn() {
         <button className="mini" data-testid="acct-logout" disabled={s.busy} onClick={() => void accountAction(() => accountApi.logout())}>SIGN OUT</button>
       </div>
       <SyncLine />
-      <h3 className="caps mt-1.5 mb-0 text-xs tracking-[0.14em] opacity-70">Passkeys</h3>
+      {isDesktop() && <button className="mini" onClick={() => void manageAccount()}>MANAGE ACCOUNT IN BROWSER</button>}
+      {!isDesktop() && <h3 className="caps mt-1.5 mb-0 text-xs tracking-[0.14em] opacity-70">Passkeys</h3>}
       <ul className="m-0 grid list-none gap-1.5 p-0" data-testid="acct-passkeys">
         {s.passkeys.map((k) => (
           <li key={k.id} className="flex items-baseline gap-2.5">
@@ -117,7 +128,7 @@ function SignedIn() {
           </li>
         ))}
       </ul>
-      <form className="flex flex-wrap items-center gap-2" onSubmit={(e) => { e.preventDefault(); void accountAction(() => accountApi.addPasskey(label)).then(() => setLabel('')); }}>
+      <form className="flex flex-wrap items-center gap-2" onSubmit={(e) => { e.preventDefault(); void (isDesktop() ? manageAccount() : accountAction(() => accountApi.addPasskey(label))).then(() => setLabel('')); }}>
         <input className="field-input" placeholder="Label (e.g. laptop)" value={label} maxLength={40} onChange={(e) => setLabel(e.target.value)} data-testid="acct-add-label" />
         <button className="mini" type="submit" disabled={s.busy} data-testid="acct-add">ADD PASSKEY</button>
       </form>
@@ -137,6 +148,21 @@ function SignedIn() {
   );
 }
 
+function DesktopApproval({ id }: { id: string }) {
+  const account = useAccount();
+  const [done, setDone] = useState(false);
+  const [error, setError] = useState('');
+  if (account.status !== 'signedIn') return <p>Sign in below to approve the Riftwarden desktop client.</p>;
+  if (done) return <p>Desktop sign-in approved. You can return to Riftwarden.</p>;
+  return (
+    <div className="grid gap-2.5">
+      <p>Allow the Riftwarden desktop client to sign in as {account.account?.name}?</p>
+      <button className="primary" onClick={() => void accountApi.approveDesktop(id).then(() => setDone(true), (err: Error) => setError(err.message))}>APPROVE DESKTOP SIGN-IN</button>
+      {error && <p className="text-bad">{error}</p>}
+    </div>
+  );
+}
+
 export function AccountPanel() {
   const s = useAccount();
   useEffect(() => {
@@ -144,6 +170,7 @@ export function AccountPanel() {
   }, [s.status]);
   return (
     <div className="grid max-w-[560px] gap-3.5" data-testid="acct-panel" data-status={s.status}>
+      {new URLSearchParams(location.search).get('desktop') && <DesktopApproval id={new URLSearchParams(location.search).get('desktop')!} />}
       {s.recoveryCode && <RecoveryCodeCard code={s.recoveryCode} />}
       {s.status === 'unknown' && <p>Checking your account…</p>}
       {s.status === 'offline' && (

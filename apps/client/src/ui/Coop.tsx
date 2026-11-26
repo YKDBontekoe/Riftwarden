@@ -130,7 +130,8 @@ export function CoopPanel({ flow, compact }: { flow: Flow; compact?: boolean }) 
     );
   }
 
-  const link = `${location.origin}${location.pathname}#/join/${lobby.code}`;
+  const inviteOrigin = '__TAURI_INTERNALS__' in window ? 'https://riftwarden.ykdbonte.dev/' : `${location.origin}${location.pathname}`;
+  const link = `${inviteOrigin}#/join/${lobby.code}`;
   const connected = lobby.players.filter((p) => p.connected);
   const ready = connected.filter((p) => p.host || p.ready).length;
   const allReady = connected.filter((p) => !p.host).every((p) => p.ready);

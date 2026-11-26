@@ -232,6 +232,7 @@ export function MainMenu({ flow }: { flow: Flow }) {
           <MenuHero flow={flow} save={save} season={season} />
           {canResume && <div className="ds-glass ds-toast risk"><span className="ds-dot" style={{ background: 'var(--ds-risk)' }} /><span className="ds-col"><b>Operation suspended</b><span className="ds-meta">Resume or end it at the deployment console</span></span></div>}
           <InstallApp />
+          {!('__TAURI_INTERNALS__' in window) && <a className="mini" href="https://github.com/YKDBontekoe/Riftwarden/releases/latest" target="_blank" rel="noreferrer">DOWNLOAD DESKTOP CLIENT</a>}
         </aside>
       ) : (
         <Sheet title={MENU_SECTIONS[tab]} close={() => setTab(null)}>

@@ -1,5 +1,7 @@
 // The gateway's account API (passkeys, sessions, recovery codes). Same origin in development (Vite proxies
 // /auth), `VITE_API_URL` in production builds, `?api=<origin>` to point a client at another gateway.
+import { isDesktop } from '../desktop/update';
+import { desktopSignOut } from '../desktop/account';
 import { assertionJSON, creationOptions, registrationJSON, requestOptions } from './webauthn';
 
 export interface Account {
@@ -67,6 +69,7 @@ async function get(options: Record<string, unknown>): Promise<PublicKeyCredentia
 }
 
 export const accountApi = {
+  approveDesktop: (id: string) => call<void>('POST', '/auth/desktop/approve', { id }),
   me: () => call<{ account: Account; passkeys: PasskeyInfo[] }>('GET', '/auth/me'),
   nameCheck: (name: string) => call<{ available: boolean; name: string; reason?: string }>('GET', `/auth/name?name=${encodeURIComponent(name)}`),
   async register(name: string): Promise<SignedIn> {
@@ -92,5 +95,8 @@ export const accountApi = {
   removePasskey: (id: string) => call<void>('DELETE', `/auth/passkeys/${encodeURIComponent(id)}`),
   newRecoveryCode: () => call<{ recoveryCode: string }>('POST', '/auth/recovery-code'),
   rename: (name: string) => call<Account>('POST', '/auth/rename', { name }),
-  logout: () => call<void>('POST', '/auth/logout'),
+  async logout(): Promise<void> {
+    await call<void>('POST', '/auth/logout');
+    if (isDesktop()) await desktopSignOut();
+  },
 };

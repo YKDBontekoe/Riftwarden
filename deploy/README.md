@@ -50,3 +50,22 @@ build by commit. After production verification, create the GitHub release tag `v
 | Health | `curl -s 127.0.0.1:18084/health` |
 
 Logs are JSON lines on stdout (`docker compose ... logs`). Observability (OpenTelemetry -> ClickHouse -> Grafana) is postponed; the gateway and workers export OTLP only when `OTEL_EXPORTER_OTLP_ENDPOINT` is set.
+
+### Desktop releases
+
+The **Desktop checks** workflow builds Windows x64, macOS Intel and macOS Apple Silicon installers for each pull
+request and push to `main`, and keeps them as GitHub Actions artifacts for seven days. These builds are unsigned.
+
+Run the **Desktop release** workflow on the deployed `main` commit after the API and website serve that commit.
+It builds a Windows x64 setup executable and a universal macOS app and DMG, signs the updater artifacts, and
+uploads the installers as workflow artifacts and publishes a GitHub release only after both builds succeed. Bump the root `package.json` version for every release.
+The updater reads `latest.json` from the latest public GitHub release, so release versions must increase.
+
+Set `TAURI_SIGNING_PRIVATE_KEY` to the complete contents of the updater private key and
+`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` to its password as GitHub Actions secrets. The public key is embedded in
+`apps/client/src-tauri/tauri.conf.json`. Keep a secure backup of the private key. To distribute macOS builds,
+set `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD`
+and `APPLE_TEAM_ID` for Developer ID signing and notarization. Windows installers are unsigned, while updates
+are verified with the Tauri signing key. A generated development release key is stored at
+`/workspace/.riftwarden-updater.key` in the implementation environment and must be transferred to the repository
+secret and backed up before that environment is removed. Do not commit the private key.
