@@ -7,12 +7,15 @@ import { regionState } from '@riftwarden/rules/war/state';
 import { regionLayout } from '@riftwarden/rules/war/regions';
 import type { SaveData } from '@riftwarden/rules/progression/save';
 import { sfx } from '@riftwarden/game/audio/Sfx';
+import { BIOMES, BIOME_IDS, type BiomeId } from '@riftwarden/rules/world/biomes';
+import { FactionIntel } from './FactionIntel';
 import { FieldArt } from './FieldArt';
 
 const KIND: Record<CodexKind, string> = { family: 'WEAPON FAMILIES', rarity: 'RARITIES', unique: 'UNIQUES' };
 
 /** Codex: every chase entry, found ones lit, the rest as teasers with where they come from. */
 export function CodexPanel({ save }: { save: SaveData }) {
+  const [record, setRecord] = useState<BiomeId>('cryo');
   const found = new Set(save.codex ?? []);
   const title = titleOf(save.breakthroughs ?? []);
   return (
@@ -22,6 +25,14 @@ export function CodexPanel({ save }: { save: SaveData }) {
         {title && <span className="font-mono text-[11px] tracking-[0.12em] text-orange" data-testid="warden-title">{title.toUpperCase()}</span>}
       </div>
       <span className="text-[12px] text-faint">First finds pay a one-time rift shard bonus when banked.</span>
+      <div className="faction-records" role="group" aria-label="Faction records">
+        {BIOME_IDS.map((biome) => (
+          <button key={biome} type="button" className="ds-chip" aria-pressed={record === biome} onClick={() => setRecord(biome)}>
+            {BIOMES[biome].faction.name}
+          </button>
+        ))}
+      </div>
+      <FactionIntel biome={record} recovered />
       {(['family', 'rarity', 'unique'] as CodexKind[]).map((k) => (
         <details key={k} className="field-notes" open={k !== 'unique'}>
           <summary>

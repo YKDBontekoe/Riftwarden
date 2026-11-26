@@ -5,6 +5,7 @@ import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { Scene } from '@babylonjs/core/scene';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { CORE_BEHAVIORS } from '@riftwarden/game/enemies/coreBehaviors';
+import { sapperBehavior } from '@riftwarden/game/enemies/factionBehaviors';
 import { type EnemyContext, EnemyManager } from '@riftwarden/game/enemies/EnemyManager';
 import { bit, hasLost, LIMB_EFFECT, LIMBS, limbDamage, limbForHit } from '@riftwarden/rules/enemies/limbs';
 import { limbNode } from '@riftwarden/game/enemies/limbRuntime';
@@ -45,6 +46,7 @@ describe('walker parts in the enemy pipeline', () => {
     scene = new Scene(engine);
     mgr = new EnemyManager(scene, new Kit(scene), createPalette(scene, false));
     for (const [kind, b] of Object.entries(CORE_BEHAVIORS)) mgr.register(kind as 'walker', b);
+    mgr.register('sapper', sapperBehavior);
   });
   afterAll(() => {
     scene.dispose();
@@ -120,6 +122,28 @@ describe('walker parts in the enemy pipeline', () => {
     for (let i = 0; i < 15; i++) mgr.damage(e, e.maxHp * 0.05, 'energy', feet, fx);
     expect(e.limbsLost).toBe(0);
     mgr.despawn(e);
+  });
+
+  it('plants the sapper forefeet and restores a detached foreleg when pooled', () => {
+    const c = ctx(new Vector3(0, 1, -80));
+    const e = mgr.spawn('sapper', 'north', ARENA, 1, 1, 1, { ctx: c });
+    const rig = e.walker!;
+    const forward = new Vector3(Math.sin(e.yaw), 0, Math.cos(e.yaw));
+    for (const { ankle } of rig.forelegs!) {
+      ankle.computeWorldMatrix(true);
+      const offset = ankle.getAbsolutePosition().subtract(e.pos);
+      expect(offset.y).toBeCloseTo(0.075, 2);
+      expect(Vector3.Dot(offset, forward)).toBeGreaterThan(0.45);
+    }
+    const rightForeleg = rig.forelegs![1].thigh;
+    const at = partPoint(e, 'cannon');
+    for (let i = 0; i < 10 && rightForeleg.isEnabled(); i++) mgr.damage(e, e.maxHp * 0.05, 'energy', at, fx);
+    expect(rightForeleg.isEnabled()).toBe(false);
+    mgr.despawn(e);
+    const again = mgr.spawn('sapper', 'north', ARENA, 1, 1, 1, { ctx: c });
+    expect(again).toBe(e);
+    expect(rightForeleg.isEnabled()).toBe(true);
+    mgr.despawn(again);
   });
 });
 
