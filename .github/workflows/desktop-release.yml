@@ -59,7 +59,8 @@ jobs:
           NODE
           )
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
-          existing=$(gh api "repos/$GH_REPO/commits/v$version" --jq .sha 2>/dev/null || true)
+          refs=$(git ls-remote origin "refs/tags/v$version" "refs/tags/v$version^{}")
+          existing=$(printf '%s\n' "$refs" | awk '/\^\{\}$/ { peeled=$1; next } NF { tag=$1 } END { print peeled ? peeled : tag }')
           if [[ -n "$existing" && "$existing" != "$EXPECTED_SHA" ]]; then
             echo 'The release tag points to a different commit.' >&2
             exit 1
