@@ -63,9 +63,8 @@ The updater reads `latest.json` from the latest public GitHub release, so releas
 
 Set `TAURI_SIGNING_PRIVATE_KEY` to the complete contents of the updater private key and
 `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` to its password as GitHub Actions secrets. The public key is embedded in
-`apps/client/src-tauri/tauri.conf.json`. Keep a secure backup of the private key. To distribute macOS builds,
-set `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD`
-and `APPLE_TEAM_ID` for Developer ID signing and notarization. Windows installers are unsigned, while updates
-are verified with the Tauri signing key. A generated development release key is stored at
+`apps/client/src-tauri/tauri.conf.json`. Keep a secure backup of the private key. The macOS release uses ad-hoc
+signing and is not notarized, so players must allow it in Privacy & Security. Windows installers are unsigned.
+Updates on both platforms are verified with the Tauri signing key. A generated development release key is stored at
 `/workspace/.riftwarden-updater.key` in the implementation environment and must be transferred to the repository
 secret and backed up before that environment is removed. Do not commit the private key.
