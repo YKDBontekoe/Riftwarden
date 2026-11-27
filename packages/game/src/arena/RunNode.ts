@@ -1,4 +1,5 @@
 import '../babylonSideEffects';
+import { music } from '../audio/Music';
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { type Scene } from '@babylonjs/core/scene';
 import { sfx } from '../audio/Sfx';
@@ -577,6 +578,7 @@ export class RunNode {
     this.complete = false;
     uiEvents.emit('banner', { title: reward === 'vault' ? 'VAULT GUARDIANS' : 'AMBUSH', sub: `${this.guard.spawns.length} hostiles · defend the reactor`, tone: 'red' });
     sfx.play('waveStart');
+    music.sting('waveStart');
   }
 
   private updateGuard(hdt: number): void {
@@ -593,6 +595,7 @@ export class RunNode {
     this.h.run.collect({ shards: g.reward === 'vault' ? GUARDIAN.cacheShards : 1, credits });
     uiEvents.emit('banner', { title: g.reward === 'vault' ? 'VAULT CRACKED' : 'AMBUSH REPELLED', sub: `Cache dropped · +${credits} cr · shards secured when you leave`, tone: 'cyan' });
     sfx.play('waveClear');
+    music.sting('waveClear');
   }
 
   get guardiansActive(): boolean {

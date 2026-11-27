@@ -1,0 +1,265 @@
+{
+  "$comment": "CC0 asset sources. `node scripts/fetch-cc0.mjs` downloads, verifies the licence, converts into packages/game/src/assets/cc0/ and rewrites the manifest + docs/assets/credits.md. Only CC0 is accepted (docs/design/design-direction.md).",
+  "models": [
+    {
+      "id": "barrel-red",
+      "polyhaven": "Barrel_01",
+      "tex": 512
+    },
+    {
+      "id": "barrel-steel",
+      "polyhaven": "barrel_03",
+      "tex": 512
+    },
+    {
+      "id": "crate-military",
+      "polyhaven": "old_military_crate",
+      "tex": 512
+    },
+    {
+      "id": "crate-plastic",
+      "polyhaven": "plastic_crate_02",
+      "tex": 512
+    },
+    {
+      "id": "jerrycan",
+      "polyhaven": "metal_jerrycan_green",
+      "tex": 512
+    },
+    {
+      "id": "propane-tank",
+      "polyhaven": "propane_tank",
+      "tex": 512
+    },
+    {
+      "id": "lpg-tank",
+      "polyhaven": "small_lpg_tank",
+      "tex": 512
+    },
+    {
+      "id": "utility-box",
+      "polyhaven": "utility_box_01",
+      "tex": 512
+    },
+    {
+      "id": "utility-box-tall",
+      "polyhaven": "utility_box_02",
+      "tex": 512
+    },
+    {
+      "id": "aircon-unit",
+      "polyhaven": "exterior_aircon_unit",
+      "tex": 512
+    },
+    {
+      "id": "generator",
+      "polyhaven": "portable_generator",
+      "tex": 1024
+    },
+    {
+      "id": "tyre",
+      "polyhaven": "old_tyre",
+      "tex": 512
+    },
+    {
+      "id": "shelves",
+      "polyhaven": "steel_frame_shelves_01",
+      "tex": 1024
+    },
+    {
+      "id": "tool-chest",
+      "polyhaven": "metal_tool_chest",
+      "tex": 1024
+    },
+    {
+      "id": "toolbox",
+      "polyhaven": "metal_toolbox",
+      "tex": 512
+    },
+    {
+      "id": "welding-cart",
+      "polyhaven": "portable_welding_cart",
+      "tex": 512
+    },
+    {
+      "id": "cardboard-box",
+      "polyhaven": "cardboard_box_01",
+      "tex": 512
+    },
+    {
+      "id": "extinguisher",
+      "polyhaven": "korean_fire_extinguisher_01",
+      "tex": 512
+    },
+    {
+      "id": "oil-tin",
+      "polyhaven": "oil_tin",
+      "tex": 512
+    },
+    {
+      "id": "airduct",
+      "polyhaven": "modular_airduct_circular_01",
+      "tex": 1024
+    },
+    {
+      "id": "pipes",
+      "polyhaven": "modular_industrial_pipes_01",
+      "tex": 1024
+    },
+    {
+      "id": "street-lamp",
+      "polyhaven": "street_lamp_02",
+      "tex": 512
+    },
+    {
+      "id": "security-light",
+      "polyhaven": "security_light",
+      "tex": 512
+    },
+    {
+      "id": "road-barrier",
+      "polyhaven": "concrete_road_barrier_02",
+      "tex": 1024
+    },
+    {
+      "id": "covered-car",
+      "polyhaven": "covered_car",
+      "tex": 1024
+    },
+    {
+      "id": "fire-barrel",
+      "polyhaven": "barrel_stove",
+      "tex": 512
+    },
+    {
+      "id": "wheel-rim",
+      "polyhaven": "rusted_wheel_rim_01",
+      "tex": 512
+    },
+    {
+      "id": "searchlight",
+      "polyhaven": "portable_searchlight",
+      "tex": 512
+    },
+    {
+      "id": "trash-can",
+      "polyhaven": "metal_trash_can",
+      "tex": 512
+    }
+  ],
+  "textures": [
+    {
+      "id": "cast-concrete",
+      "polyhaven": "concrete"
+    },
+    {
+      "id": "painted-metal",
+      "polyhaven": "rusty_painted_metal"
+    },
+    {
+      "id": "steel-plate",
+      "polyhaven": "metal_plate"
+    },
+    {
+      "id": "steel-plate-fine",
+      "polyhaven": "metal_plate_02"
+    },
+    {
+      "id": "panel-plaster",
+      "polyhaven": "beige_wall_001"
+    }
+  ],
+  "music": [
+    {
+      "id": "hq",
+      "title": "Airy (Dark Sci-Fi Audio Pack)",
+      "author": "SRG774",
+      "page": "https://opengameart.org/content/dark-sci-fi-audio-pack",
+      "file": "https://opengameart.org/sites/default/files/airy_0.mp3"
+    },
+    {
+      "id": "prep",
+      "title": "Pulse (Dark Sci-Fi Audio Pack)",
+      "author": "SRG774",
+      "page": "https://opengameart.org/content/dark-sci-fi-audio-pack",
+      "file": "https://opengameart.org/sites/default/files/pulse_0.mp3"
+    },
+    {
+      "id": "combat",
+      "title": "Fight or Flee (loop)",
+      "author": "Tsorthan Grove",
+      "page": "https://opengameart.org/content/fight-or-flee",
+      "file": "https://opengameart.org/sites/default/files/fight_or_flee_loop_0.flac"
+    },
+    {
+      "id": "boss",
+      "title": "Hunter-class Lifeform",
+      "author": "vitalezzz",
+      "page": "https://opengameart.org/content/hunter-class-lifeform",
+      "file": "https://opengameart.org/sites/default/files/hunter-class_lifeform_1.mp3"
+    }
+  ],
+  "sets": [
+    {
+      "id": "outpost-ground",
+      "polyhaven": "concrete_floor_damaged_01",
+      "res": "2k",
+      "height": true
+    },
+    {
+      "id": "outpost-masonry",
+      "polyhaven": "concrete_wall_006",
+      "res": "1k",
+      "height": true
+    },
+    {
+      "id": "outpost-metal",
+      "polyhaven": "rusty_painted_metal",
+      "res": "1k"
+    },
+    {
+      "id": "cryo-ground",
+      "polyhaven": "snow_02",
+      "res": "1k",
+      "height": true
+    },
+    {
+      "id": "cryo-masonry",
+      "polyhaven": "concrete_slab_wall_02",
+      "res": "1k",
+      "height": true
+    },
+    {
+      "id": "cryo-metal",
+      "polyhaven": "blue_metal_plate",
+      "res": "1k"
+    },
+    {
+      "id": "foundry-ground",
+      "polyhaven": "damaged_concrete_floor_03",
+      "res": "2k",
+      "height": true
+    },
+    {
+      "id": "foundry-masonry",
+      "polyhaven": "factory_brick",
+      "res": "1k",
+      "height": true
+    },
+    {
+      "id": "foundry-metal",
+      "polyhaven": "rusty_metal_sheet",
+      "res": "1k"
+    },
+    {
+      "id": "shared-rust",
+      "polyhaven": "rusty_metal_02",
+      "res": "1k"
+    },
+    {
+      "id": "shared-steel",
+      "polyhaven": "metal_plate",
+      "res": "1k"
+    }
+  ]
+}

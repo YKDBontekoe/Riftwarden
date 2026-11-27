@@ -1,4 +1,5 @@
 import { Color3 } from '@babylonjs/core/Maths/math.color';
+import { music } from '../audio/Music';
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { sfx } from '../audio/Sfx';
 import type { Game } from '../core/Game';
@@ -68,6 +69,7 @@ export class SurvivalRuntime {
       uiEvents.emit('banner', { title: `WARNING · ${b.name}${p.boss.encounter > 1 ? ` ${ROMAN[Math.min(9, p.boss.encounter - 1)]}` : ''}`, sub: `${b.warning}. Prepare defenses: it arrives when the wave starts.`, tone });
       uiEvents.emit('alert', { text: `BOSS INBOUND · ${b.name}`, tone: 'red' });
       sfx.play('alarm', { volume: 0.8 });
+      music.sting('bossIn');
     } else if (p.event) {
       const ev = EVENTS[p.event];
       uiEvents.emit('alert', { text: ev.warning, tone: 'orange' });

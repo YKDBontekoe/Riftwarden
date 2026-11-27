@@ -6,6 +6,13 @@ import { drawOfflineScreen, drawStationScreen, loadStationIllustrations, OFFLINE
 import { levelForXp } from '@riftwarden/rules/progression/level';
 import { freePoints } from '@riftwarden/rules/progression/skilltree';
 import { placeScan } from '../visuals/scannedProps';
+import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
+import { configureProps, footprintClear, placeProps, setPropShadowSink } from '../visuals/propLibrary';
+import { clutterCandidates, pickClutter } from './hqClutter';
+import { applyScanDetail } from '../visuals/scanDetail';
+import { music } from '../audio/Music';
+import { buildContactGrime, GRIME } from '../visuals/contactGrime';
+import { wallSegments } from '@riftwarden/rules/home/layout';
 import { loftData } from '../visuals/sculpt';
 import { type AbstractEngine as Engine } from '@babylonjs/core/Engines/abstractEngine';
 import { SceneInstrumentation } from '@babylonjs/core/Instrumentation/sceneInstrumentation';
@@ -199,6 +206,10 @@ export class HomeBase {
     const floor = surface('hqDeck', deckSet, [0.34, 0.36, 0.38], 0.32, 1.6, 0.08);
     const wall = surface('hqWall', wallSet, [0.6, 0.62, 0.64], 0.28, 1.5, 0.1);
     const ceiling = surface('hqCeiling', ceilSet, [0.2, 0.21, 0.23], 0.25, 2.2, 0);
+    // Scanned micro detail: brushed plate on the deck (6 m tiles), plaster grain on the cladding (4 m tiles).
+    applyScanDetail(floor, scene, 'steel-plate-fine', 6, 0.9);
+    applyScanDetail(wall, scene, 'panel-plaster', 4, 0.7);
+    applyScanDetail(ceiling, scene, 'cast-concrete', 2.5, 0.6);
     const glass = new PBRMaterial('hqGlass', scene);
     glass.albedoColor = new Color3(0.02, 0.06, 0.08);
     glass.bumpTexture = windowRainNormal(scene, high);
@@ -270,6 +281,16 @@ export class HomeBase {
     this.readOnly = !!hooks.hostBase?.();
     const save = this.layoutSave();
     this.buildStations(ctx, save);
+    configureProps(scene, { lights: 8 + LIMITS.lights, environment: 1.15 });
+    const consoles = HQ_STATIONS.map((st) => { const pose = save.base.stations[st.id]; return pose ? [pose.x, pose.z] as const : st.pos; });
+    // A contact shadow and a little dust along every wall base, in front of the 0.3 m plinth.
+    buildContactGrime(scene, wallSegments().filter((w) => w.y0 <= 0.05).flatMap((w) => [1, -1].map((side) => ({
+      x0: w.axis === 'x' ? w.c + side * 0.3 : w.a, z0: w.axis === 'x' ? w.a : w.c + side * 0.3,
+      x1: w.axis === 'x' ? w.c + side * 0.3 : w.b, z1: w.axis === 'x' ? w.b : w.c + side * 0.3,
+      nx: w.axis === 'x' ? side : 0, nz: w.axis === 'x' ? 0 : side,
+    }))), GRIME.hq);
+    for (const m of scene.meshes) m.computeWorldMatrix(true); // the occupancy picks run before the first frame
+    placeProps(new TransformNode('hqClutter', scene), pickClutter(clutterCandidates(consoles), (c) => footprintClear(scene, c.x, c.z, c.hx, c.hz, c.top)));
     builder.finish();
     // M7: player-built modules and every placed object (incremental, own colliders).
     this.layer = new ExpansionLayer(scene, this.kit, ctx, () => this.player?.position ?? Vector3.Zero(), high);
@@ -324,6 +345,7 @@ export class HomeBase {
       sg.normalBias = 0.03;
       sg.darkness = 0.1;
       for (const m of builder.shadowCasters) sg.addShadowCaster(m);
+      setPropShadowSink(scene, (m) => sg.addShadowCaster(m));
     }
 
     // ---- player (same controller as the arena)
@@ -581,6 +603,7 @@ export class HomeBase {
     this.post?.setOptions({ bloom: s.bloom, reduceMotion: s.reduceMotion });
     sfx.setVolume(s.volume);
     sfx.setMix(s.sfxVolume, s.uiVolume, s.ambienceVolume, s.combatCueVolume);
+    sfx.setMusicVolume(s.musicVolume);
   }
 
   /** Give the player control (pointer lock); falls back to the pause overlay. */
@@ -646,6 +669,7 @@ export class HomeBase {
       if (!this.target) this.focus.setTarget(null);
     }
     this.focus.update(dt, this.reduceMotion);
+    music.update(dt, { scene: 'hq' });
     this.ambient.update(dt);
     this.layer.update(dt);
     this.animateOthers(dt);

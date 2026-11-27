@@ -125,6 +125,10 @@ export class Sfx {
     this.cueBus.connect(this.sfxBus);
     this.ambBus.connect(this.filter);
     this.uiBus.connect(this.master);
+    // Music through the shared lowpass: tactical mode muffles the score with everything else.
+    this.musicBus = ctx.createGain();
+    this.musicBus.gain.value = this.musicLevel;
+    this.musicBus.connect(this.filter);
     const len = ctx.sampleRate;
     this.noise = ctx.createBuffer(1, len, ctx.sampleRate);
     const d = this.noise.getChannelData(0);
@@ -233,6 +237,24 @@ export class Sfx {
     }
     if (category === 'ambience') this.thunder(0);
     else this.play(category === 'effects' ? 'shoot' : category === 'combat' ? 'crit' : 'ui');
+  }
+
+  private musicBus: GainNode | null = null;
+  private musicLevel = 0.6;
+  /** Music volume (Settings > Music), relative to master. */
+  setMusicVolume(v: number): void {
+    this.musicLevel = v;
+    if (this.ctx && this.musicBus) this.musicBus.gain.setTargetAtTime(v, this.ctx.currentTime, 0.05);
+  }
+  /** Shared context and buses for the score (`Music.ts`); null until the first audio gesture. */
+  get context(): AudioContext | null {
+    return this.ctx ?? null;
+  }
+  get musicOut(): AudioNode | null {
+    return this.musicBus;
+  }
+  get noiseBuffer(): AudioBuffer | null {
+    return this.noise ?? null;
   }
 
   /** Bus for ambience loops (environment). */

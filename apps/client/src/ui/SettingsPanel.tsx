@@ -167,6 +167,7 @@ export function SettingsPanel({ flow, compact, page, onTab }: { flow: Flow; comp
               <Slider label="Master volume" help="Everything" testId="vol-master" min={0} max={1} step={0.05} value={s.volume} fmt={pct} onChange={(v) => update({ volume: v })} />
               <Slider label="Effects" help="Weapons, hits, explosions" min={0} max={1} step={0.05} value={s.sfxVolume} fmt={pct} onChange={(v) => update({ sfxVolume: v })} />
               <Slider label="Combat cues" help="Hit confirmations and combat warnings, within the Effects mix" min={0} max={1} step={0.05} value={s.combatCueVolume} fmt={pct} onChange={(v) => update({ combatCueVolume: v })} />
+              <Slider label="Music" help="Adaptive score: calmer in the HQ, building with the fight" testId="vol-music" min={0} max={1} step={0.05} value={s.musicVolume} fmt={pct} onChange={(v) => update({ musicVolume: v })} />
               <Slider label="Ambience" help="Reactor hum, machinery, weather" min={0} max={1} step={0.05} value={s.ambienceVolume} fmt={pct} onChange={(v) => update({ ambienceVolume: v })} />
               <Slider label="Interface" help="Menus, pickups, alerts" min={0} max={1} step={0.05} value={s.uiVolume} fmt={pct} onChange={(v) => update({ uiVolume: v })} />
               <Row label="Preview current mix">
@@ -244,7 +245,7 @@ function resetTab(tab: Tab): Partial<Settings> {
   const d = DEFAULT_SETTINGS;
   switch (tab) {
     case 'display': return { quality: d.quality, ...PRESETS[d.quality], fov: d.fov, renderer: d.renderer };
-    case 'audio': return { volume: d.volume, sfxVolume: d.sfxVolume, ambienceVolume: d.ambienceVolume, uiVolume: d.uiVolume, combatCueVolume: d.combatCueVolume };
+    case 'audio': return { volume: d.volume, sfxVolume: d.sfxVolume, ambienceVolume: d.ambienceVolume, uiVolume: d.uiVolume, combatCueVolume: d.combatCueVolume, musicVolume: d.musicVolume };
     case 'controls': return { sensitivity: d.sensitivity, invertY: d.invertY, touchControls: d.touchControls, touchLook: d.touchLook, touchOpacity: d.touchOpacity, wheelSwap: d.wheelSwap, keys: { ...d.keys } };
     case 'interface': return { uiScale: d.uiScale, reticle: d.reticle, reticleSize: d.reticleSize, aimFeedback: d.aimFeedback, damageNumbers: d.damageNumbers };
     case 'access': return { colorblind: d.colorblind, reduceMotion: d.reduceMotion, shake: d.shake };

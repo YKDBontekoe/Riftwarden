@@ -1,4 +1,5 @@
 import { Color3 } from '@babylonjs/core/Maths/math.color';
+import { music } from '../../audio/Music';
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { sfx } from '../../audio/Sfx';
 import { speedFactor } from '@riftwarden/rules/combat/status';
@@ -171,6 +172,7 @@ export const overseerBehavior: Behavior = {
     a.pylons = [];
     ctx.alert('OVERSEER CORE · CONTAINMENT LOST', 'white');
     sfx.play('bossRoar', { volume: 1, pitch: 0.5 });
+    music.sting('bossDown');
     return 3.2;
   },
   dying(e, dt, t, ctx) {

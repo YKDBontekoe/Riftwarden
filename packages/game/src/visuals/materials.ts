@@ -9,6 +9,7 @@ import { Texture } from '@babylonjs/core/Materials/Textures/texture';
 import { Color3 } from '@babylonjs/core/Maths/math.color';
 import { type Scene } from '@babylonjs/core/scene';
 import type { ArenaLayout } from '@riftwarden/rules/world/layout';
+import { applyScanDetail } from './scanDetail';
 import { floorSet, industrialSet, type PbrSet, rustSet, wallSet, wearSet, yardDeckSet } from './textures';
 
 /**
@@ -210,6 +211,10 @@ export function createPalette(scene: Scene, high: boolean, indoor = false, layou
       }
     }
   }
+  // Scanned micro detail on painted and bare steel (box-projected every 2.5 m). Not on the white trims or enamel: the
+  // paint scan's streaks read as wood grain on a light or orange base (trims, enamel).
+  for (const m of [graphite, steel]) applyScanDetail(m, scene, 'painted-metal', 2.5, 0.45);
+  applyScanDetail(metal, scene, 'steel-plate', 2.5, 0.6);
   for (const m of lit) m.environmentIntensity = indoor ? 1.15 : 0.89;
 
   return {

@@ -1,4 +1,5 @@
 import type { ScoreContext } from '@riftwarden/rules/loot/loadoutScore';
+import { music } from '../audio/Music';
 import { condHud, type CondId, condIdsOf, ConditionTracker, hasConditional } from '@riftwarden/rules/combat/conditions';
 import type { SeasonRuleId } from '@riftwarden/rules/progression/seasons';
 import { PINNACLE, pinnacleBoss } from '@riftwarden/rules/progression/spikes';
@@ -49,6 +50,7 @@ import { loadoutScore } from '@riftwarden/rules/loot/loadoutScore';
 import { contactShadow } from '../visuals/grounding';
 import { enemyContacts } from '../visuals/EnemyContacts';
 import { createSunShadows } from '../arena/shadows';
+import { setPropShadowSink } from '../visuals/propLibrary';
 import { CORE_BEHAVIORS } from '../enemies/coreBehaviors';
 import { DROP_SOURCES, type DropSourceId } from '@riftwarden/rules/loot/drops';
 import { equipmentModifiers, weaponDefFor } from '@riftwarden/rules/loot/equipment';
@@ -373,7 +375,7 @@ export class Game {
     this.reactorLight.range = 24;
 
     // Arena
-    const arena = new ArenaBuilder(scene, this.pal, this.layout);
+    const arena = new ArenaBuilder(scene, this.pal, this.layout, high);
     arena.build();
     this.atmosphere.lightYard(arena.meshes);
     this.arenaVisuals = arena;
@@ -390,6 +392,7 @@ export class Game {
     this.post = new PostFx(scene, engine, this.player.camera, high, true);
     Object.assign(this.post, { baseContrast: 1.13, baseExposure: 1.06 }); // retain shadow detail under the directional key
     this.mood = new MoodDirector(scene, this.moon, this.post);
+    music.reseed(this.layout.seed ?? 1);
 
     this.fx = new Effects(scene, this.kit, this.pal, this.layout, high);
     this.wfx = new WeaponFx(scene);
@@ -404,7 +407,7 @@ export class Game {
     // Shadows (high quality only); enemies & turrets register as casters via the kit.
     const reactorCasters = this.reactor.root.getChildMeshes().filter((m) => m.material && !m.material.needAlphaBlendingForMesh(m));
     const sg = createSunShadows(moon, settings.shadows ?? (high ? 'high' : 'low'), high, [...arena.shadowCasters, ...reactorCasters]);
-    if (sg) this.kit.shadowSink = (m) => sg.addShadowCaster(m);
+    if (sg) setPropShadowSink(scene, this.kit.shadowSink = (m) => sg.addShadowCaster(m));
     this.enemies = new EnemyManager(scene, this.kit, this.pal);
     if (!sg) enemyContacts(scene, this.enemies, this.player.camera.position);
     if (cfg.mode === 'survival') this.hunt = new Hunt(this.layout);
@@ -667,6 +670,7 @@ export class Game {
     // Armor is measured against the incoming wave's level.
     this.player.applyStats(this.stats, this.attackerScale);
     sfx.play('waveStart');
+    music.sting('waveStart');
     if (!w.plan?.event && !w.plan?.boss) uiEvents.emit('banner', { title: `WAVE ${w.number}`, sub: `${w.spawns.length} hostiles inbound${w.plan && w.number > 3 ? ` · ${this.survival.hud().theme.toLowerCase()}` : ''}`, tone: 'orange' });
   }
 
@@ -679,6 +683,7 @@ export class Game {
     uiEvents.emit('coresGained', w.clearReward);
     this.reactorHp = Math.min(ECONOMY.reactorMaxHp, this.reactorHp + ECONOMY.reactorMaxHp * ECONOMY.reactorRepairPerWave);
     sfx.play('waveClear');
+    music.sting('waveClear');
     const salvage = Math.round((ECONOMY.salvageWaveBase + w.number * ECONOMY.salvagePerWave) * this.cfg.tier.salvageMult);
     const credits = Math.round(RUN_INCOME.waveCredits(w.number) * this.cfg.tier.salvageMult);
     this.cfg.run.collect({ salvage, credits });
@@ -713,6 +718,7 @@ export class Game {
       const n = banked.items.length;
       if (this.lastBankSaved) {
         sfx.play('bank');
+        music.sting('checkpoint');
         uiEvents.emit('banner', { title: 'CHECKPOINT SECURED', sub: `Wave ${w.number} cleared · ${banked.salvage} salvage · ${banked.credits} cr · ${banked.components} comp${banked.shards ? ` · ${banked.shards} shards` : ''}${n ? ` · ${n} item${n === 1 ? '' : 's'}` : ''} banked to HQ`, tone: 'cyan' });
       } else if (this.cfg.run.survival.dev) uiEvents.emit('banner', { title: 'CHECKPOINT · DEVELOPMENT SESSION', sub: 'Development tools were used this run: nothing is banked to HQ', tone: 'white' });
       else uiEvents.emit('banner', { title: 'CHECKPOINT · SAVE FAILED', sub: 'Rewards are held by the run but could not be written to storage yet', tone: 'red' });
@@ -814,6 +820,7 @@ export class Game {
     this.post.setOptions({ bloom: s.bloom, reduceMotion: s.reduceMotion });
     sfx.setVolume(s.volume);
     sfx.setMix(s.sfxVolume, s.uiVolume, s.ambienceVolume, s.combatCueVolume);
+    sfx.setMusicVolume(s.musicVolume);
     saveSettings(s);
   }
 
@@ -1481,6 +1488,7 @@ export class Game {
     const flash = this.updateSky(dt);
     this.hurtFx = Math.max(this.player.hurtFlash, this.player.alive ? 0 : 0.8);
     this.mood.update(dt, this.moodInput());
+    music.update(dt, { scene: 'arena', phase: this.waves.phase, alive: this.enemies.active.length, tension: this.mood.cur.tension, chain: this.player.chain, ...this.moodInput() });
     this.motionFx();
     this.post.update(dt, k, this.hurtFx, flash);
 

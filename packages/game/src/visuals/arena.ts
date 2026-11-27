@@ -26,6 +26,12 @@ import { ArenaDressing, type DressingHost } from './arenaDressing';
 import { RubbleBuilder } from './rubble';
 import { ArenaFloor } from './arenaFloor';
 import { planRubble } from '@riftwarden/rules/world/rubblePlan';
+import { planProps } from '@riftwarden/rules/world/propPlan';
+import { configureProps, placeProps } from './propLibrary';
+import { applyBiomeSurfaces } from './biomeSurfaces';
+import { buildFixtureGlow } from './fixtureGlow';
+import { arenaGrimeFaces, buildContactGrime, GRIME } from './contactGrime';
+import { PROP_SPECIES } from '@riftwarden/rules/world/propCatalog';
 import { smoothLatheData } from './sculpt';
 
 interface GateVisual {
@@ -57,7 +63,7 @@ export class ArenaBuilder {
   /** Every static render mesh (for environment capture). */
   readonly meshes: Mesh[] = [];
 
-  constructor(private scene: Scene, private pal: Palette, private layout: ArenaLayout) {
+  constructor(private scene: Scene, private pal: Palette, private layout: ArenaLayout, private high = true) {
     this.physicsShape = new PhysicsShapeContainer(scene);
     this.relayLight = unlit(scene, 'relayBeacon', [0.24, 2.1, 1.75]);
   }
@@ -103,6 +109,7 @@ export class ArenaBuilder {
     const span = Math.max(120, (L.half + 16) * 2);
     const ground = MeshBuilder.CreateGround('ground', { width: span, height: span }, this.scene);
     ground.material = P.floor;
+    applyBiomeSurfaces(this.scene, P, L.biome ?? 'outpost', span, this.high);
     ground.receiveShadows = true;
     ground.metadata = { surface: 'floor' };
     ground.freezeWorldMatrix();
@@ -158,7 +165,15 @@ export class ArenaBuilder {
     // Floor zoning: reactor plaza, wall gutters, gate chevrons (thin inlays under decals and lanes).
     new ArenaFloor({ scene: this.scene, add: (m, mat, s) => this.add(m, mat, s) }, this.pal, this.layout).build();
     // Weathering: rubble piles, scattered debris and wreckage (visual only, planned off every lane).
-    new RubbleBuilder({ scene: this.scene, add: (m, mat, s) => this.add(m, mat, s) }, { concrete: P.debris, rust: P.rust, graphite: P.graphite, enamel: P.enamel }, true).build(planRubble(L));
+    const rubble = planRubble(L);
+    new RubbleBuilder({ scene: this.scene, add: (m, mat, s) => this.add(m, mat, s) }, { concrete: P.debris, rust: P.rust, graphite: P.graphite, enamel: P.enamel }, true).build(rubble);
+    // Scanned CC0 props (drums, crates, rooftop plant): visual only, planned off lanes and rubble like the debris.
+    configureProps(this.scene, { lights: 8, environment: 0.89, albedo: 0.82 });
+    const props = planProps(L, rubble);
+    placeProps(new TransformNode('arenaProps', this.scene), props);
+    // Natural floor-to-wall seams: contact shadow, biome grime / snow drift / soot, wall staining.
+    buildContactGrime(this.scene, arenaGrimeFaces(L), GRIME[L.biome ?? 'outpost'], (L.seed ?? 11) >>> 0);
+    if (!(this.scene.getEngine() instanceof NullEngine)) buildFixtureGlow(this.scene, props.filter((p) => PROP_SPECIES[p.species].roles.includes('wall')), L.biome ?? 'outpost');
 
     this.merge();
 

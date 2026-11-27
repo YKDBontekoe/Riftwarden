@@ -18,6 +18,8 @@ export interface Settings {
   uiVolume: number;
   /** Hit confirmations and combat warnings, relative to Effects. */
   combatCueVolume: number;
+  /** Adaptive score (CC0 loops + procedural layers), relative to master. */
+  musicVolume: number;
   /** M7: interface scale (0.8..1.3). */
   uiScale: number;
   reticle: 'dynamic' | 'fixed' | 'dot';
@@ -99,6 +101,7 @@ export const DEFAULT_SETTINGS: Settings = {
   ambienceVolume: 0.8,
   uiVolume: 0.8,
   combatCueVolume: 1,
+  musicVolume: 0.6,
   uiScale: 1,
   reticle: 'dynamic',
   reticleSize: 1,
@@ -161,6 +164,7 @@ export function sanitizeSettings(raw: unknown, version = VERSION): Settings {
     ambienceVolume: clampNum(r.ambienceVolume, 0, 1, 0.8),
     uiVolume: clampNum(r.uiVolume, 0, 1, 0.8),
     combatCueVolume: clampNum(r.combatCueVolume, 0, 1, DEFAULT_SETTINGS.combatCueVolume),
+    musicVolume: clampNum(r.musicVolume, 0, 1, DEFAULT_SETTINGS.musicVolume),
     uiScale: clampNum(r.uiScale, 0.8, 1.3, 1),
     reticle: pick(r.reticle, ['dynamic', 'fixed', 'dot'] as const, DEFAULT_SETTINGS.reticle),
     reticleSize: clampNum(r.reticleSize, 0.75, 1.5, DEFAULT_SETTINGS.reticleSize),
