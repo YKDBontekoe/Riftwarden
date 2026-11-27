@@ -1,6 +1,8 @@
 /** Versioned, validated settings persisted in localStorage. */
 export type Quality = 'high' | 'medium' | 'low';
 export type Level3 = 'low' | 'medium' | 'high';
+export const ADAPTIVE_TARGETS = [0, 60, 120, 144] as const;
+export type AdaptiveTarget = (typeof ADAPTIVE_TARGETS)[number];
 
 export interface Settings {
   sensitivity: number;
@@ -35,6 +37,11 @@ export interface Settings {
   bloom: boolean;
   /** Render resolution scale (0.5..1). */
   renderScale: number;
+  /**
+   * Adaptive quality: frame-rate target (0 = off). Below it, cosmetic effects and then render resolution step down
+   * smoothly, and come back once there is headroom (core/adaptiveQuality.ts).
+   */
+  adaptiveTarget: AdaptiveTarget;
   /** Graphics backend (applies on the next start): WebGL2, or WebGPU where the browser supports it (beta until it
    * has been checked on real GPUs; it falls back to WebGL2 when WebGPU is unavailable). */
   renderer: 'webgl' | 'webgpu';
@@ -102,6 +109,7 @@ export const DEFAULT_SETTINGS: Settings = {
   reduceMotion: false,
   colorblind: 'off',
   ...PRESETS.high,
+  adaptiveTarget: 60,
   renderer: 'webgl',
   keys: Object.fromEntries(ACTIONS.map((a) => [a.id, a.def])),
   touchControls: 'auto',
@@ -166,6 +174,7 @@ export function sanitizeSettings(raw: unknown, version = VERSION): Settings {
     shadows: v1 ? preset.shadows : pick(r.shadows, ['off', 'low', 'high'] as const, preset.shadows),
     bloom: v1 ? preset.bloom : typeof r.bloom === 'boolean' ? r.bloom : preset.bloom,
     renderScale: v1 ? preset.renderScale : clampNum(r.renderScale, 0.5, 1, preset.renderScale),
+    adaptiveTarget: ADAPTIVE_TARGETS.includes(r.adaptiveTarget as AdaptiveTarget) ? (r.adaptiveTarget as AdaptiveTarget) : 60,
     renderer: pick(r.renderer, ['webgl', 'webgpu'] as const, 'webgl'),
     keys,
     touchControls: pick(r.touchControls, ['auto', 'on', 'off'] as const, 'auto'),

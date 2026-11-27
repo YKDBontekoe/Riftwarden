@@ -255,6 +255,12 @@ apps/client/src/ui/economy.tsx         ResourceBar, CostLine, ConfirmButton, use
                            Terminals (deploy/loadout/storage/workshop/command), items.tsx (shared inventory view,
                            item detail, comparison), LootHud (prompt, feed, world labels, arena cargo), store + uiEvents
 tests/                     Vitest suites for the [pure] modules
+packages/game/src/world/triangleBvh.ts, world/fastPick.ts   PERF: static triangle BVH for ray picks on merged level shells (Babylon-identical results) [BVH pure]
+packages/game/src/world/pickCandidates.ts   PERF: metadataPicker (Babylon picking over metadata-tagged meshes only), skipPointerPicking
+packages/game/src/visuals/freshMaterial.ts, visuals/warmPools.ts   PERF: material creation without scene-wide dirty scans; shader warm-up of pooled meshes
+packages/game/src/enemies/separation.ts   PERF: crowd separation (grid pass identical to the pairwise loop) [pure]
+packages/game/src/core/adaptiveQuality.ts, core/frameStats.ts   PERF: adaptive quality controller, F3 1% / 0.1% lows [pure]
+scripts/bench-perf.cjs, scripts/bench-coop.mjs   PERF: browser benchmark scenarios (+ CPU profile, shader variants), headless co-op server benchmark
 scripts/lib/harness.cjs    shared e2e helpers: launch/boot/check/stats/waitFor/shot/collectErrors (all browser suites import it)
 scripts/e2e-m1.cjs         M1 browser acceptance suite (70 checks: scenarios A-G, tiers, leaks, persistence)
 scripts/e2e-m2.cjs         M2 browser acceptance suite (loot scenarios A-I, migration, leaks)

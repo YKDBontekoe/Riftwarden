@@ -295,7 +295,8 @@ export class NavGrid {
     if (k < 0) return [];
     const cells: number[] = [k];
     const w = this.w;
-    for (let guard = 0; guard < this.w * 4 && this.dist[k] > 0; guard++) {
+    let guard = 0;
+    for (; guard < this.w * 4 && this.dist[k] > 0; guard++) {
       const i = k % w;
       const j = (k - i) / w;
       let best = k;
@@ -318,17 +319,73 @@ export class NavGrid {
     }
     const pts: Vec2[] = [{ x, z }, ...cells.slice(1).map((c) => ({ x: this.cx(c), z: this.cz(c) }))];
     const last = pts[pts.length - 1];
-    if (this.goals?.length) return this.pull(pts);
+    // The descent from a cell is fixed for a field, so the pulled tail from any cell-centred point can be shared by
+    // every agent passing that cell; not when the walk was cut short by the step guard.
+    const memo = guard < this.w * 4;
+    if (this.goals?.length) return this.pullMemo(pts, cells, memo);
     // End on the ring, on the line from the reactor to the last cell (walkers ring the reactor).
     const R = this.layout.reactor;
     const ang = Math.atan2(last.x - R.x, last.z - R.z);
     const ring = R.radius + 3.2;
     pts.push({ x: R.x + Math.sin(ang) * ring, z: R.z + Math.cos(ang) * ring });
-    return this.pull(pts);
+    return this.pullMemo(pts, cells, memo);
+  }
+
+  /**
+   * `pull` with the tails memoised per cell and field version. A version bump re-planned every agent in the same
+   * frame and the greedy pull (a line walk per candidate, from the far end, per kept point) cost 15-50 ms for 250
+   * agents; shared tails make it one scan from each agent's own start. Output equals `pull` (tests/navgrid-pull.test.ts).
+   * `cells[i]` is the cell of `pts[i]` for 1 <= i < cells.length.
+   */
+  private tails = new Map<number, Vec2[]>();
+  private tailsVersion = -1;
+  private pullMemo(pts: Vec2[], cells: readonly number[], memo: boolean): Vec2[] {
+    if (pts.length <= 2) return pts;
+    if (!memo) return this.pull(pts);
+    if (this.tailsVersion !== this.version) {
+      this.tails.clear();
+      this.tailsVersion = this.version;
+    }
+    const end = pts.length - 1;
+    const out: Vec2[] = [pts[0]];
+    const first = this.reach(pts, 0);
+    out.push(pts[first]);
+    if (first === end) return out;
+    // Walk anchors until the end or a memoised cell, then fill the memo back to front.
+    const anchors: number[] = [first];
+    let a = first;
+    let rest: Vec2[] = [];
+    while (a < end) {
+      const hit = this.tails.get(cells[a]);
+      if (hit) {
+        rest = hit;
+        anchors.pop();
+        break;
+      }
+      a = this.reach(pts, a);
+      anchors.push(a);
+    }
+    // anchors: [a0, a1, ..., ak] where a(j+1) = reach(aj); tail(aj) = [pts[a(j+1)], ...tail(a(j+1))].
+    if (a >= end) anchors.pop();
+    let tail = rest;
+    for (let j = anchors.length - 1; j >= 0; j--) {
+      const next = j + 1 < anchors.length ? anchors[j + 1] : a;
+      tail = [pts[next], ...tail];
+      this.tails.set(cells[anchors[j]], tail);
+    }
+    for (const p of tail) out.push(p);
+    return out;
+  }
+
+  /** Farthest index after `a` reachable from `pts[a]` in a straight clear line (at least `a + 1`). */
+  private reach(pts: Vec2[], a: number): number {
+    let b = pts.length - 1;
+    while (b > a + 1 && !this.clear(pts[a].x, pts[a].z, pts[b].x, pts[b].z)) b--;
+    return b;
   }
 
   /** Greedy string pulling: keep a point only when the straight line past it is not clear. */
-  private pull(pts: Vec2[]): Vec2[] {
+  pull(pts: Vec2[]): Vec2[] {
     if (pts.length <= 2) return pts;
     const out: Vec2[] = [pts[0]];
     let a = 0;

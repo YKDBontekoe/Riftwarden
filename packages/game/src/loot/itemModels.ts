@@ -14,6 +14,7 @@ import { defaultBuild, type WeaponBuild } from '@riftwarden/rules/weapons/build'
 import { moduleTypeDef } from '@riftwarden/rules/weapons/modules';
 import { Assembler, buildWeaponModel, type V3 } from '../weapons/model';
 import { weaponGlow, weaponMaterials } from '../weapons/materials';
+import { freshMaterial } from '../visuals/freshMaterial';
 import { ACCENT, crateSculpt, CURRENCY_ACCENT, CURRENCY_SCULPTS, ITEM_SCULPTS, moduleSculpt, type Sculptor } from './itemShapes';
 
 /**
@@ -89,14 +90,26 @@ export function sculptFor(defId: string): ((s: Sculptor) => void) | null {
   return null;
 }
 
-function sculpted(scene: Scene, name: string, build: (s: Sculptor) => void, accent: V3, materials: Pick<Sculptor, 'M' | 'shell' | 'dark' | 'trim'>) {
+/** Arena pickups share accent glows per scene: a new PBR material mid-fight costs a scan of every mesh in the scene. */
+const sharedGlows = new WeakMap<Scene, Map<string, PBRMaterial>>();
+function sharedGlow(scene: Scene, c: V3): PBRMaterial {
+  let byColor = sharedGlows.get(scene);
+  if (!byColor) sharedGlows.set(scene, (byColor = new Map()));
+  const key = c.join(',');
+  let m = byColor.get(key);
+  if (!m) byColor.set(key, (m = weaponGlow(scene, `itemGlow_${key}`, c)));
+  return m;
+}
+
+function sculpted(scene: Scene, name: string, build: (s: Sculptor) => void, accent: V3, materials: Pick<Sculptor, 'M' | 'shell' | 'dark' | 'trim'>, shared = false) {
   const root = new TransformNode(`${name}Src`, scene);
   const a = new Assembler(scene, root, { name });
-  const glow = weaponGlow(scene, `${name}Glow`, accent);
-  const dim = weaponGlow(scene, `${name}Dim`, [accent[0] * 0.18, accent[1] * 0.18, accent[2] * 0.18]);
+  const dimC: V3 = [accent[0] * 0.18, accent[1] * 0.18, accent[2] * 0.18];
+  const glow = shared ? sharedGlow(scene, accent) : weaponGlow(scene, `${name}Glow`, accent);
+  const dim = shared ? sharedGlow(scene, dimC) : weaponGlow(scene, `${name}Dim`, dimC);
   build({ a, root, glow, dim, ...materials });
   a.finalize();
-  return { root, meshes: a.meshes, owned: [glow, dim] as Material[] };
+  return { root, meshes: a.meshes, owned: (shared ? [] : [glow, dim]) as Material[] };
 }
 
 /** Bake a hierarchy into one mesh per material under `into` (world transforms applied). */
@@ -134,14 +147,15 @@ export function buildItemModel(scene: Scene, look: ItemLook, opts: ModelBuildOpt
       name, mount: false, pickup: opts.pickup,
       element: detailed ? look.element : undefined, uniqueId: detailed ? look.uniqueId : undefined,
     }, detailed ? r.index : 0);
-    src = { root: rig.root, meshes: rig.meshes, owned: [rig.energy, rig.chargeGlow, rig.heat, rig.ledOn, rig.ledHot, rig.ledOff] };
+    // Pickup rigs share their glow/heat materials per scene (buildWeaponModel): never dispose those with one model.
+    src = { root: rig.root, meshes: rig.meshes, owned: opts.pickup ? [] : [rig.energy, rig.chargeGlow, rig.heat, rig.ledOn, rig.ledHot, rig.ledOff] };
   } else {
     const fn = sculptFor(look.defId) ?? crateSculpt;
     const paint = BASE_PAINT[look.defId] ?? CATEGORY_PAINT[look.category];
     const M = weaponMaterials(scene);
     src = sculpted(scene, name, fn, ACCENT[look.defId] ?? [1.6, 1.6, 1.8], {
       M, shell: M.equipmentPaint(paint), dark: BOSS_BASES.has(look.defId) ? M.graphite : M.dark, trim: M.satin,
-    });
+    }, !!opts.pickup);
   }
   return finish(scene, src, name, opts.size ?? 1);
 }
@@ -258,8 +272,10 @@ export function rimMaterial(scene: Scene, id: RarityId, gain = 1.25): PBRMateria
   const g = rarity(id).glow;
   // Commons get a faint rim: the outline should signal value, not add noise to every scrap drop.
   if (rarity(id).index === 0) gain *= 0.35;
-  const m = weaponGlow(scene, `rim_${id}`, [g[0] * gain, g[1] * gain, g[2] * gain]);
-  m.backFaceCulling = true;
-  m.cullBackFaces = false;
-  return m;
+  return freshMaterial(() => {
+    const m = weaponGlow(scene, `rim_${id}`, [g[0] * gain, g[1] * gain, g[2] * gain]);
+    m.backFaceCulling = true;
+    m.cullBackFaces = false;
+    return m;
+  });
 }

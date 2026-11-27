@@ -573,7 +573,7 @@ export class ClientGame extends Game {
     this.tele.update(hdt);
     this.dynamics.update(dt, hdt);
     this.turrets.update(dt, this.turretCtx);
-    this.applyTowerPoses();
+    this.applyTowerPoses(dt);
     this.updateRemotes(dt);
     this.updateProjectiles(hdt);
     this.fx.update(dt);
@@ -642,12 +642,14 @@ export class ClientGame extends Game {
   }
 
   private towerPose = new Map<number, [number, number, number, number, number]>();
-  private applyTowerPoses(): void {
+  private applyTowerPoses(dt: number): void {
+    // 35% per frame at 60 Hz, the same settling time at any frame rate.
+    const k = 1 - Math.pow(0.65, dt * 60);
     for (const [id, t] of this.towerById) {
       const p = this.towerPose.get(id);
       if (!p || t.building) continue;
-      t.yaw = lerpAngle(t.yaw, p[0], 0.35);
-      t.pitch += (p[1] - t.pitch) * 0.35;
+      t.yaw = lerpAngle(t.yaw, p[0], k);
+      t.pitch += (p[1] - t.pitch) * k;
       t.rig.yaw.rotation.y = t.yaw;
       t.rig.pitch.rotation.x = t.pitch;
       if (p[2] && !t.disabled) t.disable(0.3);

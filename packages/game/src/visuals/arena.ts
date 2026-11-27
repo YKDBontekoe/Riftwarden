@@ -1,4 +1,5 @@
 import { NullEngine } from '@babylonjs/core/Engines/nullEngine';
+import { accelerateStaticPicking } from '../world/fastPick';
 import { type Material } from '@babylonjs/core/Materials/material';
 import { type PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial';
 import { Color3 } from '@babylonjs/core/Maths/math.color';
@@ -700,6 +701,8 @@ export class ArenaBuilder {
       else if (g.mat === this.pal.white || g.mat === this.pal.graphite || g.mat === this.pal.metal || g.mat === this.pal.enamel || g.mat === this.pal.steel) boxProjectUVs(merged, 2.5);
       this.meshes.push(merged);
       merged.isPickable = g.surface !== null;
+      // Level shells span the whole arena (15k-125k triangles): every shot, LOS and crosshair pick tested them all.
+      if (merged.isPickable) accelerateStaticPicking(merged);
       merged.metadata = g.surface ? { surface: g.surface, impact: masonry || g.mat === this.pal.white || g.mat === this.pal.panel ? 'ceramic' : 'alloy' } : null;
       merged.receiveShadows = g.surface !== null || g.mat.name.startsWith('biomeDeposit:');
       merged.freezeWorldMatrix();

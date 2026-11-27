@@ -1,5 +1,50 @@
 # Measured performance
 
+## Performance overhaul (2026-11), before / after
+
+`scripts/bench-perf.cjs` and `scripts/bench-coop.mjs` (see [`README.md`](README.md)), run on the commit before the
+overhaul (`88c0d92`) and after it with the same scripts, headless Chromium + SwiftShader on the cloud container, low
+preset, 1280x720. Combat rows are the median of two runs (worst step: the worst of both). **sim** = one fixed 60 Hz
+simulation step (CPU, representative up to the CPU difference); **frame** = step + `scene.render()` in software GL
+(not representative of a GPU). Draw calls and active meshes are averaged over every rendered frame.
+
+| Scenario | Metric | Before | After |
+| --- | --- | --- | --- |
+| early (wave 2, 9 enemies) | sim p50 / p99 / p99.9 (ms) | 2.4 / 8.8 / 19 | 0.5 / 2.6 / 7.3 |
+| late (wave 30, 120 enemies, 12 towers, 14 upgrades, firing) | sim p50 / p99 / p99.9 (ms) | 7.3 / 34.7 / 431 | 2.3 / 13.0 / 43.1 |
+| late | worst step (ms) | 687 | 45.5 |
+| extreme (wave 40, 250-261 enemies) | sim p50 / p99 / p99.9 (ms) | 11.7 / 69.3 / 711 | 3.3 / 13.7 / 22.9 |
+| extreme | worst step (ms) | 1520 | 37.3 |
+| extreme | frame p50 / p99 (ms, software GL) | 126-133 / 1633-1865 | 103-119 / 163-181 |
+| loot (64 pickups + 40 enemies) | sim p50 / p99 (ms) | 3.8 / 11.4 | 1.1 / 5.5 |
+| extended (20 simulated min, 80 enemies) | sim p50 / p99 / worst (ms) | 4.8 / 19.0 / 220 | 0.8 / 3.8 / 19.4 |
+| extended | steps over 40 ms | 10 (AI up to 78 ms) | 0 |
+| extended | JS heap every 2 min (MB, no forced GC) | 360 -> 560, climbing | 286 -> 350-400, flat after 2 min |
+| extended | meshes after the pools filled | 9748, flat | 9547, flat |
+| extreme | shader variants first compiled mid-fight | 16-18 | 4-5 |
+| late | shader variants first compiled mid-fight | 2 | 7-10 |
+| co-op 2 players, 120 enemies (server) | tick p50 / p99 / max (ms) | 1.00 / 5.92 / 26.7 | 0.74 / 3.89 / 9.5 |
+| co-op 4 players, 200 enemies (server) | tick p50 / p99 / max (ms) | 1.87 / 7.55 / 19.5 | 1.34 / 6.60 / 19.6 |
+| co-op | snapshot bytes per player (avg / max), traffic per player | 7.8 KB / 15.2 KB, 205 KB/s (2p) | unchanged (no wire change) |
+
+- Draw calls are unchanged where comparable (early 201/201, extreme 542/544, loot 729/697). In **late** the old code
+  averaged 161 draws, but only when that scenario is the second arena of the browser session; run as the first arena
+  it draws 467 (new: 499) at equal active meshes (4362 / 4462), and the new code has fewer active meshes still waiting
+  for a shader (53 vs 90). The 161 is an artefact of the old code's session history, not a saving the overhaul lost.
+- Mid-fight shader variants: in **late** (second arena of the session) the new code compiles more (7-10 vs 2): first
+  drops of new loot bases and weapon-swap viewmodel parts still build lazily (listed under "Not done yet" in the
+  system note); the old code's count there has the same session-history caveat as its draw calls.
+- The heap growth before was most likely Babylon's log cache: a per-frame warning (walker shield `visibility` on an
+  instance) is prepended to `Logger._LogCache`, one ever-growing string, every frame.
+- Render frames of several seconds remain in software GL when SwiftShader fails the known hit-flash PBR variant and
+  falls back (e2e-m1 "Z"); not a GPU behaviour.
+- Biggest single costs found before (late fight, CPU profile): triangle picks against the merged level shells
+  (crosshair inspect every frame ~2 ms/step, shots, HUD aim), the shield warning (5% of all JS), material dirty scans
+  from scorch fades and loot materials, pick predicates over every mesh, all agents re-planning in one frame, and
+  shader compiles of pooled effects on first use. Details: [`../systems/performance.md`](../systems/performance.md).
+
+## Earlier measurements
+
 > Measured (headless SwiftShader, so GPU numbers are not representative). Re-measure on a real GPU with F3 before drawing conclusions.
 
 - M1 HQ (high preset): ~110 draw calls, 165 active meshes, 0.23 ms simulation per frame. Arena with 9 enemies, high preset with cascaded shadows: ~320 draw calls.

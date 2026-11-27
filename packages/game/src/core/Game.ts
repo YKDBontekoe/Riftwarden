@@ -11,6 +11,8 @@ import { sectorAffinity } from '@riftwarden/rules/combat/elements';
 import { Ray } from '@babylonjs/core/Culling/ray.core';
 import { type AbstractEngine as Engine } from '@babylonjs/core/Engines/abstractEngine';
 import { SceneInstrumentation } from '@babylonjs/core/Instrumentation/sceneInstrumentation';
+import { warmPooledMeshes } from '../visuals/warmPools';
+import { FrameStats, lows } from './frameStats';
 import { DirectionalLight } from '@babylonjs/core/Lights/directionalLight';
 import { PointLight } from '@babylonjs/core/Lights/pointLight';
 import { Color3, Color4 } from '@babylonjs/core/Maths/math.color';
@@ -103,6 +105,7 @@ import type { Input } from './Input';
 import { type Settings, keyLabel, saveSettings } from './settings';
 import { TacticalEnergy, Wallet } from '@riftwarden/rules/core/tactical';
 import { type TutorialHost, TutorialDirector } from './TutorialDirector';
+import { skipPointerPicking } from '../world/pickCandidates';
 
 const TMP = new Vector3();
 /** Sun intensity (directional, range-free). */
@@ -342,7 +345,7 @@ export class Game {
     this.scene = scene;
     scene.clearColor = new Color4(0.2, 0.2, 0.22, 1);
     scene.ambientColor = new Color3(0.04, 0.045, 0.05);
-    scene.skipPointerMovePicking = true;
+    skipPointerPicking(scene);
     scene.enablePhysics(new Vector3(0, -26, 0), new HavokPlugin(true, havok));
 
     const high = settings.quality === 'high';
@@ -807,12 +810,20 @@ export class Game {
     this.player.reduceMotion = s.reduceMotion;
     this.player.shakeScale = s.shake;
     this.weapon.anim.reduceMotion = s.reduceMotion;
-    this.fx.setDensity(s.particles);
-    this.atmosphere.setDensity(s.particles === 'low' ? 0.45 : s.particles === 'medium' ? 0.75 : 1, s.reduceMotion);
+    this.setEffectLoad(this.effectLoad);
     this.post.setOptions({ bloom: s.bloom, reduceMotion: s.reduceMotion });
     sfx.setVolume(s.volume);
     sfx.setMix(s.sfxVolume, s.uiVolume, s.ambienceVolume, s.combatCueVolume);
     saveSettings(s);
+  }
+
+  /** Adaptive quality (client): cosmetic particle density on top of the setting; never gameplay visuals. */
+  effectLoad = 1;
+  setEffectLoad(k: number): void {
+    this.effectLoad = k;
+    const s = this.settings;
+    this.fx.setDensity(s.particles, k);
+    this.atmosphere.setDensity((s.particles === 'low' ? 0.45 : s.particles === 'medium' ? 0.75 : 1) * k, s.reduceMotion);
   }
 
   /** Enemy level scale for armor (same growth as flat item stats at this wave/tier). */
@@ -1329,6 +1340,7 @@ export class Game {
   step(dt: number, fps = 60): void {
     if (this.disposed) return;
     if (Number.isFinite(fps)) this.fpsSmooth += (fps - this.fpsSmooth) * 0.05;
+    if (this.perfOn) this.frames.push(this.engine.getDeltaTime());
     const t0 = performance.now();
     if (this.screen === 'playing' || this.screen === 'defeat') this.update(dt);
     else this.idleAnimate(dt);
@@ -1348,6 +1360,8 @@ export class Game {
   }
   /** Smoothed simulation cost per frame (ms, diagnostics). */
   frameMs = 0;
+  /** Raw frame times while F3 is open (1% / 0.1% lows). */
+  private readonly frames = new FrameStats();
 
   protected idleAnimate(dt: number): void {
     this.dynamics.update(dt, 0);
@@ -1916,10 +1930,7 @@ export class Game {
     for (const mesh of this.weapon.rig.meshes) {
       if (mesh.material) jobs.push(mesh.material.forceCompilationAsync(mesh).catch(() => {}));
     }
-    for (const m of this.scene.meshes) {
-      if (m.isEnabled() || !m.material || !/^(dynPart|ventPlume|ventWarn|volatileCharge)/.test(m.name)) continue;
-      jobs.push(m.material.forceCompilationAsync(m).catch(() => {}));
-    }
+    jobs.push(...warmPooledMeshes(this.scene));
     return Promise.all(jobs);
   }
 
@@ -2272,7 +2283,7 @@ export class Game {
     let projectiles = this.wfx.liveBolts;
     for (const p of this.fx.projectiles) if (p.active) projectiles++;
     return {
-      fps: Math.round(this.fpsSmooth), enemies: this.enemies.count, draws: this.drawCalls, particles: this.fx.particleCount,
+      fps: Math.round(this.fpsSmooth), ...lows(this.frames), load: this.effectLoad, enemies: this.enemies.count, draws: this.drawCalls, particles: this.fx.particleCount,
       towers: this.turrets.turrets.length, projectiles, pending: d.pending, statuses: d.statuses, triggers: d.triggersPerSec,
       dpsPlayer: Math.round(d.dps.weapon), dpsTower: Math.round(d.dps.tower), effects: d.effects, dropped: d.dropped,
       frameMs: Math.round(this.frameMs * 100) / 100, aiMs: Math.round(this.enemies.aiAvg * 100) / 100, telegraphs: this.tele.active, ordnance: this.ordnance.live,

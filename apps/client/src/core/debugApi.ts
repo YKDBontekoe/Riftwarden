@@ -28,6 +28,8 @@ export function debugApi(flow: Flow) {
   return {
     flow,
     sfx,
+    /** HUD snapshot store (UI update checks). */
+    hud: hudStore,
     profile: flow.profile,
     get game() {
       return flow.arena;

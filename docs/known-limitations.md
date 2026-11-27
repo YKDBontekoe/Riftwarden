@@ -6,7 +6,13 @@ Cross-cutting limitations. System-specific gaps are listed under "Not done yet" 
 ## Verification gaps
 
 - Real-GPU frame rate, transition time and look are unmeasured: development runs on headless SwiftShader. Profile with
-  F3 on target hardware. WebGPU stays opt-in (Settings > Renderer, `?webgpu`) until checked on a real GPU.
+  F3 on target hardware (it shows 1% / 0.1% lows and the p99 frame time). WebGPU stays opt-in (Settings > Renderer,
+  `?webgpu`) until checked on a real GPU.
+- Adaptive quality cannot be exercised headless (every SwiftShader frame is over its 250 ms cut-off); only the
+  controller and its wiring are tested. Its feel on real hardware is unverified.
+- Benchmarks (`scripts/bench-perf.cjs`) measure CPU-side simulation exactly; their render times are software GL and
+  not representative of a GPU. The scenarios vary somewhat run to run (async compiles, loot ids), so compare medians of
+  repeated runs.
 - High preset cost (SSR + SSAO + MSAA + 8 lights on PBR) is unmeasured on real GPUs; the Performance preset drops
   SSR/SSAO/shadows/MSAA.
 - No real-device check of mobile (iOS Safari fullscreen/orientation, Android install banner, phone frame rates).

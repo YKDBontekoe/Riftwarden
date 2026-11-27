@@ -28,6 +28,7 @@ import type { ArenaLayout, GateId, Vec2 } from '@riftwarden/rules/world/layout';
 import type { EnemyNavigator } from '@riftwarden/rules/enemies/navigation';
 import { freshMutationState, type MutationState, mutationDeath, setupMutations, updateMutations } from './mutations';
 import { WalkerMotion } from './walkerMotion';
+import { Separation } from './separation';
 
 export interface EnemyContext {
   player: Player;
@@ -265,6 +266,7 @@ interface PendingBlast {
 
 export class EnemyManager {
   readonly active: Enemy[] = [];
+  private readonly separation = new Separation();
   private pool = new Map<EnemyKind, Enemy[]>();
   private hitboxTemplate: Mesh;
   private markMats: Record<string, ReturnType<typeof unlit>>;
@@ -885,29 +887,9 @@ export class EnemyManager {
       return;
     }
     this.nav?.tick(dt);
-    // Separation (n is small; O(n^2) is cheaper than a spatial structure here). Bosses are immovable.
+    // Separation (bosses are immovable): spatial grid for large crowds, same result as the pairwise loop.
     const list = this.active;
-    for (let i = 0; i < list.length; i++) {
-      const a = list[i];
-      for (let j = i + 1; j < list.length; j++) {
-        const b = list[j];
-        if (Math.abs(a.pos.y - b.pos.y) > 2.5) continue;
-        const dx = b.pos.x - a.pos.x;
-        const dz = b.pos.z - a.pos.z;
-        const min = a.def.radius + b.def.radius;
-        const d2 = dx * dx + dz * dz;
-        if (d2 < min * min && d2 > 1e-6) {
-          const d = Math.sqrt(d2);
-          const push = ((min - d) / d) * 0.5 * Math.min(1, hdt * 8);
-          const wa = a.def.role === 'boss' ? 0 : b.def.role === 'boss' ? 2 : 1;
-          const wb = b.def.role === 'boss' ? 0 : a.def.role === 'boss' ? 2 : 1;
-          a.pos.x -= dx * push * wa;
-          a.pos.z -= dz * push * wa;
-          b.pos.x += dx * push * wb;
-          b.pos.z += dz * push * wb;
-        }
-      }
-    }
+    this.separation.apply(list, hdt);
 
     for (let i = list.length - 1; i >= 0; i--) {
       const e = list[i];

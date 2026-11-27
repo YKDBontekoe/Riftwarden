@@ -270,6 +270,7 @@ export class Atmosphere {
   private nextFlash = 6;
   readonly skyMesh: Mesh;
   readonly gateLights: PointLight[] = [];
+  private readonly gateSealed: boolean[] = [];
   /** Static meshes that should appear in environment reflections. */
   readonly envMeshes: AbstractMesh[] = [];
   readonly fogColor = new Color3(...BASE_FOG);
@@ -620,7 +621,7 @@ export class Atmosphere {
     for (let i = 0; i < this.gateLights.length; i++) {
       const l = this.gateLights[i];
       // Rift-lit, not floodlit: the tunnel steel keeps its dark value; the mist carries the glow into the yard.
-      l.intensity = 2.1 + 0.35 * Math.sin(this.time * 7.3 + i * 2) * Math.sin(this.time * 3.1 + i) + flick * 0.6;
+      l.intensity = this.gateSealed[i] ? 0 : 2.1 + 0.35 * Math.sin(this.time * 7.3 + i * 2) * Math.sin(this.time * 3.1 + i) + flick * 0.6;
     }
     return flick;
   }
@@ -658,7 +659,11 @@ export class Atmosphere {
 
   /** M6: gate index 3 (south) is sealed until the secondary access route opens. */
   setGateOpen(index: number, open: boolean): void {
-    this.gateLights[index]?.setEnabled(open);
+    // A sealed gate's light stays enabled at zero intensity: enabling a light mid-run changes every lit mesh's light
+    // list, so every lit material compiled a new shader variant the moment the route opened (a long hitch).
+    this.gateSealed[index] = !open;
+    const l = this.gateLights[index];
+    if (l && !open) l.intensity = 0;
     const ps = this.gateEmbers[index];
     if (!ps) return;
     if (open) ps.start();
