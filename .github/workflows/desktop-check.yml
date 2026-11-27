@@ -1,0 +1,59 @@
+name: Desktop checks
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  check:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            bundle: nsis
+            artifact: windows-x64
+            file: nsis/*.exe
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            bundle: dmg
+            artifact: macos-arm64
+            file: dmg/*.dmg
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            bundle: dmg
+            artifact: macos-x64
+            file: dmg/*.dmg
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
+        with:
+          toolchain: '1.97'
+          targets: ${{ matrix.target }}
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - name: Build desktop installer
+        shell: bash
+        env:
+          VITE_API_URL: https://riftwarden-api.ykdbonte.dev
+          TARGET: ${{ matrix.target }}
+          BUNDLE: ${{ matrix.bundle }}
+        run: |
+          printf '%s\n' '{"bundle":{"createUpdaterArtifacts":false}}' > "$RUNNER_TEMP/tauri-check.json"
+          pnpm --filter @riftwarden/client exec tauri build --target "$TARGET" --bundles "$BUNDLE" --config "$RUNNER_TEMP/tauri-check.json"
+      - name: Upload installer
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: riftwarden-${{ matrix.artifact }}
+          path: apps/client/src-tauri/target/${{ matrix.target }}/release/bundle/${{ matrix.file }}
+          if-no-files-found: error
+          retention-days: 7

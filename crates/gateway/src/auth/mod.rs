@@ -2,6 +2,7 @@
 //! codes, extra passkeys, rename, sign-out. WebAuthn ceremonies keep their state in Redis for five minutes
 //! and are single use.
 
+pub mod desktop;
 pub mod names;
 pub mod recovery;
 pub mod session;
@@ -42,6 +43,9 @@ pub fn webauthn(config: &Config) -> anyhow::Result<Webauthn> {
 
 pub fn routes() -> Router<State> {
     Router::new()
+        .route("/auth/desktop/start", post(desktop::begin))
+        .route("/auth/desktop/approve", post(desktop::approve))
+        .route("/auth/desktop/poll", post(desktop::poll))
         .route("/auth/name", get(name_check))
         .route("/auth/register/start", post(register_start))
         .route("/auth/register/finish", post(register_finish))

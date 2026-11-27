@@ -1,0 +1,29 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Riftwarden",
+  "version": "../../../package.json",
+  "identifier": "dev.ykdbonte.riftwarden",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../../../dist"
+  },
+  "app": {
+    "windows": [{ "title": "Riftwarden", "width": 1280, "height": 720, "minWidth": 800, "minHeight": 600 }],
+    "security": { "csp": "default-src 'self' asset: http://asset.localhost; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: http://asset.localhost data: blob:; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:* ws://127.0.0.1:* https://riftwarden-api.ykdbonte.dev wss://riftwarden-api.ykdbonte.dev https://github.com https://objects.githubusercontent.com; worker-src 'self' blob:;" }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis", "dmg", "app"],
+    "createUpdaterArtifacts": true,
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
+    "windows": { "webviewInstallMode": { "type": "offlineInstaller" } }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDc0NjdCMEExQjQxM0ZDNzgKUldSNC9CTzBvYkJuZEd3MTJSWHBuWTZVRlpIeG5mdllnYy9IbzdlRWZaUHFzK04xcHkvaDVqUlkK",
+      "endpoints": ["https://github.com/YKDBontekoe/Riftwarden/releases/latest/download/latest.json"]
+    }
+  }
+}
