@@ -78,7 +78,7 @@ async function install(p) {
         const sim = [], frame = [], render = [], samples = [];
         let maxEnemies = 0, maxParticles = 0, maxOrd = 0, maxPickups = 0, nan = false, spawned = 0, kills0 = g.kills;
         const spikes = [];
-        let drawSum = 0, activeSum = 0;
+        let drawSum = 0, activeSum = 0, notReadySum = 0;
         const effects0 = new Set(Object.keys(g.scene.getEngine()._compiledEffects || {}));
         for (let i = 0; i < steps; i++) {
           const before = { mats: g.scene.materials.length, meshes: g.scene.meshes.length, kills: g.kills, pickups: g.loot.pickups.length, effects: g.scene.getEngine()._compiledEffects ? Object.keys(g.scene.getEngine()._compiledEffects).length : 0 };
@@ -94,7 +94,15 @@ async function install(p) {
             render.push(t2 - t1);
             frame.push(t2 - t0);
             drawSum += g.drawCalls;
-            activeSum += g.scene.getActiveMeshes().length;
+            const am = g.scene.getActiveMeshes();
+            activeSum += am.length;
+            // Selected for drawing but skipped because the shader is not compiled yet (pop-in): read passively.
+            for (let k = 0; k < am.length; k++) {
+              const m = am.data[k];
+              const src = m.getClassName() === 'InstancedMesh' ? m.sourceMesh : m;
+              const dw = src.subMeshes?.[0]?._getDrawWrapper?.();
+              if (!dw || !dw.effect || !dw.effect.isReady()) notReadySum++;
+            }
           }
           maxEnemies = Math.max(maxEnemies, g.enemies.count);
           maxParticles = Math.max(maxParticles, g.fx.particleCount);
@@ -124,7 +132,7 @@ async function install(p) {
         }
         const newEffects = Object.keys(compiled).filter((k) => !effects0.has(k)).map((k) => ({ users: users.get(compiled[k]) || [], key: k.replace(/\s+/g, ' ') }));
         const oldEffects = [...effects0].map((k) => k.replace(/\s+/g, ' '));
-        return { newEffects, oldEffects, sim, frame, render, spikes, maxEnemies, maxParticles, maxOrd, maxPickups, nan, kills: g.kills - kills0, draws: render.length ? Math.round(drawSum / render.length) : g.drawCalls, activeMeshes: render.length ? Math.round(activeSum / render.length) : g.scene.getActiveMeshes().length, meshes: g.scene.meshes.length, samples };
+        return { newEffects, oldEffects, sim, frame, render, spikes, maxEnemies, maxParticles, maxOrd, maxPickups, nan, kills: g.kills - kills0, draws: render.length ? Math.round(drawSum / render.length) : g.drawCalls, activeMeshes: render.length ? Math.round(activeSum / render.length) : g.scene.getActiveMeshes().length, notReady: render.length ? Math.round(notReadySum / render.length) : 0, meshes: g.scene.meshes.length, samples };
       },
     };
   });
@@ -158,7 +166,7 @@ async function profileStop(cdp, label) {
 }
 
 function report(name, r, extra = {}) {
-  const out = { scenario: name, sim: summary(r.sim), ...(r.frame.length ? { frame: summary(r.frame), render: summary(r.render) } : {}), maxEnemies: r.maxEnemies, maxParticles: r.maxParticles, maxOrdnance: r.maxOrd, maxPickups: r.maxPickups, kills: r.kills, draws: r.draws, activeMeshes: r.activeMeshes, meshes: r.meshes, nan: r.nan, ...extra };
+  const out = { scenario: name, sim: summary(r.sim), ...(r.frame.length ? { frame: summary(r.frame), render: summary(r.render) } : {}), maxEnemies: r.maxEnemies, maxParticles: r.maxParticles, maxOrdnance: r.maxOrd, maxPickups: r.maxPickups, kills: r.kills, draws: r.draws, activeMeshes: r.activeMeshes, notReady: r.notReady, meshes: r.meshes, nan: r.nan, ...extra };
   if (r.samples.length) out.samples = r.samples;
   if (r.spikes && r.spikes.length) out.spikes = r.spikes;
   out.newEffects = r.newEffects.length;

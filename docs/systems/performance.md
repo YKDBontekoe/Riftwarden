@@ -61,7 +61,8 @@ decision: [ADR 0003](../decisions/0003-frame-pacing-adaptive-quality.md).
   new variant at once. The sealed south gate keeps its light enabled at intensity 0 (`visuals/atmosphere.ts`
   `setGateOpen`). Since 8-light materials take the first eight enabled lights, the sealed gate's light now holds its
   slot from the start, as it already did once the gate opened.
-- Never set `visibility` on an `InstancedMesh` (no effect, and Babylon logs a warning each time).
+- Never set `visibility` on an `InstancedMesh` (no effect, and Babylon logs a warning each time). Any per-frame Babylon
+  warning is a leak: `Logger` prepends every message to one cache string (`Logger._LogCache`).
 
 ## Simulation scaling
 
