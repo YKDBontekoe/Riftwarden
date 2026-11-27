@@ -1502,7 +1502,7 @@ export class Game {
 
     if (this.screen === 'defeat') {
       this.defeatT += dt;
-      if (this.defeatT > 2.2 && this.input.locked) this.input.releaseLock();
+      if (this.defeatT > 2.2 && this.input.mouseLocked) this.input.releaseLock();
     }
 
     this.hudT -= dt;

@@ -36,7 +36,7 @@ afterEach(() => vi.unstubAllGlobals());
 describe('Input pointer-lock capture', () => {
   it('uses native capture for look, and releases it on Escape', async () => {
     const { canvas, fire } = fakeDom();
-    let move: (dx: number, dy: number) => void = () => {};
+    let move: (dx: number, dy: number, held: number, pressed: number, released: number, wheel: number) => void = () => {};
     const stop = vi.fn();
     const input = new Input(canvas);
     input.nativeMouse = { start: async (onMove) => { move = onMove; return true; }, stop };
@@ -45,7 +45,7 @@ describe('Input pointer-lock capture', () => {
     await input.requestLock();
     expect(input.captured).toBe(true);
     expect(canvas.requestPointerLock).not.toHaveBeenCalled();
-    move(4, -3);
+    move(4, -3, 0, 0, 0, 0);
     expect([input.mouseDx, input.mouseDy]).toEqual([4, -3]);
     fire('keydown', { code: 'KeyW' });
     expect(input.isDown('KeyW')).toBe(true);
@@ -54,7 +54,7 @@ describe('Input pointer-lock capture', () => {
     expect(input.captured).toBe(false);
     expect(input.isDown('KeyW')).toBe(false);
     expect(onLockChange).toHaveBeenCalledExactlyOnceWith(false);
-    move(5, 5);
+    move(5, 5, 0, 0, 0, 0);
     expect([input.mouseDx, input.mouseDy]).toEqual([0, 0]);
   });
 
@@ -97,6 +97,45 @@ describe('Input pointer-lock capture', () => {
     expect(input.captured).toBe(false);
     expect(stop).toHaveBeenCalledOnce();
     expect(input.onLockChange).toHaveBeenCalledExactlyOnceWith(false);
+  });
+
+  it('delivers native mouse buttons, quick clicks and wheel without depending on DOM events', async () => {
+    const { canvas } = fakeDom();
+    const input = new Input(canvas);
+    let sample: (dx: number, dy: number, held: number, pressed: number, released: number, wheel: number) => void = () => {};
+    input.nativeMouse = { start: async (receive) => { sample = receive; return true; }, stop: () => {} };
+    await input.requestLock();
+    sample(0, 0, 1, 1, 0, 0);
+    expect(input.mouse(0)).toBe(true);
+    expect(input.mousePressed(0)).toBe(true);
+    input.endFrame();
+    expect(input.mouse(0)).toBe(true);
+    sample(0, 0, 0, 0, 1, 0);
+    expect(input.mouse(0)).toBe(false);
+    sample(0, 0, 0, 1, 1, 90);
+    sample(0, 0, 0, 0, 0, 0);
+    expect(input.mouse(0)).toBe(true);
+    expect(input.mousePressed(0)).toBe(true);
+    expect(input.wheel).toBe(1);
+    input.endFrame();
+    expect(input.mouse(0)).toBe(false);
+    sample(0, 0, 4, 4, 0, 0);
+    expect(input.mousePressed(2)).toBe(true);
+  });
+
+  it('does not repeat a consumed native click until it is released', async () => {
+    const { canvas } = fakeDom();
+    const input = new Input(canvas);
+    let sample: (dx: number, dy: number, held: number, pressed: number, released: number, wheel: number) => void = () => {};
+    input.nativeMouse = { start: async (receive) => { sample = receive; return true; }, stop: () => {} };
+    await input.requestLock();
+    sample(0, 0, 1, 1, 0, 0);
+    input.consumeMouse(0);
+    input.endFrame();
+    sample(0, 0, 1, 0, 0, 0);
+    expect(input.mouse(0)).toBe(false);
+    sample(0, 0, 1, 1, 1, 0);
+    expect(input.mousePressed(0)).toBe(true);
   });
   it('is captured as soon as requestLock resolves, before pointerlockchange fires', async () => {
     const { canvas, doc } = fakeDom();

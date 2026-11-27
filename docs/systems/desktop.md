@@ -6,9 +6,10 @@
   `pnpm dev` on :5173). Version comes from the root `package.json`. Bundles: NSIS (Windows, offline WebView installer),
   DMG/app (macOS). CSP in `tauri.conf.json` allows only the app, the local proxy, the production API and GitHub release
   downloads.
-- **macOS controls**: AppKit captures relative mouse movement while the game has control, because WKWebView's pointer
+- **macOS controls**: AppKit captures relative mouse movement, button transitions and wheel input while the game has control, because WKWebView's pointer
   lock can fail. Esc, focus loss and window deactivation release capture and restore the system cursor; Windows and
-  browser clients continue to use pointer lock. Native movement is drained once per rendered frame.
+  browser clients continue to use pointer lock. Native input is drained once per rendered frame; short clicks are retained
+  until a game frame consumes them.
 - **Local API proxy** (`src-tauri/src/main.rs`): at start the app binds an axum server on `127.0.0.1:<random port>`
   under a random path secret. `/{secret}/session` bridges the WebSocket and `/{secret}/*` proxies HTTP to the production
   API, attaching the session cookie, which is kept in the OS keyring (`dev.ykdbonte.riftwarden` / `session`), never in the
@@ -23,7 +24,7 @@
 - **CI**: `.github/workflows/desktop-check.yml` (build check) and `desktop-release.yml` (signed release; needs the updater
   signing key secret; macOS may be ad-hoc signed).
 - **Tests**: `tests/input.test.ts` (capture, movement, release and focus-loss races), `scripts/e2e-desktop-mouse.cjs`
-  (HQ control with a simulated native backend), `src-tauri/src/cors.rs`
+  (HQ control and arena firing with a simulated native backend), `src-tauri/src/cors.rs`
   (credentialed proxy preflight), `tests/desktop-update.test.ts`,
   `crates/gateway/tests/auth.rs` (desktop approval flow).
 - **Not done yet**: native macOS mouse capture needs verification on real hardware; the Linux development environment

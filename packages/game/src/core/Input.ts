@@ -1,5 +1,5 @@
 export interface NativeMouseCapture {
-  start(move: (dx: number, dy: number) => void, lost: () => void): Promise<boolean>;
+  start(sample: (dx: number, dy: number, held: number, pressed: number, released: number, wheel: number) => void, lost: () => void): Promise<boolean>;
   stop(): void;
 }
 
@@ -38,6 +38,8 @@ export class Input {
   private lockAttempt: Promise<void> | null = null;
   nativeMouse: NativeMouseCapture | null = null;
   private nativeLocked = false;
+  private nativeHeld = 0;
+  private nativeSuppressed = 0;
   private captureGeneration = 0;
   /** When the browser's default Escape unlock happened (programmatic exits don't have a cooldown). */
   private unlockedAt = 0;
@@ -73,25 +75,20 @@ export class Input {
     });
     window.addEventListener('touchstart', () => (this.touchAt = performance.now()), { passive: true, capture: true });
     document.addEventListener('mousedown', (e) => {
-      if (!this.captured || e.button > 2 || performance.now() - this.touchAt < 900) return;
+      if (!this.captured || this.nativeLocked || e.button > 2 || performance.now() - this.touchAt < 900) return;
       this.buttons[e.button] = true;
       this.buttonsPressed[e.button] = true;
     });
     document.addEventListener('mouseup', (e) => {
-      if (e.button <= 2) this.buttons[e.button] = false;
+      if (!this.nativeLocked && e.button <= 2) this.buttons[e.button] = false;
     });
     document.addEventListener('contextmenu', (e) => e.preventDefault());
     document.addEventListener(
       'wheel',
       (e) => {
-        if (!this.locked && !this.nativeLocked) return;
+        if (!this.locked || this.nativeLocked) return;
         // Trackpads send many small deltas: accumulate to whole notches (~100 px each).
-        this.wheelAcc += e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY;
-        const steps = Math.trunc(this.wheelAcc / 90);
-        if (steps !== 0) {
-          this.wheel += Math.sign(steps);
-          this.wheelAcc = 0;
-        }
+        this.addWheel(e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY);
       },
       { passive: true },
     );
@@ -118,6 +115,10 @@ export class Input {
     return this.locked || this.nativeLocked || this.forceCapture || this.touch;
   }
 
+  get mouseLocked(): boolean {
+    return this.locked || this.nativeLocked;
+  }
+
   async requestLock(): Promise<void> {
     if (this.touch) {
       this.onEngage();
@@ -142,7 +143,18 @@ export class Input {
       const generation = this.captureGeneration;
       const mouse = this.nativeMouse;
       const acquired = await mouse.start(
-        (dx, dy) => { if (this.nativeLocked) this.look(dx, dy); },
+        (dx, dy, held, pressed, released, wheel) => {
+          if (!this.nativeLocked) return;
+          this.look(dx, dy);
+          this.nativeHeld = held & 7;
+          this.nativeSuppressed &= this.nativeHeld & ~released;
+          for (let i = 0; i < 3; i++) {
+            const bit = 1 << i;
+            if ((pressed & bit) && !(this.nativeSuppressed & bit)) this.buttonsPressed[i] = true;
+            this.buttons[i] = !(this.nativeSuppressed & bit) && (!!(this.nativeHeld & bit) || this.buttonsPressed[i]);
+          }
+          this.addWheel(wheel);
+        },
         () => { if (this.nativeLocked) this.releaseLock(); },
       );
       if (generation !== this.captureGeneration) {
@@ -226,6 +238,17 @@ export class Input {
   /** Consume a button when another mode used the click, including its held state. */
   consumeMouse(button: number): void {
     this.buttons[button] = this.buttonsPressed[button] = false;
+    if (this.nativeLocked) this.nativeSuppressed |= 1 << button;
+  }
+
+  private addWheel(delta: number): void {
+    if (!Number.isFinite(delta)) return;
+    this.wheelAcc += delta;
+    const steps = Math.trunc(this.wheelAcc / 90);
+    if (steps !== 0) {
+      this.wheel += Math.sign(steps);
+      this.wheelAcc = 0;
+    }
   }
 
   /** Touch look: mouse-equivalent pixels, consumed by the next frame. */
@@ -261,6 +284,7 @@ export class Input {
     this.pressedSet.clear();
     this.releasedSet.clear();
     this.buttonsPressed[0] = this.buttonsPressed[1] = this.buttonsPressed[2] = false;
+    if (this.nativeLocked) for (let i = 0; i < 3; i++) this.buttons[i] = !!(this.nativeHeld & (1 << i)) && !(this.nativeSuppressed & (1 << i));
     this.mouseDx = 0;
     this.mouseDy = 0;
     this.wheel = 0;
@@ -269,6 +293,7 @@ export class Input {
   clear(): void {
     this.down.clear();
     this.wheelAcc = 0;
+    this.nativeHeld = this.nativeSuppressed = 0;
     this.setStick(0, 0, false);
     this.buttons[0] = this.buttons[1] = this.buttons[2] = false;
     this.endFrame();
