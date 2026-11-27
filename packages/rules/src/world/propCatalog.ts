@@ -9,7 +9,7 @@ export type PropSpecies =
   | 'utility-box' | 'utility-box-tall' | 'aircon-unit' | 'generator' | 'tyre' | 'shelves' | 'tool-chest' | 'toolbox'
   | 'welding-cart' | 'cardboard-box' | 'extinguisher' | 'oil-tin'
   | 'airduct' | 'pipes' | 'street-lamp' | 'security-light' | 'road-barrier' | 'covered-car' | 'fire-barrel' | 'wheel-rim'
-  | 'searchlight' | 'trash-can';
+  | 'searchlight' | 'trash-can' | 'roller-shutter';
 
 /**
  * Where a species reads right: `floor` = yard clutter at a wall foot, `deck` = larger pieces against a solid out on
@@ -56,6 +56,7 @@ export const PROP_SPECIES: Record<PropSpecies, PropDef> = {
   'wheel-rim': { size: [0.4, 0.4, 0.15], roles: ['floor'], small: true },
   searchlight: { size: [0.17, 0.19, 0.25], roles: ['roof'], small: true },
   'trash-can': { size: [1.85, 0.91, 0.56], roles: ['deck', 'floor'] },
+  'roller-shutter': { size: [3.08, 2.4, 0.3], roles: ['wall'] },
 };
 
 /** One placed prop: position of its footprint centre on the ground (y = standing height), yaw in radians. */

@@ -308,6 +308,24 @@
       "sha256": "ce117bfc8a576a58a09626916c0334d6d834ac3665cecff0d622ca8a3f59465c"
     },
     {
+      "id": "roller-shutter",
+      "kind": "model",
+      "title": "Rollershutter Door",
+      "author": "MP",
+      "source": "https://polyhaven.com/a/rollershutter_door",
+      "triangles": 1104,
+      "dimensionsMm": [
+        3080,
+        300,
+        2400
+      ],
+      "file": "models/roller-shutter.glb",
+      "license": "CC0-1.0",
+      "retrieved": "2026-11-27",
+      "bytes": 354056,
+      "sha256": "1fc4cadfec4ab98295c3834a38c067fef49beba523a0149ecc38b27f9be9eb7a"
+    },
+    {
       "id": "searchlight",
       "kind": "model",
       "title": "Portable Searchlight",

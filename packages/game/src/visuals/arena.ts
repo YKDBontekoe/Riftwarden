@@ -37,7 +37,6 @@ import { buildContainerStack, containerLiveries } from './containerModel';
 import { buildMachineBank, machineRoofSlots } from './machineModel';
 import { buildRailings } from './railing';
 import { arenaGrimeFaces, buildContactGrime, GRIME } from './contactGrime';
-import { PROP_SPECIES } from '@riftwarden/rules/world/propCatalog';
 
 interface GateVisual {
   lane: ReturnType<typeof createPathLight>;
@@ -184,7 +183,7 @@ export class ArenaBuilder {
     placeProps(new TransformNode('arenaProps', this.scene), props);
     // Natural floor-to-wall seams: contact shadow, biome grime / snow drift / soot, wall staining.
     buildContactGrime(this.scene, arenaGrimeFaces(L), GRIME[L.biome ?? 'outpost'], (L.seed ?? 11) >>> 0);
-    if (!(this.scene.getEngine() instanceof NullEngine)) buildFixtureGlow(this.scene, props.filter((p) => PROP_SPECIES[p.species].roles.includes('wall')), L.biome ?? 'outpost');
+    if (!(this.scene.getEngine() instanceof NullEngine)) buildFixtureGlow(this.scene, props.filter((p) => p.species === 'street-lamp' || p.species === 'security-light'), L.biome ?? 'outpost');
 
     this.merge();
 

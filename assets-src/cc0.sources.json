@@ -145,6 +145,11 @@
       "id": "trash-can",
       "polyhaven": "metal_trash_can",
       "tex": 512
+    },
+    {
+      "id": "roller-shutter",
+      "polyhaven": "rollershutter_door",
+      "tex": 1024
     }
   ],
   "textures": [

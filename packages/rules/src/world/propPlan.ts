@@ -178,6 +178,28 @@ export function planProps(L: ArenaLayout, rubble: readonly RubbleSpot[] = [], se
     }
   }
 
+  // Loading-dock shutters flush on the long faces of elevated decks (platform solids are solid plinths).
+  for (const b of L.boxes) {
+    if (b.kind !== 'platform' || b.min[1] > 0.1 || b.max[1] < 3 || full()) continue;
+    const wide = b.max[0] - b.min[0] >= b.max[2] - b.min[2];
+    const run = wide ? b.max[0] - b.min[0] : b.max[2] - b.min[2];
+    const doors = run > 9 ? 2 : run > 4.5 ? 1 : 0;
+    for (const side of [-1, 1]) {
+      if (rand() > 0.75) continue;
+      const face = wide ? (side < 0 ? b.min[2] : b.max[2]) : side < 0 ? b.min[0] : b.max[0];
+      const lo = wide ? b.min[0] : b.min[2];
+      for (let k = 0; k < doors; k++) {
+        const t = lo + (run * (k + 0.5)) / doors + (rand() - 0.5) * 0.6;
+        const off = 0.17;
+        const x = wide ? t : face + side * off;
+        const z = wide ? face + side * off : t;
+        // A ramp landing on this face would run through the door.
+        if (L.ramps.some((r) => x > r.x0 - 1.8 && x < r.x1 + 1.8 && z > r.z0 - 1.8 && z < r.z1 + 1.8)) continue;
+        out.push({ species: 'roller-shutter', x, y: 0, z, yaw: wide ? (side > 0 ? 0 : Math.PI) : side > 0 ? Math.PI / 2 : -Math.PI / 2, scale: 1 });
+      }
+    }
+  }
+
   // Rooftop plant on blocks and container stacks with a usable top.
   // Containers only: blocks are dressed as open transformer bays whose visible top is below the collision box.
   const roofs: Box[] = L.boxes.filter((b) => b.kind === 'container' && b.max[0] - b.min[0] >= 3.1 && b.max[2] - b.min[2] >= 2.2);

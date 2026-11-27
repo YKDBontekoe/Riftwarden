@@ -45,6 +45,7 @@ const URLS: Record<PropSpecies, string> = {
   'wheel-rim': new URL('../assets/cc0/models/wheel-rim.glb', import.meta.url).href,
   searchlight: new URL('../assets/cc0/models/searchlight.glb', import.meta.url).href,
   'trash-can': new URL('../assets/cc0/models/trash-can.glb', import.meta.url).href,
+  'roller-shutter': new URL('../assets/cc0/models/roller-shutter.glb', import.meta.url).href,
 };
 
 /** How a scene lights its props (set once by the arena / HQ before placing any). */
