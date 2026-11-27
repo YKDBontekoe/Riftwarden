@@ -23,6 +23,7 @@ scripts/e2e-mobile.cjs     MOBILE browser suite (emulated landscape phone, real 
 scripts/e2e-pwa.cjs        MOBILE: production-build suite with its own static server (installability, offline start, update waits for RELOAD)
 apps/client/src/ui/router.tsx, ui/hud/live.tsx, ui/app.css, sw-plugin.ts   V2: routes, signal HUD bindings, Tailwind entry, service worker generator
 apps/client/src/account/   V2: passkey API + WebAuthn, account store, AccountPanel, sync.ts (account <-> profile namespace, guest adoption, SessionClient)
+apps/client/src-tauri/src/  DESKTOP: main.rs (shell and local API proxy), cors.rs (credentialed proxy CORS and preflight test)
 packages/game/src/net/SessionClient.ts, NetClient.ts   V2: session socket (sync, change notices, co-op tunnel); co-op client over that tunnel
 packages/game/src/progression/SyncJournal.ts            V2: offline log per profile namespace (genesis + entries)
 packages/rules/src/progression/sync.ts, runRules.ts, runCheck.ts   V2: replay, run entries, run validation (loot stream replay, ceilings)
