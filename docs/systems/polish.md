@@ -7,4 +7,4 @@
 - **Mood.** `MoodDirector.update(dt, Game.moodInput())` runs next to `post.update` in `Game` and `ClientGame`. It owns the scene fog colour. The replica does not mirror `survival.event`, so event moods only show on the host/single player; tier, boss presence and reactor health work everywhere.
 - **Effects.** Burn marks last 22 s and shrink over the last 5 s; atmosphere particle rates follow the `particles` setting.
 - **HQ.** `StationFocus` (ring + push-in; skipped with reduced motion), `AmbientDrones` on `ambientNav` (core rooms only, hover 2.5 m, keep 2.4 m from the player).
-- **Not done yet:** hit-react knock/stagger, emissive breathing, boss secondary motion, living station screens, music bed, placed-machine emitters, HQ fog/window shaft, lamp shaft revival, medium-quality SSAO.
+- **Not done yet:** hit-react knock/stagger, emissive breathing, boss secondary motion, living station screens, placed-machine emitters, HQ fog/window shaft, lamp shaft revival, medium-quality SSAO. The music bed landed with the CC0 art pass ([cc0-art-music.md](cc0-art-music.md)).

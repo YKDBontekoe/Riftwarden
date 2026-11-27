@@ -1,6 +1,7 @@
 // Browser automation API (`window.__rift` with `?test`): state, fixed-step simulation, debug actions.
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { sfx } from '@riftwarden/game/audio/Sfx';
+import { music } from '@riftwarden/game/audio/Music';
 import { buildWeaponModel } from '@riftwarden/game/weapons/model';
 import { rarity, type RarityId } from '@riftwarden/rules/loot/rarity';
 import { generateUnique, uniqueDef } from '@riftwarden/rules/loot/uniques';
@@ -28,6 +29,8 @@ export function debugApi(flow: Flow) {
   return {
     flow,
     sfx,
+    /** Adaptive score state (track weights, layer levels, intensity). */
+    music,
     /** HUD snapshot store (UI update checks). */
     hud: hudStore,
     profile: flow.profile,

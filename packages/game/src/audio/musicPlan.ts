@@ -56,7 +56,8 @@ export function musicTarget(i: MusicInput): MusicTarget {
     if (i.boss) tracks.boss = 1;
     else tracks.combat = 1;
     layers.pulse = 0.45 + intensity * 0.55;
-    layers.drums = smooth(0.3, 0.65, intensity);
+    // Combat always has a beat; it hits harder as the fight heats up.
+    layers.drums = 0.4 + 0.6 * smooth(0.3, 0.7, intensity);
     layers.riser = smooth(0.55, 1, 1 - clamp01(i.reactorFrac ?? 1)) * 0.8;
   } else {
     tracks.prep = 1;

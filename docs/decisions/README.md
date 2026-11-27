@@ -22,3 +22,4 @@ below. Never rewrite an accepted ADR's decision: supersede it with a new one and
 | [0001](0001-architecture-v2.md) | Rust gateway as the only backend, TypeScript rules in Node workers, Protobuf over one WebSocket | Accepted (2026-11-21) |
 | [0002](0002-agent-docs-layout.md) | Agent guide in `AGENTS.md` (imported by `CLAUDE.md`), details in `docs/` | Accepted (2026-11-27) |
 | [0003](0003-frame-pacing-adaptive-quality.md) | Variable-step client frames, `dt`-correct rates, adaptive quality (no fixed-step + interpolation rewrite) | Accepted (2026-11-27) |
+| [0004](0004-cc0-asset-pipeline.md) | Third-party CC0 assets via a licence-checking fetch script (own GLB packer, ffmpeg), manifest + hash test, lazy loading | Accepted (2026-11-27) |

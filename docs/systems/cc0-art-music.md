@@ -1,0 +1,90 @@
+# CC0 art and music pass
+
+Third-party CC0 assets (Poly Haven models and textures, OpenGameArt music) give each biome its own look and the game a
+score. Pipeline and licence rules: [ADR 0004](../decisions/0004-cc0-asset-pipeline.md); provenance:
+[`docs/assets/credits.md`](../assets/credits.md). Sky, sun and post-processing are unchanged by this pass.
+
+## Sources
+
+- `assets-src/cc0.sources.json` lists every asset; `node scripts/fetch-cc0.mjs [ids] [--force]` downloads, checks the
+  licence (Poly Haven is CC0; an OpenGameArt page must list CC0 as its only licence), converts and rewrites
+  `packages/game/src/assets/cc0/manifest.json` and the credits file. Needs curl and ffmpeg (libwebp, libmp3lame).
+- Output: `models/*.glb` (1K or 512 px WebP textures embedded with `EXT_texture_webp`), `sets/<id>-{albedo,normal,arm}.webp`
+  (full surface sets; ground and masonry normals carry the height map in alpha), `textures/<id>-detail.webp` (high-passed
+  scans in Babylon's detail map layout), `music/*.mp3` (-18 LUFS, 96 kbit/s).
+
+## Arena surfaces (`visuals/biomeSurfaces.ts`)
+
+- `applyBiomeSurfaces` replaces the procedural maps of the palette's `floor`, `concrete`, `panel` and `rust` with the
+  biome's scanned set (`BIOME_SURFACES`): outpost = damaged concrete yard, cast concrete walls, red painted steel;
+  cryo = packed snow, cast slabs, blue plate; foundry = scorched deck, factory brick, corroded sheet. Ground tiles
+  every 5-6 m (the ground plane's UVs span the yard); box-projected solids keep their metre tiles (masonry 3 m,
+  cladding 4 m).
+- High quality turns on parallax occlusion (`depth` per surface) from the height in the normal alpha.
+- The maps share the palette's ARM layout, so swapping never changes shader defines. The old procedural maps are
+  disposed. Headless (`NullEngine`) skips all of it.
+- Scanned micro detail (`visuals/scanDetail.ts`) is layered on graphite, black steel and bare metal (paint scan) and on
+  the HQ deck, walls and ceiling. Not on white trims or enamel: the paint streaks read as wood grain there.
+
+## Props
+
+- Catalogue `rules/world/propCatalog.ts` (species, footprint, roles, `longZ`), loader `visuals/propLibrary.ts`:
+  lazy glTF loader plus `EXT_texture_webp` (deep imports: every extension must be imported), one container per
+  species and scene, instanced, pivot moved to the footprint centre on the floor, never pickable, no physics,
+  frozen world matrices. `configureProps` sets lights / IBL / albedo per scene; `setPropShadowSink` hands loaded parts
+  to the sun's shadow generator (queued until it exists). The co-op server and tests skip loading.
+- Arena placement `rules/world/propPlan.ts` (pure, seed `seed ^ 0xa55e7`, never shifts rubble or gameplay rolls):
+  wall-foot clusters in ~85% of the bays between perimeter braces, wall-mounted lamps every other bay, deck clusters
+  on the long sides of blocks / machinery / containers, rooftop plant (air-con, ducts, cabinets, searchlights). Every
+  floor prop passes the rubble plan's `spotBlocked` (lanes with margin, reactor, spawn, reserved, vents, ramps, inside
+  solids) and keeps clear of rubble. Per-biome recipes (foundry fire barrels and gas, cryo crates and cars, outpost
+  drums and barriers). Cap `MAX_ARENA_PROPS` = 160.
+- Wall lamps get fake light (`visuals/fixtureGlow.ts`): additive splash down the wall, glowing lens, floor pool, one
+  merged mesh each, coloured per biome. No real lights (budget).
+- HQ clutter (`home/hqClutter.ts`, pure): per room, seeded wall slots offer small clusters (tool chests, shelves, boxes,
+  welding cart, drums in reclamation, freight in the launch bay) clear of portals and station consoles (relocated
+  consoles included). HomeBase keeps up to five per room whose footprint passes `footprintClear` (3x3 downward ray
+  picks from just above the cluster height): the room's own racks, shelves and scrap are never overlapped. HQ walls
+  have a 0.3 m plinth and a rail at ~0.8 m, so clusters stand 0.36 m (low) / 0.5 m (tall) off the wall line.
+
+## Contact grime (`visuals/contactGrime.ts`)
+
+Every grounded solid's open faces (arena) and every HQ wall base get three merged strips: a tight contact shadow, a
+ragged floor band (outpost mud, cryo snow drift, foundry soot, HQ light dust) and staining up the wall. Lit,
+alpha-blended, no depth write, z-offset under decals. Removes the clean CG line where floor meets wall.
+
+## Music (`audio/musicPlan.ts` [pure], `audio/Music.ts`)
+
+- Four CC0 loops: HQ (Airy, SRG774), prep (Pulse, SRG774), combat (Fight or Flee, Tsorthan Grove), boss
+  (Hunter-class Lifeform, vitalezzz). `musicTarget` gives one track weight per state (boss wins in combat) and
+  layer levels: pulse (sawtooth bass, minor pentatonic, root per run seed), drums (always on in combat, harder with
+  intensity), riser (low reactor). Intensity grows with enemies alive / cap, events, boss, reactor damage, kill chain.
+- Runtime on the shared `Sfx` context: `musicBus` -> tactical lowpass -> master. Loops crossfade (~2.5 s) and
+  overlap 2 s at the wrap; muted tracks stop. Layers are scheduled on the audio clock (25 ms timer, 0.12 s
+  lookahead, 118 BPM). Stingers (synthesised): wave start / clear, checkpoint, boss in (ducks), boss down,
+  legendary+ drop (`jackpot`), defeat. `music.update` runs in `Game`, `ClientGame` (replicated phase) and `HomeBase`.
+- Setting `musicVolume` (default 0.6, optional field, no settings version bump); Settings > Audio > Music.
+- `window.__rift.music.state` exposes track weights, layers and intensity.
+
+## Budget
+
+28.6 MB in the repository. Props and loops are not precached by the service worker (`apps/client/sw-plugin.ts`
+`LAZY`); surface sets are. An arena downloads only its biome's sets (~3-5 MB) and the props it places.
+
+## Tests
+
+- `tests/asset-manifest.test.ts`: every file listed, CC0, hash and size match, 32 MB budget, every species and track
+  has a file. `tests/prop-plan.test.ts`: deterministic, dense, off lanes / reactor / spawn, per-biome dressing, rubble
+  stream unchanged, HQ clutter inside rooms and clear of doors and consoles. `tests/music.test.ts`: one track per
+  state, calm HQ, monotone intensity, deterministic patterns, `dt`-correct easing, setting sanitize.
+- Browser: music state HQ -> prep -> combat checked through `__rift.music.state`; screenshot reviews of the three
+  biomes and the HQ rooms (SwiftShader, not representative of GPU colour).
+
+## Not done yet
+
+- Real-GPU look check (exposure: the storm-dusk arenas still read dark, especially wall faces in shadow).
+- Loops were picked by licence and metadata, not auditioned; swap in `assets-src/cc0.sources.json`.
+- Props have no collision: the drone and shots pass through them (like rubble). Large deck pieces (cars, dumpsters)
+  are the most noticeable.
+- No fire / smoke on foundry fire barrels; no real light from wall lamps.
+- Player-built Architect rooms get no clutter or grime.
