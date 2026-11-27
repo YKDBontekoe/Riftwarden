@@ -11,9 +11,9 @@ const manifest = JSON.parse(readFileSync(join(DIR, 'manifest.json'), 'utf8')) as
 };
 /**
  * Repository budget for third-party assets. All are lazily loaded and never precached; an arena downloads only
- * its own biome's surface sets (~3-5 MB) plus the props and loops it uses.
+ * its own biome's surface sets (~3-5 MB), its HDRI (~1.5 MB) plus the props and loops it uses.
  */
-const BUDGET = 32 * 1024 * 1024;
+const BUDGET = 40 * 1024 * 1024;
 
 function walk(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {

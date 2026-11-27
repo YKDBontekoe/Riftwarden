@@ -29,12 +29,23 @@ score. Pipeline and licence rules: [ADR 0004](../decisions/0004-cc0-asset-pipeli
 - Scanned micro detail (`visuals/scanDetail.ts`) is layered on graphite, black steel and bare metal (paint scan) and on
   the HQ deck, walls and ceiling. Not on white trims or enamel: the paint streaks read as wood grain there.
 
+## Sky light and sun shafts (`visuals/skyLight.ts`)
+
+- Each biome lights its PBR surfaces from a CC0 Poly Haven HDRI (`assets/cc0/hdri/*.hdr`, 1K, prefiltered on load
+  through `HDRCubeTexture`) as `scene.environmentTexture`; the visible sky dome is unchanged. The old in-scene cube
+  capture is the fallback when the file cannot load (offline before first use; `.hdr` is not precached).
+- High quality adds volumetric sun shafts: an additive, unfogged disc far along `Atmosphere.sunDir` feeds a
+  `VolumetricLightScatteringPostProcess` (ratio 0.5, 60 samples), so gantries and stacks cut shafts through the haze.
+- MSAA is 4x on High (Babylon's TAA disables itself while the camera moves, which an FPS camera always does).
+
 ## Biome light (`visuals/biomeLight.ts`)
 
 `applyBiomeLight` (called once by `Game`) sets per biome: camera grade exposure / contrast (the mood director still adds
 boss / event / reactor moods on top), the `stormFill` hemispheric light's sky colour, ground bounce and intensity, IBL
 strength on the palette and props, and a sun multiplier. Outpost = warm dusk with dusty bounce (exposure 1.46),
-cryo = cold daylight with snow bounce (1.4), foundry = furnace orange welling up from below (1.3). No light is added
+cryo = cold daylight with snow bounce, foundry = furnace orange welling up from below. With the HDRI as real sky
+light the fill is back to ~0.6-1.0 and exposure ~1.0-1.2; the ground's IBL is 55% of the rest (rough concrete and
+snow mirrored the blue dusk sky as frost). No light is added
 (frame budget). Black steel albedo is lifted x1.9 so panels stop reading as holes. Lightning flashes now add to the
 biome sun (`Game.sunBase`) instead of resetting it to the bare constant.
 

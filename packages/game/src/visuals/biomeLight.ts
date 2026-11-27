@@ -22,9 +22,9 @@ export interface BiomeLight {
 }
 
 export const BIOME_LIGHT: Record<BiomeId, BiomeLight> = {
-  outpost: { exposure: 1.4, contrast: 1.06, fill: 2.6, sky: [0.74, 0.76, 0.84], ground: [0.4, 0.33, 0.26], env: 1.6, sun: 1.25 },
-  cryo: { exposure: 1.34, contrast: 1.04, fill: 2.8, sky: [0.76, 0.86, 1], ground: [0.58, 0.64, 0.72], env: 1.6, sun: 1.2 },
-  foundry: { exposure: 1.32, contrast: 1.1, fill: 2.4, sky: [0.66, 0.52, 0.44], ground: [0.55, 0.24, 0.09], env: 1.5, sun: 1.15 },
+  outpost: { exposure: 1.18, contrast: 1.1, fill: 1.0, sky: [0.74, 0.76, 0.84], ground: [0.4, 0.33, 0.26], env: 1.0, sun: 1.25 },
+  cryo: { exposure: 1.05, contrast: 1.08, fill: 0.85, sky: [0.76, 0.86, 1], ground: [0.58, 0.64, 0.72], env: 1.0, sun: 1.2 },
+  foundry: { exposure: 1.15, contrast: 1.12, fill: 0.95, sky: [0.66, 0.52, 0.44], ground: [0.55, 0.24, 0.09], env: 1.0, sun: 1.15 },
 };
 
 /** Applies the biome's light to an arena scene; returns the sun multiplier (on top of the biome's `sunMul`). */
@@ -39,12 +39,14 @@ export function applyBiomeLight(scene: Scene, post: PostFx, P: Palette, biome: B
     fill.groundColor.set(...L.ground);
   }
   for (const m of P.lit) m.environmentIntensity = L.env;
+  // Concrete and snow are rough and mostly see the ground around them: full sky reflection read as frost.
+  P.floor.environmentIntensity = L.env * 0.55;
   // Black steel panels were tuned for a dim scene; under brighter fill they read as holes. Lift to dark grey.
   P.steel.albedoColor.scaleInPlace(2.6);
   // Dark painted steel, not polished metal: as metal it only mirrored the dusk sky and read as a void.
   P.steel.metallic = 0.25;
   // Bare steel (pipes, rails, ladders) read as white plastic under the stronger fill: weathered galvanised instead.
-  P.metal.albedoColor.set(0.46, 0.47, 0.48);
+  P.metal.albedoColor.set(0.38, 0.39, 0.4);
   // Painted trims (vent frames, bands) glared white under the fill: worn off-white.
   P.white.albedoColor.set(0.32, 0.32, 0.3);
   P.metal.roughness = 1.25;

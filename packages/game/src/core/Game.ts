@@ -52,6 +52,7 @@ import { enemyContacts } from '../visuals/EnemyContacts';
 import { createSunShadows } from '../arena/shadows';
 import { setPropShadowSink } from '../visuals/propLibrary';
 import { applyBiomeLight } from '../visuals/biomeLight';
+import { addSunShafts, applySkyLight } from '../visuals/skyLight';
 import { CORE_BEHAVIORS } from '../enemies/coreBehaviors';
 import { DROP_SOURCES, type DropSourceId } from '@riftwarden/rules/loot/drops';
 import { equipmentModifiers, weaponDefFor } from '@riftwarden/rules/loot/equipment';
@@ -393,6 +394,7 @@ export class Game {
     this.weapon = new Weapon(scene, weaponDef, this.player, cfg.loadout.weapon);
     scene.setRenderingAutoClearDepthStencil(1, true, true, true);
     this.post = new PostFx(scene, engine, this.player.camera, high, true);
+    if (high) addSunShafts(scene, this.player.camera, this.atmosphere.sunDir, biomeOf(this.layout).sun.map((v) => v * 0.9) as [number, number, number]);
     this.sunBase = SUN * biomeOf(this.layout).sunMul * applyBiomeLight(scene, this.post, this.pal, this.layout.biome ?? 'outpost');
     this.moon.intensity = this.sunBase;
     this.mood = new MoodDirector(scene, this.moon, this.post);
@@ -467,7 +469,7 @@ export class Game {
     this.director = new Director(this, cfg.seed ?? hashRunSeed(cfg.run.id));
 
     // Reflections/ambient: capture the finished static scene once into a prefiltered cube map.
-    this.atmosphere.captureEnvironment([...arena.meshes, ...this.reactor.root.getChildMeshes()], this.pal.lit, high);
+    applySkyLight(scene, this.layout.biome ?? 'outpost', high, () => this.atmosphere.captureEnvironment([...arena.meshes, ...this.reactor.root.getChildMeshes()], this.pal.lit, high));
 
     const game = this;
     this.enemyCtx = {

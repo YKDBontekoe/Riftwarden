@@ -281,5 +281,19 @@
       "polyhaven": "rusty_metal_04",
       "res": "1k"
     }
+  ],
+  "hdris": [
+    {
+      "id": "outpost-sky",
+      "polyhaven": "industrial_sunset_02"
+    },
+    {
+      "id": "cryo-sky",
+      "polyhaven": "snowy_field"
+    },
+    {
+      "id": "foundry-sky",
+      "polyhaven": "industrial_sunset"
+    }
   ]
 }

@@ -12,7 +12,7 @@ export const PUBLIC_FILES = ['./icons/icon-192.png', './icons/icon-512.png', './
  * and a missing one only leaves a prop out or the score silent. Surface textures stay precached, since scene
  * readiness waits on them.
  */
-const LAZY = /\.(glb|mp3)$/;
+const LAZY = /\.(glb|mp3|hdr)$/;
 
 export function serviceWorker(): Plugin {
   return {
