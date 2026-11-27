@@ -46,11 +46,11 @@ export interface GrimeLook {
 
 export const GRIME: Record<'outpost' | 'cryo' | 'foundry' | 'hq', GrimeLook> = {
   // Mud, oil and wind-blown grit.
-  outpost: { floor: [0.2, 0.16, 0.12], floorAlpha: 0.85, floorWidth: 1.6, wall: [0.08, 0.065, 0.05], wallAlpha: 0.7, wallHeight: 1.3, ao: 0.75, aoWidth: 0.55, roughness: 0.9 },
+  outpost: { floor: [0.15, 0.125, 0.1], floorAlpha: 0.7, floorWidth: 1.6, wall: [0.08, 0.065, 0.05], wallAlpha: 0.7, wallHeight: 1.3, ao: 0.75, aoWidth: 0.55, roughness: 0.9 },
   // Snow drifts piled against every wall, a little slush staining above them.
   cryo: { floor: [0.82, 0.87, 0.93], floorAlpha: 0.95, floorWidth: 1.9, wall: [0.74, 0.8, 0.88], wallAlpha: 0.5, wallHeight: 0.45, ao: 0.55, aoWidth: 0.4, roughness: 0.75 },
   // Ash (pale, so it reads on the dark deck) over soot staining on the walls.
-  foundry: { floor: [0.24, 0.21, 0.19], floorAlpha: 0.85, floorWidth: 1.7, wall: [0.03, 0.026, 0.024], wallAlpha: 0.8, wallHeight: 1.8, ao: 0.8, aoWidth: 0.6, roughness: 0.95 },
+  foundry: { floor: [0.13, 0.115, 0.105], floorAlpha: 0.7, floorWidth: 1.7, wall: [0.03, 0.026, 0.024], wallAlpha: 0.8, wallHeight: 1.8, ao: 0.8, aoWidth: 0.6, roughness: 0.95 },
   // A maintained interior: just a contact shadow and a little dust at the skirting.
   hq: { floor: [0.16, 0.16, 0.17], floorAlpha: 0.3, floorWidth: 0.7, wall: [0.12, 0.12, 0.13], wallAlpha: 0.22, wallHeight: 0.5, ao: 0.6, aoWidth: 0.32, roughness: 0.8 },
 };
@@ -105,40 +105,45 @@ function strips(faces: readonly GrimeFace[], width: number, wall: boolean, lift:
   const pos: number[] = [];
   const uv: number[] = [];
   const nrm: number[] = [];
+  const col: number[] = [];
   const idx: number[] = [];
   for (const f of faces) {
     const y = (f.y ?? 0) + lift;
     const len = Math.hypot(f.x1 - f.x0, f.z1 - f.z0);
     if (len < 0.2) continue;
-    // Overhang the ends a little so corners overlap instead of leaving a clean notch.
     const ax = (f.x1 - f.x0) / len;
     const az = (f.z1 - f.z0) / len;
-    const ext = wall ? 0 : width * 0.5;
-    const p0 = [f.x0 - ax * ext, f.z0 - az * ext];
-    const p1 = [f.x1 + ax * ext, f.z1 + az * ext];
+    // Floor strips run past both ends and fade out there (vertex alpha), so they never end in a hard,
+    // tile-like edge; wall strips stop at the corner.
+    const ext = wall ? 0 : width * 0.7;
+    const cols: [number, number][] = wall ? [[0, 1], [len, 1]] : [[-ext, 0], [0, 1], [len, 1], [len + ext, 0]];
     const base = pos.length / 3;
-    const u1 = (len + ext * 2) / 4;
     const off = 0.015; // just off the surface
-    if (wall) {
-      for (const [p, u] of [[p0, 0], [p1, u1]] as const) {
-        pos.push(p[0] + f.nx * off, y, p[1] + f.nz * off, p[0] + f.nx * off, y + width, p[1] + f.nz * off);
-        uv.push(u, 0, u, 1);
+    for (const [t, a] of cols) {
+      const px = f.x0 + ax * t;
+      const pz = f.z0 + az * t;
+      const u = (t + ext) / 4;
+      if (wall) {
+        pos.push(px + f.nx * off, y, pz + f.nz * off, px + f.nx * off, y + width, pz + f.nz * off);
         nrm.push(f.nx, 0, f.nz, f.nx, 0, f.nz);
-      }
-    } else {
-      for (const [p, u] of [[p0, 0], [p1, u1]] as const) {
-        pos.push(p[0] + f.nx * off, y, p[1] + f.nz * off, p[0] + f.nx * (width + off), y, p[1] + f.nz * (width + off));
-        uv.push(u, 0, u, 1);
+      } else {
+        pos.push(px + f.nx * off, y, pz + f.nz * off, px + f.nx * (width + off), y, pz + f.nz * (width + off));
         nrm.push(0, 1, 0, 0, 1, 0);
       }
+      uv.push(u, 0, u, 1);
+      col.push(1, 1, 1, a, 1, 1, 1, a);
     }
-    idx.push(base, base + 1, base + 2, base + 1, base + 3, base + 2, base, base + 2, base + 1, base + 1, base + 2, base + 3);
+    for (let k = 0; k < cols.length - 1; k++) {
+      const b = base + k * 2;
+      idx.push(b, b + 1, b + 2, b + 1, b + 3, b + 2, b, b + 2, b + 1, b + 1, b + 2, b + 3);
+    }
   }
   const vd = new VertexData();
   vd.positions = pos;
   vd.indices = idx;
   vd.normals = nrm;
   vd.uvs = uv;
+  vd.colors = col;
   return vd;
 }
 
@@ -158,6 +163,7 @@ export function buildContactGrime(scene: Scene, faces: readonly GrimeFace[], loo
     const mesh = new Mesh(name, scene);
     data.applyToMesh(mesh);
     mesh.material = mat;
+    mesh.hasVertexAlpha = true;
     mesh.isPickable = false;
     mesh.receiveShadows = true;
     mesh.freezeWorldMatrix();
