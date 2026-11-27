@@ -11,6 +11,7 @@ import { sectorAffinity } from '@riftwarden/rules/combat/elements';
 import { Ray } from '@babylonjs/core/Culling/ray.core';
 import { type AbstractEngine as Engine } from '@babylonjs/core/Engines/abstractEngine';
 import { SceneInstrumentation } from '@babylonjs/core/Instrumentation/sceneInstrumentation';
+import { warmPooledMeshes } from '../visuals/warmPools';
 import { DirectionalLight } from '@babylonjs/core/Lights/directionalLight';
 import { PointLight } from '@babylonjs/core/Lights/pointLight';
 import { Color3, Color4 } from '@babylonjs/core/Maths/math.color';
@@ -103,6 +104,7 @@ import type { Input } from './Input';
 import { type Settings, keyLabel, saveSettings } from './settings';
 import { TacticalEnergy, Wallet } from '@riftwarden/rules/core/tactical';
 import { type TutorialHost, TutorialDirector } from './TutorialDirector';
+import { skipPointerPicking } from '../world/pickCandidates';
 
 const TMP = new Vector3();
 /** Sun intensity (directional, range-free). */
@@ -342,7 +344,7 @@ export class Game {
     this.scene = scene;
     scene.clearColor = new Color4(0.2, 0.2, 0.22, 1);
     scene.ambientColor = new Color3(0.04, 0.045, 0.05);
-    scene.skipPointerMovePicking = true;
+    skipPointerPicking(scene);
     scene.enablePhysics(new Vector3(0, -26, 0), new HavokPlugin(true, havok));
 
     const high = settings.quality === 'high';
@@ -1916,10 +1918,7 @@ export class Game {
     for (const mesh of this.weapon.rig.meshes) {
       if (mesh.material) jobs.push(mesh.material.forceCompilationAsync(mesh).catch(() => {}));
     }
-    for (const m of this.scene.meshes) {
-      if (m.isEnabled() || !m.material || !/^(dynPart|ventPlume|ventWarn|volatileCharge)/.test(m.name)) continue;
-      jobs.push(m.material.forceCompilationAsync(m).catch(() => {}));
-    }
+    jobs.push(...warmPooledMeshes(this.scene));
     return Promise.all(jobs);
   }
 

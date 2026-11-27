@@ -6,6 +6,7 @@ import { type AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh';
 import { type Scene } from '@babylonjs/core/scene';
 import type { Enemy, EnemyHitboxMeta } from '../enemies/EnemyManager';
 import type { ShotRequest } from '../combat/Weapon';
+import { metadataPicker } from '../world/pickCandidates';
 
 /** One enemy struck by a shot, in ray order. */
 export interface ShotStrike {
@@ -48,13 +49,13 @@ export function traceShot(scene: Scene, enemies: readonly Enemy[], r: ShotReques
     RAY.origin.copyFrom(r.origin);
     RAY.direction.copyFrom(r.dir);
     RAY.length = r.range;
-    const wall = scene.pickWithRay(RAY, (m: AbstractMesh) => !!m.metadata?.surface && m.isEnabled(), false);
+    const wall = metadataPicker(scene).pickWithRay(RAY, (m: AbstractMesh) => !!m.metadata?.surface && m.isEnabled(), false);
     return { struck, wall: wall?.hit ? wall : null };
   }
   RAY.origin.copyFrom(r.origin);
   RAY.direction.copyFrom(r.dir);
   RAY.length = r.range;
-  const hits = scene.multiPickWithRay(RAY, (m: AbstractMesh) => (!!m.metadata?.surface || !!m.metadata?.enemy) && m.isEnabled()) ?? [];
+  const hits = metadataPicker(scene).multiPickWithRay(RAY, (m: AbstractMesh) => (!!m.metadata?.surface || !!m.metadata?.enemy) && m.isEnabled()) ?? [];
   hits.sort((a, b) => a.distance - b.distance);
   const wall = hits.find((h) => !!(h.pickedMesh!.metadata as { surface?: string }).surface) ?? null;
   const maxDist = wall ? wall.distance : r.range;
@@ -150,7 +151,7 @@ export function coneCandidates(scene: Scene, enemies: readonly Enemy[], r: ShotR
     LOS_RAY.origin.copyFrom(r.origin);
     LOS_RAY.direction.copyFrom(d.scaleInPlace(1 / len));
     LOS_RAY.length = Math.max(0, len - k.e.def.bodyR * k.e.def.scale);
-    const block = scene.pickWithRay(LOS_RAY, (m: AbstractMesh) => !!m.metadata?.surface && m.isEnabled(), true);
+    const block = metadataPicker(scene).pickWithRay(LOS_RAY, (m: AbstractMesh) => !!m.metadata?.surface && m.isEnabled(), true);
     if (block?.hit) continue;
     visible.push(k);
   }

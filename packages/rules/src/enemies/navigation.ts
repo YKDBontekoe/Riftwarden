@@ -31,6 +31,12 @@ export const NAV_TUNING = {
   breachScale: 4,
   /** Minimum time between breach hits (s). */
   breachMin: 0.7,
+  /**
+   * Agents re-planned per frame after a field change (tower placed or wrecked, survival retarget). The rest keep
+   * following their previous path until their turn: with 250 machines one change re-planned everyone in one frame
+   * (15-50 ms). At 60 Hz the last of 250 agents re-routes ~8 frames (130 ms) later.
+   */
+  replansPerFrame: 32,
 };
 
 export interface NavTower {
@@ -66,6 +72,8 @@ export class EnemyNavigator {
   readonly ground: NavGrid;
   readonly air: NavGrid;
   private syncT = 0;
+  /** Re-plans left this frame (reset by `tick`). */
+  private replans = NAV_TUNING.replansPerFrame;
   /** Breach hits dealt this run (statistics / tests). */
   breaches = 0;
 
@@ -111,6 +119,7 @@ export class EnemyNavigator {
 
   /** Per-frame bookkeeping (hostile time). */
   tick(hdt: number): void {
+    this.replans = NAV_TUNING.replansPerFrame;
     this.syncT -= hdt;
     if (this.syncT <= 0) {
       this.syncT = NAV_TUNING.syncEvery;
@@ -118,10 +127,17 @@ export class EnemyNavigator {
     }
   }
 
-  /** Re-plan an agent whose field changed since its path was made. Returns true when the path was replaced. */
+  /**
+   * Re-plan an agent whose field changed since its path was made. Returns true when the path was replaced. Field
+   * changes are spread over frames (`replansPerFrame`); a forced re-plan (`navV = -1`) is never deferred.
+   */
   refresh(e: NavAgent): boolean {
     const g = this.grid(e.kind);
     if (e.navV === g.version) return false;
+    if (e.navV !== -1) {
+      if (this.replans <= 0) return false;
+      this.replans--;
+    }
     e.navV = g.version;
     if (e.seg >= e.path.length) return false; // already at the reactor
     const pts = g.pathFrom(e.pos.x, e.pos.z);

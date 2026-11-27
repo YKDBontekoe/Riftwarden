@@ -621,7 +621,7 @@ export class Effects {
     d.mesh.rotation.y = Math.random() * Math.PI * 2;
     d.mesh.scaling.set(size, 1, size);
     d.life = 26;
-    d.mat.alpha = 1;
+    d.mesh.visibility = 1;
   }
 
   /** color: 0 = player (white-blue), 1 = turret (cyan), 2 = hostile (orange) */
@@ -780,7 +780,9 @@ export class Effects {
     for (const d of this.scorches) {
       if (d.life <= 0) continue;
       d.life -= dt;
-      d.mat.alpha = Math.min(1, d.life / 6) * 0.92;
+      // Fade with mesh.visibility (same shader term as material alpha): an alpha write marks the material dirty, which
+      // scans every mesh in the scene, every frame, per decal.
+      d.mesh.visibility = Math.min(1, d.life / 6) * 0.92;
       if (d.life <= 0) d.mesh.setEnabled(false);
     }
   }

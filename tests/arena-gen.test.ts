@@ -4,7 +4,7 @@ import { distToBoxXZ } from '@riftwarden/rules/world/geometry';
 import { ARENA, type GateId } from '@riftwarden/rules/world/layout';
 import { KIT } from '@riftwarden/rules/player/movement';
 import { NAV, NavGrid } from '@riftwarden/rules/world/navgrid';
-import { EnemyNavigator, FLYERS, type NavAgent } from '@riftwarden/rules/enemies/navigation';
+import { EnemyNavigator, FLYERS, NAV_TUNING, type NavAgent } from '@riftwarden/rules/enemies/navigation';
 import { recycleRefund, repairCost, towerMaxHp } from '@riftwarden/rules/towers/durability';
 
 const GATES: GateId[] = ['north', 'east', 'west', 'south'];
@@ -215,6 +215,40 @@ describe('breaching + durability rules', () => {
     expect(nav.sync()).toBe(true);
     expect(nav.refresh(e)).toBe(true);
     expect(e.seg).toBe(1);
+  });
+
+  it('spreads re-plans after a field change over frames; forced re-plans are never deferred', () => {
+    const towers: { id: number; x: number; z: number; radius: number; blocking: boolean }[] = [];
+    const L = generateArena(4040);
+    const nav = new EnemyNavigator(L, { towers: () => towers, breach: () => {} });
+    const s = L.routes.east.points[0];
+    const crowd = Array.from({ length: 100 }, () => {
+      const e = agent({ pos: { x: s.x, z: s.z }, path: nav.pathFrom('walker', s, 'east') });
+      e.navV = nav.ground.version;
+      return e;
+    });
+    const mid = L.routes.east.points[1];
+    towers.push({ id: 1, x: (s.x + mid.x) / 2, z: (s.z + mid.z) / 2, radius: 1.1, blocking: true });
+    expect(nav.sync()).toBe(true);
+    const per = NAV_TUNING.replansPerFrame;
+    let frames = 0;
+    while (crowd.some((e) => e.navV !== nav.ground.version)) {
+      nav.tick(1 / 60);
+      const n = crowd.filter((e) => nav.refresh(e)).length;
+      expect(n).toBeLessThanOrEqual(per);
+      frames++;
+    }
+    expect(frames).toBe(Math.ceil(100 / per));
+    // Budget spent this frame: a forced re-plan still happens.
+    const forced = agent({ pos: { x: s.x, z: s.z }, path: [{ x: s.x, z: s.z }, { x: s.x, z: s.z }] });
+    forced.navV = -1;
+    nav.tick(1 / 60);
+    for (let i = 0; i < per; i++) {
+      const e = crowd[i];
+      e.navV = nav.ground.version - 1;
+      nav.refresh(e);
+    }
+    expect(nav.refresh(forced)).toBe(true);
   });
 
   it('durability numbers', () => {

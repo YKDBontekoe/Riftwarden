@@ -139,7 +139,9 @@ export class LootField {
     holo.parent = root;
     holo.position.y = HOLO_HEIGHT;
     const glow = this.glow.get(r.id)!;
-    const { model, own } = this.placeModel(item, holo);
+    // The item model goes under its own node: built now, or on a following frame when several drops land at once.
+    const model = new TransformNode('lootSpin', this.scene);
+    model.parent = holo;
     const k = this.kit;
     const ring = k.part('torusThin', glow, root, { pos: [0, 0.045, 0], scale: [0.88, 0.3, 0.88], shadow: false });
     k.part('cyl6', this.P.graphite, root, { pos: [0, 0.03, 0], scale: [0.62, 0.06, 0.62], shadow: false });
@@ -169,7 +171,7 @@ export class LootField {
       holo,
       ring,
       model,
-      own,
+      own: null,
       motes: r.index >= 3 ? this.motes(ground, r.id, r.index) : null,
       flightT: 0,
       from: from.clone(),
@@ -180,7 +182,22 @@ export class LootField {
     holo.position.set(from.x - ground.x, from.y - ground.y, from.z - ground.z);
     for (const m of root.getChildMeshes()) m.isPickable = false;
     this.pickups.push(p);
+    if (this.builtThisFrame++ === 0) this.buildModel(p);
+    else this.pendingModels.push(p);
     return p;
+  }
+
+  /**
+   * Model builds per frame: a drop's model costs 10-80 ms (geometry, rim hull, materials), more in a crowded scene, so
+   * a multi-kill that drops several items builds the first at once and the rest one per frame (a few frames of a
+   * hologram without its model while it is still in flight) instead of stalling one frame for all of them.
+   */
+  private builtThisFrame = 0;
+  private readonly pendingModels: Pickup[] = [];
+
+  private buildModel(p: Pickup): void {
+    p.own = this.placeModel(p.item, p.model);
+    for (const m of p.model.getChildMeshes()) m.isPickable = false;
   }
 
   /** Longest side of a dropped model (metres). */
@@ -225,7 +242,7 @@ export class LootField {
   }
 
   /** The drop's model under `holo`: an owned rolled model for rare+ weapons, else template instances. */
-  private placeModel(item: ItemInstance, holo: TransformNode): { model: TransformNode; own: ItemModel | null } {
+  private placeModel(item: ItemInstance, holo: TransformNode): ItemModel | null {
     const look = lookOf(item);
     const r = rarity(item.rarity);
     const tilt = item.category === 'weapon' ? 0.28 : 0.12;
@@ -236,7 +253,7 @@ export class LootField {
       own.root.rotation.set(pitch, 0, tilt);
       rimHull(this.scene, own, this.rimMat(item.rarity), RIM_WIDTH, `lootRim${this.nextId}`);
       this.detailedBuilds++;
-      return { model: own.root, own };
+      return own;
     }
     const t = this.template(look);
     const node = new TransformNode('lootModel', this.scene);
@@ -248,7 +265,7 @@ export class LootField {
       inst.parent = node;
       inst.isPickable = false;
     }
-    return { model: node, own: null };
+    return null;
   }
 
   /** Rising motes around epic+ drops (emitter-positioned: see the particle notes in docs/systems/destruction-vfx.md). */
@@ -279,6 +296,12 @@ export class LootField {
   }
   /** Animate drops in flight, hover and spin, blink expiring pickups. Real time. */
   update(dt: number): void {
+    this.builtThisFrame = 0;
+    const next = this.pendingModels.shift();
+    if (next) {
+      this.builtThisFrame++;
+      this.buildModel(next);
+    }
     for (const p of this.pickups) {
       p.t += dt;
       if (p.flightT < FLIGHT) {
@@ -309,6 +332,8 @@ export class LootField {
   remove(p: Pickup): void {
     const i = this.pickups.indexOf(p);
     if (i >= 0) this.pickups.splice(i, 1);
+    const q = this.pendingModels.indexOf(p);
+    if (q >= 0) this.pendingModels.splice(q, 1);
     p.motes?.dispose(false);
     p.root.dispose(false, false);
     p.own?.dispose();
