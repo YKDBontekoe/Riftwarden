@@ -168,7 +168,7 @@ export class ArenaBuilder {
     new ArenaFloor({ scene: this.scene, add: (m, mat, s) => this.add(m, mat, s) }, this.pal, this.layout).build();
     // Weathering: rubble piles, scattered debris and wreckage (visual only, planned off every lane).
     const rubble = planRubble(L);
-    new RubbleBuilder({ scene: this.scene, add: (m, mat, s) => this.add(m, mat, s) }, { concrete: P.debris, rust: P.rust, graphite: P.graphite, enamel: P.enamel }, true).build(rubble);
+    new RubbleBuilder({ scene: this.scene, add: (m, mat, s) => this.add(m, mat, s) }, { concrete: P.debris, rust: P.rust, graphite: P.graphite, enamel: P.steel }, true).build(rubble);
     // Scanned CC0 props (drums, crates, rooftop plant): visual only, planned off lanes and rubble like the debris.
     configureProps(this.scene, { lights: 8, environment: BIOME_LIGHT[L.biome ?? 'outpost'].env, albedo: 0.82 });
     const props = planProps(L, rubble);
@@ -211,27 +211,39 @@ export class ArenaBuilder {
     body.shape = shape;
   }
 
-  /** Thin concrete wall (mazes, chicanes, the bastion ring, pylons): kick plate, cap, ribs and a dim marker line. */
+  /**
+   * Thin concrete wall (mazes, chicanes, the bastion ring, pylons) built like precast panel walling: ~3 m panels
+   * with recessed joints, a slightly proud cap and a flush plinth, steel tie plates over the joints. No neon.
+   */
   private buildBarrier(b: Box): void {
     const P = this.pal;
     const [x0, , z0] = b.min;
     const [x1, y1, z1] = b.max;
     const alongX = x1 - x0 >= z1 - z0;
     const run = alongX ? x1 - x0 : z1 - z0;
-    this.box(x0, 0, z0, x1, y1 - 0.22, z1, P.concrete, 'wall');
-    this.box(x0 - 0.05, y1 - 0.22, z0 - 0.05, x1 + 0.05, y1, z1 + 0.05, P.graphite, 'wall');
-    this.box(x0 - 0.04, 0, z0 - 0.04, x1 + 0.04, 0.42, z1 + 0.04, P.graphite, 'wall');
-    if (run < 2.2) return; // pylons / bastion blocks: plain
-    // Steel ribs every ~3 m on both faces and a dim marker line under the cap (reads at distance and in the dark).
-    for (let t = 1.4; t < run - 0.6; t += 3.1) {
-      if (alongX) this.box(x0 + t - 0.12, 0.42, z0 - 0.09, x0 + t + 0.12, y1 - 0.22, z1 + 0.09, P.metal, 'wall');
-      else this.box(x0 - 0.09, 0.42, z0 + t - 0.12, x1 + 0.09, y1 - 0.22, z0 + t + 0.12, P.metal, 'wall');
+    const a0 = alongX ? x0 : z0;
+    // Core (collision-sized, the joints recess into it) and cap.
+    const seg = (s0: number, s1: number, y0: number, ya: number, grow: number, mat: Material) => alongX
+      ? this.box(s0, y0, z0 - grow, s1, ya, z1 + grow, mat, 'wall')
+      : this.box(x0 - grow, y0, s0, x1 + grow, ya, s1, mat, 'wall');
+    seg(a0, a0 + run, 0, y1, -0.04, P.steel); // dark backing, seen only in the joints
+    const panels = Math.max(1, Math.round(run / 3));
+    const w = run / panels;
+    for (let k = 0; k < panels; k++) {
+      const s0 = a0 + k * w + (k ? 0.025 : 0);
+      const s1 = a0 + (k + 1) * w - (k < panels - 1 ? 0.025 : 0);
+      seg(s0, s1, 0.06, y1 - 0.16, 0, P.concrete);
     }
-    if (alongX) this.box(x0 + 0.3, y1 - 0.5, z0 - 0.03, x1 - 0.3, y1 - 0.42, z1 + 0.03, P.orangeDim, null);
-    else this.box(x0 - 0.03, y1 - 0.5, z0 + 0.3, x1 + 0.03, y1 - 0.42, z1 - 0.3, P.orangeDim, null);
+    seg(a0 - 0.02, a0 + run + 0.02, y1 - 0.16, y1, 0.035, P.concrete); // cap
+    seg(a0, a0 + run, 0, 0.06, 0.01, P.concrete); // plinth
+    if (run < 2.2) return;
+    // Tie plates across the joints, low and high.
+    for (let k = 1; k < panels; k++) {
+      const t = a0 + k * w;
+      for (const y of [0.45, y1 - 0.55]) seg(t - 0.09, t + 0.09, y, y + 0.16, 0.012, P.graphite);
+    }
   }
 
-  /** Shipping-container stack: one shell per 2.6 m level (colour per level), corrugation ribs, rails, door frame. */
   private liveries: Material[] | null = null;
 
   /** Real ISO containers (containerModel.ts) over the collision box, one per level. */
@@ -297,7 +309,8 @@ export class ArenaBuilder {
         };
         const [left, right] = trim(x0, x1);
         const [front, back] = trim(z0, z1);
-        this.box(left, y0, front, right, y1, back, P.steel, 'wall');
+        // Cast concrete tunnel walls (black steel read as a flat void in daylight).
+        this.box(left, y0, front, right, y1, back, P.concrete, 'wall');
         const extendX = right - left < back - front ? 0.045 : 0;
         const extendZ = extendX > 0 ? 0 : 0.045;
         this.box(left - extendX, 2.0, front - extendZ, right + extendX, 2.15, back + extendZ, P.orangeDim, null);
@@ -525,7 +538,7 @@ export class ArenaBuilder {
       { id: 'south', pos: new Vector3(0, 0, -H), yaw: Math.PI },
     ];
     for (const f of frames) {
-      const lights = unlit(this.scene, `gateSignal:${f.id}`, [1.35, 0.36, 0.08], { twoSided: true });
+      const lights = unlit(this.scene, `gateSignal:${f.id}`, [0.8, 0.22, 0.05], { twoSided: true });
       const root = new TransformNode('gate', this.scene);
       root.position.copyFrom(f.pos);
       root.rotation.y = f.yaw;

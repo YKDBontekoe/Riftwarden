@@ -104,27 +104,38 @@ interface SurfaceLook {
   /** Parallax occlusion depth (UV units) from the height packed in the normal map's alpha; high quality only. */
   depth?: number;
 }
+
+/**
+ * Per-set PBR corrections. Some scans mark painted steel as bare metal (metal_plate_02 averages 0.91 metal) or are
+ * very glossy (blue plate, 0.28 roughness): with an IBL captured from a dusk scene those render near-black, as
+ * mirrors of dark surroundings. Painted steel is a dielectric: metal factor down, roughness up.
+ */
+const SET_PBR: Partial<Record<SurfaceSetId, { metal: number; rough: number }>> = {
+  'cryo-casing': { metal: 0.12, rough: 1.1 },
+  'cryo-metal': { metal: 1, rough: 1.9 },
+  'foundry-casing': { metal: 0.6, rough: 1 },
+};
 export const BIOME_SURFACES: Record<BiomeId, { ground: SurfaceLook & { tile: number }; masonry: SurfaceLook; cladding: SurfaceLook; casing: SurfaceLook; rust: SurfaceLook }> = {
   outpost: {
     ground: { set: 'outpost-ground', tint: [1.05, 1.02, 0.98], normal: 1, tile: 5, depth: 0.045 },
     masonry: { set: 'outpost-masonry', tint: [0.8, 0.82, 0.84], normal: 0.9, depth: 0.03 },
-    cladding: { set: 'outpost-metal', tint: [0.86, 0.8, 0.78], normal: 0.7 },
+    cladding: { set: 'cryo-casing', tint: [0.82, 0.8, 0.76], normal: 0.7 },
     casing: { set: 'outpost-casing', tint: [0.62, 0.66, 0.62], normal: 0.8 },
-    rust: { set: 'shared-rust', tint: [1, 1, 1], normal: 0.8 },
+    rust: { set: 'foundry-casing', tint: [0.85, 0.8, 0.75], normal: 0.8 },
   },
   cryo: {
     ground: { set: 'cryo-ground', tint: [0.93, 0.97, 1.04], normal: 0.9, tile: 6, depth: 0.04 },
-    masonry: { set: 'cryo-masonry', tint: [0.86, 0.9, 0.95], normal: 0.8, depth: 0.03 },
+    masonry: { set: 'outpost-masonry', tint: [0.78, 0.84, 0.92], normal: 0.9, depth: 0.03 },
     cladding: { set: 'cryo-metal', tint: [0.95, 1, 1.05], normal: 0.7 },
     casing: { set: 'cryo-casing', tint: [0.6, 0.64, 0.7], normal: 0.8 },
-    rust: { set: 'shared-rust', tint: [0.8, 0.84, 0.9], normal: 0.8 },
+    rust: { set: 'foundry-casing', tint: [0.75, 0.78, 0.84], normal: 0.8 },
   },
   foundry: {
     ground: { set: 'foundry-ground', tint: [0.78, 0.72, 0.68], normal: 1.1, tile: 5, depth: 0.05 },
     masonry: { set: 'foundry-masonry', tint: [0.82, 0.74, 0.7], normal: 1, depth: 0.04 },
     cladding: { set: 'foundry-metal', tint: [0.78, 0.74, 0.72], normal: 0.8 },
     casing: { set: 'foundry-casing', tint: [0.72, 0.66, 0.62], normal: 0.9 },
-    rust: { set: 'shared-rust', tint: [0.9, 0.78, 0.7], normal: 0.9 },
+    rust: { set: 'foundry-casing', tint: [0.9, 0.8, 0.72], normal: 0.9 },
   },
 };
 
@@ -150,9 +161,10 @@ function apply(m: PBRMaterial, scene: Scene, look: SurfaceLook, scale: number, h
   maps.normal.level = look.normal;
   m.metallicTexture = maps.arm;
   m.albedoColor.set(...look.tint);
-  // ARM carries the real roughness and metal: the factors pass it through unchanged.
-  m.metallic = 1;
-  m.roughness = 1;
+  // ARM carries the real roughness and metal; the factors correct scans that mislabel paint as metal.
+  const fix = SET_PBR[look.set];
+  m.metallic = fix?.metal ?? 1;
+  m.roughness = fix?.rough ?? 1;
   if (high && look.depth) {
     // Real relief in joints, cracks and gravel without extra geometry (the scan's height map, steep-parallax).
     m.useParallax = true;
@@ -227,7 +239,8 @@ export function scannedMaterial(scene: Scene, name: string, id: SurfaceSetId, ti
   maps.normal.level = normal;
   m.metallicTexture = maps.arm;
   m.albedoColor.set(...tint);
-  m.metallic = 1;
-  m.roughness = 1;
+  const fix = SET_PBR[id];
+  m.metallic = fix?.metal ?? 1;
+  m.roughness = fix?.rough ?? 1;
   return m;
 }

@@ -10,6 +10,20 @@ import type { Palette } from './materials';
 import { loftData, smoothLatheData } from './sculpt';
 import { rimeSurface } from './rimeSurface';
 import { biomeWeathering } from './biomeWeathering';
+import { buildSubstation } from './substationModel';
+import { PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
+
+/** Brown glazed porcelain (insulator bushings): glossy dielectric. */
+function porcelainMaterial(scene: Scene): PBRMaterial {
+  const m = new PBRMaterial('porcelain', scene);
+  m.albedoColor = new Color3(0.22, 0.1, 0.05);
+  m.metallic = 0;
+  m.roughness = 0.18;
+  m.usePhysicalLightFalloff = false;
+  m.maxSimultaneousLights = 8;
+  return m;
+}
 
 /** What the dressing needs from the arena builder: merged-by-material boxes and meshes. */
 export interface DressingHost {
@@ -28,6 +42,7 @@ type Axis = 'x' | 'y' | 'z';
 export class ArenaDressing {
   private n = 0;
   private frost: Material | null = null;
+  private porcelain: Material | null = null;
 
   constructor(private h: DressingHost, private P: Palette, private L: ArenaLayout) {}
 
@@ -165,37 +180,9 @@ export class ArenaDressing {
       this.pipe('y', span - 0.22, span - 0.13, cx, cz, 2.35, P.enamel, 'wall');
       return;
     }
-    // Each substation has a continuous cast shell resting on a recessed plinth.
-    // The longitudinal cooling drum sits between the two end castings.
-    const depth = wide ? z1 - z0 : x1 - x0;
-    const shell = (name: string, rows: number[][], mat: Material, position: number, scale = 1) => {
-      const mesh = new Mesh(name, this.h.scene);
-      loftData(rows.map(([t,w,h,v]) => ({t: t * scale + position, w, h, v, n: 4.6})), wide ? 'x' : 'z', 48).applyToMesh(mesh);
-      mesh.position.set(cx, y0, cz);
-      this.h.add(mesh, mat, 'wall');
-    };
-    const shellHalf = depth / 2;
-    const halfRun = run / 2;
-    const h = y1 - y0;
-    shell('transformerBed', [[-halfRun + 0.08,shellHalf-0.08,0.37,0.37],[-halfRun+0.24,shellHalf,0.43,0.43],
-      [halfRun-0.22,shellHalf,0.43,0.43],[halfRun-0.08,shellHalf-0.08,0.37,0.37]], P.concrete, 0);
-    shell('transformerVessel', [[-halfRun+0.2,shellHalf-0.5,1.21,2.05],[-halfRun+0.6,shellHalf-0.16,1.56,2.2],
-      [halfRun-0.6,shellHalf-0.16,1.56,2.2],[halfRun-0.2,shellHalf-0.5,1.21,2.05]], P.graphite, 0);
-    for (const side of [-1,1]) {
-      shell('transformerCheek', [[0,shellHalf-0.10,h*0.42,h*0.51],[0.2,shellHalf+0.02,h*0.45,h*0.52],
-        [0.76,shellHalf+0.01,h*0.44,h*0.55],[1.18,shellHalf-0.09,h*0.36,h*0.57]],
-        P.panel, side * halfRun, -side);
-    }
-    for (let bay = -2; bay <= 2; bay++) {
-      const center = bay * (run - 3.15) / 5;
-      shell('exchangerFin', [[-0.12,shellHalf-0.02,h*0.385,h*0.50],[-0.06,shellHalf+0.02,h*0.40,h*0.50],
-        [0.06,shellHalf+0.02,h*0.40,h*0.50],[0.12,shellHalf-0.02,h*0.385,h*0.50]], bay === -2 ? P.enamel : P.metal, center);
-    }
-    const axis = wide ? 'x' : 'z';
-    for (const side of [-1, 1]) {
-      if (wide) this.pipe(axis, x0+0.55,x1-0.55, h-0.45,cz+side*0.56,0.2,P.graphite,'wall');
-      else this.pipe(axis,z0+0.55,z1-0.55,cx+side*0.56,h-0.45,0.2,P.graphite,'wall');
-    }
+    // A real transformer bay (substationModel.ts) instead of a lofted shell with flat end caps.
+    this.porcelain ??= porcelainMaterial(this.h.scene);
+    buildSubstation(this.h, b, { concrete: P.concrete, tank: P.graphite, fins: P.graphite, steel: P.metal, porcelain: this.porcelain, hazard: P.enamel });
   }
 
   // ------------------------------------------------------------------ gate tunnels

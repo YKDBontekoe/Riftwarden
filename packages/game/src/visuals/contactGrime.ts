@@ -57,8 +57,8 @@ export const GRIME: Record<'outpost' | 'cryo' | 'foundry' | 'hq', GrimeLook> = {
 
 /** Ragged falloff mask: opaque at v = 0 (the seam), breaking up into patches toward v = 1. */
 function falloffTexture(scene: Scene, name: string, seed: number, ragged: number) {
-  const W = 512;
-  const H = 128;
+  const W = 1024;
+  const H = 256;
   const { c, ctx } = canvas(W, H);
   const img = ctx.createImageData(W, H);
   for (let y = 0; y < H; y++)
@@ -68,7 +68,8 @@ function falloffTexture(scene: Scene, name: string, seed: number, ragged: number
       // Periodic in u, so the strip tiles along any wall length.
       const n = fbm(u, v * 0.25, 8, 4, seed) * 0.7 + vnoise(u * 64, v * 16, 64, seed + 7, 16) * 0.3;
       const edge = 1 - v - (n - 0.5) * ragged;
-      const a = Math.max(0, Math.min(1, edge * 1.6)) ** 1.6;
+      // Soft, wide falloff: a hard alpha edge stair-steps into visible pixels at a metre-wide strip.
+      const a = Math.max(0, Math.min(1, edge * 1.25)) ** 2.2;
       const i = (y * W + x) * 4;
       img.data[i] = img.data[i + 1] = img.data[i + 2] = 255;
       img.data[i + 3] = a * 255;

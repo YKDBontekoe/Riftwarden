@@ -11,7 +11,7 @@ import { type RubbleSpot, spotBlocked } from './rubblePlan';
  * - wall-foot clusters in most bays between the perimeter braces (drums, crates, dumpsters, parked cars...);
  * - wall-mounted lamps and floodlights high on the perimeter faces;
  * - deck clusters leaning on the long sides of blocks, machinery banks and container stacks;
- * - rooftop plant (air-con, ducts, cabinets, searchlights) on blocks and container stacks.
+ * - rooftop plant (air-con, ducts, cabinets, searchlights) on container stacks.
  * Each biome has its own recipes, so the dressing carries the biome identity together with its surfaces.
  * Own seed stream (`seed ^ 0xa55e7`), so adding props never shifts rubble, decals or any gameplay roll.
  */
@@ -179,7 +179,8 @@ export function planProps(L: ArenaLayout, rubble: readonly RubbleSpot[] = [], se
   }
 
   // Rooftop plant on blocks and container stacks with a usable top.
-  const roofs: Box[] = L.boxes.filter((b) => (b.kind === 'block' || b.kind === 'container') && b.max[0] - b.min[0] >= 3.1 && b.max[2] - b.min[2] >= 2.2);
+  // Containers only: blocks are dressed as open transformer bays whose visible top is below the collision box.
+  const roofs: Box[] = L.boxes.filter((b) => b.kind === 'container' && b.max[0] - b.min[0] >= 3.1 && b.max[2] - b.min[2] >= 2.2);
   for (const b of roofs) {
     if (rand() > 0.8 || full()) continue;
     const wide = b.max[0] - b.min[0] >= b.max[2] - b.min[2];
