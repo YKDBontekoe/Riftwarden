@@ -48,8 +48,5 @@ export function applyBiomeLight(scene: Scene, post: PostFx, P: Palette, biome: B
   // Painted trims (vent frames, bands) glared white under the fill: worn off-white.
   P.white.albedoColor.set(0.32, 0.32, 0.3);
   P.metal.roughness = 1.25;
-  // Decorative emissive strips (wall bars, machine slots, rings) were tuned to carry a dark scene; in a lit one they
-  // read as arcade neon. Real plant has small indicators, so they drop well below bloom threshold.
-  for (const m of [P.cyanDim, P.orangeDim, P.cyanGlow, P.whiteGlow]) m.emissiveColor.scaleInPlace(0.42);
   return L.sun;
 }

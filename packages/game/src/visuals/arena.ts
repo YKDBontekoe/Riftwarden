@@ -291,11 +291,11 @@ export class ArenaBuilder {
       }
       if (alongX) {
         this.box(x0, y1 + 0.98, Math.min(r0, r1), x1, y1 + 1.08, Math.max(r0, r1), P.metal, null);
-        this.box(x0, y1, Math.min(e, e + inward * 0.3), x1, y1 + 0.012, Math.max(e, e + inward * 0.3), P.orangeDim, null);
+        this.box(x0, y1, Math.min(e, e + inward * 0.3), x1, y1 + 0.012, Math.max(e, e + inward * 0.3), P.decorOrange, null);
         this.collider(new Vector3((x0 + x1) / 2, y1 + 0.55, (r0 + r1) / 2), new Vector3(x1 - x0, 1.1, 0.12));
       } else {
         this.box(Math.min(r0, r1), y1 + 0.98, z0, Math.max(r0, r1), y1 + 1.08, z1, P.metal, null);
-        this.box(Math.min(e, e + inward * 0.3), y1, z0, Math.max(e, e + inward * 0.3), y1 + 0.012, z1, P.orangeDim, null);
+        this.box(Math.min(e, e + inward * 0.3), y1, z0, Math.max(e, e + inward * 0.3), y1 + 0.012, z1, P.decorOrange, null);
         this.collider(new Vector3((r0 + r1) / 2, y1 + 0.55, (z0 + z1) / 2), new Vector3(0.12, 1.1, z1 - z0));
       }
     }
@@ -327,7 +327,7 @@ export class ArenaBuilder {
         this.box(left, y0, front, right, y1, back, P.concrete, 'wall');
         const extendX = right - left < back - front ? 0.045 : 0;
         const extendZ = extendX > 0 ? 0 : 0.045;
-        this.box(left - extendX, 2.0, front - extendZ, right + extendX, 2.15, back + extendZ, P.orangeDim, null);
+        this.box(left - extendX, 2.0, front - extendZ, right + extendX, 2.15, back + extendZ, P.decorOrange, null);
         break;
       }
       case 'platform': {
@@ -389,7 +389,7 @@ export class ArenaBuilder {
         this.box(x0, y0, z0, x1, y1, z1, P.panel, 'wall');
         this.box(x0 - 0.035, y0, z0, x1 + 0.035, y0 + 0.31, z1, P.graphite, null);
         this.box(x0 - 0.035, y1 - 0.32, z0, x1 + 0.035, y1, z1, P.steel, null);
-        this.box(x0 - 0.04, y1 - 0.29, z0 + 0.16, x1 + 0.04, y1 - 0.19, z1 - 0.16, P.cyanGlow, null);
+        this.box(x0 - 0.04, y1 - 0.29, z0 + 0.16, x1 + 0.04, y1 - 0.19, z1 - 0.16, P.decorBright, null);
         break;
       }
       case 'block':
@@ -524,7 +524,7 @@ export class ArenaBuilder {
     const ring = MeshBuilder.CreateTorus('plaza', { diameter: 15, thickness: 0.12, tessellation: 64 }, this.scene);
     ring.position.y = 0.01;
     ring.scaling.y = 0.1;
-    this.add(ring, P.cyanDim, null);
+    this.add(ring, P.decorCyan, null);
   }
 
   private buildGates(decals: ArenaDecals): void {
@@ -545,7 +545,7 @@ export class ArenaBuilder {
         const m = createBeveledBox('gatePart', w, h, d, Math.min(w, h, d, 0.32) * 0.32, this.scene);
         m.rotation.y = f.yaw;
         m.position = Vector3.TransformCoordinates(new Vector3(x, y, z), root.getWorldMatrix());
-        this.add(m, mat, mat === lights || mat === P.orangeDim || mat === P.whiteGlow ? null : 'wall');
+        this.add(m, mat, mat === lights || mat === P.decorOrange || mat === P.whiteGlow ? null : 'wall');
         return m;
       };
       root.computeWorldMatrix(true);
@@ -619,7 +619,7 @@ export class ArenaBuilder {
       rotor.material = lights;
       const counterRotor = segmentedRing(this.scene, 'gateRotorInner', 3.19, 0.04, 20, 0.35);
       counterRotor.parent = frame;
-      counterRotor.material = P.orangeDim;
+      counterRotor.material = P.decorOrange;
       const lane = createPathLight(this.scene, `hostileLane:${f.id}`, this.layout.routes[f.id].points,
         this.layout.laneHalfWidth, new Color3(...biomeOf(this.layout).lane), true);
       this.gates.set(f.id, { lane, rotor, counterRotor, lights, charge: 0.4, flash: 0 });
@@ -645,7 +645,7 @@ export class ArenaBuilder {
       for (let i = -Math.floor((H - 8) / 32); i <= Math.floor((H - 8) / 32); i++) {
         const z = i * 32;
         this.gantryBeam(x, 11.39, z, 1.7, 1.4, 1.7, P.steel);
-        this.box(x - 0.88, 11.8, z - 0.88, x + 0.88, 11.94, z + 0.88, this.relayLight, null);
+        this.box(x - 0.88, 11.8, z - 0.88, x + 0.88, 11.94, z + 0.88, P.decorCyan, null); // hub status band, dim
         decals.socket(x, 11.25, z, 0.86, 0.86, 1.25);
       }
       for (let z = -H; z < H; z += 4) {
@@ -653,7 +653,7 @@ export class ArenaBuilder {
         brace.position.set(x, 12.73, z + 2);
         brace.rotation.x = (Math.round((z + H) / 4) % 2 === 0 ? 1 : -1) * Math.atan2(1.03, 4);
         this.add(brace, P.metal, null);
-        if (z % 12 === 0) this.box(x - 0.075, 12.01, z + 0.8, x + 0.075, 12.09, z + 1.6, P.cyanDim, null);
+        if (z % 12 === 0) this.box(x - 0.075, 12.01, z + 0.8, x + 0.075, 12.09, z + 1.6, P.decorCyan, null);
       }
     }
     for (const z of [-34, 36]) {
@@ -684,7 +684,7 @@ export class ArenaBuilder {
     }
     for (const [x, z] of [[-H - 1, -H - 1], [H + 1, -H - 1], [-H - 1, H + 1], [H + 1, H + 1]]) {
       this.box(x - 1.2, 0, z - 1.2, x + 1.2, 13, z + 1.2, P.graphite, null);
-      this.box(x - 1.25, 12.2, z - 1.25, x + 1.25, 12.5, z + 1.25, P.cyanGlow, null);
+      this.box(x - 1.25, 12.2, z - 1.25, x + 1.25, 12.5, z + 1.25, P.decorBright, null);
     }
   }
 

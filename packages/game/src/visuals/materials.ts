@@ -28,6 +28,10 @@ export interface Palette {
   floor: PBRMaterial;
   cyanGlow: PBRMaterial;
   cyanDim: PBRMaterial;
+  /** Architecture-only glows (arena and dressing), well below the gameplay accents: real plant has small indicators. */
+  decorCyan: PBRMaterial;
+  decorOrange: PBRMaterial;
+  decorBright: PBRMaterial;
   orangeGlow: PBRMaterial;
   orangeDim: PBRMaterial;
   redGlow: PBRMaterial;
@@ -226,6 +230,9 @@ export function createPalette(scene: Scene, high: boolean, indoor = false, layou
     floor,
     cyanGlow: glow(scene, 'cyanGlow', [0.68, 1.49, 1.24]),
     cyanDim: glow(scene, 'cyanDim', [0.18, 0.45, 0.38]),
+    decorCyan: glow(scene, 'decorCyan', [0.08, 0.19, 0.16]),
+    decorOrange: glow(scene, 'decorOrange', [0.32, 0.055, 0.004]),
+    decorBright: glow(scene, 'decorBright', [0.1, 0.22, 0.19]),
     orangeGlow: glow(scene, 'orangeGlow', [2.9, 0.45, 0.03]),
     orangeDim: glow(scene, 'orangeDim', [0.75, 0.13, 0.01]),
     redGlow: glow(scene, 'redGlow', [2.6, 0.28, 0.12]),

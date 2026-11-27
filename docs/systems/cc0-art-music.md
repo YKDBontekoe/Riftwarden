@@ -58,7 +58,10 @@ the box face. Geometry winding is clockwise-from-outside (Babylon is left-handed
   of the box: an L-corner where an end face is flush with the other wall's side face z-fights, and SSAO turned that
   into a black streak.
 - Gate tunnels are cast concrete; the sealed blast door's bevelled parts get world-scale box-projected UVs
-  (`ArenaDynamics.part`), gate / door signals and decorative emissive strips run at ~40% of their old intensity.
+  (`ArenaDynamics.part`). Architecture glows use the palette's `decorCyan` / `decorOrange` / `decorBright` (well
+  below bloom); the shared `cyanGlow` / `orangeDim` / `cyanDim` stay at full strength because towers, enemies and the
+  reactor use them for readability. Blast-door hazard chevrons are paint (`enamel`). Elevated decks get guard railings
+  (`visuals/railing.ts`, open where a ramp lands). Slag pools are a molten crust texture (dark plates, glowing seams).
 
 ## Machinery (`visuals/machineModel.ts`)
 

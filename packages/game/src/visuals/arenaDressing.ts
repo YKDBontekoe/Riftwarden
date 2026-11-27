@@ -142,7 +142,7 @@ export class ArenaDressing {
       } else {
         at(mid, 2.88, 0.04, 2.3, 1.33, 0.15, P.graphite, 'wall');
         for (let k = 0; k < 7; k++) at(mid, 1.91 + k * 0.31, 0.20, 2.10, 0.072, 0.075, P.metal, 'wall');
-        at(mid, 4.34, 0.14, 1.97, 0.035, 0.06, P.orangeDim, null);
+        at(mid, 4.34, 0.14, 1.97, 0.035, 0.06, P.decorOrange, null);
       }
     }
   }
@@ -208,7 +208,7 @@ export class ArenaDressing {
         for (const side of [-1, 1]) {
           const x = side * g;
           quad(x - side * 0.28, 0, z - 0.25, x, 8.2, z + 0.25, P.metal, 'wall');
-          quad(x - side * 0.34, 2.0, z - 0.3, x, 2.2, z + 0.3, P.orangeDim, null);
+          quad(x - side * 0.34, 2.0, z - 0.3, x, 2.2, z + 0.3, P.decorOrange, null);
         }
         quad(-g, 8.2, z - 0.22, g, 8.6, z + 0.22, P.steel, null);
       }
@@ -254,7 +254,7 @@ export class ArenaDressing {
     const biome = biomeOf(this.L).id;
     const shell = biome === 'cryo' ? P.white : biome === 'foundry' ? P.enamel : P.metal;
     const vents = biome === 'foundry' ? P.steel : P.graphite;
-    const light = biome === 'cryo' ? P.cyanDim : P.orangeDim;
+    const light = biome === 'cryo' ? P.decorCyan : P.decorOrange;
     for (const alongX of [true, false]) {
       const start = alongX ? x0 : z0;
       const end = alongX ? x1 : z1;
@@ -279,7 +279,7 @@ export class ArenaDressing {
               // Wall-hung coolant manifold in the centre of a recessed service bay.
               const offset = edge + side * .22;
               face(t, y - .04, .65, .50, .17, P.steel);
-              face(t, y + .04, .34, .12, .22, P.cyanDim);
+              face(t, y + .04, .34, .12, .22, P.decorCyan);
               for (const dy of [-.25, .12]) {
                 const from = t - width * .32;
                 const to = t + width * .32;
@@ -295,10 +295,10 @@ export class ArenaDressing {
               else deposit.position.set(edge + side * .15, y - .55, t);
               deposit.rotation.y = alongX ? 0 : Math.PI / 2;
               this.h.add(deposit, this.frost, null);
-              face(t, y + .21, width * .64, .09, .17, P.cyanDim);
+              face(t, y + .21, width * .64, .09, .17, P.decorCyan);
             }
           } else if (biome === 'foundry') {
-            for (let slot = -1; slot <= 1; slot++) face(t + slot * width * .24, y - .04, .14, .56, .15, P.orangeDim);
+            for (let slot = -1; slot <= 1; slot++) face(t + slot * width * .24, y - .04, .14, .56, .15, P.decorOrange);
           } else {
             for (const slot of [-1, 0, 1]) face(t, y - .08 + slot * .21, width - .55, .075, .13, P.metal);
           }
@@ -388,12 +388,12 @@ export class ArenaDressing {
       const oc = (legIn + legOut) / 2;
       if (alongX) {
         this.h.box(mid - 1.4, 16.6, legIn - 0.8, mid + 1.4, 17.4, legOut + 0.8, P.metal, null);
-        this.h.box(lo, 17.3, legIn - 0.1, hi, 17.38, legIn + 0.1, P.orangeDim, null);
+        this.h.box(lo, 17.3, legIn - 0.1, hi, 17.38, legIn + 0.1, P.decorOrange, null);
         this.pipe('y', 12.5, 16.6, mid, oc, 0.08, P.metal);
         this.cbox(mid, 12.2, oc, 0.5, 0.35, 0.5, P.white);
       } else {
         this.h.box(legIn - 0.8, 16.6, mid - 1.4, legOut + 0.8, 17.4, mid + 1.4, P.metal, null);
-        this.h.box(legIn - 0.1, 17.3, lo, legIn + 0.1, 17.38, hi, P.orangeDim, null);
+        this.h.box(legIn - 0.1, 17.3, lo, legIn + 0.1, 17.38, hi, P.decorOrange, null);
         this.pipe('y', 12.5, 16.6, oc, mid, 0.08, P.metal);
         this.cbox(oc, 12.2, mid, 0.5, 0.35, 0.5, P.white);
       }
