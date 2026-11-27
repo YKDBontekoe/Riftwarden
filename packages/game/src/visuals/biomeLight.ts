@@ -22,9 +22,9 @@ export interface BiomeLight {
 }
 
 export const BIOME_LIGHT: Record<BiomeId, BiomeLight> = {
-  outpost: { exposure: 1.46, contrast: 1.06, fill: 1.05, sky: [0.74, 0.76, 0.84], ground: [0.4, 0.33, 0.26], env: 1.6, sun: 1.25 },
-  cryo: { exposure: 1.4, contrast: 1.04, fill: 1.1, sky: [0.76, 0.86, 1], ground: [0.58, 0.64, 0.72], env: 1.6, sun: 1.2 },
-  foundry: { exposure: 1.36, contrast: 1.1, fill: 0.95, sky: [0.66, 0.52, 0.44], ground: [0.55, 0.24, 0.09], env: 1.5, sun: 1.15 },
+  outpost: { exposure: 1.4, contrast: 1.06, fill: 2.6, sky: [0.74, 0.76, 0.84], ground: [0.4, 0.33, 0.26], env: 1.6, sun: 1.25 },
+  cryo: { exposure: 1.34, contrast: 1.04, fill: 2.8, sky: [0.76, 0.86, 1], ground: [0.58, 0.64, 0.72], env: 1.6, sun: 1.2 },
+  foundry: { exposure: 1.32, contrast: 1.1, fill: 2.4, sky: [0.66, 0.52, 0.44], ground: [0.55, 0.24, 0.09], env: 1.5, sun: 1.15 },
 };
 
 /** Applies the biome's light to an arena scene; returns the sun multiplier (on top of the biome's `sunMul`). */
@@ -40,7 +40,7 @@ export function applyBiomeLight(scene: Scene, post: PostFx, P: Palette, biome: B
   }
   for (const m of P.lit) m.environmentIntensity = L.env;
   // Black steel panels were tuned for a dim scene; under brighter fill they read as holes. Lift to dark grey.
-  P.steel.albedoColor.scaleInPlace(1.9);
+  P.steel.albedoColor.scaleInPlace(2.6);
   // Dark painted steel, not polished metal: as metal it only mirrored the dusk sky and read as a void.
   P.steel.metallic = 0.25;
   // Decorative emissive strips (wall bars, machine slots, rings) were tuned to carry a dark scene; in a lit one they

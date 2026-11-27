@@ -122,7 +122,7 @@ export class ArenaDynamics {
       root.position.set(cx + side * w * 0.25, 0, cz);
       const meshes: AbstractMesh[] = [];
       meshes.push(this.part(root, w / 2, h, d * 0.7, 0, h / 2, 0, P.graphite, 'wall'));
-      for (let i = 0; i < 4; i++) meshes.push(this.part(root, w / 2 - 0.5, 1.4, d * 0.78, 0, 1.2 + i * 2.05, 0, P.steel, 'wall'));
+      for (let i = 0; i < 4; i++) meshes.push(this.part(root, w / 2 - 0.5, 1.4, d * 0.78, 0, 1.2 + i * 2.05, 0, P.graphite, 'wall'));
       // chevrons on the inner face + leading edge light
       for (let i = 0; i < 5; i++) meshes.push(this.part(root, 0.5, 0.18, 0.05, side * -0.4 + side * i * -0.55 + side * 1.2, 0.5, d * 0.36 + 0.04, hazard, null));
       meshes.push(this.part(root, 0.12, h - 0.6, 0.06, -side * (w / 4 - 0.08), h / 2, d * 0.36 + 0.03, warn, null));
