@@ -59,7 +59,7 @@ Details and older numbers: [`history.md`](history.md).
 
 `/?test` sets `input.forceCapture` (no pointer lock) and exposes `window.__rift` (`apps/client/src/core/debugApi.ts`):
 `state()`, `look(yaw, pitch)`, `advance(seconds)` (fixed 60 Hz simulation, no rendering), `stopLoop()`, `render(frames)`,
-`killAll()`, `leakStats()`, `spawnLoot`, `teleport`, `makeItem`, `grant`, `previewLoading`, plus `flow`, `profile`,
+`killAll()`, `leakStats()`, `hud` (the HUD store), `spawnLoot`, `teleport`, `makeItem`, `grant`, `previewLoading`, plus `flow`, `profile`,
 `game`, `home`, `dev`. Drive input with `game.input.simulateKey(code, down)` / `simulateMouse(button, down)`.
 
 `?test` defaults (keep legacy suites stable): classic arena (`&procedural` opts in), classic endless run (`&map`), local
@@ -80,5 +80,5 @@ export RIFT_TEST_REDIS_URL=redis://127.0.0.1:56379
 
 ## Tools
 
-`scripts/playtest.cjs` (bot plays N waves, prints pacing), `feel-shots.cjs`, `vfx-shots.cjs`, `loot-shots.cjs`,
+`scripts/bench-perf.cjs` (performance scenarios early/late/extreme/loot/extended: frame-time percentiles, draws, heap, spikes; `BENCH_PROFILE=1` adds CPU-profile hotspots, `BENCH_EFFECTS=<prefix>` dumps shader variants compiled mid-fight; see [`performance.md`](performance.md)), `scripts/bench-coop.mjs` (headless co-op server: tick cost, snapshot/event bytes; `node --import tsx scripts/bench-coop.mjs 2 120 30`), `scripts/playtest.cjs` (bot plays N waves, prints pacing), `feel-shots.cjs`, `vfx-shots.cjs`, `loot-shots.cjs`,
 `item-sheet.cjs`, `ui-shots.cjs` + `ui-diff.cjs` (UI regression captures), `smoke-stack.mjs` (deploy smoke).

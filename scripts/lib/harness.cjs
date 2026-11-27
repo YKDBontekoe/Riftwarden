@@ -59,7 +59,7 @@ async function boot(p, { reload = false, skipUpgrades = false, keepLoop = false,
 
 /**
  * Launch Chromium (SwiftShader) with one context + page and boot the app.
- * opts: viewport, query (extra URL params, e.g. '&map'), init (localStorage entries seeded once per tab), storageState, skipUpgrades, gc (expose gc for leak checks), channel (Playwright browser channel).
+ * opts: viewport, query (extra URL params, e.g. '&map'), init (localStorage entries seeded once per tab), storageState, skipUpgrades, gc (expose gc and precise performance.memory for leak checks), channel (Playwright browser channel).
  */
 async function launch({ viewport = { width: 1280, height: 720 }, init = null, storageState, skipUpgrades = false, gc = false, query = '', diagnostics, channel } = {}) {
   const b = await chromium.launch({ channel, args: gc ? [...GL_ARGS, '--js-flags=--expose-gc', '--enable-precise-memory-info'] : GL_ARGS });
