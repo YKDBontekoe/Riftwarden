@@ -22,10 +22,10 @@ export function nativeMouseCapture(): NativeMouseCapture {
         const poll = async (): Promise<void> => {
           if (generation !== current) return;
           try {
-            const delta = await invoke<{ active: boolean; x: number; y: number }>('desktop_mouse_take');
+            const delta = await invoke<{ active: boolean; x: number; y: number; held: number; pressed: number; released: number; wheel: number }>('desktop_mouse_take');
             if (generation !== current) return;
             if (!delta.active) { lost(); return; }
-            move(delta.x, delta.y);
+            move(delta.x, delta.y, delta.held, delta.pressed, delta.released, delta.wheel);
             requestAnimationFrame(() => { void poll(); });
           } catch {
             if (generation === current) lost();

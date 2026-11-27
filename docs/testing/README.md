@@ -40,7 +40,7 @@ collectErrors); do not copy helpers.
 | `e2e-range` | Firing range + DPS meter |
 | `e2e-polish`, `e2e-feel-polish`, `e2e-render-lifecycle` | Presentation, feel, scene lifecycle |
 | `e2e-mobile`, `e2e-pwa` | Touch controls (emulated phone); installability/offline/update (production build) |
-| `e2e-desktop-mouse` | HQ movement, mouse look, pause and focus loss through a simulated native mouse backend; real AppKit still needs a Mac |
+| `e2e-desktop-mouse` | HQ movement, mouse look, pause, focus loss and arena firing through a simulated native mouse backend; real AppKit still needs a Mac |
 | `e2e-accounts`, `e2e-sync` | Passkeys and offline sync (need the stack) |
 | `e2e-construction-coop` | HQ construction; section X = real two-browser co-op (own stack, `node --import tsx`) |
 | `e2e-coop-protocol.mjs`, `e2e-coop-map.mjs` | Co-op protocol with bot clients (own stack; needs a DB role that may create databases) |
