@@ -51,6 +51,12 @@ construction-and-coop (`.github/workflows/ci.yml`).
 - e2e-m2 **C8/C9** fail on the pre-existing code; A2/A6/D8/F1 are intermittent random-loot checks; H stops at
   `deploy(p, 2)` since the v11 progression restart.
 - e2e-m3 **H1** is stale since the v11 restart (reads a weapon the wipe removed).
+- Open (performance overhaul): the wider pool shader warm-up (`visuals/warmPools.ts`) compiles a 13-light PBR variant
+  that SwiftShader cannot compile, so the "no console errors" checks (e2e-combat Z, e2e-m2 I4, e2e-arenas Z,
+  e2e-render-lifecycle, e2e-range Z, e2e-m5 Z, e2e-polish) now report it; they pass on `88c0d92`. Every other check
+  matches the base commit. Next step: find the material (effects with a compilation error after `warmShaders`) and
+  skip or cap it in the warm-up.
+- e2e-m1 A5 (deployment terminal label) and e2e-m6 E4/D5/D6/H2/I1 also fail on `88c0d92`.
 - e2e-m6 B6/B7/C4 fail identically on older commits (fast-pace speeds); C1 is timing-flaky under load.
 
 Details and older numbers: [`history.md`](history.md).
