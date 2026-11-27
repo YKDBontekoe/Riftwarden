@@ -1,5 +1,5 @@
 # Rust gateway: the only public backend service (docs/architecture/architecture-v2.md section 9).
-FROM rust:1.97-bookworm AS build
+FROM rust:1.99-bookworm AS build
 WORKDIR /src
 # The image already has the pinned toolchain (rust-toolchain.toml would make rustup download components).
 COPY Cargo.toml Cargo.lock ./
