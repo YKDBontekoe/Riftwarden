@@ -49,6 +49,31 @@ stays the collider; contact grime keeps only its floor band on containers (`floo
 the box face. Geometry winding is clockwise-from-outside (Babylon is left-handed); normals come from
 `VertexData.ComputeNormals`. Next in this pass: buildings (`block`), perimeter walls, machinery banks.
 
+## Architecture: substations, barriers, gates
+
+- `block` solids are dressed as transformer bays (`visuals/substationModel.ts`): plinth with kerb, ribbed tank,
+  radiator fin banks with headers, porcelain HV/LV bushings, conservator on brackets, cable box, ladder. Inside the
+  collision box; rooftop props are therefore placed on containers only.
+- Barriers are precast panel walls (~3 m panels, recessed joints, proud cap, tie plates). Their ends stop 4 mm short
+  of the box: an L-corner where an end face is flush with the other wall's side face z-fights, and SSAO turned that
+  into a black streak.
+- Gate tunnels are cast concrete; the sealed blast door's bevelled parts get world-scale box-projected UVs
+  (`ArenaDynamics.part`), gate / door signals and decorative emissive strips run at ~40% of their old intensity.
+
+## Ground relief (`visuals/groundRelief.ts` [pure], `uv.ts` `sculptGround`)
+
+The ground is a subdivided grid (0.6 m high quality, 1.1 m otherwise) displaced by `GroundRelief.height`: settled
+6 m slabs with their own offset and tilt, pooling dips, cryo drifts, sunken scorch around foundry slag (|h| <= 0.16 m).
+A 1 m fade mask makes it exactly 0 on lanes, the reactor plaza, the spawn, build pads, hazards, rifts, vents, ramps
+and within 2.2 m of solids, so feet, props, rubble, grime and floor paint stay flush. The Havok collider stays the
+flat plane; the ground mesh gets `accelerateStaticPicking` (shots and placement pick it).
+
+## PBR corrections for scans
+
+`SET_PBR` (biomeSurfaces.ts) fixes scans that mark painted steel as metal (metal_plate_02 averages 0.91 metal) or are
+very glossy (blue plate): under an IBL captured from a dusk scene they rendered near-black. Painted steel is a
+dielectric; black steel is lifted and set to metallic 0.25.
+
 ## Props
 
 - Catalogue `rules/world/propCatalog.ts` (species, footprint, roles, `longZ`), loader `visuals/propLibrary.ts`:
@@ -72,7 +97,8 @@ the box face. Geometry winding is clockwise-from-outside (Babylon is left-handed
 
 ## Contact grime (`visuals/contactGrime.ts`)
 
-Every grounded solid's open faces (arena) and every HQ wall base get three merged strips: a tight contact shadow, a
+Every grounded solid's open faces (arena) and every HQ wall base get three merged strips (floor strips fade out
+past their ends through vertex alpha, so they never end in a tile-like edge): a tight contact shadow, a
 ragged floor band (outpost mud, cryo snow drift, foundry pale ash so it reads on the dark deck, HQ light dust) and staining up the wall. Lit,
 alpha-blended, no depth write, z-offset under decals. Removes the clean CG line where floor meets wall.
 
