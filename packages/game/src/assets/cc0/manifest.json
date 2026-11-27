@@ -914,38 +914,38 @@
     {
       "id": "outpost-ground-albedo",
       "kind": "texture",
-      "title": "Concrete Floor Damaged 01 (albedo, 2k)",
-      "author": "Rob Tuytel",
-      "source": "https://polyhaven.com/a/concrete_floor_damaged_01",
+      "title": "Concrete Floor Worn 001 (albedo, 2k)",
+      "author": "Dimitrios Savva, Rico Cilliers",
+      "source": "https://polyhaven.com/a/concrete_floor_worn_001",
       "file": "sets/outpost-ground-albedo.webp",
       "license": "CC0-1.0",
       "retrieved": "2026-11-27",
-      "bytes": 288522,
-      "sha256": "13e61d05029e892ed4fe2dafcadf79a8cd80864a796a47ceb122b4700790b780"
+      "bytes": 151884,
+      "sha256": "5a31023f12d93df1d1e5fc5191bc75ad3420190989d5312826ee976bd51b4f94"
     },
     {
       "id": "outpost-ground-arm",
       "kind": "texture",
-      "title": "Concrete Floor Damaged 01 (arm, 2k)",
-      "author": "Rob Tuytel",
-      "source": "https://polyhaven.com/a/concrete_floor_damaged_01",
+      "title": "Concrete Floor Worn 001 (arm, 2k)",
+      "author": "Dimitrios Savva, Rico Cilliers",
+      "source": "https://polyhaven.com/a/concrete_floor_worn_001",
       "file": "sets/outpost-ground-arm.webp",
       "license": "CC0-1.0",
       "retrieved": "2026-11-27",
-      "bytes": 418310,
-      "sha256": "e591288bdff80cb679bab557217a3dc0aa613d58d872faf59198b4d1ef55aa59"
+      "bytes": 285794,
+      "sha256": "10a63b2ad2f6234dc6071ae39536ac2d68108e142f211b6c592e89ede4a59727"
     },
     {
       "id": "outpost-ground-normal",
       "kind": "texture",
-      "title": "Concrete Floor Damaged 01 (normal, 2k)",
-      "author": "Rob Tuytel",
-      "source": "https://polyhaven.com/a/concrete_floor_damaged_01",
+      "title": "Concrete Floor Worn 001 (normal, 2k)",
+      "author": "Dimitrios Savva, Rico Cilliers",
+      "source": "https://polyhaven.com/a/concrete_floor_worn_001",
       "file": "sets/outpost-ground-normal.webp",
       "license": "CC0-1.0",
       "retrieved": "2026-11-27",
-      "bytes": 993634,
-      "sha256": "7fc7c8cb867cf4e986f80e64411c882a48ac33217329cfc283e47e0d15268f5d"
+      "bytes": 2802312,
+      "sha256": "ba6844429733bfc07f6eee58db9b42195466bb89c75a73fed8c584e2ca1d73a4"
     },
     {
       "id": "outpost-masonry-albedo",

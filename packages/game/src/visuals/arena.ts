@@ -35,6 +35,7 @@ import { GroundRelief } from './groundRelief';
 import { sculptGround } from './uv';
 import { buildContainerStack, containerLiveries } from './containerModel';
 import { buildMachineBank, machineRoofSlots } from './machineModel';
+import { buildRailings } from './railing';
 import { arenaGrimeFaces, buildContactGrime, GRIME } from './contactGrime';
 import { PROP_SPECIES } from '@riftwarden/rules/world/propCatalog';
 
@@ -69,7 +70,8 @@ export class ArenaBuilder {
 
   constructor(private scene: Scene, private pal: Palette, private layout: ArenaLayout, private high = true) {
     this.physicsShape = new PhysicsShapeContainer(scene);
-    this.relayLight = unlit(scene, 'relayBeacon', [0.24, 2.1, 1.75]);
+    // Tether beacons stay readable (gameplay) but no longer bloom like neon.
+    this.relayLight = unlit(scene, 'relayBeacon', [0.12, 1.0, 0.85]);
   }
 
   private add(mesh: Mesh, mat: Material, surface: string | null): void {
@@ -350,6 +352,7 @@ export class ArenaBuilder {
             fascia(x, 0.47, y1 - 1.04, 0.07, 0.13, 0.15, P.metal);
           }
         }
+        buildRailings({ box: (...a) => this.box(...a) }, b, this.layout.ramps, P.metal, P.enamel);
         break;
       }
       case 'relay': {
@@ -534,7 +537,7 @@ export class ArenaBuilder {
       { id: 'south', pos: new Vector3(0, 0, -H), yaw: Math.PI },
     ];
     for (const f of frames) {
-      const lights = unlit(this.scene, `gateSignal:${f.id}`, [0.8, 0.22, 0.05], { twoSided: true });
+      const lights = unlit(this.scene, `gateSignal:${f.id}`, [0.42, 0.1, 0.025], { twoSided: true });
       const root = new TransformNode('gate', this.scene);
       root.position.copyFrom(f.pos);
       root.rotation.y = f.yaw;

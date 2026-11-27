@@ -45,6 +45,8 @@ export function applyBiomeLight(scene: Scene, post: PostFx, P: Palette, biome: B
   P.steel.metallic = 0.25;
   // Bare steel (pipes, rails, ladders) read as white plastic under the stronger fill: weathered galvanised instead.
   P.metal.albedoColor.set(0.46, 0.47, 0.48);
+  // Painted trims (vent frames, bands) glared white under the fill: worn off-white.
+  P.white.albedoColor.set(0.32, 0.32, 0.3);
   P.metal.roughness = 1.25;
   // Decorative emissive strips (wall bars, machine slots, rings) were tuned to carry a dark scene; in a lit one they
   // read as arcade neon. Real plant has small indicators, so they drop well below bloom threshold.

@@ -117,10 +117,11 @@ const SET_PBR: Partial<Record<SurfaceSetId, { metal: number; rough: number }>> =
 };
 export const BIOME_SURFACES: Record<BiomeId, { ground: SurfaceLook & { tile: number }; masonry: SurfaceLook; cladding: SurfaceLook; casing: SurfaceLook; rust: SurfaceLook }> = {
   outpost: {
-    ground: { set: 'outpost-ground', tint: [1.05, 1.02, 0.98], normal: 1, tile: 5, depth: 0.045 },
+    ground: { set: 'outpost-ground', tint: [0.92, 0.9, 0.87], normal: 1, tile: 7, depth: 0.045 },
     masonry: { set: 'outpost-masonry', tint: [0.8, 0.82, 0.84], normal: 0.9, depth: 0.03 },
     cladding: { set: 'cryo-casing', tint: [0.82, 0.8, 0.76], normal: 0.7 },
-    casing: { set: 'outpost-casing', tint: [0.62, 0.66, 0.62], normal: 0.8 },
+    // Weathered grey steel: the green paint covered every gantry, ramp and roof and read as a toy set.
+    casing: { set: 'foundry-casing', tint: [0.62, 0.64, 0.66], normal: 0.8 },
     rust: { set: 'foundry-casing', tint: [0.85, 0.8, 0.75], normal: 0.8 },
   },
   cryo: {
@@ -209,7 +210,8 @@ function yardMacro(scene: Scene, biome: BiomeId, span: number) {
       // Ground darkens toward the yard edge (runoff and dirt collect along the walls).
       const edge = Math.max(Math.abs(u - 0.5), Math.abs(v - 0.5)) * 2;
       const rim = Math.max(0, (edge - (1 - 24 / span)) * (span / 24));
-      const k = Math.max(0.35, Math.min(1, 0.78 + (broad - 0.5) * 0.55 - blotch * 0.35 - streak * 0.2 - rim * 0.3));
+      // Gentle: strong blotches on top of a scan's own stains read as camouflage.
+      const k = Math.max(0.55, Math.min(1, 0.86 + (broad - 0.5) * 0.26 - blotch * 0.16 - streak * 0.1 - rim * 0.22));
       const i = (y * N + x) * 4;
       img.data[i] = img.data[i + 1] = img.data[i + 2] = k * 255;
       img.data[i + 3] = 255;

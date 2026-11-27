@@ -114,7 +114,8 @@ export class ArenaDynamics {
     const w = b.max[0] - b.min[0];
     const h = b.max[1] - b.min[1];
     const d = b.max[2] - b.min[2];
-    const hazard = unlit(this.scene, 'doorHazard', [0.95, 0.38, 0.04]);
+    // Hazard chevrons are paint, not light.
+    const hazard = P.enamel;
     const warn = unlit(this.scene, 'doorWarn', [0.45, 0.04, 0.015]);
     this.warnLights.push({ mat: warn, on: () => this.door.some((m) => m.t > 0 && m.t < 1) });
     for (const side of [-1, 1]) {

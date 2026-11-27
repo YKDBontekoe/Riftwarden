@@ -202,7 +202,7 @@
   "sets": [
     {
       "id": "outpost-ground",
-      "polyhaven": "concrete_floor_damaged_01",
+      "polyhaven": "concrete_floor_worn_001",
       "res": "2k",
       "height": true
     },
