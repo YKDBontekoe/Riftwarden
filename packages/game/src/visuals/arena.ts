@@ -31,6 +31,7 @@ import { configureProps, placeProps } from './propLibrary';
 import { applyBiomeSurfaces } from './biomeSurfaces';
 import { buildFixtureGlow } from './fixtureGlow';
 import { BIOME_LIGHT } from './biomeLight';
+import { buildContainerStack, containerLiveries } from './containerModel';
 import { arenaGrimeFaces, buildContactGrime, GRIME } from './contactGrime';
 import { PROP_SPECIES } from '@riftwarden/rules/world/propCatalog';
 import { smoothLatheData } from './sculpt';
@@ -231,42 +232,12 @@ export class ArenaBuilder {
   }
 
   /** Shipping-container stack: one shell per 2.6 m level (colour per level), corrugation ribs, rails, door frame. */
+  private liveries: Material[] | null = null;
+
+  /** Real ISO containers (containerModel.ts) over the collision box, one per level. */
   private buildContainer(b: Box): void {
-    const P = this.pal;
-    const [x0, , z0] = b.min;
-    const [x1, y1, z1] = b.max;
-    const alongX = x1 - x0 >= z1 - z0;
-    const run = alongX ? x1 - x0 : z1 - z0;
-    const levels = Math.max(1, Math.round(y1 / 2.6));
-    const lh = y1 / levels;
-    const mats = [P.rust, P.enamel, P.panel, P.graphite];
-    const hash = Math.abs(Math.round(x0 * 7.3 + z0 * 3.1));
-    for (let l = 0; l < levels; l++) {
-      const ya = l * lh;
-      const yb = ya + lh;
-      const top = l === levels - 1;
-      this.box(x0 + 0.04, ya + 0.04, z0 + 0.04, x1 - 0.04, yb - 0.04, z1 - 0.04, mats[(hash + l) % mats.length], top ? 'platform' : 'wall');
-      // Top / bottom rails along the long edges.
-      for (const y of [ya, yb - 0.14]) {
-        if (alongX) {
-          this.box(x0, y, z0, x1, y + 0.14, z0 + 0.12, P.graphite, 'wall');
-          this.box(x0, y, z1 - 0.12, x1, y + 0.14, z1, P.graphite, 'wall');
-        } else {
-          this.box(x0, y, z0, x0 + 0.12, y + 0.14, z1, P.graphite, 'wall');
-          this.box(x1 - 0.12, y, z0, x1, y + 0.14, z1, P.graphite, 'wall');
-        }
-      }
-      // Corrugation ribs on both long faces.
-      for (let t = 0.5; t < run - 0.3; t += 0.9) {
-        if (alongX) {
-          this.box(x0 + t - 0.07, ya + 0.16, z0 - 0.03, x0 + t + 0.07, yb - 0.16, z0 + 0.06, P.metal, 'wall');
-          this.box(x0 + t - 0.07, ya + 0.16, z1 - 0.06, x0 + t + 0.07, yb - 0.16, z1 + 0.03, P.metal, 'wall');
-        } else {
-          this.box(x0 - 0.03, ya + 0.16, z0 + t - 0.07, x0 + 0.06, yb - 0.16, z0 + t + 0.07, P.metal, 'wall');
-          this.box(x1 - 0.06, ya + 0.16, z0 + t - 0.07, x1 + 0.03, yb - 0.16, z0 + t + 0.07, P.metal, 'wall');
-        }
-      }
-    }
+    this.liveries ??= containerLiveries(this.scene, BIOME_LIGHT[this.layout.biome ?? 'outpost'].env);
+    buildContainerStack({ scene: this.scene, add: (m, mat, s) => this.add(m, mat, s) }, b, this.liveries, this.pal.steel);
   }
 
   /** Elevated walkway deck: buildable top, edge girders below, railings (with low colliders) and hazard edges. */

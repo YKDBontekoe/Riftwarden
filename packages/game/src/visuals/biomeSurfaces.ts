@@ -1,5 +1,5 @@
 import { NullEngine } from '@babylonjs/core/Engines/nullEngine';
-import { type PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial';
+import { PBRMaterial as PBRMaterialCtor, type PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial';
 import { Texture } from '@babylonjs/core/Materials/Textures/texture';
 import type { Scene } from '@babylonjs/core/scene';
 import type { BiomeId } from '@riftwarden/rules/world/biomes';
@@ -206,4 +206,28 @@ function yardMacro(scene: Scene, biome: BiomeId, span: number) {
   const t = toTexture('yardMacro', c, scene, { srgb: false, aniso: 4 });
   t.wrapU = t.wrapV = 0;
   return t;
+}
+
+/** A standalone lit material from a scanned set (containers and other kit that is not a palette surface). */
+export function scannedMaterial(scene: Scene, name: string, id: SurfaceSetId, tint: [number, number, number], normal: number, environment: number): PBRMaterial {
+  const m = new PBRMaterialCtor(name, scene);
+  m.usePhysicalLightFalloff = false;
+  m.maxSimultaneousLights = 8;
+  m.environmentIntensity = environment;
+  m.useAmbientOcclusionFromMetallicTextureRed = true;
+  m.useRoughnessFromMetallicTextureGreen = true;
+  m.useMetallnessFromMetallicTextureBlue = true;
+  if (scene.getEngine() instanceof NullEngine) {
+    m.albedoColor.set(...tint);
+    return m;
+  }
+  const maps = load(scene, id, 1);
+  m.albedoTexture = maps.albedo;
+  m.bumpTexture = maps.normal;
+  maps.normal.level = normal;
+  m.metallicTexture = maps.arm;
+  m.albedoColor.set(...tint);
+  m.metallic = 1;
+  m.roughness = 1;
+  return m;
 }

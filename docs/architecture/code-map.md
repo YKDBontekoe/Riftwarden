@@ -215,6 +215,8 @@ packages/rules/src/world/geometry.ts      distance helpers                      
 packages/game/src/world/physicsGroups.ts Havok filter masks (ENV vs PLAYER)
 packages/game/src/visuals/propLibrary.ts  loads/instances scanned CC0 props (lazy glTF + WebP), pivot normalisation, shadow hook, footprint ray test
 packages/game/src/visuals/biomeSurfaces.ts scanned PBR surface sets per biome for ground / masonry / cladding / rust (+ parallax occlusion on high)
+packages/game/src/visuals/containerModel.ts real ISO container geometry (corrugation, doors, locking bars, castings) + stacked builder with scanned liveries
+packages/game/src/visuals/biomeLight.ts   per-biome exposure / fill / bounce / IBL / sun for the arena
 packages/game/src/visuals/contactGrime.ts contact shadow + grime / snow / soot strips along floor-wall seams (arena and HQ)
 packages/game/src/visuals/fixtureGlow.ts  fake light splashes, lenses and pools for wall-mounted prop fixtures
 packages/game/src/visuals/scanDetail.ts   scanned micro detail maps (Babylon detail map layout) for procedural sets

@@ -38,6 +38,17 @@ cryo = cold daylight with snow bounce (1.4), foundry = furnace orange welling up
 (frame budget). Black steel albedo is lifted x1.9 so panels stop reading as holes. Lightning flashes now add to the
 biome sun (`Game.sunBase`) instead of resetting it to the bare constant.
 
+## Architecture: freight containers (`visuals/containerModel.ts`)
+
+Container stacks are real ISO containers instead of a box with ribs: trapezoidal side corrugation at the 278 mm
+pitch, corrugated rear wall, two door leaves with four locking bars, cam keepers, brackets, handles and hinges,
+corner posts, side and end rails, eight corner castings and a dimpled roof (the top level's roof is the buildable
+`platform` surface). One container per ~2.6 m level, door end and livery seeded from the box position. Liveries are
+full scanned painted-steel sets (`scannedMaterial` in `biomeSurfaces.ts`), hardware is black steel. The layout box
+stays the collider; contact grime keeps only its floor band on containers (`floorOnly`), since their walls sit inside
+the box face. Geometry winding is clockwise-from-outside (Babylon is left-handed); normals come from
+`VertexData.ComputeNormals`. Next in this pass: buildings (`block`), perimeter walls, machinery banks.
+
 ## Props
 
 - Catalogue `rules/world/propCatalog.ts` (species, footprint, roles, `longZ`), loader `visuals/propLibrary.ts`:

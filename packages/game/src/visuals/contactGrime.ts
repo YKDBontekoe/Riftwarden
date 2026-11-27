@@ -25,6 +25,8 @@ export interface GrimeFace {
   nz: number;
   /** Floor height (0 in the arena). */
   y?: number;
+  /** No wall staining strip (the solid's visible wall is recessed from the face, e.g. container walls). */
+  floorOnly?: boolean;
 }
 
 export interface GrimeLook {
@@ -146,7 +148,7 @@ export function buildContactGrime(scene: Scene, faces: readonly GrimeFace[], loo
   const layers: [string, VertexData, PBRMaterial][] = [
     ['grimeAo', strips(faces, look.aoWidth, false, 0.012), material(scene, 'grimeAo', [0, 0, 0], look.ao, 1, tight, -3)],
     ['grimeFloor', strips(faces, look.floorWidth, false, 0.018), material(scene, 'grimeFloor', look.floor, look.floorAlpha, look.roughness, ragged, -4)],
-    ['grimeWall', strips(faces, look.wallHeight, true, 0), material(scene, 'grimeWall', look.wall, look.wallAlpha, look.roughness, ragged, -2)],
+    ['grimeWall', strips(faces.filter((f) => !f.floorOnly), look.wallHeight, true, 0), material(scene, 'grimeWall', look.wall, look.wallAlpha, look.roughness, ragged, -2)],
   ];
   for (const [name, data, mat] of layers) {
     if (!data.positions?.length) continue;
@@ -178,7 +180,7 @@ export function arenaGrimeFaces(L: ArenaLayout): GrimeFace[] {
       const mx = (s.x0 + s.x1) / 2 + s.nx * 0.5;
       const mz = (s.z0 + s.z1) / 2 + s.nz * 0.5;
       if (Math.abs(mx) > H || Math.abs(mz) > H) continue;
-      out.push({ ...s, x0: Math.max(-H, Math.min(H, s.x0)), x1: Math.max(-H, Math.min(H, s.x1)), z0: Math.max(-H, Math.min(H, s.z0)), z1: Math.max(-H, Math.min(H, s.z1)) });
+      out.push({ ...s, floorOnly: b.kind === 'container', x0: Math.max(-H, Math.min(H, s.x0)), x1: Math.max(-H, Math.min(H, s.x1)), z0: Math.max(-H, Math.min(H, s.z0)), z1: Math.max(-H, Math.min(H, s.z1)) });
     }
   }
   return out;
