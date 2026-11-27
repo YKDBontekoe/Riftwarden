@@ -67,6 +67,8 @@ export interface PropPlacement {
   z: number;
   yaw: number;
   scale: number;
+  /** Lean about the model's own x axis after the yaw (pi/2 = lying on its side). */
+  tilt?: number;
 }
 
 /** Footprint radius in the ground plane (for spacing and clearance checks). */

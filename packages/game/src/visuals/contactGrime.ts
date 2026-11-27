@@ -194,3 +194,56 @@ export function arenaGrimeFaces(L: ArenaLayout): GrimeFace[] {
   }
   return out;
 }
+
+/** Radial ragged stain mask (oil, rust run-off, soot) for ground patches under prop vignettes. */
+function stainTexture(scene: Scene, seed: number) {
+  const N = 256;
+  const { c, ctx } = canvas(N);
+  const img = ctx.createImageData(N, N);
+  for (let y = 0; y < N; y++)
+    for (let x = 0; x < N; x++) {
+      const u = x / N, v = y / N;
+      const d = Math.hypot(u - 0.5, v - 0.5) * 2;
+      const n = fbm(u, v, 6, 4, seed) - 0.5;
+      const a = Math.max(0, Math.min(1, (1 - d + n * 0.7) * 1.6)) ** 1.8 * (0.55 + 0.45 * vnoise(u * 18, v * 18, 18, seed + 2));
+      const i = (y * N + x) * 4;
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = 255;
+      img.data[i + 3] = a * 255;
+    }
+  ctx.putImageData(img, 0, 0);
+  const t = toTexture('propStain', c, scene, { aniso: 4 });
+  t.hasAlpha = true;
+  t.wrapU = t.wrapV = 0;
+  return t;
+}
+
+/** Ground stains under prop vignettes, one merged mesh, so clusters sit in the world instead of on top of it. */
+export function buildStains(scene: Scene, stains: readonly { x: number; z: number; r: number }[], color: [number, number, number], alpha: number, seed = 5): void {
+  if (scene.getEngine() instanceof NullEngine || !stains.length) return;
+  const pos: number[] = [];
+  const uv: number[] = [];
+  const nrm: number[] = [];
+  const idx: number[] = [];
+  for (const s of stains) {
+    const b = pos.length / 3;
+    const rot = ((s.x * 7.3 + s.z * 3.1) % 6.283);
+    const c = Math.cos(rot), sn = Math.sin(rot);
+    for (const [cu, cv] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+      pos.push(s.x + (cu * c - cv * sn) * s.r, 0.02, s.z + (cu * sn + cv * c) * s.r);
+      uv.push((cu + 1) / 2, (cv + 1) / 2);
+      nrm.push(0, 1, 0);
+    }
+    idx.push(b, b + 2, b + 1, b, b + 3, b + 2);
+  }
+  const vd = new VertexData();
+  vd.positions = pos;
+  vd.indices = idx;
+  vd.normals = nrm;
+  vd.uvs = uv;
+  const mesh = new Mesh('propStains', scene);
+  vd.applyToMesh(mesh);
+  mesh.material = material(scene, 'propStain', color, alpha, 0.6, stainTexture(scene, seed), -5);
+  mesh.isPickable = false;
+  mesh.receiveShadows = true;
+  mesh.freezeWorldMatrix();
+}

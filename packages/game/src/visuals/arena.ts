@@ -26,7 +26,7 @@ import { ArenaDressing, type DressingHost } from './arenaDressing';
 import { RubbleBuilder } from './rubble';
 import { ArenaFloor } from './arenaFloor';
 import { planRubble } from '@riftwarden/rules/world/rubblePlan';
-import { planProps } from '@riftwarden/rules/world/propPlan';
+import { planPropsDetailed } from '@riftwarden/rules/world/propPlan';
 import { configureProps, placeProps } from './propLibrary';
 import { applyBiomeSurfaces, scannedMaterial } from './biomeSurfaces';
 import { buildFixtureGlow } from './fixtureGlow';
@@ -36,7 +36,7 @@ import { sculptGround } from './uv';
 import { buildContainerStack, containerLiveries } from './containerModel';
 import { buildMachineBank, machineRoofSlots } from './machineModel';
 import { buildRailings } from './railing';
-import { arenaGrimeFaces, buildContactGrime, GRIME } from './contactGrime';
+import { arenaGrimeFaces, buildContactGrime, buildStains, GRIME } from './contactGrime';
 
 interface GateVisual {
   lane: ReturnType<typeof createPathLight>;
@@ -179,7 +179,8 @@ export class ArenaBuilder {
     new RubbleBuilder({ scene: this.scene, add: (m, mat, s) => this.add(m, mat, s) }, { concrete: P.debris, rust: P.rust, graphite: P.graphite, enamel: P.steel }, true).build(rubble);
     // Scanned CC0 props (drums, crates, rooftop plant): visual only, planned off lanes and rubble like the debris.
     configureProps(this.scene, { lights: 8, environment: BIOME_LIGHT[L.biome ?? 'outpost'].env, albedo: 0.82 });
-    const props = planProps(L, rubble);
+    const { props, stains } = planPropsDetailed(L, rubble);
+    buildStains(this.scene, stains, [0.05, 0.045, 0.04], 0.75, (L.seed ?? 5) >>> 0);
     placeProps(new TransformNode('arenaProps', this.scene), props);
     // Natural floor-to-wall seams: contact shadow, biome grime / snow drift / soot, wall staining.
     buildContactGrime(this.scene, arenaGrimeFaces(L), GRIME[L.biome ?? 'outpost'], (L.seed ?? 11) >>> 0);

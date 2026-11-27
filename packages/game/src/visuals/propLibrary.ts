@@ -145,6 +145,7 @@ export function placeProps(parent: TransformNode, placements: readonly PropPlace
         holder.parent = parent;
         holder.position.set(p.x, p.y, p.z);
         holder.rotation.y = p.yaw;
+        holder.rotation.x = p.tilt ?? 0;
         holder.scaling.setAll(p.scale);
         const instance = container.instantiateModelsToScene((name) => `prop:${species}:${name}`, false, { doNotInstantiate: false });
         for (const node of instance.rootNodes) {

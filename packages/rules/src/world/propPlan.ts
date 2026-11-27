@@ -3,6 +3,21 @@ import { distToBoxXZ } from './geometry';
 import type { ArenaLayout, Box } from './layout';
 import { PROP_SPECIES, type PropPlacement, propRadius, type PropSpecies } from './propCatalog';
 import { type RubbleSpot, spotBlocked } from './rubblePlan';
+import { placeVignette, VIGNETTES, vignetteExtent } from './propVignettes';
+
+/** Vignettes per biome (wall-foot story clusters). */
+const BIOME_VIGNETTES: Record<NonNullable<ArenaLayout['biome']>, (keyof typeof VIGNETTES)[]> = {
+  outpost: ['drumHuddle', 'palletStack', 'tyrePile', 'generatorBay', 'dumpster', 'parkedCar', 'barrierRun', 'pipeStore'],
+  foundry: ['drumHuddle', 'gasBottles', 'fireCorner', 'generatorBay', 'pipeStore', 'dumpster', 'barrierRun'],
+  cryo: ['palletStack', 'generatorBay', 'parkedCar', 'tyrePile', 'pipeStore', 'barrierRun', 'gasBottles'],
+};
+
+/** A dark ground stain under a vignette (oil, rust run-off, soot), for the arena to draw. */
+export interface PropStain {
+  x: number;
+  z: number;
+  r: number;
+}
 
 /**
  * Where the arena's scanned props go (pure). Same contract as the rubble plan: visual only, kept off every lane,
@@ -105,14 +120,20 @@ const along = (species: PropSpecies) => {
 };
 
 export function planProps(L: ArenaLayout, rubble: readonly RubbleSpot[] = [], seed = (L.seed ?? 0) ^ PROP_SEED): PropPlacement[] {
+  return planPropsDetailed(L, rubble, seed).props;
+}
+
+/** Props plus the ground stains under their vignettes. */
+export function planPropsDetailed(L: ArenaLayout, rubble: readonly RubbleSpot[] = [], seed = (L.seed ?? 0) ^ PROP_SEED): { props: PropPlacement[]; stains: PropStain[] } {
   const rand = mulberry32(seed >>> 0);
   const out: PropPlacement[] = [];
   const taken: Taken[] = rubble.map((s) => ({ x: s.x, z: s.z, r: s.r * 0.8 }));
   // `from`: cluster members placed from this index on may touch each other (a cluster is one group of clutter).
   const free = (x: number, z: number, r: number, from = taken.length) =>
     !spotBlocked(L, x, z, Math.max(0.6, r)) && taken.every((t, i) => i >= from || Math.hypot(t.x - x, t.z - z) > t.r + r);
-  const put = (species: PropSpecies, x: number, y: number, z: number, yaw: number, scale = 1) => {
-    out.push({ species, x, y, z, yaw, scale });
+  const stains: PropStain[] = [];
+  const put = (species: PropSpecies, x: number, y: number, z: number, yaw: number, scale = 1, tilt?: number) => {
+    out.push(tilt ? { species, x, y, z, yaw, scale, tilt } : { species, x, y, z, yaw, scale });
     taken.push({ x, z, r: propRadius(species, scale) });
   };
   const R = RECIPES[L.biome ?? 'outpost'];
@@ -143,14 +164,43 @@ export function planProps(L: ArenaLayout, rubble: readonly RubbleSpot[] = [], se
     }
   };
 
-  // Wall-foot clusters in most bays between the braces ArenaDressing sets every 7.4 m; mounted lamps above
-  // every other bay (backs to the face, high enough to clear the drone's usual flight line).
+  // Wall-foot vignettes: story clusters, densest at the inside corners of each face and then at irregular gaps,
+  // each group rotated a little off the wall line. Mounted lamps above every other brace bay.
+  const names = BIOME_VIGNETTES[L.biome ?? 'outpost'];
   for (const w of wallFaces(L)) {
+    const along: [number, number] = w.alongX ? [1, 0] : [0, 1];
+    const outward: [number, number] = w.alongX ? [0, w.s] : [w.s, 0];
+    const wallYaw = (w.alongX ? 0 : Math.PI / 2) + (w.s > 0 ? 0 : Math.PI);
+    const tryAt = (t: number) => {
+      if (full()) return;
+      const v = VIGNETTES[names[Math.floor(rand() * names.length)]];
+      const ext = vignetteExtent(v);
+      // Mirror the group at random so leaning and stacked pieces are not always on the same side.
+      const flip = rand() < 0.5 ? -1 : 1;
+      const dir: [number, number] = [along[0] * flip, along[1] * flip];
+      const lo = flip > 0 ? t + ext.u0 : t - ext.u1;
+      const hi = flip > 0 ? t + ext.u1 : t - ext.u0;
+      if (lo < w.a + 0.4 || hi > w.e - 0.4) return;
+      const ax = w.alongX ? t : w.face;
+      const az = w.alongX ? w.face : t;
+      const items = placeVignette(v, ax, az, dir, outward, flip > 0 ? wallYaw : wallYaw + Math.PI, (rand() - 0.5) * 0.22);
+      const cluster = taken.length;
+      const midU = (lo + hi) / 2;
+      const cx = w.alongX ? midU : w.face + w.s * ext.depth * 0.5;
+      const cz = w.alongX ? w.face + w.s * ext.depth * 0.5 : midU;
+      const r = Math.max((hi - lo) / 2, ext.depth / 2);
+      if (!free(cx, cz, r * 0.8, cluster)) return;
+      for (const p of items) put(p.species, p.x, p.y, p.z, p.yaw, p.scale, p.tilt);
+      stains.push({ x: cx, z: cz, r: r * 1.15 });
+    };
+    // Inside corners first (both ends of the face), then irregular gaps along the run.
+    tryAt(w.a + 1.6);
+    tryAt(w.e - 1.6);
+    for (let t = w.a + 6 + rand() * 4; t < w.e - 6; t += 6 + rand() * 9) if (rand() < 0.6) tryAt(t);
     let bay = 0;
     for (let p = w.a + 0.9; p < w.e - 2; p += 7.4, bay++) {
       const mid = p + 3.7;
       if (mid + 2.65 > w.e) continue;
-      if (rand() < 0.85) row(R.wall[Math.floor(rand() * R.wall.length)], w.alongX, w.face, w.s, mid + (rand() - 0.5) * 1.6, p + 1.4, p + 6.0);
       if (bay % 2 === 0 && !full()) {
         const species = R.mount[(bay / 2) % R.mount.length];
         const [, , depth] = PROP_SPECIES[species].size;
@@ -226,5 +276,5 @@ export function planProps(L: ArenaLayout, rubble: readonly RubbleSpot[] = [], se
       if (species === 'aircon-unit' && rand() < 0.5) out.push({ species: 'searchlight', x: wide ? x + width / 2 + 0.4 : x, y: b.max[1], z: wide ? z : z + width / 2 + 0.4, yaw: rand() * Math.PI * 2, scale: 2.2 });
     }
   }
-  return out;
+  return { props: out, stains };
 }
