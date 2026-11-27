@@ -19,8 +19,10 @@ function fatal(err: unknown): void {
 
 async function start(): Promise<void> {
   if (isDesktop()) {
-    const settings = await invoke<{ base: string }>('desktop_settings');
-    (globalThis as typeof globalThis & { __riftDesktopApi?: string }).__riftDesktopApi = settings.base;
+    const settings = await invoke<{ base: string; native_mouse: boolean }>('desktop_settings');
+    const desktop = globalThis as typeof globalThis & { __riftDesktopApi?: string; __riftNativeMouse?: boolean };
+    desktop.__riftDesktopApi = settings.base;
+    desktop.__riftNativeMouse = settings.native_mouse;
   }
   const { boot } = await import('./boot');
   await boot();
