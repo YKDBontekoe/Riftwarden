@@ -23,6 +23,7 @@ skip unless `RIFT_TEST_DATABASE_URL` is set. Boundary tests: `architecture.test.
 `asset-manifest.test.ts` pins every third-party CC0 file to `assets/cc0/manifest.json` (licence, hash, budget); re-run
 `node scripts/fetch-cc0.mjs` after changing `assets-src/cc0.sources.json`. `prop-plan.test.ts` and `music.test.ts`
 cover the prop planner, HQ clutter and the adaptive score.
+The desktop Rust crate has a credentialed CORS preflight test: `cargo test --manifest-path apps/client/src-tauri/Cargo.toml --locked` (requires platform Tauri build dependencies).
 
 ## Browser suites (Playwright, headless Chromium)
 
