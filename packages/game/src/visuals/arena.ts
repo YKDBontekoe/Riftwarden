@@ -30,6 +30,7 @@ import { planProps } from '@riftwarden/rules/world/propPlan';
 import { configureProps, placeProps } from './propLibrary';
 import { applyBiomeSurfaces } from './biomeSurfaces';
 import { buildFixtureGlow } from './fixtureGlow';
+import { BIOME_LIGHT } from './biomeLight';
 import { arenaGrimeFaces, buildContactGrime, GRIME } from './contactGrime';
 import { PROP_SPECIES } from '@riftwarden/rules/world/propCatalog';
 import { smoothLatheData } from './sculpt';
@@ -168,7 +169,7 @@ export class ArenaBuilder {
     const rubble = planRubble(L);
     new RubbleBuilder({ scene: this.scene, add: (m, mat, s) => this.add(m, mat, s) }, { concrete: P.debris, rust: P.rust, graphite: P.graphite, enamel: P.enamel }, true).build(rubble);
     // Scanned CC0 props (drums, crates, rooftop plant): visual only, planned off lanes and rubble like the debris.
-    configureProps(this.scene, { lights: 8, environment: 0.89, albedo: 0.82 });
+    configureProps(this.scene, { lights: 8, environment: BIOME_LIGHT[L.biome ?? 'outpost'].env, albedo: 0.82 });
     const props = planProps(L, rubble);
     placeProps(new TransformNode('arenaProps', this.scene), props);
     // Natural floor-to-wall seams: contact shadow, biome grime / snow drift / soot, wall staining.

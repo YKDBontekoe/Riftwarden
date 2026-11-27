@@ -51,6 +51,7 @@ import { contactShadow } from '../visuals/grounding';
 import { enemyContacts } from '../visuals/EnemyContacts';
 import { createSunShadows } from '../arena/shadows';
 import { setPropShadowSink } from '../visuals/propLibrary';
+import { applyBiomeLight } from '../visuals/biomeLight';
 import { CORE_BEHAVIORS } from '../enemies/coreBehaviors';
 import { DROP_SOURCES, type DropSourceId } from '@riftwarden/rules/loot/drops';
 import { equipmentModifiers, weaponDefFor } from '@riftwarden/rules/loot/equipment';
@@ -199,6 +200,8 @@ export class Game {
   protected moon: DirectionalLight;
   protected hurtFx = 0;
   protected lastFlash = 0;
+  /** Sun intensity without lightning (biome sun multiplier and light identity applied). */
+  protected sunBase = SUN;
   protected arenaVisuals: ArenaBuilder;
 
   /** Conditional affixes (combat/conditions.ts): what holds right now for the local drone. */
@@ -390,7 +393,8 @@ export class Game {
     this.weapon = new Weapon(scene, weaponDef, this.player, cfg.loadout.weapon);
     scene.setRenderingAutoClearDepthStencil(1, true, true, true);
     this.post = new PostFx(scene, engine, this.player.camera, high, true);
-    Object.assign(this.post, { baseContrast: 1.13, baseExposure: 1.06 }); // retain shadow detail under the directional key
+    this.sunBase = SUN * biomeOf(this.layout).sunMul * applyBiomeLight(scene, this.post, this.pal, this.layout.biome ?? 'outpost');
+    this.moon.intensity = this.sunBase;
     this.mood = new MoodDirector(scene, this.moon, this.post);
     music.reseed(this.layout.seed ?? 1);
 
@@ -1544,7 +1548,7 @@ export class Game {
     const flash = this.atmosphere.update(dt, this.player.camera.position);
     if (flash > 0.9 && this.lastFlash < 0.5) sfx.thunder(0.4 + Math.random() * 1.2);
     this.lastFlash = flash;
-    this.moon.intensity = SUN + flash * 0.4;
+    this.moon.intensity = this.sunBase + flash * 0.4;
     return flash;
   }
 

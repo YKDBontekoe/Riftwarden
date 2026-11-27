@@ -2,7 +2,7 @@
 
 Third-party CC0 assets (Poly Haven models and textures, OpenGameArt music) give each biome its own look and the game a
 score. Pipeline and licence rules: [ADR 0004](../decisions/0004-cc0-asset-pipeline.md); provenance:
-[`docs/assets/credits.md`](../assets/credits.md). Sky, sun and post-processing are unchanged by this pass.
+[`docs/assets/credits.md`](../assets/credits.md). Skies and backdrops are unchanged; each biome has its own light identity (below).
 
 ## Sources
 
@@ -28,6 +28,15 @@ score. Pipeline and licence rules: [ADR 0004](../decisions/0004-cc0-asset-pipeli
   disposed. Headless (`NullEngine`) skips all of it.
 - Scanned micro detail (`visuals/scanDetail.ts`) is layered on graphite, black steel and bare metal (paint scan) and on
   the HQ deck, walls and ceiling. Not on white trims or enamel: the paint streaks read as wood grain there.
+
+## Biome light (`visuals/biomeLight.ts`)
+
+`applyBiomeLight` (called once by `Game`) sets per biome: camera grade exposure / contrast (the mood director still adds
+boss / event / reactor moods on top), the `stormFill` hemispheric light's sky colour, ground bounce and intensity, IBL
+strength on the palette and props, and a sun multiplier. Outpost = warm dusk with dusty bounce (exposure 1.46),
+cryo = cold daylight with snow bounce (1.4), foundry = furnace orange welling up from below (1.3). No light is added
+(frame budget). Black steel albedo is lifted x1.9 so panels stop reading as holes. Lightning flashes now add to the
+biome sun (`Game.sunBase`) instead of resetting it to the bare constant.
 
 ## Props
 
@@ -85,7 +94,7 @@ alpha-blended, no depth write, z-offset under decals. Removes the clean CG line 
 
 ## Not done yet
 
-- Real-GPU look check (exposure: the storm-dusk arenas still read dark, especially wall faces in shadow).
+- Real-GPU look check of the new exposure / fill levels (tuned on SwiftShader captures).
 - Loops were picked by licence and metadata, not auditioned; swap in `assets-src/cc0.sources.json`.
 - Props have no collision: the drone and shots pass through them (like rubble). Large deck pieces (cars, dumpsters)
   are the most noticeable.
