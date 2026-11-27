@@ -266,7 +266,7 @@ export function Perf() {
   if (!p) return null;
   return (
     <div className="perf">
-      {p.fps} FPS · {p.enemies} enemies · {p.towers ?? 0} towers · {p.projectiles ?? 0} proj · {p.draws} draws · {p.particles} particles
+      {p.fps} FPS · 1% low {p.low1 ?? 0} · 0.1% low {p.low01 ?? 0} · p99 {p.p99 ?? 0} ms{p.load !== undefined && p.load < 1 ? ` · adaptive fx ×${p.load}` : ''} · {p.enemies} enemies · {p.towers ?? 0} towers · {p.projectiles ?? 0} proj · {p.draws} draws · {p.particles} particles
       <br />
       fx queue {p.pending ?? 0} · {p.effects ?? 0} effects · {p.triggers ?? 0} triggers/s · {p.statuses ?? 0} statuses · dropped {p.dropped ?? 0} · dps player {p.dpsPlayer ?? 0} / tower {p.dpsTower ?? 0}
       <br />

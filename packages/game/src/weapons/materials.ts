@@ -4,6 +4,7 @@ import { Texture } from '@babylonjs/core/Materials/Textures/texture';
 import { Color3 } from '@babylonjs/core/Maths/math.color';
 import { type Scene } from '@babylonjs/core/scene';
 import { surfaceGrain } from '../visuals/surfaceSources';
+import { freshMaterial } from '../visuals/freshMaterial';
 import { canvas, fbm, heightToNormal, rng, toTexture, vnoise } from '../visuals/textures';
 import type { Finish } from '@riftwarden/rules/weapons/build';
 
@@ -147,7 +148,12 @@ function markingMaterial(scene: Scene): PBRMaterial {
   return material;
 }
 
+// Item materials are created mid-fight (loot drops): build them inside `freshMaterial` (no scene-wide dirty scans).
 function surface(scene: Scene, m: Micro, name: string, albedo: [number, number, number], metallic: number, roughness: number, clearCoat = 0): PBRMaterial {
+  return freshMaterial(() => surfaceMaterial(scene, m, name, albedo, metallic, roughness, clearCoat));
+}
+
+function surfaceMaterial(scene: Scene, m: Micro, name: string, albedo: [number, number, number], metallic: number, roughness: number, clearCoat: number): PBRMaterial {
   const mat = new PBRMaterial(name, scene);
   mat.albedoColor = new Color3(...albedo);
   mat.albedoTexture = m.albedo;
@@ -231,20 +237,23 @@ export function weaponMaterials(scene: Scene): WeaponMaterials {
       if (!mat) {
         const [a, met, r, cc] = SHELL[f];
         const painted = f === 'arctic' || f === 'sand' || f === 'slate';
-        mat = surface(scene, painted ? paint : m, `${pickup ? 'pickupShell' : 'wpnShell'}_${f}`, a, painted ? 1 : met, r, cc);
-        if (pickup) {
-          mat.albedoColor = Color3.Lerp(mat.albedoColor, new Color3(0.62, 0.65, 0.68), 0.18);
-          if (!painted && f !== 'iridescent') mat.metallic = Math.min(met, 0.42);
-          mat.emissiveColor = mat.albedoColor.scale(0.095);
-          mat.emissiveTexture = mat.albedoTexture;
-        }
-        if (f === 'iridescent') {
-          mat.iridescence.isEnabled = true;
-          mat.iridescence.intensity = 1;
-          mat.iridescence.indexOfRefraction = 1.6;
-          mat.iridescence.minimumThickness = 250;
-          mat.iridescence.maximumThickness = 650;
-        }
+        mat = freshMaterial(() => {
+          const shell = surface(scene, painted ? paint : m, `${pickup ? 'pickupShell' : 'wpnShell'}_${f}`, a, painted ? 1 : met, r, cc);
+          if (pickup) {
+            shell.albedoColor = Color3.Lerp(shell.albedoColor, new Color3(0.62, 0.65, 0.68), 0.18);
+            if (!painted && f !== 'iridescent') shell.metallic = Math.min(met, 0.42);
+            shell.emissiveColor = shell.albedoColor.scale(0.095);
+            shell.emissiveTexture = shell.albedoTexture;
+          }
+          if (f === 'iridescent') {
+            shell.iridescence.isEnabled = true;
+            shell.iridescence.intensity = 1;
+            shell.iridescence.indexOfRefraction = 1.6;
+            shell.iridescence.minimumThickness = 250;
+            shell.iridescence.maximumThickness = 650;
+          }
+          return shell;
+        });
         finishes.set(f, mat);
       }
       return mat;
@@ -263,9 +272,12 @@ export function weaponMaterials(scene: Scene): WeaponMaterials {
       if (!mat) {
         const coating = equipmentCoating ??= micro(scene, 'equipment');
         const { r, g, b } = Color3.FromHexString(color);
-        mat = surface(scene, coating, `equipmentPaint_${color.slice(1)}`, [r, g, b], 0.82, 0.68);
-        mat.emissiveColor = mat.albedoColor.scale(0.11);
-        mat.emissiveTexture = coating.albedo;
+        mat = freshMaterial(() => {
+          const paint = surface(scene, coating, `equipmentPaint_${color.slice(1)}`, [r, g, b], 0.82, 0.68);
+          paint.emissiveColor = paint.albedoColor.scale(0.11);
+          paint.emissiveTexture = coating.albedo;
+          return paint;
+        });
         equipmentPaints.set(color, mat);
       }
       return mat;
@@ -286,6 +298,10 @@ export function weaponMaterials(scene: Scene): WeaponMaterials {
 
 /** Unlit HDR energy material owned by one model (animated: pulses, charge, heat tint). */
 export function weaponGlow(scene: Scene, name: string, c: [number, number, number], additive = false): PBRMaterial {
+  return freshMaterial(() => glowMaterial(scene, name, c, additive));
+}
+
+function glowMaterial(scene: Scene, name: string, c: [number, number, number], additive: boolean): PBRMaterial {
   const m = new PBRMaterial(name, scene);
   m.unlit = true;
   m.albedoColor = Color3.Black();
@@ -304,10 +320,17 @@ export function weaponGlow(scene: Scene, name: string, c: [number, number, numbe
 
 /** Heat-reactive dark metal owned by one model: emissive rises from black to orange-white. */
 export function heatMetal(scene: Scene, name: string): PBRMaterial {
+  // Library and temper map first: they may be created now and are not part of this material's scope.
+  const albedo = temperTexture(scene);
+  const bump = weaponMaterials(scene).dark.bumpTexture;
+  return freshMaterial(() => heatMaterial(scene, name, albedo, bump));
+}
+
+function heatMaterial(scene: Scene, name: string, albedo: Texture, bump: PBRMaterial['bumpTexture']): PBRMaterial {
   const m = new PBRMaterial(name, scene);
   m.albedoColor = new Color3(0.30, 0.33, 0.39);
-  m.albedoTexture = temperTexture(scene);
-  m.bumpTexture = weaponMaterials(scene).dark.bumpTexture;
+  m.albedoTexture = albedo;
+  m.bumpTexture = bump;
   m.metallic = 0.85;
   m.roughness = 0.46;
   m.usePhysicalLightFalloff = false;

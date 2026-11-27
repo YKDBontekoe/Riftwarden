@@ -32,6 +32,7 @@ import type { RunStart } from '@riftwarden/protocol/protocol';
 import type { RunResult } from '@riftwarden/rules/progression/run';
 import { keyRemap, type Settings, saveSettings } from '@riftwarden/game/core/settings';
 import { FrameClock } from '@riftwarden/game/core/frameClock';
+import { AdaptiveQuality } from '@riftwarden/game/core/adaptiveQuality';
 import { hashRunSeed } from '@riftwarden/rules/roguelite/upgrades';
 import { generateArena } from '@riftwarden/rules/world/arenaGen';
 import { ARENA, type ArenaLayout } from '@riftwarden/rules/world/layout';
@@ -177,7 +178,7 @@ export class Flow {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const ratio = q === 'low' ? 1 : dpr;
     const pixelBudget = q === 'high' ? 3840 * 2160 : q === 'medium' ? 3440 * 1440 : 1920 * 1080;
-    const scale = Math.min(ratio, Math.sqrt(pixelBudget / pixels)) * (this.settings.renderScale ?? 1);
+    const scale = Math.min(ratio, Math.sqrt(pixelBudget / pixels)) * (this.settings.renderScale ?? 1) * this.adaptive.current.renderScale;
     this.engine.setHardwareScalingLevel(1 / scale);
   }
 
@@ -201,17 +202,29 @@ export class Flow {
 
   /** Smoothed frame delta (jitter filter; hitches still clamp to 1/20 s). */
   private readonly clock = new FrameClock(1 / 20);
+  /** Adaptive quality (off under automation, where suites need fixed visuals, unless a check opts in). */
+  readonly adaptive = new AdaptiveQuality(0);
+  adaptiveUnderTest = false;
 
   frame(): void {
     const w = this.world;
     if (!w || this.building) return;
-    const dt = this.clock.next(this.engine.getDeltaTime() / 1000);
+    const raw = this.engine.getDeltaTime();
+    const dt = this.clock.next(raw / 1000);
+    this.adaptive.targetFps = this.input.forceCapture && !this.adaptiveUnderTest ? 0 : this.settings.adaptiveTarget;
+    if (!this.busy && this.adaptive.sample(raw)) this.applyAdaptive();
     this.coopPresence(dt);
     // While a new scene warms up behind the transit overlay it renders but does not simulate.
     if (!this.busy) w.step(dt, this.engine.getFps());
     // Warm the HQ and its reflections once behind the opaque title artwork.
     if (w !== this.home || this.home.screen !== 'menu' || !w.scene.environmentTexture || this.busy) w.scene.render();
     this.input.endFrame();
+  }
+
+  /** Push the adaptive level to the renderer (resolution) and the arena (cosmetic effect density). */
+  private applyAdaptive(): void {
+    this.resize();
+    this.arena?.setEffectLoad(this.adaptive.current.effects);
   }
 
   applySettings(s: Settings): void {
@@ -753,6 +766,9 @@ export class Flow {
       const t1 = performance.now();
       const scene = build();
       this.building = false;
+      // A new scene starts measuring afresh at the current level (loading frames are not load).
+      this.adaptive.reset();
+      this.arena?.setEffectLoad(this.adaptive.current.effects);
       if (this.loopStopped) scene.useConstantAnimationDeltaTime = true;
       this.transitions++;
       const t2 = performance.now();

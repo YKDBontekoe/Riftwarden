@@ -102,6 +102,7 @@ export function runHud(tier: number, run: RunLedgerView, checkpointOpen: boolean
     checkpointOpen,
     lastBankedWave: run.lastBankedWave,
     kills: run.kills,
-    duration: run.duration,
+    // Whole seconds (the HUD shows m:ss): a per-frame value made the whole run block change on every publish.
+    duration: Math.floor(run.duration),
   };
 }

@@ -15,6 +15,7 @@ import { availableParts, configCost, levelCost, MAX_TOWER_LEVEL, partDef, swapCo
 import { planBuildConfig, planRefit } from '@riftwarden/rules/towers/refit';
 import { uiEvents } from '../ui/store';
 import type { TowerWear } from './TowerWear';
+import { metadataPicker } from '../world/pickCandidates';
 
 export type TowerEdit = { ok: true; cost: number } | { ok: false; reason: string };
 
@@ -86,7 +87,7 @@ export class TowerControl {
       const cam = h.player.camera;
       this.ray.origin.copyFrom(cam.position);
       cam.getDirectionToRef(Vector3.Forward(), this.ray.direction);
-      const hit = h.scene.pickWithRay(this.ray, (m) => (!!m.metadata?.turret || !!m.metadata?.surface) && m.isEnabled());
+      const hit = metadataPicker(h.scene).pickWithRay(this.ray, (m) => (!!m.metadata?.turret || !!m.metadata?.surface) && m.isEnabled());
       const meta = hit?.pickedMesh?.metadata as TurretHitboxMeta | undefined;
       if (meta?.turret && !meta.turret.building && !meta.turret.temporary) t = meta.turret;
     }

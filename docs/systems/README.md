@@ -4,6 +4,7 @@ One file per system or milestone: how it works, the rules that are easy to break
 
 | File | Covers |
 | --- | --- |
+| [performance.md](performance.md) | Performance and frame pacing (picking, material/shader hitches, crowd scaling, adaptive quality, benchmarks) |
 | [desktop.md](desktop.md) | Desktop client (Tauri 2, signed updates) |
 | [ui-design-system.md](ui-design-system.md) | UI design system (final design 2026-11, canvas "Riftwarden UI · Final design") |
 | [loot-presentation.md](loot-presentation.md) | Loot presentation (3D items, thumbnails, icons) |

@@ -115,8 +115,8 @@ export function animateCore(e: Enemy, hdt: number, ppos: Vector3, fx: Effects): 
     if (planted && d2 < 26 * 26) sfx.play('step', { volume: (1 - Math.sqrt(d2) / 26) * (e.kind === 'bulwark' ? 0.9 : 0.5), pitch: e.kind === 'bulwark' ? 0.75 : 1 });
     if (w.shield) {
       const s = e.shieldFlash;
+      // Scale only: the shield is an instance (instances ignore `visibility`; setting it logged a warning per frame).
       w.shield.scaling.set(3.6 + s * 0.3, 3.9 + s * 0.3, 3.6 + s * 0.3);
-      w.shield.visibility = 0.55 + s * 0.45;
     }
   } else if (e.drone) {
     const d = e.drone;

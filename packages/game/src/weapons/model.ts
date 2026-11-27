@@ -68,7 +68,7 @@ export interface ModelOpts {
   name?: string;
   /** Include the drone hardpoint arm (viewmodel only). Default true. */
   mount?: boolean;
-  /** Lift the receiver finish in arena lighting, where the weapon is viewed at a distance. */
+  /** Arena pickup: lift the receiver finish (viewed at a distance) and share the static glow/heat materials per scene. */
   pickup?: boolean;
   /** Damage element: non-kinetic elements tint the energy parts. */
   element?: string;
@@ -847,18 +847,39 @@ export function energyColor(b: WeaponBuild, element?: string): [number, number, 
   return [Math.max(0.05, e[0] * k * (1 + h)), e[1] * k * (1 - h * 0.3), Math.max(0.05, e[2] * k * (1 - h))];
 }
 
+type RigMaterials = Record<'energy' | 'chargeGlow' | 'heat' | 'ledOn' | 'ledHot' | 'ledOff', PBRMaterial>;
+
+function rigMaterials(scene: Scene, ec: [number, number, number]): RigMaterials {
+  return {
+    energy: weaponGlow(scene, 'wpnEnergy', ec),
+    chargeGlow: weaponGlow(scene, 'wpnCharge', [ec[0] * 0.35, ec[1] * 0.35, ec[2] * 0.35]),
+    heat: heatMetal(scene, 'wpnHeat'),
+    ledOn: weaponGlow(scene, 'wpnLedOn', [ec[0] * 0.8, ec[1] * 0.8, ec[2] * 0.8]),
+    ledHot: weaponGlow(scene, 'wpnLedHot', [3, 0.5, 0.08]),
+    ledOff: weaponGlow(scene, 'wpnLedOff', [0.02, 0.025, 0.03]),
+  };
+}
+
+const sharedRigs = new WeakMap<Scene, Map<string, RigMaterials>>();
+function sharedRigMaterials(scene: Scene, ec: [number, number, number]): RigMaterials {
+  let byColor = sharedRigs.get(scene);
+  if (!byColor) sharedRigs.set(scene, (byColor = new Map()));
+  const key = ec.join(',');
+  let set = byColor.get(key);
+  if (!set) byColor.set(key, (set = rigMaterials(scene, ec)));
+  return set;
+}
+
 export function buildWeaponModel(scene: Scene, build: WeaponBuild, installed: (ItemInstance | null)[] = [], opts: ModelOpts = {}, rarityIndex = 0): WeaponRig {
   const root = new TransformNode(`${opts.name ?? 'wpn'}Root`, scene);
   const a = new Assembler(scene, root, opts);
   const M = weaponMaterials(scene);
   const ec = energyColor(build, opts.element);
-  const energy = weaponGlow(scene, 'wpnEnergy', ec);
-  const chargeGlow = weaponGlow(scene, 'wpnCharge', [ec[0] * 0.35, ec[1] * 0.35, ec[2] * 0.35]);
-  const heat = heatMetal(scene, 'wpnHeat');
-  const ledOn = weaponGlow(scene, 'wpnLedOn', [ec[0] * 0.8, ec[1] * 0.8, ec[2] * 0.8]);
-  const ledHot = weaponGlow(scene, 'wpnLedHot', [3, 0.5, 0.08]);
-  const ledOff = weaponGlow(scene, 'wpnLedOff', [0.02, 0.025, 0.03]);
-  const owned = [energy, chargeGlow, heat, ledOn, ledHot, ledOff];
+  // Arena pickups never animate their glows/heat, so they share one set per energy colour: a new PBR material in a
+  // crowded scene costs a scan of every mesh (a rare weapon drop cost ~450 ms with 19k meshes).
+  const shared = opts.pickup ? sharedRigMaterials(scene, ec) : null;
+  const { energy, chargeGlow, heat, ledOn, ledHot, ledOff } = shared ?? rigMaterials(scene, ec);
+  const owned = shared ? [] : [energy, chargeGlow, heat, ledOn, ledHot, ledOff];
   const rig: Ctx['rig'] = { spin: [], fins: [], charge: [], muzzles: [] };
   const c: Ctx = { mount: opts.mount !== false, a, M, shell: M.shell(build.finish, opts.pickup), trim: rarityIndex >= 2 ? M.trim(build.finish) : M.satin, energy, chargeGlow, heat, b: build, rarity: rarityIndex, rig };
   rig.slide = a.node('slide', root);

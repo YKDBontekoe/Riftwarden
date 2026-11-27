@@ -326,8 +326,9 @@ export class Effects {
   particleBudget = 1800;
   /** M7 settings: particle density multiplier (low 0.45, medium 0.75, high 1). */
   density = 1;
-  setDensity(level: 'low' | 'medium' | 'high'): void {
-    this.density = level === 'low' ? 0.45 : level === 'medium' ? 0.75 : 1;
+  /** `load`: adaptive-quality multiplier (core/adaptiveQuality.ts), 1 = the setting as chosen. */
+  setDensity(level: 'low' | 'medium' | 'high', load = 1): void {
+    this.density = (level === 'low' ? 0.45 : level === 'medium' ? 0.75 : 1) * load;
     this.particleBudget = Math.round((this.high ? 1800 : 1050) * this.density);
     this.fragments.cap = Math.round((this.high ? 72 : 44) * this.density);
     this.smolder.density = this.density;
@@ -621,7 +622,7 @@ export class Effects {
     d.mesh.rotation.y = Math.random() * Math.PI * 2;
     d.mesh.scaling.set(size, 1, size);
     d.life = 26;
-    d.mat.alpha = 1;
+    d.mesh.visibility = 1;
   }
 
   /** color: 0 = player (white-blue), 1 = turret (cyan), 2 = hostile (orange) */
@@ -780,7 +781,9 @@ export class Effects {
     for (const d of this.scorches) {
       if (d.life <= 0) continue;
       d.life -= dt;
-      d.mat.alpha = Math.min(1, d.life / 6) * 0.92;
+      // Fade with mesh.visibility (same shader term as material alpha): an alpha write marks the material dirty, which
+      // scans every mesh in the scene, every frame, per decal.
+      d.mesh.visibility = Math.min(1, d.life / 6) * 0.92;
       if (d.life <= 0) d.mesh.setEnabled(false);
     }
   }

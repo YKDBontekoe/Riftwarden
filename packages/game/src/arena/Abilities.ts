@@ -36,6 +36,7 @@ import type { ItemInstance } from '@riftwarden/rules/loot/types';
 import type { Player } from '../player/Player';
 import { uiEvents } from '../ui/store';
 import { ENV_QUERY } from '../world/physicsGroups';
+import { metadataPicker } from '../world/pickCandidates';
 
 /** What abilities need from the arena (no Game import). */
 export interface AbilityHost {
@@ -349,7 +350,7 @@ export class Abilities {
   private mark(eye: Vector3, aim: Vector3, power: number, radius: number): void {
     this.pickRay.origin.copyFrom(eye);
     this.pickRay.direction.copyFrom(aim);
-    const hit = this.h.scene.pickWithRay(this.pickRay, (m) => !!m.metadata?.surface && m.isEnabled());
+    const hit = metadataPicker(this.h.scene).pickWithRay(this.pickRay, (m) => !!m.metadata?.surface && m.isEnabled());
     const at = hit?.pickedPoint ? hit.pickedPoint.clone() : eye.add(aim.scale(40));
     at.y = Math.max(0, at.y);
     this.strikes.push({ at, t: ORBITAL_DELAY, power, radius, pulse: 0 });

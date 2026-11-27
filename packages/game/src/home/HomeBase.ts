@@ -156,7 +156,8 @@ export class HomeBase {
     this.scene = scene;
     scene.clearColor = new Color4(0.02, 0.04, 0.06, 1);
     scene.ambientColor = new Color3(0.03, 0.04, 0.05);
-    scene.skipPointerMovePicking = true;
+    // No Babylon pointer events in the HQ: never pick the whole scene on mouse move/press/release.
+    scene.skipPointerMovePicking = scene.skipPointerDownPicking = scene.skipPointerUpPicking = true;
     scene.enablePhysics(new Vector3(0, -26, 0), new HavokPlugin(true, havok));
     const high = settings.quality === 'high';
 

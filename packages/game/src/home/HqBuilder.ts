@@ -6,6 +6,7 @@ import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
 import { PhysicsMotionType } from '@babylonjs/core/Physics/v2/IPhysicsEnginePlugin';
 import { PhysicsBody } from '@babylonjs/core/Physics/v2/physicsBody';
 import { PhysicsShapeBox, PhysicsShapeContainer } from '@babylonjs/core/Physics/v2/physicsShape';
+import { accelerateStaticPicking } from '../world/fastPick';
 import { type Scene } from '@babylonjs/core/scene';
 import { createBeveledBox } from '../visuals/bevel';
 import { boxProjectUVs } from '../visuals/uv';
@@ -427,6 +428,7 @@ export class HqBuilder {
       merged.material = mat;
       boxProjectUVs(merged, mat === this.M.floor ? 6 : mat === this.M.wall ? 4 : 2.5);
       merged.isPickable = g.surface !== null;
+      if (merged.isPickable) accelerateStaticPicking(merged);
       merged.metadata = g.surface ? { surface: g.surface } : null;
       merged.receiveShadows = g.surface !== null;
       merged.freezeWorldMatrix();

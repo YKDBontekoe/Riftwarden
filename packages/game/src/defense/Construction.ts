@@ -14,6 +14,7 @@ import { BASES, composeTower, configCost, DEFAULT_CONFIG, NO_RUN_INPUT, type Tow
 import type { ArenaLayout } from '@riftwarden/rules/world/layout';
 import { FOOTPRINT_SAMPLES, PLACEMENT_MESSAGES, type PlacementReason, validatePlacement } from '@riftwarden/rules/defense/placement';
 import type { Turret } from './Turrets';
+import { metadataPicker } from '../world/pickCandidates';
 
 export const BUILD_REACH = 32;
 
@@ -76,7 +77,7 @@ export class Construction {
 
   private surfaceHeight(x: number, z: number, fromY: number): number {
     this.downRay.origin.set(x, fromY, z);
-    const hit = this.scene.pickWithRay(this.downRay, isSurface);
+    const hit = metadataPicker(this.scene).pickWithRay(this.downRay, isSurface);
     return hit?.hit && hit.pickedPoint ? hit.pickedPoint.y : -1;
   }
 
@@ -86,7 +87,7 @@ export class Construction {
     this.ray.origin.copyFrom(cam.position);
     cam.getDirectionToRef(Vector3.Forward(), this.ray.direction);
     this.ray.length = BUILD_REACH + 8;
-    const hit = this.scene.pickWithRay(this.ray, isSurface);
+    const hit = metadataPicker(this.scene).pickWithRay(this.ray, isSurface);
     if (!hit?.hit || !hit.pickedPoint) {
       this.valid = false;
       this.reason = 'no-surface';
@@ -135,7 +136,7 @@ export class Construction {
    */
   validateAt(x: number, z: number, cfg: TowerConfig, from: Vector3, cores: number, turrets: readonly Turret[], stats: CombatStats): { reason: PlacementReason; point: Vector3 } {
     this.downRay.origin.set(x, 18, z);
-    const hit = this.scene.pickWithRay(this.downRay, isSurface);
+    const hit = metadataPicker(this.scene).pickWithRay(this.downRay, isSurface);
     if (!hit?.hit || !hit.pickedPoint) return { reason: 'no-surface', point: new Vector3(x, 0, z) };
     const p = hit.pickedPoint.clone();
     const n = hit.getNormal(true, true) ?? Vector3.Up();

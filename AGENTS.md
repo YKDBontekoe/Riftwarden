@@ -101,6 +101,9 @@ changing economy/progression numbers pinned by `tests/progression-sim.test.ts`, 
   big files rather than growing them.
 - **Naming**: by intent, never by milestone (`nextTowerCost`, not `m5Cost`). The HUD keys `m5`/`m6` are legacy.
 - **Unlock track**: a new player-facing feature needs an entry in `packages/rules/src/progression/unlocks.ts`.
+- **Frame budget**: no per-frame material property writes or light enable/disable mid-run (shader recompiles), no
+  per-frame chances or smoothing without `dt`, gameplay ray picks through `metadataPicker`. Details and the rest:
+  [`docs/systems/performance.md`](docs/systems/performance.md).
 - **Comments** explain why (a constraint, a gotcha, a link to a doc section), not what the code says.
 
 ## Definition of done

@@ -392,7 +392,7 @@ export class Ordnance {
         r.pos.y += Math.sin(f * Math.PI) * r.arc;
         r.mesh.position.copyFrom(r.pos);
         r.mesh.scaling.setAll(1 + 0.15 * Math.sin(rt * 30));
-        if (Math.random() < 0.5) ctx.trail(r.kind, r.pos);
+        if (Math.random() < perFrame(0.5, hdt)) ctx.trail(r.kind, r.pos);
         if (f >= 1) this.finish(r, ctx, r.to, false);
         continue;
       }
@@ -422,7 +422,7 @@ export class Ordnance {
       r.pos.copyFrom(next);
       r.mesh.position.copyFrom(next);
       if (r.kind === 'orb') r.mesh.rotation.y += hdt * 6;
-      if (Math.random() < 0.35) ctx.trail(r.kind, r.pos);
+      if (Math.random() < perFrame(0.35, hdt)) ctx.trail(r.kind, r.pos);
       r.life -= hdt;
       if (r.life <= 0) {
         r.active = false;
@@ -481,3 +481,8 @@ function segSphere(a: Vector3, b: Vector3, c: Vector3, rad: number): boolean {
 
 export const TELE_COLOR = COLORS;
 export const C3 = (c: TeleColor) => new Color3(...COLORS[c]);
+
+/** Chance per step for an event that happens with chance `p60` per 60 Hz frame (trail density independent of frame rate). */
+function perFrame(p60: number, dt: number): number {
+  return 1 - Math.pow(1 - p60, dt * 60);
+}

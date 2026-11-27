@@ -152,6 +152,13 @@ export function SettingsPanel({ flow, compact, page, onTab }: { flow: Flow; comp
               <Seg label="Particles" help="Sparks, smoke and debris density" value={s.particles} options={[['low', 'Low'], ['medium', 'Medium'], ['high', 'High']]} onChange={(v) => update({ particles: v })} />
               <Seg label="Bloom" help="Glow around bright lights and plasma" value={s.bloom ? 'on' : 'off'} options={[['on', 'On'], ['off', 'Off']]} onChange={(v) => update({ bloom: v === 'on' })} />
               <Slider label="Render resolution" help="Lower is faster on weak GPUs" min={0.5} max={1} step={0.05} value={s.renderScale} fmt={pct} onChange={(v) => update({ renderScale: v })} />
+              <Seg
+                label="Adaptive quality"
+                help="Below this frame rate, fewer particles first, then lower resolution, until it holds"
+                value={String(s.adaptiveTarget)}
+                options={[['0', 'Off'], ['60', '60 FPS'], ['120', '120 FPS'], ['144', '144 FPS']]}
+                onChange={(v) => update({ adaptiveTarget: Number(v) as Settings['adaptiveTarget'] })}
+              />
               <Seg label="Renderer" help={`${flow.backend === 'webgpu' ? 'WebGPU' : 'WebGL2'} now · applies on restart · WebGPU is a beta`} value={s.renderer} options={[['webgl', 'WebGL2'], ['webgpu', 'WebGPU']]} onChange={(v) => update({ renderer: v })} />
             </>
           )}

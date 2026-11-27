@@ -52,6 +52,12 @@ construction-and-coop (`.github/workflows/ci.yml`).
 - e2e-m2 **C8/C9** fail on the pre-existing code; A2/A6/D8/F1 are intermittent random-loot checks; H stops at
   `deploy(p, 2)` since the v11 progression restart.
 - e2e-m3 **H1** is stale since the v11 restart (reads a weapon the wipe removed).
+- Open (performance overhaul): the wider pool shader warm-up (`visuals/warmPools.ts`) compiles a 13-light PBR variant
+  that SwiftShader cannot compile, so the "no console errors" checks (e2e-combat Z, e2e-m2 I4, e2e-arenas Z,
+  e2e-render-lifecycle, e2e-range Z, e2e-m5 Z, e2e-polish) now report it; they pass on `88c0d92`. Every other check
+  matches the base commit. Next step: find the material (effects with a compilation error after `warmShaders`) and
+  skip or cap it in the warm-up.
+- e2e-m1 A5 (deployment terminal label) and e2e-m6 E4/D5/D6/H2/I1 also fail on `88c0d92`.
 - e2e-m6 B6/B7/C4 fail identically on older commits (fast-pace speeds); C1 is timing-flaky under load.
 
 Details and older numbers: [`history.md`](history.md).
@@ -60,7 +66,7 @@ Details and older numbers: [`history.md`](history.md).
 
 `/?test` sets `input.forceCapture` (no pointer lock) and exposes `window.__rift` (`apps/client/src/core/debugApi.ts`):
 `state()`, `look(yaw, pitch)`, `advance(seconds)` (fixed 60 Hz simulation, no rendering), `stopLoop()`, `render(frames)`,
-`killAll()`, `leakStats()`, `spawnLoot`, `teleport`, `makeItem`, `grant`, `previewLoading`, plus `flow`, `profile`,
+`killAll()`, `leakStats()`, `hud` (the HUD store), `spawnLoot`, `teleport`, `makeItem`, `grant`, `previewLoading`, plus `flow`, `profile`,
 `game`, `home`, `dev`. Drive input with `game.input.simulateKey(code, down)` / `simulateMouse(button, down)`.
 
 `?test` defaults (keep legacy suites stable): classic arena (`&procedural` opts in), classic endless run (`&map`), local
@@ -81,5 +87,5 @@ export RIFT_TEST_REDIS_URL=redis://127.0.0.1:56379
 
 ## Tools
 
-`scripts/playtest.cjs` (bot plays N waves, prints pacing), `feel-shots.cjs`, `vfx-shots.cjs`, `loot-shots.cjs`,
+`scripts/bench-perf.cjs` (performance scenarios early/late/extreme/loot/extended: frame-time percentiles, draws, heap, spikes; `BENCH_PROFILE=1` adds CPU-profile hotspots, `BENCH_EFFECTS=<prefix>` dumps shader variants compiled mid-fight; see [`performance.md`](performance.md)), `scripts/bench-coop.mjs` (headless co-op server: tick cost, snapshot/event bytes; `node --import tsx scripts/bench-coop.mjs 2 120 30`), `scripts/playtest.cjs` (bot plays N waves, prints pacing), `feel-shots.cjs`, `vfx-shots.cjs`, `loot-shots.cjs`,
 `item-sheet.cjs`, `ui-shots.cjs` + `ui-diff.cjs` (UI regression captures), `smoke-stack.mjs` (deploy smoke).
