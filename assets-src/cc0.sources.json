@@ -280,6 +280,21 @@
       "id": "foundry-casing",
       "polyhaven": "rusty_metal_04",
       "res": "1k"
+    },
+    {
+      "id": "outpost-patch",
+      "polyhaven": "asphalt_02",
+      "res": "1k"
+    },
+    {
+      "id": "cryo-patch",
+      "polyhaven": "snow_02",
+      "res": "1k"
+    },
+    {
+      "id": "foundry-patch",
+      "polyhaven": "metal_plate",
+      "res": "1k"
     }
   ],
   "hdris": [

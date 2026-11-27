@@ -100,6 +100,7 @@ packages/game/src/visuals/hqTextures.ts  HQ-only surface sets with emissive maps
 packages/game/src/home/roomStyle.ts      accent colour + light tint per HQ room (room identity)                             [pure]
 packages/rules/src/world/propCatalog.ts   scanned CC0 prop species: footprint, roles (floor/deck/roof/wall/hq), orientation [pure]
 packages/rules/src/world/propPlan.ts      where arena props go per biome (wall-foot clusters, wall lamps, deck clusters, rooftop plant), own seed stream [pure]
+packages/rules/src/world/propVignettes.ts hand-authored wall-foot prop vignettes (stacks, tipped items) and their placement [pure]
 packages/rules/src/world/rubblePlan.ts    where arena rubble/wreckage goes (piles at wall bases + block corners, wall wrecks, deck scatter), kept off lanes/reactor/spawn/reserved/vents/ramps [pure]
 packages/game/src/visuals/arenaFloor.ts  arena floor zoning: reactor steel plaza + hazard border, wall gutters with grates, gate-mouth chevrons (8 mm inlays under decals 16 mm / lane lights 28 mm, not pickable)
 packages/game/src/visuals/riftMist.ts    RiftMist: additive noise vapour rolling out of each gate (floor + waist layers, orange open / grey sealed; Game.openGate lights it)
@@ -221,6 +222,8 @@ packages/game/src/visuals/biomeLight.ts   per-biome exposure / fill / bounce / I
 packages/game/src/visuals/substationModel.ts transformer-bay geometry for `block` solids (tank, radiators, bushings, conservator)
 packages/game/src/visuals/machineModel.ts  machinery bank geometry (enclosure, pump skids, header, cable tray, roof vessels)
 packages/game/src/visuals/groundRelief.ts visual ground relief field with gameplay fade mask [pure]
+packages/game/src/visuals/floorPlan.ts    floor detail plan: slab joints, patches, cracks, pools, spots, walkway paint [pure]
+packages/game/src/visuals/floorDetail.ts  builds the floor detail plan as relief-following overlays; exact ground-mesh height sampler
 packages/game/src/visuals/contactGrime.ts contact shadow + grime / snow / soot strips along floor-wall seams (arena and HQ)
 packages/game/src/visuals/fixtureGlow.ts  fake light splashes, lenses and pools for wall-mounted prop fixtures
 packages/game/src/visuals/scanDetail.ts   scanned micro detail maps (Babylon detail map layout) for procedural sets

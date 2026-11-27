@@ -786,6 +786,42 @@
       "sha256": "96c7a4bd0bdd0d6b44a94475f58d9aba5b7ffbc4328071206cf7e34c70200268"
     },
     {
+      "id": "cryo-patch-albedo",
+      "kind": "texture",
+      "title": "Snow 02 (albedo, 1k)",
+      "author": "Rob Tuytel",
+      "source": "https://polyhaven.com/a/snow_02",
+      "file": "sets/cryo-patch-albedo.webp",
+      "license": "CC0-1.0",
+      "retrieved": "2026-11-27",
+      "bytes": 59442,
+      "sha256": "e6c8bbf2083e3f5d3ee11578b6234c306d4252bc4f672fcde46c881b1185d54b"
+    },
+    {
+      "id": "cryo-patch-arm",
+      "kind": "texture",
+      "title": "Snow 02 (arm, 1k)",
+      "author": "Rob Tuytel",
+      "source": "https://polyhaven.com/a/snow_02",
+      "file": "sets/cryo-patch-arm.webp",
+      "license": "CC0-1.0",
+      "retrieved": "2026-11-27",
+      "bytes": 21648,
+      "sha256": "5081809df0889128942131170149f2307a26e24aa7732c99f7bf1977516c925f"
+    },
+    {
+      "id": "cryo-patch-normal",
+      "kind": "texture",
+      "title": "Snow 02 (normal, 1k)",
+      "author": "Rob Tuytel",
+      "source": "https://polyhaven.com/a/snow_02",
+      "file": "sets/cryo-patch-normal.webp",
+      "license": "CC0-1.0",
+      "retrieved": "2026-11-27",
+      "bytes": 361828,
+      "sha256": "f692c3e48de49bb693f2a956f847b184e16e24f06b584633502d6a7524ac21dc"
+    },
+    {
       "id": "foundry-casing-albedo",
       "kind": "texture",
       "title": "Rusty Metal 04 (albedo, 1k)",
@@ -930,6 +966,42 @@
       "sha256": "0d792235df5dc1940ea9b265629731968f802afa61568856f8bdbe1580be149f"
     },
     {
+      "id": "foundry-patch-albedo",
+      "kind": "texture",
+      "title": "Metal Plate (albedo, 1k)",
+      "author": "Rob Tuytel",
+      "source": "https://polyhaven.com/a/metal_plate",
+      "file": "sets/foundry-patch-albedo.webp",
+      "license": "CC0-1.0",
+      "retrieved": "2026-11-27",
+      "bytes": 75380,
+      "sha256": "1a921c9395fafc7062b08a068db7f27f2fd7be43a5d5a5f9ae9ea6d20e9e379f"
+    },
+    {
+      "id": "foundry-patch-arm",
+      "kind": "texture",
+      "title": "Metal Plate (arm, 1k)",
+      "author": "Rob Tuytel",
+      "source": "https://polyhaven.com/a/metal_plate",
+      "file": "sets/foundry-patch-arm.webp",
+      "license": "CC0-1.0",
+      "retrieved": "2026-11-27",
+      "bytes": 209092,
+      "sha256": "b0807ff0b5342f672f8cf4f0b286f597a07f8da15c77dc33494fdab0e70178ed"
+    },
+    {
+      "id": "foundry-patch-normal",
+      "kind": "texture",
+      "title": "Metal Plate (normal, 1k)",
+      "author": "Rob Tuytel",
+      "source": "https://polyhaven.com/a/metal_plate",
+      "file": "sets/foundry-patch-normal.webp",
+      "license": "CC0-1.0",
+      "retrieved": "2026-11-27",
+      "bytes": 163218,
+      "sha256": "815a9ac72227bd63bf186ee1e101f044750549329c92c2487179b3bbac7f1d06"
+    },
+    {
       "id": "outpost-casing-albedo",
       "kind": "texture",
       "title": "Green Metal Rust (albedo, 1k)",
@@ -1072,6 +1144,42 @@
       "retrieved": "2026-11-27",
       "bytes": 32248,
       "sha256": "a00bc84a2ee1a8e73ce234163fb69c37d4014d1557e38ba2d2797d632159f5ff"
+    },
+    {
+      "id": "outpost-patch-albedo",
+      "kind": "texture",
+      "title": "Asphalt 02 (albedo, 1k)",
+      "author": "Rob Tuytel",
+      "source": "https://polyhaven.com/a/asphalt_02",
+      "file": "sets/outpost-patch-albedo.webp",
+      "license": "CC0-1.0",
+      "retrieved": "2026-11-27",
+      "bytes": 346772,
+      "sha256": "afb0906664f2d0250bdadb65caaf4171b1b9b50d228290adfd1f649eacc52d71"
+    },
+    {
+      "id": "outpost-patch-arm",
+      "kind": "texture",
+      "title": "Asphalt 02 (arm, 1k)",
+      "author": "Rob Tuytel",
+      "source": "https://polyhaven.com/a/asphalt_02",
+      "file": "sets/outpost-patch-arm.webp",
+      "license": "CC0-1.0",
+      "retrieved": "2026-11-27",
+      "bytes": 243444,
+      "sha256": "77b7eda57848281518f76aef39a7409653da36d27632061a974673ca181e502a"
+    },
+    {
+      "id": "outpost-patch-normal",
+      "kind": "texture",
+      "title": "Asphalt 02 (normal, 1k)",
+      "author": "Rob Tuytel",
+      "source": "https://polyhaven.com/a/asphalt_02",
+      "file": "sets/outpost-patch-normal.webp",
+      "license": "CC0-1.0",
+      "retrieved": "2026-11-27",
+      "bytes": 426214,
+      "sha256": "50ede53131b58159d4bb69b8bf1c8e7a120922c7e69e2445a5e4d195978a47a7"
     },
     {
       "id": "painted-metal",

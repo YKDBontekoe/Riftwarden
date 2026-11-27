@@ -79,10 +79,10 @@ describe('prop vignettes', () => {
   it('lies tipped items on their side and keeps stacks above the floor', () => {
     for (const v of Object.values(VIGNETTES)) {
       const items = placeVignette(v, 0, 0, [1, 0], [0, 1], 0, 0);
-      for (const p of items) {
+      items.forEach((p, i) => {
         expect(p.y).toBeGreaterThanOrEqual(0);
-        if (Math.abs(p.tilt ?? 0) > 1.2) expect(p.y).toBeCloseTo(SPECIES[p.species].size[0] / 2 + (v.items.find((i) => i.species === p.species && i.tilt === p.tilt)?.y ?? 0), 6);
-      }
+        if (Math.abs(p.tilt ?? 0) > 1.2) expect(p.y).toBeCloseTo(SPECIES[p.species].size[0] / 2 + (v.items[i].y ?? 0), 6);
+      });
       const ext = vignetteExtent(v);
       expect(ext.u1).toBeGreaterThan(ext.u0);
       expect(ext.depth).toBeGreaterThan(0);

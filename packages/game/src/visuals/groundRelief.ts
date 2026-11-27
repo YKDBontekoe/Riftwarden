@@ -12,7 +12,8 @@ import { planPads } from '@riftwarden/rules/world/rubblePlan';
 export const MAX_RELIEF = 0.16;
 /** Distance from solids over which the relief fades in (props, grime and rubble sit in this band). */
 export const CLEAR = 2.2;
-const SLAB = 6;
+/** Slab size of the settled-concrete relief (m); floor joints run on this grid. */
+export const SLAB = 6;
 
 const hash = (x: number, z: number, seed: number): number => {
   let h = Math.imul(x | 0, 374761393) ^ Math.imul(z | 0, 668265263) ^ Math.imul(seed | 0, 2246822519);

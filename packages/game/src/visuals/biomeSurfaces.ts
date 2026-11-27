@@ -3,6 +3,7 @@ import { PBRMaterial as PBRMaterialCtor, type PBRMaterial } from '@babylonjs/cor
 import { Texture } from '@babylonjs/core/Materials/Textures/texture';
 import type { Scene } from '@babylonjs/core/scene';
 import type { BiomeId } from '@riftwarden/rules/world/biomes';
+import { SLAB } from './groundRelief';
 import type { Palette } from './materials';
 import { canvas, fbm, toTexture, vnoise } from './textures';
 
@@ -93,6 +94,21 @@ const SETS = {
     normal: new URL('../assets/cc0/sets/shared-steel-normal.webp', import.meta.url).href,
     arm: new URL('../assets/cc0/sets/shared-steel-arm.webp', import.meta.url).href,
   },
+  'outpost-patch': {
+    albedo: new URL('../assets/cc0/sets/outpost-patch-albedo.webp', import.meta.url).href,
+    normal: new URL('../assets/cc0/sets/outpost-patch-normal.webp', import.meta.url).href,
+    arm: new URL('../assets/cc0/sets/outpost-patch-arm.webp', import.meta.url).href,
+  },
+  'cryo-patch': {
+    albedo: new URL('../assets/cc0/sets/cryo-patch-albedo.webp', import.meta.url).href,
+    normal: new URL('../assets/cc0/sets/cryo-patch-normal.webp', import.meta.url).href,
+    arm: new URL('../assets/cc0/sets/cryo-patch-arm.webp', import.meta.url).href,
+  },
+  'foundry-patch': {
+    albedo: new URL('../assets/cc0/sets/foundry-patch-albedo.webp', import.meta.url).href,
+    normal: new URL('../assets/cc0/sets/foundry-patch-normal.webp', import.meta.url).href,
+    arm: new URL('../assets/cc0/sets/foundry-patch-arm.webp', import.meta.url).href,
+  },
 } satisfies Record<string, ReturnType<typeof set>>;
 export type SurfaceSetId = keyof typeof SETS;
 
@@ -114,6 +130,7 @@ const SET_PBR: Partial<Record<SurfaceSetId, { metal: number; rough: number }>> =
   'cryo-casing': { metal: 0.12, rough: 1.1 },
   'cryo-metal': { metal: 1, rough: 1.9 },
   'foundry-casing': { metal: 0.6, rough: 1 },
+  'foundry-patch': { metal: 0.4, rough: 1.3 },
 };
 export const BIOME_SURFACES: Record<BiomeId, { ground: SurfaceLook & { tile: number }; masonry: SurfaceLook; cladding: SurfaceLook; casing: SurfaceLook; rust: SurfaceLook }> = {
   outpost: {
@@ -194,11 +211,14 @@ export function applyBiomeSurfaces(scene: Scene, P: Palette, biome: BiomeId, spa
   P.floor.useLightmapAsShadowmap = true;
 }
 
-/** Low-frequency stain / wear field over the ground plane (UV 0..1 = the whole yard). */
+/**
+ * Low-frequency stain / wear field over the ground plane (UV 0..1 = the whole yard), plus a tone per 6 m slab
+ * (no two concrete pours cure to the same shade) so the joint grid reads as separate slabs. The noise field is
+ * computed at 512 and upsampled; the slab tones are evaluated at 2048 so their edges stay under the joint strips.
+ */
 function yardMacro(scene: Scene, biome: BiomeId, span: number) {
   const N = 512;
-  const { c, ctx } = canvas(N);
-  const img = ctx.createImageData(N, N);
+  const field = new Float32Array(N * N);
   const seed = biome === 'cryo' ? 41 : biome === 'foundry' ? 73 : 17;
   for (let y = 0; y < N; y++)
     for (let x = 0; x < N; x++) {
@@ -211,9 +231,23 @@ function yardMacro(scene: Scene, biome: BiomeId, span: number) {
       const edge = Math.max(Math.abs(u - 0.5), Math.abs(v - 0.5)) * 2;
       const rim = Math.max(0, (edge - (1 - 24 / span)) * (span / 24));
       // Gentle: strong blotches on top of a scan's own stains read as camouflage.
-      const k = Math.max(0.55, Math.min(1, 0.86 + (broad - 0.5) * 0.26 - blotch * 0.16 - streak * 0.1 - rim * 0.22));
-      const i = (y * N + x) * 4;
-      img.data[i] = img.data[i + 1] = img.data[i + 2] = k * 255;
+      field[y * N + x] = 0.86 + (broad - 0.5) * 0.26 - blotch * 0.16 - streak * 0.1 - rim * 0.22;
+    }
+  const M = biome === 'cryo' ? N : 2048;
+  const { c, ctx } = canvas(M);
+  const img = ctx.createImageData(M, M);
+  const tone = (si: number, sj: number) => {
+    let h = Math.imul(si, 374761393) ^ Math.imul(sj, 668265263) ^ Math.imul(seed, 2246822519);
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    const r = ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+    return r < 0.12 ? 0.8 : r > 0.9 ? 1.1 : 0.9 + r * 0.14;
+  };
+  for (let y = 0; y < M; y++)
+    for (let x = 0; x < M; x++) {
+      let k = field[Math.floor((y * N) / M) * N + Math.floor((x * N) / M)];
+      if (M !== N) k *= tone(Math.floor(((x + 0.5) / M - 0.5) * span / SLAB), Math.floor(((y + 0.5) / M - 0.5) * span / SLAB));
+      const i = (y * M + x) * 4;
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = Math.max(0.5, Math.min(1, k)) * 255;
       img.data[i + 3] = 255;
     }
   ctx.putImageData(img, 0, 0);

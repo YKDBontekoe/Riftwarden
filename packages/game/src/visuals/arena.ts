@@ -32,6 +32,8 @@ import { applyBiomeSurfaces, scannedMaterial } from './biomeSurfaces';
 import { buildFixtureGlow } from './fixtureGlow';
 import { BIOME_LIGHT } from './biomeLight';
 import { GroundRelief } from './groundRelief';
+import { buildFloorDetail, GroundSurface } from './floorDetail';
+import { planFloor } from './floorPlan';
 import { sculptGround } from './uv';
 import { buildContainerStack, containerLiveries } from './containerModel';
 import { buildMachineBank, machineRoofSlots } from './machineModel';
@@ -111,12 +113,14 @@ export class ArenaBuilder {
     const P = this.pal;
 
     // Floor
-    const span = Math.max(120, (L.half + 16) * 2);
+    // A multiple of 12 m keeps the ground lattice on the 6 m slab grid, so relief steps land on the floor joints.
+    const span = Math.ceil(Math.max(120, (L.half + 16) * 2) / 12) * 12;
     // Sculpted ground (groundRelief.ts): settled slabs, dips, drifts; flat wherever gameplay or other floor
     // dressing touches it. The collider below stays the flat plane.
-    const sub = this.scene.getEngine() instanceof NullEngine ? 1 : Math.round(span / (this.high ? 0.6 : 1.1));
+    const sub = this.scene.getEngine() instanceof NullEngine ? 1 : Math.round(span / (this.high ? 0.6 : 1.2));
     const ground = MeshBuilder.CreateGround('ground', { width: span, height: span, subdivisions: sub, updatable: false }, this.scene);
-    if (sub > 1) sculptGround(ground, new GroundRelief(L));
+    const relief = new GroundRelief(L);
+    if (sub > 1) sculptGround(ground, relief);
     ground.material = P.floor;
     applyBiomeSurfaces(this.scene, P, L.biome ?? 'outpost', span, this.high);
     ground.receiveShadows = true;
@@ -174,6 +178,8 @@ export class ArenaBuilder {
     }
     // Floor zoning: reactor plaza, wall gutters, gate chevrons (thin inlays under decals and lanes).
     new ArenaFloor({ scene: this.scene, add: (m, mat, s) => this.add(m, mat, s) }, this.pal, this.layout).build();
+    // Worked-yard detail: saw-cut joints, cracks, replaced slabs, standing water, oil spots, walkway paint.
+    if (sub > 1) buildFloorDetail(this.scene, planFloor(L, (x, z) => relief.height(x, z)), L.biome ?? 'outpost', new GroundSurface(relief, span, sub), BIOME_LIGHT[L.biome ?? 'outpost'].env * 0.55, (L.seed ?? 3) >>> 0);
     // Weathering: rubble piles, scattered debris and wreckage (visual only, planned off every lane).
     const rubble = planRubble(L);
     new RubbleBuilder({ scene: this.scene, add: (m, mat, s) => this.add(m, mat, s) }, { concrete: P.debris, rust: P.rust, graphite: P.graphite, enamel: P.steel }, true).build(rubble);

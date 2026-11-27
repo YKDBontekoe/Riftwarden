@@ -88,7 +88,28 @@ The ground is a subdivided grid (0.6 m high quality, 1.1 m otherwise) displaced 
 6 m slabs with their own offset and tilt, pooling dips, cryo drifts, sunken scorch around foundry slag (|h| <= 0.16 m).
 A 1 m fade mask makes it exactly 0 on lanes, the reactor plaza, the spawn, build pads, hazards, rifts, vents, ramps
 and within 2.2 m of solids, so feet, props, rubble, grime and floor paint stay flush. The Havok collider stays the
-flat plane; the ground mesh gets `accelerateStaticPicking` (shots and placement pick it).
+flat plane; the ground mesh gets `accelerateStaticPicking` (shots and placement pick it). The ground span is rounded up
+to a multiple of 12 m (0.6 / 1.2 m lattice), so lattice lines fall on the 6 m slab grid and the relief steps sit
+under the floor joints.
+
+## Floor detail (`visuals/floorPlan.ts` [pure], `visuals/floorDetail.ts`)
+
+What turns one tiled scan into a worked yard; visual only, never pickable, one mesh per layer.
+
+- **Slab tones**: the yard macro lightmap (`biomeSurfaces.ts` `yardMacro`, 2048 px, cryo 512) gives every 6 m slab
+  its own shade (0.8-1.1) on top of the wear field.
+- **Saw-cut joints** on the slab grid (not cryo): two-tone strips, a near-black core with pale spalled shoulders, so
+  they read on any deck. Replaced slabs and trench strips get the same cut around their outline.
+- **Patches**: the biome's second scanned set (`*-patch`: outpost asphalt_02 repairs, foundry metal_plate tread
+  covers, cryo snow_02 powder drifts with a ragged alpha-tested outline), 1 cm proud.
+- **Cracks** (branching random-walk mask, not cryo), **oil / soot spots**, **worn yellow walkway lines** 3.6 m off
+  each perimeter wall (not cryo), broken wherever something stands on them.
+- **Standing water / ice**: flat discs at a water level found by walking down the relief's dips; the disc is the
+  smallest one whose rim is everywhere above the water, so the ground forms the shoreline. Dark, low-roughness and
+  dimmed IBL (full IBL mirrored the dusk sky as flat blue blobs; foundry at 0.35).
+- `floorFree` keeps all layers off solids, the reactor plaza (11.6 m), pads, hazards, vents, rifts, ramps and the
+  1.2 m wall band. `GroundSurface.height` reproduces the ground mesh's triangles (CreateGround lattice and diagonal),
+  so overlays follow the relief without floating. Own seed stream `seed ^ 0x5f1a7`.
 
 ## PBR corrections for scans
 
@@ -104,7 +125,11 @@ dielectric; black steel is lifted and set to metallic 0.25.
   frozen world matrices. `configureProps` sets lights / IBL / albedo per scene; `setPropShadowSink` hands loaded parts
   to the sun's shadow generator (queued until it exists). The co-op server and tests skip loading.
 - Arena placement `rules/world/propPlan.ts` (pure, seed `seed ^ 0xa55e7`, never shifts rubble or gameplay rolls):
-  wall-foot clusters in ~85% of the bays between perimeter braces, wall-mounted lamps every other bay, deck clusters
+  wall-foot vignettes (`rules/world/propVignettes.ts`: hand-authored story clusters such as drum huddles with a tipped
+  barrel, three-high pallet stacks, tyre piles, generator bays, dumpsters, gas bottles, parked cars, pipe stores, fire
+  corners) at inside corners first, then at irregular 6-15 m gaps, mirrored and turned slightly off the wall line,
+  each with a ragged ground stain (`contactGrime.ts` `buildStains`); props take an optional `tilt` (lying items rest
+  on their side), wall-mounted lamps every other bay, deck clusters
   on the long sides of blocks / machinery / containers, rooftop plant (air-con, ducts, cabinets, searchlights). Every
   floor prop passes the rubble plan's `spotBlocked` (lanes with margin, reactor, spawn, reserved, vents, ramps, inside
   solids) and keeps clear of rubble. Per-biome recipes (foundry fire barrels and gas, cryo crates and cars, outpost
@@ -139,14 +164,16 @@ alpha-blended, no depth write, z-offset under decals. Removes the clean CG line 
 
 ## Budget
 
-28.6 MB in the repository. Props and loops are not precached by the service worker (`apps/client/sw-plugin.ts`
+37.6 MB in the repository. Props and loops are not precached by the service worker (`apps/client/sw-plugin.ts`
 `LAZY`); surface sets are. An arena downloads only its biome's sets (~3-5 MB) and the props it places.
 
 ## Tests
 
-- `tests/asset-manifest.test.ts`: every file listed, CC0, hash and size match, 32 MB budget, every species and track
+- `tests/asset-manifest.test.ts`: every file listed, CC0, hash and size match, 40 MB budget, every species and track
   has a file. `tests/prop-plan.test.ts`: deterministic, dense, off lanes / reactor / spawn, per-biome dressing, rubble
-  stream unchanged, HQ clutter inside rooms and clear of doors and consoles. `tests/music.test.ts`: one track per
+  stream unchanged, HQ clutter inside rooms and clear of doors and consoles, vignette items rest on the floor.
+  `tests/floor-plan.test.ts`: every floor layer off solids and gameplay floor, joints on the slab grid, pools inside
+  a dry rim, deterministic, ground sampler exact at lattice vertices. `tests/music.test.ts`: one track per
   state, calm HQ, monotone intensity, deterministic patterns, `dt`-correct easing, setting sanitize.
 - Browser: music state HQ -> prep -> combat checked through `__rift.music.state`; screenshot reviews of the three
   biomes and the HQ rooms (SwiftShader, not representative of GPU colour).
