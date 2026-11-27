@@ -34,6 +34,70 @@ function fakeDom() {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('Input pointer-lock capture', () => {
+  it('uses native capture for look, and releases it on Escape', async () => {
+    const { canvas, fire } = fakeDom();
+    let move: (dx: number, dy: number) => void = () => {};
+    const stop = vi.fn();
+    const input = new Input(canvas);
+    input.nativeMouse = { start: async (onMove) => { move = onMove; return true; }, stop };
+    const onLockChange = vi.fn();
+    input.onLockChange = onLockChange;
+    await input.requestLock();
+    expect(input.captured).toBe(true);
+    expect(canvas.requestPointerLock).not.toHaveBeenCalled();
+    move(4, -3);
+    expect([input.mouseDx, input.mouseDy]).toEqual([4, -3]);
+    fire('keydown', { code: 'KeyW' });
+    expect(input.isDown('KeyW')).toBe(true);
+    fire('keydown', { code: 'Escape', preventDefault: vi.fn() });
+    expect(stop).toHaveBeenCalledOnce();
+    expect(input.captured).toBe(false);
+    expect(input.isDown('KeyW')).toBe(false);
+    expect(onLockChange).toHaveBeenCalledExactlyOnceWith(false);
+    move(5, 5);
+    expect([input.mouseDx, input.mouseDy]).toEqual([0, 0]);
+  });
+
+  it('releases native capture on focus loss and ignores a late acquisition', async () => {
+    const { canvas, fire } = fakeDom();
+    let finish!: (value: boolean) => void;
+    const stop = vi.fn();
+    const input = new Input(canvas);
+    input.nativeMouse = { start: () => new Promise((resolve) => { finish = resolve; }), stop };
+    const attempt = input.requestLock();
+    fire('blur');
+    finish(true);
+    await attempt;
+    expect(input.captured).toBe(false);
+    expect(stop).toHaveBeenCalledOnce();
+  });
+
+  it('pauses if native capture is lost', async () => {
+    const { canvas } = fakeDom();
+    let lost = () => {};
+    const stop = vi.fn();
+    const input = new Input(canvas);
+    input.nativeMouse = { start: async (_move, onLost) => { lost = onLost; return true; }, stop };
+    input.onLockChange = vi.fn();
+    await input.requestLock();
+    lost();
+    expect(input.captured).toBe(false);
+    expect(input.onLockChange).toHaveBeenCalledExactlyOnceWith(false);
+    expect(stop).toHaveBeenCalledOnce();
+  });
+
+  it('releases active native capture exactly once on window blur', async () => {
+    const { canvas, fire } = fakeDom();
+    const input = new Input(canvas);
+    const stop = vi.fn();
+    input.nativeMouse = { start: async () => true, stop };
+    input.onLockChange = vi.fn();
+    await input.requestLock();
+    fire('blur');
+    expect(input.captured).toBe(false);
+    expect(stop).toHaveBeenCalledOnce();
+    expect(input.onLockChange).toHaveBeenCalledExactlyOnceWith(false);
+  });
   it('is captured as soon as requestLock resolves, before pointerlockchange fires', async () => {
     const { canvas, doc } = fakeDom();
     // Browsers set pointerLockElement when the lock is granted, but deliver the
