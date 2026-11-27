@@ -39,7 +39,7 @@ so running co-op operations finish on the old version (up to `DRAIN_TIMEOUT`, 30
 The root `package.json` is the release version source. Bump `major.minor.patch` in the release PR and use the
 owner-only production workflow on `main`. Pages publishes `/version.json` with the release version and commit,
 and both images carry the same OCI version and revision labels. The deploy and health checks identify the exact
-build by commit. After production verification, create the GitHub release tag `v<version>` at that deployed commit.
+build by commit. The desktop release workflow creates its GitHub tag after production verification.
 
 | Task | Command (in `~/stacks/riftwarden`) |
 | --- | --- |
@@ -56,10 +56,11 @@ Logs are JSON lines on stdout (`docker compose ... logs`). Observability (OpenTe
 The **Desktop checks** workflow builds Windows x64, macOS Intel and macOS Apple Silicon installers for each pull
 request and push to `main`, and keeps them as GitHub Actions artifacts for seven days. These builds are unsigned.
 
-Run the **Desktop release** workflow on the deployed `main` commit after the API and website serve that commit.
-It builds a Windows x64 setup executable and a universal macOS app and DMG, signs the updater artifacts, and
-uploads the installers as workflow artifacts and publishes a GitHub release only after both builds succeed. Bump the root `package.json` version for every release.
-The updater reads `latest.json` from the latest public GitHub release, so release versions must increase.
+After a successful production deployment, the **Desktop release** workflow builds a Windows x64 setup executable
+and a universal macOS app and DMG, signs the updater artifacts, and publishes them as a GitHub release. It can also
+be run manually on a deployed `main` commit. Each run adds its workflow run number to the patch component of the root
+`package.json` version, giving desktop updates increasing versions without changing the browser release version.
+The updater reads `latest.json` from the latest public GitHub release.
 
 Set `TAURI_SIGNING_PRIVATE_KEY` to the complete contents of the updater private key and
 `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` to its password as GitHub Actions secrets. The public key is embedded in
