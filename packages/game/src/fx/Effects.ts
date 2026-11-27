@@ -326,8 +326,9 @@ export class Effects {
   particleBudget = 1800;
   /** M7 settings: particle density multiplier (low 0.45, medium 0.75, high 1). */
   density = 1;
-  setDensity(level: 'low' | 'medium' | 'high'): void {
-    this.density = level === 'low' ? 0.45 : level === 'medium' ? 0.75 : 1;
+  /** `load`: adaptive-quality multiplier (core/adaptiveQuality.ts), 1 = the setting as chosen. */
+  setDensity(level: 'low' | 'medium' | 'high', load = 1): void {
+    this.density = (level === 'low' ? 0.45 : level === 'medium' ? 0.75 : 1) * load;
     this.particleBudget = Math.round((this.high ? 1800 : 1050) * this.density);
     this.fragments.cap = Math.round((this.high ? 72 : 44) * this.density);
     this.smolder.density = this.density;

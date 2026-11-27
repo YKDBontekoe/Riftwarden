@@ -237,7 +237,7 @@ export interface HudState {
   spread: number; // crosshair gap in px
   aimTarget: 'body' | 'weak' | 'shield' | null;
   stats: { kills: number; time: number; wave: number; coresEarned: number; turretsBuilt: number };
-  perf: { fps: number; enemies: number; draws: number; particles: number; towers?: number; projectiles?: number; pending?: number; statuses?: number; triggers?: number; dpsPlayer?: number; dpsTower?: number; effects?: number; dropped?: number; frameMs?: number; aiMs?: number; telegraphs?: number; ordnance?: number; wave?: number; tier?: number; event?: string; boss?: string; budget?: number; hpMult?: number; dmgMult?: number; spawnQueue?: number; elites?: number; dev?: boolean } | null;
+  perf: { fps: number; low1?: number; low01?: number; p99?: number; load?: number; enemies: number; draws: number; particles: number; towers?: number; projectiles?: number; pending?: number; statuses?: number; triggers?: number; dpsPlayer?: number; dpsTower?: number; effects?: number; dropped?: number; frameMs?: number; aiMs?: number; telegraphs?: number; ordnance?: number; wave?: number; tier?: number; event?: string; boss?: string; budget?: number; hpMult?: number; dmgMult?: number; spawnQueue?: number; elites?: number; dev?: boolean } | null;
   m5: M5Hud | null;
   m6: SurvivalHud | null;
   /** Run map: current node chip (arena) and the map screen view. */
@@ -308,21 +308,44 @@ export const initialHud: HudState = {
 
 type Listener = () => void;
 
+/** Deep equality for plain JSON-like data (objects with Object/null prototype, arrays, primitives), bounded depth. */
+function samePlain(a: unknown, b: unknown, depth: number): boolean {
+  if (Object.is(a, b)) return true;
+  if (depth > 6 || typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false;
+  if (Array.isArray(a)) {
+    if (!Array.isArray(b) || a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) if (!samePlain(a[i], b[i], depth + 1)) return false;
+    return true;
+  }
+  const pa = Object.getPrototypeOf(a);
+  if ((pa !== Object.prototype && pa !== null) || Object.getPrototypeOf(b) !== pa || Array.isArray(b)) return false;
+  const ka = Object.keys(a);
+  if (ka.length !== Object.keys(b).length) return false;
+  for (const k of ka) {
+    if (!Object.prototype.hasOwnProperty.call(b, k)) return false;
+    if (!samePlain((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k], depth + 1)) return false;
+  }
+  return true;
+}
+
 /** Minimal external store: the game pushes snapshots, React components subscribe. */
 export class Store<T extends object> {
   private listeners = new Set<Listener>();
   constructor(private state: T) {}
   get = (): T => this.state;
   set(patch: Partial<T>): void {
-    let changed = false;
+    let next: T | null = null;
     for (const k in patch) {
-      if (!Object.is(patch[k], this.state[k])) {
-        changed = true;
-        break;
-      }
+      const cur = this.state[k];
+      const v = patch[k] as T[typeof k];
+      // Structural sharing: the game rebuilds nested HUD objects every publish (20 Hz); an equal value keeps the
+      // previous reference so components selecting it do not re-render.
+      if (Object.is(v, cur) || samePlain(v, cur, 0)) continue;
+      next ??= { ...this.state };
+      next[k] = v;
     }
-    if (!changed) return;
-    this.state = { ...this.state, ...patch };
+    if (!next) return;
+    this.state = next;
     this.listeners.forEach((l) => l());
   }
   get listenerCount(): number {
