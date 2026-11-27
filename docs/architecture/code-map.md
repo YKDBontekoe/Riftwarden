@@ -219,6 +219,7 @@ packages/game/src/visuals/biomeSurfaces.ts scanned PBR surface sets per biome fo
 packages/game/src/visuals/containerModel.ts real ISO container geometry (corrugation, doors, locking bars, castings) + stacked builder with scanned liveries
 packages/game/src/visuals/biomeLight.ts   per-biome exposure / fill / bounce / IBL / sun for the arena
 packages/game/src/visuals/substationModel.ts transformer-bay geometry for `block` solids (tank, radiators, bushings, conservator)
+packages/game/src/visuals/machineModel.ts  machinery bank geometry (enclosure, pump skids, header, cable tray, roof vessels)
 packages/game/src/visuals/groundRelief.ts visual ground relief field with gameplay fade mask [pure]
 packages/game/src/visuals/contactGrime.ts contact shadow + grime / snow / soot strips along floor-wall seams (arena and HQ)
 packages/game/src/visuals/fixtureGlow.ts  fake light splashes, lenses and pools for wall-mounted prop fixtures

@@ -14,10 +14,10 @@ type Recipe = PropSpecies[];
 
 /** Per room: the clusters that belong there (first species stands on the floor, the rest beside or on it). */
 const RECIPES: Record<string, Recipe[]> = {
-  works: [['tool-chest', 'toolbox'], ['shelves'], ['welding-cart', 'propane-tank'], ['cardboard-box', 'cardboard-box', 'crate-plastic'], ['extinguisher']],
-  config: [['tool-chest', 'toolbox'], ['shelves'], ['crate-plastic', 'crate-plastic'], ['extinguisher']],
-  market: [['cardboard-box', 'cardboard-box', 'cardboard-box'], ['shelves'], ['crate-plastic', 'crate-plastic'], ['extinguisher']],
-  reclaim: [['barrel-steel', 'barrel-steel', 'oil-tin'], ['welding-cart'], ['generator'], ['shelves'], ['extinguisher']],
+  works: [['tool-chest', 'toolbox'], ['welding-cart', 'propane-tank'], ['cardboard-box', 'cardboard-box', 'crate-plastic'], ['extinguisher']],
+  config: [['tool-chest', 'toolbox'], ['crate-plastic', 'crate-plastic'], ['extinguisher']],
+  market: [['cardboard-box', 'cardboard-box', 'cardboard-box'], ['crate-plastic', 'crate-plastic'], ['extinguisher']],
+  reclaim: [['barrel-steel', 'barrel-steel', 'oil-tin'], ['welding-cart'], ['generator'], ['extinguisher']],
   deploy: [['crate-military', 'crate-plastic'], ['generator', 'jerrycan'], ['crate-military'], ['extinguisher']],
 };
 /** Items that stack on the previous item instead of standing beside it. */

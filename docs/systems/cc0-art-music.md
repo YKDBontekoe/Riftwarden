@@ -60,6 +60,14 @@ the box face. Geometry winding is clockwise-from-outside (Babylon is left-handed
 - Gate tunnels are cast concrete; the sealed blast door's bevelled parts get world-scale box-projected UVs
   (`ArenaDynamics.part`), gate / door signals and decorative emissive strips run at ~40% of their old intensity.
 
+## Machinery (`visuals/machineModel.ts`)
+
+`machine` solids are plant, not boxes with glow slots: rear enclosure with access doors and louvres, pump skids
+(volute and finned motor in blue-grey drive enamel, yellow coupling guard, valved riser with handwheel) into a flanged
+galvanised header, a roof cable tray and filter vessels at `machineRoofSlots`, exactly where the three gameplay
+roof colliders stand. One dim status lamp per bay is the only emissive. Bare steel (`P.metal`) is weathered
+galvanised (albedo 0.46, rough) instead of near-white.
+
 ## Ground relief (`visuals/groundRelief.ts` [pure], `uv.ts` `sculptGround`)
 
 The ground is a subdivided grid (0.6 m high quality, 1.1 m otherwise) displaced by `GroundRelief.height`: settled
@@ -137,3 +145,5 @@ alpha-blended, no depth write, z-offset under decals. Removes the clean CG line 
   are the most noticeable.
 - No fire / smoke on foundry fire barrels; no real light from wall lamps.
 - Player-built Architect rooms get no clutter or grime.
+- Multi-part Poly Haven models with nested node transforms (steel shelves, tool cart, storage cart) render as one
+  oversized part through `placeProps`' pivot normalisation; they are left out of every recipe until that is fixed.

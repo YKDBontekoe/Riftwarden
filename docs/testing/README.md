@@ -68,6 +68,10 @@ construction-and-coop (`.github/workflows/ci.yml`).
 
 Details and older numbers: [`history.md`](history.md).
 
+- Arena palette materials take up to 14 lights; in SwiftShader that exceeds `GL_MAX_VERTEX_UNIFORM_BUFFERS (14)` for some
+  variants ("uniform block count exceeds"). This is the cause behind the known "no console errors" failures (e2e-m1 Z,
+  e2e-combat Z, e2e-polish "no page errors"); real GPUs report 14+ but should be checked.
+
 ## Driving the game from a test (`?test`)
 
 `/?test` sets `input.forceCapture` (no pointer lock) and exposes `window.__rift` (`apps/client/src/core/debugApi.ts`):
