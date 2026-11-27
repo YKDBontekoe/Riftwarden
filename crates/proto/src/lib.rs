@@ -1,4 +1,4 @@
-//! Wire types generated from `proto/riftwarden/v1` (see docs/architecture-v2.md section 5).
+//! Wire types generated from `proto/riftwarden/v1` (see docs/architecture/architecture-v2.md section 5).
 
 #![allow(clippy::all)]
 

@@ -1,6 +1,6 @@
 //! Tracing + OpenTelemetry. Logs always go to stdout (JSON in production); when
 //! `OTEL_EXPORTER_OTLP_ENDPOINT` is set, spans, logs and metrics are also exported over OTLP/gRPC to the
-//! collector, which stores them in ClickHouse (docs/architecture-v2.md section 10).
+//! collector, which stores them in ClickHouse (docs/architecture/architecture-v2.md section 10).
 
 use anyhow::Result;
 use opentelemetry::{KeyValue, global, trace::TracerProvider as _};

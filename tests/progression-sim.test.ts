@@ -1,4 +1,4 @@
-// Progression pacing simulation (docs/progression-design.md "Validation"): a modelled player plays hours of waves
+// Progression pacing simulation (docs/design/progression-design.md "Validation"): a modelled player plays hours of waves
 // through the real wave composer and drop tables, equips what is better, and climbs Rift Levels once their gear
 // matches the level. It pins the time-to-first-X targets so later tuning cannot silently speed the chase up again.
 import { describe, expect, it } from 'vitest';

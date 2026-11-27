@@ -1,7 +1,7 @@
 # Deploying Riftwarden
 
 The backend runs on one server with Docker Compose; the static client is on Cloudflare Pages. Design and reasoning:
-[docs/architecture-v2.md](../docs/architecture-v2.md), section 9.
+[docs/architecture/architecture-v2.md](../docs/architecture/architecture-v2.md), section 9.
 
 ## One-time setup on the server
 

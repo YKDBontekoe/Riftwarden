@@ -1,4 +1,4 @@
-// Rift Levels browser suite (docs/progression-design.md phase 1): A deploy terminal picker + loot gates + unlock bar,
+// Rift Levels browser suite (docs/design/progression-design.md phase 1): A deploy terminal picker + loot gates + unlock bar,
 // B picking a high level and deploying (item levels, rarity ceiling, HUD), C Rift Surge on the run map,
 // D v11 restart notice for a migrated profile, E staged unlocks (&locks), F weapon-family mastery, V screenshots.
 //   node scripts/e2e-riftlevels.cjs [A,B,...]   (dev server on :5173)

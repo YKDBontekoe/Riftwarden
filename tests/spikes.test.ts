@@ -1,4 +1,4 @@
-// Big spikes (docs/progression-design.md §7): codex first finds, breakthroughs, pinnacle keys + runs, war caches.
+// Big spikes (docs/design/progression-design.md §7): codex first finds, breakthroughs, pinnacle keys + runs, war caches.
 import { describe, expect, it } from 'vitest';
 import { generateItem } from '@riftwarden/rules/loot/generate';
 import { rarity } from '@riftwarden/rules/loot/rarity';

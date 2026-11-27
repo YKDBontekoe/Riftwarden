@@ -1,4 +1,4 @@
-// Weapon-family mastery (docs/progression-design.md §6, §11): ranks, damage bonus, component locks, finishes, perks,
+// Weapon-family mastery (docs/design/progression-design.md §6, §11): ranks, damage bonus, component locks, finishes, perks,
 // co-op squad XP and team bonus, sanitize.
 import { describe, expect, it } from 'vitest';
 import {

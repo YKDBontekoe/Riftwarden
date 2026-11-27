@@ -1,6 +1,6 @@
 // Worker logs: one JSON line per record on stdout, and (when OTEL_EXPORTER_OTLP_ENDPOINT is set) batched to the
 // OpenTelemetry collector over OTLP/HTTP JSON, which stores them in ClickHouse next to the gateway's
-// (docs/architecture-v2.md section 10). No SDK: the log record shape is all the workers need.
+// (docs/architecture/architecture-v2.md section 10). No SDK: the log record shape is all the workers need.
 
 export type Level = 'info' | 'warn' | 'error';
 

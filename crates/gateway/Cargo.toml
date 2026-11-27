@@ -1,6 +1,6 @@
 [package]
 name = "riftwarden-gateway"
-description = "The Riftwarden backend: the only public service (HTTP + WebSocket), see docs/architecture-v2.md."
+description = "The Riftwarden backend: the only public service (HTTP + WebSocket), see docs/architecture/architecture-v2.md."
 edition.workspace = true
 version.workspace = true
 license.workspace = true

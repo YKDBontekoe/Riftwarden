@@ -1,4 +1,4 @@
-// Loot feedback (docs/progression-design.md §6): "is this better?" made obvious. NEW BEST (beats every owned item of
+// Loot feedback (docs/design/progression-design.md §6): "is this better?" made obvious. NEW BEST (beats every owned item of
 // its slot kind; weapons per family), item level against the level's baseline, the best finds of a run and the power
 // gained since the previous run. Pure: the pickup prompt, item cards, world labels and the run summary read it.
 import { itemPower } from '../progression/riftLevel';

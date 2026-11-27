@@ -1,4 +1,4 @@
-// Seasons + leaderboards in the HQ (docs/progression-design.md §11): switch between the permanent and this month's
+// Seasons + leaderboards in the HQ (docs/design/progression-design.md §11): switch between the permanent and this month's
 // seasonal profile, the season rule and time left, the journey, archived seasons, and the boards (server profiles
 // only: guests never appear, solo runs were validated by the rules worker).
 import { useEffect, useState } from 'react';

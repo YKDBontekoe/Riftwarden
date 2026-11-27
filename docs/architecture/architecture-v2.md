@@ -1,6 +1,6 @@
 # Riftwarden architecture v2 (prototype -> production)
 
-Status: **approved 2026-11-21, implemented** (steps 1-11, section 13; the open items are listed under "Owner actions" in section 15). Once approved, this file is the plan for the "Architecture v2" milestone and wins over older notes in CLAUDE.md where they conflict.
+Status: **approved 2026-11-21, implemented** (steps 1-11, section 13; the open items are listed under "Owner actions" in section 15). Once approved, this file is the plan for the "Architecture v2" milestone and wins over older notes in the system docs where they conflict.
 
 ## 1. Owner decisions (Q&A, 2026-11)
 

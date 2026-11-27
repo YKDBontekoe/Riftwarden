@@ -1,4 +1,4 @@
-// Staged unlocks in the HQ (docs/progression-design.md §5): the full track (Command Console), the next three goals
+// Staged unlocks in the HQ (docs/design/progression-design.md §5): the full track (Command Console), the next three goals
 // (HQ strip) and the "just unlocked" toast. Locked entries are teasers: name, what they do and when they open.
 import { useEffect } from 'react';
 import { hudStore } from '@riftwarden/game/ui/store';

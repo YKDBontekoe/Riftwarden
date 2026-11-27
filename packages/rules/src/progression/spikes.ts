@@ -1,4 +1,4 @@
-// Big spikes (docs/progression-design.md §7): the codex (first finds, with teasers and a one-time shard bonus),
+// Big spikes (docs/design/progression-design.md §7): the codex (first finds, with teasers and a one-time shard bonus),
 // Rift Level breakthroughs (a guaranteed cache + title every fifth level), pinnacle keys (RL 8+: a key summons a
 // pinnacle boss) and Rift War victory caches (liberated regions pay everyone who fought there). Pure.
 import { mulberry32 } from '../combat/damage';
