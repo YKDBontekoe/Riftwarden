@@ -28,15 +28,15 @@ import { ArenaFloor } from './arenaFloor';
 import { planRubble } from '@riftwarden/rules/world/rubblePlan';
 import { planProps } from '@riftwarden/rules/world/propPlan';
 import { configureProps, placeProps } from './propLibrary';
-import { applyBiomeSurfaces } from './biomeSurfaces';
+import { applyBiomeSurfaces, scannedMaterial } from './biomeSurfaces';
 import { buildFixtureGlow } from './fixtureGlow';
 import { BIOME_LIGHT } from './biomeLight';
 import { GroundRelief } from './groundRelief';
 import { sculptGround } from './uv';
 import { buildContainerStack, containerLiveries } from './containerModel';
+import { buildMachineBank, machineRoofSlots } from './machineModel';
 import { arenaGrimeFaces, buildContactGrime, GRIME } from './contactGrime';
 import { PROP_SPECIES } from '@riftwarden/rules/world/propCatalog';
-import { smoothLatheData } from './sculpt';
 
 interface GateVisual {
   lane: ReturnType<typeof createPathLight>;
@@ -255,6 +255,8 @@ export class ArenaBuilder {
   }
 
   private liveries: Material[] | null = null;
+  private lampDim: Material | null = null;
+  private drivePaint: Material | null = null;
 
   /** Real ISO containers (containerModel.ts) over the collision box, one per level. */
   private buildContainer(b: Box): void {
@@ -400,37 +402,21 @@ export class ArenaBuilder {
         this.buildBridge(b);
         break;
       case 'machine': {
-        this.box(x0, y0, z0, x1, y1, z1, P.graphite, 'wall');
-        const capacitor = smoothLatheData([
-          [0.61, 0], [0.73, 0.10], [0.73, 0.28], [0.56, 0.39], [0.56, 1.01],
-          [0.71, 1.12], [0.71, 1.34], [0.59, 1.48], [0.35, 1.60],
-        ], 24);
+        // Real plant (machineModel.ts): enclosure, pump skids, header, cable tray, roof filter vessels.
         const alongX = x1 - x0 > z1 - z0;
-        const face = alongX ? z1 : x0 < 0 ? x1 : x0;
-        const side = alongX || x0 < 0 ? 1 : -1;
-        const n = 3;
-        for (let i = 0; i < n; i++) {
-          const f = (i + 0.5) / n;
-          const cx = alongX ? x0 + (x1 - x0) * f : (x0 + x1) / 2;
-          const cz = alongX ? (z0 + z1) / 2 : z0 + (z1 - z0) * f;
-          const c = new Mesh('cap', this.scene);
-          capacitor.applyToMesh(c);
-          c.position.set(cx, y1, cz);
-          this.add(c, P.metal, 'wall');
-          const ring = MeshBuilder.CreateTorus('capRing', { thickness: 0.08, diameter: 1.42, tessellation: 24 }, this.scene);
-          ring.position.set(cx, y1 + 1.2, cz);
-          this.add(ring, i % 2 ? P.cyanGlow : P.cyanDim, null);
+        const front = alongX || x0 < 0 ? 1 : -1;
+        this.lampDim ??= unlit(this.scene, 'statusLamp', [0.15, 0.9, 0.35]);
+        // Motors and pumps in blue-grey drive enamel, distinct from the enclosure paint.
+        this.drivePaint ??= scannedMaterial(this.scene, 'driveEnamel', 'cryo-casing', [0.42, 0.55, 0.72], 0.8, BIOME_LIGHT[this.layout.biome ?? 'outpost'].env);
+        buildMachineBank({ scene: this.scene, box: (...a) => this.box(...a), add: (m, mat, s) => this.add(m, mat, s) }, b, front, {
+          casing: P.graphite, steel: P.steel, metal: P.metal, guard: P.enamel, drive: this.drivePaint, cable: P.steel, lamp: this.lampDim,
+        });
+        // Gameplay colliders over the roof vessels (unchanged from the capacitor bank).
+        const run = alongX ? x1 - x0 : z1 - z0;
+        for (const a of machineRoofSlots(run)) {
+          const cx = alongX ? (x0 + x1) / 2 + a : (x0 + x1) / 2;
+          const cz = alongX ? (z0 + z1) / 2 : (z0 + z1) / 2 + a;
           this.collider(new Vector3(cx, y1 + 0.8, cz), new Vector3(1.5, 1.6, 1.5));
-          const slot = (w: number, y: number, height: number, near: number, far: number, mat: Material, surface: string | null) => {
-            const a = face + side * near;
-            const b = face + side * far;
-            if (alongX) this.box(cx - w, y, a, cx + w, y + height, b, mat, surface);
-            else this.box(Math.min(a, b), y, cz - w, Math.max(a, b), y + height, cz + w, mat, surface);
-          };
-          slot(1.13, 0.37, y1 - 0.63, -0.025, 0.12, P.metal, 'wall');
-          slot(0.95, 0.57, y1 - 1.1, 0.117, 0.17, P.panel, 'wall');
-          for (let j = 0; j < 4; j++) slot(0.81, 0.78 + j * 0.156, 0.062, 0.166, 0.218, P.graphite, 'wall');
-          slot(0.48, y1 - 0.8, 0.064, 0.17, 0.202, i === 1 ? P.cyanDim : P.orangeDim, null);
         }
         break;
       }

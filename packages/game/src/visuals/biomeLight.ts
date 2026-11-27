@@ -43,6 +43,9 @@ export function applyBiomeLight(scene: Scene, post: PostFx, P: Palette, biome: B
   P.steel.albedoColor.scaleInPlace(2.6);
   // Dark painted steel, not polished metal: as metal it only mirrored the dusk sky and read as a void.
   P.steel.metallic = 0.25;
+  // Bare steel (pipes, rails, ladders) read as white plastic under the stronger fill: weathered galvanised instead.
+  P.metal.albedoColor.set(0.46, 0.47, 0.48);
+  P.metal.roughness = 1.25;
   // Decorative emissive strips (wall bars, machine slots, rings) were tuned to carry a dark scene; in a lit one they
   // read as arcade neon. Real plant has small indicators, so they drop well below bloom threshold.
   for (const m of [P.cyanDim, P.orangeDim, P.cyanGlow, P.whiteGlow]) m.emissiveColor.scaleInPlace(0.42);
