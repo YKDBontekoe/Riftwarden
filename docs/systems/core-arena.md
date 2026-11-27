@@ -1,0 +1,16 @@
+# M0
+
+> Moved verbatim from the old root `CLAUDE.md` (2026-11). Quoted section names (e.g. "Loot depth", "Run map") refer to other files in this folder (index: [README.md](README.md)). Test counts are the numbers recorded when the work landed, not current totals.
+
+- **Two clocks.** `update(dt)` uses real time for player, weapon, turrets, UI; `hdt = dt * tactical.hostileScale` for enemies, enemy projectiles and spawn timing. Tactical mode only dilates hostiles.
+- **Lanes are reserved.** Enemies follow fixed polylines (`ARENA.routes`) with per-enemy lateral offset; placement forbids towers within `laneHalfWidth + radius` of a lane on the floor, so construction can never block navigation. A 5 s stuck watchdog snaps enemies to their waypoint.
+- **Hit detection.** Player hitscan uses `scene.multiPickWithRay` against meshes tagged `metadata.surface` (level) or `metadata.enemy` (invisible hitbox spheres: body + weakpoint). Turret hitboxes (`metadata.turret`) are only used for inspection, shots pass through. LOS checks use Havok raycasts with `ENV_QUERY` so they ignore the player capsule.
+- **Damage pipeline.** All damage goes through `Game.damageEnemy` -> `rollDamage` -> `EnemyManager.damage` (`applyDamage`: shields first, energy +50% vs shields). Feedback (hitmarker, numbers, sounds) is emitted from there. Future triggered effects hook in here.
+- **Stats.** `Game.modifiers: StatModifier[]` -> `computeStats` -> `Game.stats`, read by weapon, turrets and movement. Loot and run upgrades should only add modifiers.
+- **Gameplay vs visuals.** Effects are pooled and capped (`Effects.particleBudget`); logic never depends on them.
+- **Rendering.** Surfaces are `PBRMaterial` (`usePhysicalLightFalloff = false`, so light intensities/ranges behave like the old StandardMaterial setup). Every glow/beam/additive sprite uses `unlit()` (PBR unlit = colour x texture, unclamped HDR). Do NOT use StandardMaterial for tinted or HDR glows: it adds emissive textures and clamps to 1.
+- **Environment.** `Atmosphere.captureEnvironment` renders the static scene once (after `executeWhenReady`) into a ReflectionProbe, wraps the cube in a plain `BaseTexture`, prefilters it with `HDRFiltering`, and sets `scene.environmentTexture`. Never reference the probe's RTT from a material (it would re-render while sampled: GL feedback loop). DynamicTexture `clone()` yields a blank texture: build a second texture from the canvas instead.
+- **Screen-space passes** (SSAO/SSR) use a separate geometry buffer (`forceGeometryBuffer`), not the prepass MRT, because prepass breaks particle rendering. Sprite-sheet particle systems also rendered incorrectly; use single sprites with random rotation.
+- **Explosions** go through `Effects.explode(pos, {scale, debris, color})`: star flash, additive fireball, stretched sparks, embers, rising smoke, ground + air shockwave rings, smoke-trailing debris, flash light, scorch decal and a camera-shake request (`onShake` -> `Player.addTrauma` + lens kick). Shots on level geometry use `Effects.impact` (sparks, dust puff, burn decal).
+- **UI.** Game publishes a HUD snapshot to `hudStore` at 20 Hz; instant feedback goes through `uiEvents`. Damage numbers animate imperatively (no per-frame React renders).
+- **Data-driven content** in `packages/rules/src/data/defs.ts` (weapon, enemies, tower, economy).

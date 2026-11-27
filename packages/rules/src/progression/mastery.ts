@@ -1,4 +1,4 @@
-// Weapon-family mastery (docs/progression-design.md §6, §11): using a family earns mastery XP (banked like Warden XP),
+// Weapon-family mastery (docs/design/progression-design.md §6, §11): using a family earns mastery XP (banked like Warden XP),
 // ranks 1-50 give a soft-capped damage bonus with that family, component unlocks, cosmetic finishes, titles and a
 // pick-one-of-two perk every 5 ranks. In co-op: +10% mastery XP per other warden (max +30%), a shared-family damage
 // bonus and a small aura from veterans. Pure: the arena, the server, the HQ and the tests read it.

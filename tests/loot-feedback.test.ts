@@ -1,4 +1,4 @@
-// Loot feedback (docs/progression-design.md §6): build-aware verdicts, NEW BEST, item level vs baseline, run recap.
+// Loot feedback (docs/design/progression-design.md §6): build-aware verdicts, NEW BEST, item level vs baseline, run recap.
 import { describe, expect, it } from 'vitest';
 import { bestFinds, bestKey, bestPowers, isNewBest, levelDelta, powerGain } from '@riftwarden/rules/loot/feedback';
 import { generateItem } from '@riftwarden/rules/loot/generate';

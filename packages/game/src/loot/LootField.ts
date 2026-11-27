@@ -251,7 +251,7 @@ export class LootField {
     return { model: node, own: null };
   }
 
-  /** Rising motes around epic+ drops (emitter-positioned: see the particle notes in CLAUDE.md). */
+  /** Rising motes around epic+ drops (emitter-positioned: see the particle notes in docs/systems/destruction-vfx.md). */
   private motes(at: Vector3, id: RarityId, index: number): ParticleSystem {
     this.moteTex ??= flareSprite(this.scene);
     const g = rarity(id).glow;

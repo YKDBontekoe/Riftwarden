@@ -2,7 +2,7 @@
 
 A first-person sci-fi action tower-defense roguelite for the browser. You are a hovering combat drone defending an energy reactor against endless waves of robotic machines, with procedural loot, a branching run map on a shared war map, towers, and 2-4 player co-op.
 
-**Status: Architecture v2** (prototype -> production, [docs/architecture-v2.md](docs/architecture-v2.md)): a Rust gateway is the only backend, gameplay rules stay in one TypeScript copy executed by internal Node workers, Protobuf over one WebSocket, passkey accounts, offline play with server-validated sync, and a Vite + React 19 + Tailwind client with an optional WebGPU renderer.
+**Status: Architecture v2** (prototype -> production, [docs/architecture/architecture-v2.md](docs/architecture/architecture-v2.md)): a Rust gateway is the only backend, gameplay rules stay in one TypeScript copy executed by internal Node workers, Protobuf over one WebSocket, passkey accounts, offline play with server-validated sync, and a Vite + React 19 + Tailwind client with an optional WebGPU renderer.
 
 ## Repository layout
 
@@ -135,4 +135,4 @@ All keys can be rebound in Settings > Controls. In co-op the team panel shows ea
 - **UI:** React HUD and menus, settings (sensitivity, FOV, graphics quality, volume) persisted in versioned localStorage.
 - **Audio:** procedural WebAudio sound effects (no asset files), positional panning, low-pass during tactical mode.
 
-See [CLAUDE.md](CLAUDE.md) for architecture, design decisions and known limitations.
+Contributor and agent rules: [AGENTS.md](AGENTS.md). Architecture, system notes, testing and known limitations: [docs/](docs/README.md).

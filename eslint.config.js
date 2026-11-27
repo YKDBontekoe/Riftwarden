@@ -1,5 +1,5 @@
 // Lint is a ratchet: correctness rules are errors, size/style signals are warnings so the
-// existing hotspots (see CLAUDE.md "Layout") are visible without blocking CI.
+// existing hotspots (see docs/architecture/refactoring-backlog.md) are visible without blocking CI.
 import tseslint from 'typescript-eslint';
 import reactHooks from 'eslint-plugin-react-hooks';
 

@@ -1,4 +1,4 @@
-// Rift Levels (docs/progression-design.md §1-3, §9, §11): endless levels, checkpoint unlocks, Rift Surges and their
+// Rift Levels (docs/design/progression-design.md §1-3, §9, §11): endless levels, checkpoint unlocks, Rift Surges and their
 // validation, item level from the level, readiness, and the v11 progression restart.
 import { describe, expect, it } from 'vitest';
 import { mulberry32 } from '@riftwarden/rules/combat/damage';

@@ -354,7 +354,7 @@ async function forceNext(p, kind, anomaly) {
       check('G1 null field refuses build mode', g.build === false);
     }
 
-    // SwiftShader: the known hit-flash PBR variant can exceed the uniform buffer limit (see CLAUDE.md, m1 Z).
+    // SwiftShader: the known hit-flash PBR variant can exceed the uniform buffer limit (see docs/testing/README.md, known failures: m1 Z).
     if (want('S')) {
       // Survival: a fresh deployment in survival mode (classic arena in ?test: the hunt builds its own nav field).
       await ev(p, async () => {

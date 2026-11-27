@@ -1,4 +1,4 @@
-// Staged feature unlocks (docs/progression-design.md §5): a new warden starts with one weapon family, one ability and
+// Staged feature unlocks (docs/design/progression-design.md §5): a new warden starts with one weapon family, one ability and
 // the core stations; families, slots, stations and endgame systems open with Warden level (basics) and the highest
 // Rift Level unlocked (endgame). Pure: the HQ unlock track, the op gate, the loot locks and the slot rules read it.
 import { RESOURCE_KEYS } from '../economy/config';

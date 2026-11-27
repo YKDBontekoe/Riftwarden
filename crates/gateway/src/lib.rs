@@ -1,4 +1,4 @@
-//! Riftwarden gateway: the only public backend service (see docs/architecture-v2.md).
+//! Riftwarden gateway: the only public backend service (see docs/architecture/architecture-v2.md).
 //! The binary (`main.rs`) only wires configuration, telemetry and shutdown around [`router`].
 
 pub mod admin;

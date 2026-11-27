@@ -82,7 +82,7 @@ export const MIGRATIONS: Record<number, (data: Obj) => Obj> = {
    * The skill tree starts unallocated (seed and validation via sanitize).
    */
   /**
-   * v10 -> v11: the Rift Level progression (docs/progression-design.md). The loot curve changed completely, so
+   * v10 -> v11: the Rift Level progression (docs/design/progression-design.md). The loot curve changed completely, so
    * progression restarts (owner decision): items, resources, records, levels, tree, HQ construction and market are
    * reset; the profile id, callsign, creation time and tutorial survive. Deterministic (ids and times come from the
    * old document), so the server and every device migrate a stored profile to the same document.

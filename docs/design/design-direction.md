@@ -1,6 +1,6 @@
 # Riftwarden design direction (owner Q&A, 2026-11)
 
-Answers from the owner, recorded so every session builds toward the same game. When a choice here conflicts with an older note in CLAUDE.md, this file wins.
+Answers from the owner, recorded so every session builds toward the same game. When a choice here conflicts with an older note in the system docs (`docs/systems/`), this file wins.
 
 ## Pillars
 
@@ -18,7 +18,7 @@ Answers from the owner, recorded so every session builds toward the same game. W
 - A run is a **branching map**. Each node is a 5-wave segment (= one checkpoint). At each checkpoint: bank, then pick the next node **or extract home** (allowed at every node).
 - Node types: normal combat sectors (biomes/factions), elite/boss nodes (harder, better loot), merchant/forge (in-run shop, crafting, upgrade rerolls), events/anomalies (risk/reward, curses, gambles, vaults).
 - Between nodes **towers reset** (new arena). Cores carry over.
-- *(Done: endless seeded acts of 7 rows ending in an act boss; combat / elite / boss sectors of five waves on the global wave count, merchant / forge / anomaly / vault / rest hubs; node modifiers, act curses and blessings; towers refund half their cost into cores; co-op teams vote on the next node. See CLAUDE.md "Run map".)*
+- *(Done: endless seeded acts of 7 rows ending in an act boss; combat / elite / boss sectors of five waves on the global wave count, merchant / forge / anomaly / vault / rest hubs; node modifiers, act curses and blessings; towers refund half their cost into cores; co-op teams vote on the next node. See [docs/systems/run-map.md](../systems/run-map.md).)*
 
 ## Combat kit (build first, after the Game.ts refactor)
 

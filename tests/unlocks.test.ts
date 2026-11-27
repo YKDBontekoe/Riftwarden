@@ -1,4 +1,4 @@
-// Staged feature unlocks (docs/progression-design.md §5): the track, loot locks, slot locks and the op gate.
+// Staged feature unlocks (docs/design/progression-design.md §5): the track, loot locks, slot locks and the op gate.
 import { describe, expect, it } from 'vitest';
 import { xpForLevel } from '@riftwarden/rules/progression/level';
 import { ALL_LOOT_LOCKS, isUnlocked, lockReason, lockedCategories, lockedFamilies, lootLocks, newlyUnlocked, nextUnlocks, opFeature, slotUnlocked, stationForUnlock, STATION_FEATURE, visibleCurrencies, unlockTrack, UNLOCKS } from '@riftwarden/rules/progression/unlocks';

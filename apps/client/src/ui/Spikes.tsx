@@ -1,4 +1,4 @@
-// Big spikes in the HQ (docs/progression-design.md §7): the codex with teasers, breakthrough titles, Rift War victory
+// Big spikes in the HQ (docs/design/progression-design.md §7): the codex with teasers, breakthrough titles, Rift War victory
 // caches to claim, and the pinnacle card on the deploy terminal (keys, summon, craft a key).
 import { useState, useSyncExternalStore } from 'react';
 import type { Flow } from '../core/Flow';

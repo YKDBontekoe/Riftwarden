@@ -1,4 +1,4 @@
-// Run recap (docs/progression-design.md §6): the best finds of the run, the loadout power gained since the run
+// Run recap (docs/design/progression-design.md §6): the best finds of the run, the loadout power gained since the run
 // started and the weapon mastery earned, so even a small step forward reads as progress.
 import { powerGain } from '@riftwarden/rules/loot/feedback';
 import { rarity } from '@riftwarden/rules/loot/rarity';

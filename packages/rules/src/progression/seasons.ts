@@ -1,4 +1,4 @@
-// Seasons (docs/progression-design.md §11): a monthly seasonal profile next to the permanent one. It lives inside the
+// Seasons (docs/design/progression-design.md §11): a monthly seasonal profile next to the permanent one. It lives inside the
 // account document (`SaveData.seasonal`), starts fresh every month with its own Rift Level ladder (one checkpoint
 // fewer per unlock), a rotating season rule and a journey of goals; at the end of the month everything it earned
 // moves into the permanent profile (`rolloverSeason`) and a summary is archived. Boards read the `board` summaries

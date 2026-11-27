@@ -1,4 +1,4 @@
-// Seasons (docs/progression-design.md §11): calendar, the nested seasonal profile, season-tagged replay, the faster
+// Seasons (docs/design/progression-design.md §11): calendar, the nested seasonal profile, season-tagged replay, the faster
 // ladder, journey, board summaries, end-of-month rollover, and the device Profile's seasonal mode.
 import { describe, expect, it } from 'vitest';
 import { generateItem } from '@riftwarden/rules/loot/generate';

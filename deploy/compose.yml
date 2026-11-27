@@ -1,4 +1,4 @@
-# Riftwarden backend on the personal server (docs/architecture-v2.md sections 9-10). The static client is on
+# Riftwarden backend on the personal server (docs/architecture/architecture-v2.md sections 9-10). The static client is on
 # Cloudflare Pages; cloudflared publishes the gateway (api.). Logs: JSON on stdout (`docker compose logs`).
 # Images are pinned by digest in images.env, written by deploy.sh (one per sim slot, so slots roll one at a time).
 # Memory budget: ~2 GB of the 4 GB allocated to the stack.
