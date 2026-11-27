@@ -16,7 +16,7 @@ use sha2::{Digest, Sha256};
 use std::sync::{Arc, Mutex};
 use tauri::{Manager, State as AppState};
 use tokio_tungstenite::tungstenite::{client::IntoClientRequest, Message as RemoteMessage};
-use tower_http::cors::{AllowOrigin, Any, CorsLayer};
+mod cors;
 
 const API: &str = "https://riftwarden-api.ykdbonte.dev";
 const SITE: &str = "https://riftwarden.ykdbonte.dev";
@@ -203,13 +203,7 @@ fn main() {
             let router = Router::new()
                 .route("/{secret}/session", any(socket))
                 .route("/{secret}/{*path}", any(proxy))
-                .layer(
-                    CorsLayer::new()
-                        .allow_origin(AllowOrigin::mirror_request())
-                        .allow_credentials(true)
-                        .allow_methods(Any)
-                        .allow_headers(Any),
-                )
+                .layer(cors::local_proxy())
                 .with_state(state);
             tauri::async_runtime::spawn(async move {
                 if let Ok(listener) = tokio::net::TcpListener::from_std(listener) {

@@ -20,6 +20,7 @@ skip unless `RIFT_TEST_DATABASE_URL` is set. Boundary tests: `architecture.test.
 `save-surface.test.ts` (save barrel exports), `net-events.test.ts` (wire event tags on both sides), `docs.test.ts`
 (documentation links).
 `desktop-release.test.ts` checks first-release tag lookup, annotated tags, and remote lookup failures.
+The desktop Rust crate has a credentialed CORS preflight test: `cargo test --manifest-path apps/client/src-tauri/Cargo.toml --locked` (requires platform Tauri build dependencies).
 
 ## Browser suites (Playwright, headless Chromium)
 
