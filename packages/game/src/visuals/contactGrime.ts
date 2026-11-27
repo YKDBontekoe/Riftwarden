@@ -48,7 +48,7 @@ export const GRIME: Record<'outpost' | 'cryo' | 'foundry' | 'hq', GrimeLook> = {
   // Mud, oil and wind-blown grit.
   outpost: { floor: [0.2, 0.16, 0.12], floorAlpha: 0.85, floorWidth: 1.6, wall: [0.08, 0.065, 0.05], wallAlpha: 0.7, wallHeight: 1.3, ao: 0.75, aoWidth: 0.55, roughness: 0.9 },
   // Snow drifts piled against every wall, a little slush staining above them.
-  cryo: { floor: [0.82, 0.87, 0.93], floorAlpha: 0.95, floorWidth: 1.9, wall: [0.7, 0.76, 0.84], wallAlpha: 0.75, wallHeight: 0.7, ao: 0.55, aoWidth: 0.4, roughness: 0.75 },
+  cryo: { floor: [0.82, 0.87, 0.93], floorAlpha: 0.95, floorWidth: 1.9, wall: [0.74, 0.8, 0.88], wallAlpha: 0.5, wallHeight: 0.45, ao: 0.55, aoWidth: 0.4, roughness: 0.75 },
   // Ash (pale, so it reads on the dark deck) over soot staining on the walls.
   foundry: { floor: [0.24, 0.21, 0.19], floorAlpha: 0.85, floorWidth: 1.7, wall: [0.03, 0.026, 0.024], wallAlpha: 0.8, wallHeight: 1.8, ao: 0.8, aoWidth: 0.6, roughness: 0.95 },
   // A maintained interior: just a contact shadow and a little dust at the skirting.
@@ -145,11 +145,13 @@ function strips(faces: readonly GrimeFace[], width: number, wall: boolean, lift:
 export function buildContactGrime(scene: Scene, faces: readonly GrimeFace[], look: GrimeLook, seed = 11): void {
   if (scene.getEngine() instanceof NullEngine || !faces.length) return;
   const ragged = falloffTexture(scene, 'grimeMask', seed, 1.1);
+  // Wall staining fades smoothly: a ragged mask on a vertical strip reads as dithered noise.
+  const soft = falloffTexture(scene, 'grimeSoft', seed + 7, 0.45);
   const tight = falloffTexture(scene, 'grimeAo', seed + 3, 0.35);
   const layers: [string, VertexData, PBRMaterial][] = [
     ['grimeAo', strips(faces, look.aoWidth, false, 0.012), material(scene, 'grimeAo', [0, 0, 0], look.ao, 1, tight, -3)],
     ['grimeFloor', strips(faces, look.floorWidth, false, 0.018), material(scene, 'grimeFloor', look.floor, look.floorAlpha, look.roughness, ragged, -4)],
-    ['grimeWall', strips(faces.filter((f) => !f.floorOnly), look.wallHeight, true, 0), material(scene, 'grimeWall', look.wall, look.wallAlpha, look.roughness, ragged, -2)],
+    ['grimeWall', strips(faces.filter((f) => !f.floorOnly), look.wallHeight, true, 0), material(scene, 'grimeWall', look.wall, look.wallAlpha, look.roughness, soft, -2)],
   ];
   for (const [name, data, mat] of layers) {
     if (!data.positions?.length) continue;

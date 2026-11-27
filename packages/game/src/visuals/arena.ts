@@ -31,6 +31,8 @@ import { configureProps, placeProps } from './propLibrary';
 import { applyBiomeSurfaces } from './biomeSurfaces';
 import { buildFixtureGlow } from './fixtureGlow';
 import { BIOME_LIGHT } from './biomeLight';
+import { GroundRelief } from './groundRelief';
+import { sculptGround } from './uv';
 import { buildContainerStack, containerLiveries } from './containerModel';
 import { arenaGrimeFaces, buildContactGrime, GRIME } from './contactGrime';
 import { PROP_SPECIES } from '@riftwarden/rules/world/propCatalog';
@@ -109,11 +111,16 @@ export class ArenaBuilder {
 
     // Floor
     const span = Math.max(120, (L.half + 16) * 2);
-    const ground = MeshBuilder.CreateGround('ground', { width: span, height: span }, this.scene);
+    // Sculpted ground (groundRelief.ts): settled slabs, dips, drifts; flat wherever gameplay or other floor
+    // dressing touches it. The collider below stays the flat plane.
+    const sub = this.scene.getEngine() instanceof NullEngine ? 1 : Math.round(span / (this.high ? 0.6 : 1.1));
+    const ground = MeshBuilder.CreateGround('ground', { width: span, height: span, subdivisions: sub, updatable: false }, this.scene);
+    if (sub > 1) sculptGround(ground, new GroundRelief(L));
     ground.material = P.floor;
     applyBiomeSurfaces(this.scene, P, L.biome ?? 'outpost', span, this.high);
     ground.receiveShadows = true;
     ground.metadata = { surface: 'floor' };
+    if (sub > 1) accelerateStaticPicking(ground); // ~100k vertices: every shot and placement pick tests it
     ground.freezeWorldMatrix();
     this.meshes.push(ground);
     this.collider(new Vector3(0, -0.5, 0), new Vector3(span, 1, span));
@@ -226,16 +233,19 @@ export class ArenaBuilder {
     const seg = (s0: number, s1: number, y0: number, ya: number, grow: number, mat: Material) => alongX
       ? this.box(s0, y0, z0 - grow, s1, ya, z1 + grow, mat, 'wall')
       : this.box(x0 - grow, y0, s0, x1 + grow, ya, s1, mat, 'wall');
-    seg(a0, a0 + run, 0, y1, -0.04, P.steel); // dark backing, seen only in the joints
+    // Ends stay 4 mm short of the box: where two barriers meet in an L, an end face flush with the other
+    // wall's side face z-fights, and SSAO turned that seam into a black streak down the corner.
+    const e = 0.004;
+    seg(a0 + e, a0 + run - e, 0, y1, -0.04, P.steel); // dark backing, seen only in the joints
     const panels = Math.max(1, Math.round(run / 3));
     const w = run / panels;
     for (let k = 0; k < panels; k++) {
-      const s0 = a0 + k * w + (k ? 0.025 : 0);
-      const s1 = a0 + (k + 1) * w - (k < panels - 1 ? 0.025 : 0);
+      const s0 = a0 + k * w + (k ? 0.025 : e);
+      const s1 = a0 + (k + 1) * w - (k < panels - 1 ? 0.025 : e);
       seg(s0, s1, 0.06, y1 - 0.16, 0, P.concrete);
     }
     seg(a0 - 0.02, a0 + run + 0.02, y1 - 0.16, y1, 0.035, P.concrete); // cap
-    seg(a0, a0 + run, 0, 0.06, 0.01, P.concrete); // plinth
+    seg(a0 + e, a0 + run - e, 0, 0.06, 0.01, P.concrete); // plinth
     if (run < 2.2) return;
     // Tie plates across the joints, low and high.
     for (let k = 1; k < panels; k++) {
