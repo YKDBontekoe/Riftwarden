@@ -20,6 +20,9 @@ score. Pipeline and licence rules: [ADR 0004](../decisions/0004-cc0-asset-pipeli
   cryo = packed snow, cast slabs, blue plate; foundry = scorched deck, factory brick, corroded sheet. Ground tiles
   every 5-6 m (the ground plane's UVs span the yard); box-projected solids keep their metre tiles (masonry 3 m,
   cladding 4 m).
+- `graphite` (machinery casings, braces, housings, trims) takes the biome's worn painted steel (`*-casing`: outpost
+  green, cryo grey plate, foundry rusted). A low-frequency stain / wear field (`yardMacro`, darker toward the walls)
+  multiplies the ground through the lightmap slot (`useLightmapAsShadowmap`), so the tiled scan never reads as a carpet.
 - High quality turns on parallax occlusion (`depth` per surface) from the height in the normal alpha.
 - The maps share the palette's ARM layout, so swapping never changes shader defines. The old procedural maps are
   disposed. Headless (`NullEngine`) skips all of it.
@@ -50,7 +53,7 @@ score. Pipeline and licence rules: [ADR 0004](../decisions/0004-cc0-asset-pipeli
 ## Contact grime (`visuals/contactGrime.ts`)
 
 Every grounded solid's open faces (arena) and every HQ wall base get three merged strips: a tight contact shadow, a
-ragged floor band (outpost mud, cryo snow drift, foundry soot, HQ light dust) and staining up the wall. Lit,
+ragged floor band (outpost mud, cryo snow drift, foundry pale ash so it reads on the dark deck, HQ light dust) and staining up the wall. Lit,
 alpha-blended, no depth write, z-offset under decals. Removes the clean CG line where floor meets wall.
 
 ## Music (`audio/musicPlan.ts` [pure], `audio/Music.ts`)

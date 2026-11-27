@@ -4,6 +4,7 @@ import { Texture } from '@babylonjs/core/Materials/Textures/texture';
 import type { Scene } from '@babylonjs/core/scene';
 import type { BiomeId } from '@riftwarden/rules/world/biomes';
 import type { Palette } from './materials';
+import { canvas, fbm, toTexture, vnoise } from './textures';
 
 /**
  * Scanned CC0 surface sets per biome (Poly Haven, `assets/cc0/sets`, provenance in the manifest): they replace the
@@ -67,6 +68,21 @@ const SETS = {
     normal: new URL('../assets/cc0/sets/foundry-metal-normal.webp', import.meta.url).href,
     arm: new URL('../assets/cc0/sets/foundry-metal-arm.webp', import.meta.url).href,
   },
+  'outpost-casing': {
+    albedo: new URL('../assets/cc0/sets/outpost-casing-albedo.webp', import.meta.url).href,
+    normal: new URL('../assets/cc0/sets/outpost-casing-normal.webp', import.meta.url).href,
+    arm: new URL('../assets/cc0/sets/outpost-casing-arm.webp', import.meta.url).href,
+  },
+  'cryo-casing': {
+    albedo: new URL('../assets/cc0/sets/cryo-casing-albedo.webp', import.meta.url).href,
+    normal: new URL('../assets/cc0/sets/cryo-casing-normal.webp', import.meta.url).href,
+    arm: new URL('../assets/cc0/sets/cryo-casing-arm.webp', import.meta.url).href,
+  },
+  'foundry-casing': {
+    albedo: new URL('../assets/cc0/sets/foundry-casing-albedo.webp', import.meta.url).href,
+    normal: new URL('../assets/cc0/sets/foundry-casing-normal.webp', import.meta.url).href,
+    arm: new URL('../assets/cc0/sets/foundry-casing-arm.webp', import.meta.url).href,
+  },
   'shared-rust': {
     albedo: new URL('../assets/cc0/sets/shared-rust-albedo.webp', import.meta.url).href,
     normal: new URL('../assets/cc0/sets/shared-rust-normal.webp', import.meta.url).href,
@@ -88,23 +104,26 @@ interface SurfaceLook {
   /** Parallax occlusion depth (UV units) from the height packed in the normal map's alpha; high quality only. */
   depth?: number;
 }
-export const BIOME_SURFACES: Record<BiomeId, { ground: SurfaceLook & { tile: number }; masonry: SurfaceLook; cladding: SurfaceLook; rust: SurfaceLook }> = {
+export const BIOME_SURFACES: Record<BiomeId, { ground: SurfaceLook & { tile: number }; masonry: SurfaceLook; cladding: SurfaceLook; casing: SurfaceLook; rust: SurfaceLook }> = {
   outpost: {
     ground: { set: 'outpost-ground', tint: [1.05, 1.02, 0.98], normal: 1, tile: 5, depth: 0.045 },
     masonry: { set: 'outpost-masonry', tint: [0.8, 0.82, 0.84], normal: 0.9, depth: 0.03 },
     cladding: { set: 'outpost-metal', tint: [0.86, 0.8, 0.78], normal: 0.7 },
+    casing: { set: 'outpost-casing', tint: [0.62, 0.66, 0.62], normal: 0.8 },
     rust: { set: 'shared-rust', tint: [1, 1, 1], normal: 0.8 },
   },
   cryo: {
     ground: { set: 'cryo-ground', tint: [0.93, 0.97, 1.04], normal: 0.9, tile: 6, depth: 0.04 },
     masonry: { set: 'cryo-masonry', tint: [0.86, 0.9, 0.95], normal: 0.8, depth: 0.03 },
     cladding: { set: 'cryo-metal', tint: [0.95, 1, 1.05], normal: 0.7 },
+    casing: { set: 'cryo-casing', tint: [0.6, 0.64, 0.7], normal: 0.8 },
     rust: { set: 'shared-rust', tint: [0.8, 0.84, 0.9], normal: 0.8 },
   },
   foundry: {
     ground: { set: 'foundry-ground', tint: [0.78, 0.72, 0.68], normal: 1.1, tile: 5, depth: 0.05 },
     masonry: { set: 'foundry-masonry', tint: [0.82, 0.74, 0.7], normal: 1, depth: 0.04 },
     cladding: { set: 'foundry-metal', tint: [0.78, 0.74, 0.72], normal: 0.8 },
+    casing: { set: 'foundry-casing', tint: [0.72, 0.66, 0.62], normal: 0.9 },
     rust: { set: 'shared-rust', tint: [0.9, 0.78, 0.7], normal: 0.9 },
   },
 };
@@ -153,4 +172,38 @@ export function applyBiomeSurfaces(scene: Scene, P: Palette, biome: BiomeId, spa
   apply(P.concrete, scene, look.masonry, 1, high);
   apply(P.panel, scene, look.cladding, 1, high);
   apply(P.rust, scene, look.rust, 1, high);
+  // Machinery casings, braces, housings and trims (the dark "graphite" paint) get worn painted steel.
+  apply(P.graphite, scene, look.casing, 1, high);
+  // Macro variation across the whole yard (stains, wet and worn patches, darker ground near the walls), so the
+  // tiled scan never reads as one uniform carpet. Multiplies the lighting through the lightmap slot.
+  const macro = yardMacro(scene, biome, span);
+  P.floor.lightmapTexture = macro;
+  P.floor.useLightmapAsShadowmap = true;
+}
+
+/** Low-frequency stain / wear field over the ground plane (UV 0..1 = the whole yard). */
+function yardMacro(scene: Scene, biome: BiomeId, span: number) {
+  const N = 512;
+  const { c, ctx } = canvas(N);
+  const img = ctx.createImageData(N, N);
+  const seed = biome === 'cryo' ? 41 : biome === 'foundry' ? 73 : 17;
+  for (let y = 0; y < N; y++)
+    for (let x = 0; x < N; x++) {
+      const u = x / N;
+      const v = y / N;
+      const broad = fbm(u, v, 6, 4, seed);
+      const blotch = Math.max(0, fbm(u, v, 18, 3, seed + 9) - 0.55) * 2.2;
+      const streak = Math.max(0, vnoise(u * 40, v * 4, 40, seed + 3, 4) - 0.7) * 1.5;
+      // Ground darkens toward the yard edge (runoff and dirt collect along the walls).
+      const edge = Math.max(Math.abs(u - 0.5), Math.abs(v - 0.5)) * 2;
+      const rim = Math.max(0, (edge - (1 - 24 / span)) * (span / 24));
+      const k = Math.max(0.35, Math.min(1, 0.78 + (broad - 0.5) * 0.55 - blotch * 0.35 - streak * 0.2 - rim * 0.3));
+      const i = (y * N + x) * 4;
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = k * 255;
+      img.data[i + 3] = 255;
+    }
+  ctx.putImageData(img, 0, 0);
+  const t = toTexture('yardMacro', c, scene, { srgb: false, aniso: 4 });
+  t.wrapU = t.wrapV = 0;
+  return t;
 }

@@ -44,11 +44,11 @@ export interface GrimeLook {
 
 export const GRIME: Record<'outpost' | 'cryo' | 'foundry' | 'hq', GrimeLook> = {
   // Mud, oil and wind-blown grit.
-  outpost: { floor: [0.09, 0.075, 0.06], floorAlpha: 0.8, floorWidth: 1.6, wall: [0.08, 0.065, 0.05], wallAlpha: 0.7, wallHeight: 1.3, ao: 0.75, aoWidth: 0.55, roughness: 0.9 },
+  outpost: { floor: [0.2, 0.16, 0.12], floorAlpha: 0.85, floorWidth: 1.6, wall: [0.08, 0.065, 0.05], wallAlpha: 0.7, wallHeight: 1.3, ao: 0.75, aoWidth: 0.55, roughness: 0.9 },
   // Snow drifts piled against every wall, a little slush staining above them.
   cryo: { floor: [0.82, 0.87, 0.93], floorAlpha: 0.95, floorWidth: 1.9, wall: [0.7, 0.76, 0.84], wallAlpha: 0.75, wallHeight: 0.7, ao: 0.55, aoWidth: 0.4, roughness: 0.75 },
-  // Soot and ash.
-  foundry: { floor: [0.035, 0.03, 0.028], floorAlpha: 0.85, floorWidth: 1.7, wall: [0.03, 0.026, 0.024], wallAlpha: 0.8, wallHeight: 1.8, ao: 0.8, aoWidth: 0.6, roughness: 0.95 },
+  // Ash (pale, so it reads on the dark deck) over soot staining on the walls.
+  foundry: { floor: [0.24, 0.21, 0.19], floorAlpha: 0.85, floorWidth: 1.7, wall: [0.03, 0.026, 0.024], wallAlpha: 0.8, wallHeight: 1.8, ao: 0.8, aoWidth: 0.6, roughness: 0.95 },
   // A maintained interior: just a contact shadow and a little dust at the skirting.
   hq: { floor: [0.16, 0.16, 0.17], floorAlpha: 0.3, floorWidth: 0.7, wall: [0.12, 0.12, 0.13], wallAlpha: 0.22, wallHeight: 0.5, ao: 0.6, aoWidth: 0.32, roughness: 0.8 },
 };

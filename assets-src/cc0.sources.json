@@ -260,6 +260,21 @@
       "id": "shared-steel",
       "polyhaven": "metal_plate",
       "res": "1k"
+    },
+    {
+      "id": "outpost-casing",
+      "polyhaven": "green_metal_rust",
+      "res": "1k"
+    },
+    {
+      "id": "cryo-casing",
+      "polyhaven": "metal_plate_02",
+      "res": "1k"
+    },
+    {
+      "id": "foundry-casing",
+      "polyhaven": "rusty_metal_04",
+      "res": "1k"
     }
   ]
 }

@@ -588,6 +588,42 @@
       "sha256": "b3a600941d12fb991a7fa27cf6dae28f9910c7e793dad1d7d8ea472b30452421"
     },
     {
+      "id": "cryo-casing-albedo",
+      "kind": "texture",
+      "title": "Metal Plate 02 (albedo, 1k)",
+      "author": "Rob Tuytel",
+      "source": "https://polyhaven.com/a/metal_plate_02",
+      "file": "sets/cryo-casing-albedo.webp",
+      "license": "CC0-1.0",
+      "retrieved": "2026-11-27",
+      "bytes": 68046,
+      "sha256": "e7fce3502f4c442fba6056b822da10c98992e897757ce09e98dddd43da47834f"
+    },
+    {
+      "id": "cryo-casing-arm",
+      "kind": "texture",
+      "title": "Metal Plate 02 (arm, 1k)",
+      "author": "Rob Tuytel",
+      "source": "https://polyhaven.com/a/metal_plate_02",
+      "file": "sets/cryo-casing-arm.webp",
+      "license": "CC0-1.0",
+      "retrieved": "2026-11-27",
+      "bytes": 260866,
+      "sha256": "5a401ae7ea0531060fb18f2a9beb4b8d1e7287e78e7d6f0fc37f37319386ac7d"
+    },
+    {
+      "id": "cryo-casing-normal",
+      "kind": "texture",
+      "title": "Metal Plate 02 (normal, 1k)",
+      "author": "Rob Tuytel",
+      "source": "https://polyhaven.com/a/metal_plate_02",
+      "file": "sets/cryo-casing-normal.webp",
+      "license": "CC0-1.0",
+      "retrieved": "2026-11-27",
+      "bytes": 16474,
+      "sha256": "4a935834c1568663ed871a50046c3d01ef3a4fe815fcac00daa6dae841f1615b"
+    },
+    {
       "id": "cryo-ground-albedo",
       "kind": "texture",
       "title": "Snow 02 (albedo, 1k)",
@@ -696,6 +732,42 @@
       "sha256": "96c7a4bd0bdd0d6b44a94475f58d9aba5b7ffbc4328071206cf7e34c70200268"
     },
     {
+      "id": "foundry-casing-albedo",
+      "kind": "texture",
+      "title": "Rusty Metal 04 (albedo, 1k)",
+      "author": "Amal Kumar",
+      "source": "https://polyhaven.com/a/rusty_metal_04",
+      "file": "sets/foundry-casing-albedo.webp",
+      "license": "CC0-1.0",
+      "retrieved": "2026-11-27",
+      "bytes": 189990,
+      "sha256": "c04a85e116dc5bb00bf49d103b4f04df0ef6055a44dbf012c49fb5986d2148c0"
+    },
+    {
+      "id": "foundry-casing-arm",
+      "kind": "texture",
+      "title": "Rusty Metal 04 (arm, 1k)",
+      "author": "Amal Kumar",
+      "source": "https://polyhaven.com/a/rusty_metal_04",
+      "file": "sets/foundry-casing-arm.webp",
+      "license": "CC0-1.0",
+      "retrieved": "2026-11-27",
+      "bytes": 110288,
+      "sha256": "3fe272c48142bdea0b445f254215ea7aad312ae42d48ddc39801a096436a1bc5"
+    },
+    {
+      "id": "foundry-casing-normal",
+      "kind": "texture",
+      "title": "Rusty Metal 04 (normal, 1k)",
+      "author": "Amal Kumar",
+      "source": "https://polyhaven.com/a/rusty_metal_04",
+      "file": "sets/foundry-casing-normal.webp",
+      "license": "CC0-1.0",
+      "retrieved": "2026-11-27",
+      "bytes": 243196,
+      "sha256": "a9bc1a885d6dbbcd370dfb574081236bf297fe344872f329f8a8555cf5cbda26"
+    },
+    {
       "id": "foundry-ground-albedo",
       "kind": "texture",
       "title": "Damaged Concrete Floor 03 (albedo, 2k)",
@@ -802,6 +874,42 @@
       "retrieved": "2026-11-27",
       "bytes": 8766,
       "sha256": "0d792235df5dc1940ea9b265629731968f802afa61568856f8bdbe1580be149f"
+    },
+    {
+      "id": "outpost-casing-albedo",
+      "kind": "texture",
+      "title": "Green Metal Rust (albedo, 1k)",
+      "author": "Rob Tuytel",
+      "source": "https://polyhaven.com/a/green_metal_rust",
+      "file": "sets/outpost-casing-albedo.webp",
+      "license": "CC0-1.0",
+      "retrieved": "2026-11-27",
+      "bytes": 19546,
+      "sha256": "af0d6746d4db658cb10417efc9897813f1e864fdaf5a243205d29dccf31418f2"
+    },
+    {
+      "id": "outpost-casing-arm",
+      "kind": "texture",
+      "title": "Green Metal Rust (arm, 1k)",
+      "author": "Rob Tuytel",
+      "source": "https://polyhaven.com/a/green_metal_rust",
+      "file": "sets/outpost-casing-arm.webp",
+      "license": "CC0-1.0",
+      "retrieved": "2026-11-27",
+      "bytes": 29658,
+      "sha256": "d87bd9160e6a1aa683234d661ea0181f619af1ff5d65a5ff914d03bc47ab4bbf"
+    },
+    {
+      "id": "outpost-casing-normal",
+      "kind": "texture",
+      "title": "Green Metal Rust (normal, 1k)",
+      "author": "Rob Tuytel",
+      "source": "https://polyhaven.com/a/green_metal_rust",
+      "file": "sets/outpost-casing-normal.webp",
+      "license": "CC0-1.0",
+      "retrieved": "2026-11-27",
+      "bytes": 10886,
+      "sha256": "c1acd01da2ace17cd1037a4d6d6d3ee71aaf3a4f37aace82a671bbb13e42232b"
     },
     {
       "id": "outpost-ground-albedo",
