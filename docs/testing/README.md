@@ -20,6 +20,7 @@ skip unless `RIFT_TEST_DATABASE_URL` is set. Boundary tests: `architecture.test.
 `save-surface.test.ts` (save barrel exports), `net-events.test.ts` (wire event tags on both sides), `docs.test.ts`
 (documentation links).
 `desktop-release.test.ts` checks first-release tag lookup, annotated tags, and remote lookup failures.
+`input.test.ts` covers browser pointer lock and the macOS native-capture lifecycle; real macOS input still requires a device check.
 The desktop Rust crate has a credentialed CORS preflight test: `cargo test --manifest-path apps/client/src-tauri/Cargo.toml --locked` (requires platform Tauri build dependencies).
 
 ## Browser suites (Playwright, headless Chromium)
@@ -39,6 +40,7 @@ collectErrors); do not copy helpers.
 | `e2e-range` | Firing range + DPS meter |
 | `e2e-polish`, `e2e-feel-polish`, `e2e-render-lifecycle` | Presentation, feel, scene lifecycle |
 | `e2e-mobile`, `e2e-pwa` | Touch controls (emulated phone); installability/offline/update (production build) |
+| `e2e-desktop-mouse` | HQ movement, mouse look, pause and focus loss through a simulated native mouse backend; real AppKit still needs a Mac |
 | `e2e-accounts`, `e2e-sync` | Passkeys and offline sync (need the stack) |
 | `e2e-construction-coop` | HQ construction; section X = real two-browser co-op (own stack, `node --import tsx`) |
 | `e2e-coop-protocol.mjs`, `e2e-coop-map.mjs` | Co-op protocol with bot clients (own stack; needs a DB role that may create databases) |

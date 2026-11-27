@@ -17,6 +17,7 @@ use std::sync::{Arc, Mutex};
 use tauri::{Manager, State as AppState};
 use tokio_tungstenite::tungstenite::{client::IntoClientRequest, Message as RemoteMessage};
 mod cors;
+mod mouse_capture;
 
 const API: &str = "https://riftwarden-api.ykdbonte.dev";
 const SITE: &str = "https://riftwarden.ykdbonte.dev";
@@ -42,10 +43,11 @@ fn keyring() -> Result<keyring::Entry, String> {
 #[derive(Serialize)]
 struct Settings {
     base: String,
+    native_mouse: bool,
 }
 #[tauri::command]
 fn desktop_settings(state: AppState<'_, Arc<Desktop>>) -> Settings {
-    Settings { base: state.base.clone() }
+    Settings { base: state.base.clone(), native_mouse: cfg!(target_os = "macos") }
 }
 
 #[derive(Deserialize)]
@@ -212,7 +214,15 @@ fn main() {
             });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![desktop_settings, desktop_sign_in, desktop_poll_sign_in, desktop_forget_session])
+        .invoke_handler(tauri::generate_handler![
+            desktop_settings,
+            desktop_sign_in,
+            desktop_poll_sign_in,
+            desktop_forget_session,
+            mouse_capture::desktop_mouse_start,
+            mouse_capture::desktop_mouse_stop,
+            mouse_capture::desktop_mouse_take
+        ])
         .run(tauri::generate_context!())
         .expect("failed to run Riftwarden");
 }

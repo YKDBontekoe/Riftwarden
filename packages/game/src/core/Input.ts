@@ -1,3 +1,8 @@
+export interface NativeMouseCapture {
+  start(move: (dx: number, dy: number) => void, lost: () => void): Promise<boolean>;
+  stop(): void;
+}
+
 /** Keyboard/mouse state with per-frame edge detection and pointer-lock management. */
 export class Input {
   private down = new Set<string>();
@@ -31,6 +36,9 @@ export class Input {
   /** Taps also fire compatibility mouse events: ignore those right after a touch. */
   private touchAt = -1e9;
   private lockAttempt: Promise<void> | null = null;
+  nativeMouse: NativeMouseCapture | null = null;
+  private nativeLocked = false;
+  private captureGeneration = 0;
   /** When the browser's default Escape unlock happened (programmatic exits don't have a cooldown). */
   private unlockedAt = 0;
   private programmaticUnlock = false;
@@ -58,7 +66,7 @@ export class Input {
       if (this.down.delete(code)) this.releasedSet.add(code);
     });
     document.addEventListener('mousemove', (e) => {
-      if (!this.captured || performance.now() - this.touchAt < 900) return;
+      if (!this.captured || this.nativeLocked || performance.now() - this.touchAt < 900) return;
       if (this.skipMouse > 0) return;
       this.mouseDx += e.movementX;
       this.mouseDy += e.movementY;
@@ -76,7 +84,7 @@ export class Input {
     document.addEventListener(
       'wheel',
       (e) => {
-        if (!this.locked) return;
+        if (!this.locked && !this.nativeLocked) return;
         // Trackpads send many small deltas: accumulate to whole notches (~100 px each).
         this.wheelAcc += e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY;
         const steps = Math.trunc(this.wheelAcc / 90);
@@ -98,13 +106,16 @@ export class Input {
       this.onLockChange(this.locked);
     });
     window.addEventListener('blur', () => {
+      const wasCaptured = this.captured;
+      const wasNative = this.nativeLocked;
+      if (this.nativeMouse) this.releaseLock();
       this.clear();
-      if (this.captured) this.onLockChange(false);
+      if (wasCaptured && !wasNative) this.onLockChange(false);
     });
   }
 
   get captured(): boolean {
-    return this.locked || this.forceCapture || this.touch;
+    return this.locked || this.nativeLocked || this.forceCapture || this.touch;
   }
 
   async requestLock(): Promise<void> {
@@ -126,6 +137,21 @@ export class Input {
   }
 
   private async acquireLock(): Promise<void> {
+    if (this.nativeMouse) {
+      if (this.nativeLocked) return;
+      const generation = this.captureGeneration;
+      const mouse = this.nativeMouse;
+      const acquired = await mouse.start(
+        (dx, dy) => { if (this.nativeLocked) this.look(dx, dy); },
+        () => { if (this.nativeLocked) this.releaseLock(); },
+      );
+      if (generation !== this.captureGeneration) {
+        mouse.stop();
+      } else if (acquired) {
+        this.nativeLocked = true;
+      }
+      return;
+    }
     if (this.isLockedNow()) {
       this.reflectLock();
       return;
@@ -168,6 +194,13 @@ export class Input {
   }
 
   releaseLock(): void {
+    this.captureGeneration++;
+    if (this.nativeLocked) {
+      this.nativeLocked = false;
+      this.nativeMouse?.stop();
+      this.clear();
+      this.onLockChange(false);
+    }
     if (document.pointerLockElement) {
       this.programmaticUnlock = true;
       document.exitPointerLock();

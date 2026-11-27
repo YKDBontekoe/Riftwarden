@@ -13,6 +13,7 @@ import { immersiveStats, initTouch, isTouchDevice } from './touch/touchMode';
 import { simulatePwa } from './pwa';
 import { createAppRouter, Root } from './ui/router';
 import { loadSurfaceSources } from '@riftwarden/game/visuals/surfaceSources';
+import { nativeMouseCapture } from './desktop/mouseCapture';
 
 // The game: Babylon, Havok, the simulation and the React app. Loaded by main.tsx right after the shell.
 export async function boot(): Promise<void> {
@@ -31,6 +32,7 @@ export async function boot(): Promise<void> {
   // In-world screens and signs are drawn to canvases: make sure the UI fonts are ready (bounded wait).
   await Promise.race([document.fonts?.ready ?? Promise.resolve(), new Promise((r) => setTimeout(r, 2500))]);
   flow = new Flow(engine, canvas, havok, settings);
+  if ((globalThis as typeof globalThis & { __riftNativeMouse?: boolean }).__riftNativeMouse) flow.input.nativeMouse = nativeMouseCapture();
   flow.backend = backend;
 
   const params = new URLSearchParams(location.search);
