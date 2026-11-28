@@ -70,6 +70,8 @@ export interface Settings {
   renderer: 'webgl' | 'webgpu';
   /** M7: key bindings (action -> KeyboardEvent.code). */
   keys: Record<string, string>;
+  /** Alternate key per action (optional; never a key already used by a primary or another alternate). */
+  keys2: Record<string, string>;
   /** Touch controls: auto (touch screens), always on, or off. */
   touchControls: 'auto' | 'on' | 'off';
   /** Touch look speed (0.3..3), on top of the mouse sensitivity. */
@@ -147,6 +149,7 @@ export const DEFAULT_SETTINGS: Settings = {
   adaptiveTarget: 60,
   renderer: 'webgl',
   keys: Object.fromEntries(ACTIONS.map((a) => [a.id, a.def])),
+  keys2: {},
   touchControls: 'auto',
   touchLook: 1,
   touchOpacity: 0.6,
@@ -187,6 +190,15 @@ export function sanitizeSettings(raw: unknown, version = VERSION): Settings {
   }
   const available = ACTIONS.map(({ def }) => def).filter((key) => !used.has(key));
   for (const { id } of ACTIONS) if (!keys[id]) keys[id] = available.shift()!;
+  for (const id of Object.values(keys)) used.add(id);
+  const keys2: Record<string, string> = {};
+  const rk2 = (r.keys2 && typeof r.keys2 === 'object' ? r.keys2 : {}) as Record<string, unknown>;
+  for (const { id } of ACTIONS) {
+    const key = rk2[id];
+    if (typeof key !== 'string' || !/^[A-Za-z0-9]{2,20}$/.test(key) || used.has(key) || isReservedKey(key)) continue;
+    keys2[id] = key;
+    used.add(key);
+  }
   return {
     sensitivity: clampNum(r.sensitivity, 0.2, 3, DEFAULT_SETTINGS.sensitivity),
     sensitivityY: clampNum(r.sensitivityY, 0.5, 2, DEFAULT_SETTINGS.sensitivityY),
@@ -223,6 +235,7 @@ export function sanitizeSettings(raw: unknown, version = VERSION): Settings {
     adaptiveTarget: ADAPTIVE_TARGETS.includes(r.adaptiveTarget as AdaptiveTarget) ? (r.adaptiveTarget as AdaptiveTarget) : 60,
     renderer: pick(r.renderer, ['webgl', 'webgpu'] as const, 'webgl'),
     keys,
+    keys2,
     touchControls: pick(r.touchControls, ['auto', 'on', 'off'] as const, 'auto'),
     touchLook: clampNum(r.touchLook, 0.3, 3, 1),
     touchOpacity: clampNum(r.touchOpacity, 0.2, 1, 0.6),
@@ -258,13 +271,16 @@ export function saveSettings(s: Settings): void {
 /** Physical key -> the default code the game logic listens for (key rebinding). */
 export function keyRemap(s: Settings): Map<string, string> {
   const m = new Map<string, string>();
-  const bound = new Set(ACTIONS.map((a) => s.keys[a.id] ?? a.def));
+  const alts = s.keys2 ?? {};
+  const bound = new Set([...ACTIONS.map((a) => s.keys[a.id] ?? a.def), ...Object.values(alts)]);
   for (const a of ACTIONS) {
     const k = s.keys[a.id] ?? a.def;
     if (k !== a.def) m.set(k, a.def);
   }
   // A default key nobody is bound to any more does nothing.
   for (const a of ACTIONS) if (!bound.has(a.def) && !m.has(a.def)) m.set(a.def, '__unbound');
+  // An alternate presses the action's default code too (sanitize keeps alternates off every primary key).
+  for (const a of ACTIONS) if (alts[a.id]) m.set(alts[a.id], a.def);
   return m;
 }
 
@@ -297,6 +313,40 @@ export const RESERVED_KEYS: readonly string[] = ['Escape', 'Tab', 'F3', 'F4', 'F
 
 export function isReservedKey(code: string): boolean {
   return RESERVED_KEYS.includes(code);
+}
+
+/** Keys with a fixed use in the arena (tower part cycling, run build, upgrade offer): bindable, but binding one hides it. */
+export const FIXED_KEYS: Readonly<Record<string, string>> = { KeyC: 'tower weapon', KeyV: 'tower core', KeyN: 'tower modifier', KeyM: 'tower base', KeyU: 'run build overview', KeyY: 'accept upgrade offer' };
+
+/** A heads-up when a key also has a fixed use (pure), or null. */
+export function fixedKeyNote(code: string): string | null {
+  // Bound keys are remapped before the game reads them, so the fixed shortcut stops working (it is not doubled).
+  return FIXED_KEYS[code] ? `${keyLabel(code)} is also the ${FIXED_KEYS[code]} shortcut in the arena; that shortcut stops working while it is bound here.` : null;
+}
+
+/**
+ * Bind `code` to an action's primary or alternate key (pure). A primary that another action uses swaps with it (no
+ * binding is lost) and takes the key away from any alternate. An alternate refuses another action's primary (say so
+ * instead of a silent swap) and moves off another alternate. Returns the new maps or a reason.
+ */
+export function rebind(keys: Settings['keys'], keys2: Settings['keys2'], id: string, alt: boolean, code: string): { keys: Settings['keys']; keys2: Settings['keys2'] } | { error: string } {
+  if (isReservedKey(code)) return { error: `${keyLabel(code)} is reserved by the game. Pick another key, or Esc to cancel.` };
+  const k = { ...keys };
+  const k2 = { ...keys2 };
+  const altOwner = Object.entries(k2).find(([, c]) => c === code)?.[0];
+  if (!alt) {
+    const clash = Object.entries(k).find(([, c]) => c === code)?.[0];
+    if (clash && clash !== id) k[clash] = k[id];
+    k[id] = code;
+    if (altOwner) delete k2[altOwner];
+    return { keys: k, keys2: k2 };
+  }
+  if (k[id] === code) return { error: `${keyLabel(code)} is already this action's main key.` };
+  const owner = Object.entries(k).find(([, c]) => c === code)?.[0];
+  if (owner) return { error: `${keyLabel(code)} is the main key for ${ACTIONS.find((a) => a.id === owner)?.label.replace(/ \(.*\)$/, '') ?? owner}.` };
+  if (altOwner) delete k2[altOwner];
+  k2[id] = code;
+  return { keys: k, keys2: k2 };
 }
 
 /** Actions whose binding differs from the default (the settings table marks them). */

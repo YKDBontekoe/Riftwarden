@@ -32,6 +32,12 @@
   for 4 s) and resets to the desktop or mobile defaults; DEL per tab now also resets adaptive quality, mute, vertical
   look and the FPS readout. Key table: changed bindings carry an ember dot (tooltip names the default), reserved keys
   (`RESERVED_KEYS`: Esc, Tab, F3, F4, F10, F11, F12) are refused with a note, a click elsewhere cancels listening.
+  Alternate keys (`settings.keys2`, `rebind`): clicking the Alternate cell binds a second key per action (Backspace
+  clears it; built-in MMB / RMB / wheel show when none is set). A main key that clashes swaps with the other action
+  and takes the key from any alternate; an alternate refuses another action's main key with a note and moves off
+  another alternate; sanitize drops alternates that clash with main keys, each other or reserved keys. Binding a key
+  with a fixed arena use (`FIXED_KEYS`: C / V / N / M tower parts, U, Y) shows a note that the fixed shortcut stops
+  working (keys are remapped before the game reads them).
   `keyLabel` names every key (R-CTRL, L-ALT, arrows as ↑←↓→, NUM 7, punctuation) instead of printing raw codes.
 - **Window** (`core/windowState.ts`): the tab title follows the run (`Paused · Wave 7 · RL 3 · Riftwarden`, checkpoint,
   preparing, reactor lost; plain outside a run). Audio fades out while the tab is hidden or the window loses focus

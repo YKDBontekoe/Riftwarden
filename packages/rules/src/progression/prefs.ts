@@ -5,7 +5,7 @@
 
 /** Preferences stored on the profile (`save.prefs`, optional: absent until a player changes a setting). */
 export interface SyncedPrefs {
-  /** Settings fields (flat primitives, plus `keys`: action -> key code). */
+  /** Settings fields (flat primitives, plus `keys` / `keys2`: action -> key code). */
   settings: Record<string, string | number | boolean | Record<string, string>>;
   /** Small UI choices (radar toggle, inventory sort, comparison priority). */
   ui: Record<string, string | number | boolean>;
@@ -28,10 +28,10 @@ export function sanitizePrefs(raw: unknown): SyncedPrefs | null {
   for (const [k, v] of Object.entries(src).slice(0, MAX_FIELDS)) {
     if (!okKey(k)) continue;
     if (prim(v)) settings[k] = v;
-    else if (k === 'keys' && v && typeof v === 'object') {
+    else if ((k === 'keys' || k === 'keys2') && v && typeof v === 'object') {
       const keys: Record<string, string> = {};
       for (const [a, code] of Object.entries(v as Record<string, unknown>).slice(0, MAX_FIELDS)) if (okKey(a) && typeof code === 'string' && /^[A-Za-z0-9]{1,24}$/.test(code)) keys[a] = code;
-      settings.keys = keys;
+      settings[k] = keys;
     }
   }
   const ui: SyncedPrefs['ui'] = {};

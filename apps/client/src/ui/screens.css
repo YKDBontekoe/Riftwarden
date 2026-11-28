@@ -684,3 +684,6 @@ button.dw-ev:hover { background: rgba(255, 255, 255, 0.04); }
 /* Settings: values and bindings that differ from the default carry an ember mark (double-click / DEL restores). */
 .set-val.changed { color: var(--ds-ember-soft); cursor: pointer; }
 .set-bind-table .sbt-name.changed b::after { content: ''; display: inline-block; width: 6px; height: 6px; margin-left: 8px; border-radius: 50%; background: var(--ds-ember); vertical-align: middle; }
+.set-bind-table button.sbt-alt { margin: 0; padding: 0; border: 0; border-bottom: 1px solid rgba(255, 255, 255, 0.08); background: none; cursor: pointer; justify-content: flex-start; }
+.set-bind-table button.sbt-alt:hover kbd, .set-bind-table button.sbt-alt:focus-visible kbd { box-shadow: inset 0 0 0 1px var(--ds-ember); }
+.set-bind-table button.sbt-alt.listen kbd { box-shadow: inset 0 0 0 2px var(--ds-ember); color: #ffc49b; background: none; animation: blink 1s infinite; }

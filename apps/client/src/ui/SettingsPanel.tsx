@@ -6,7 +6,7 @@ import { minimapStore, setMinimap } from './hud/minimap';
 import type { Flow } from '../core/Flow';
 import { InstallApp } from '../touch/MobileUi';
 import { AccountPanel } from '../account/AccountPanel';
-import { RETICLE_COLORS, changedBindings, isReservedKey, keyLabel, ACTIONS, DEFAULT_SETTINGS, mobileDefaults, PRESETS, type Quality, type Settings } from '@riftwarden/game/core/settings';
+import { RETICLE_COLORS, changedBindings, fixedKeyNote, rebind, keyLabel, ACTIONS, DEFAULT_SETTINGS, mobileDefaults, PRESETS, type Quality, type Settings } from '@riftwarden/game/core/settings';
 import { isTouchDevice } from '../touch/touchMode';
 import { sfx } from '@riftwarden/game/audio/Sfx';
 import { RARITY_IDS } from '@riftwarden/rules/loot/rarity';
@@ -113,26 +113,29 @@ export function SettingsPanel({ flow, compact, page, onTab }: { flow: Flow; comp
   };
   useEffect(() => {
     if (!binding) return;
+    const [id, slot] = binding.split(':');
+    const alt = slot === 'alt';
     // A click anywhere else cancels listening (the row's own click restarts it).
     const onDown = (e: MouseEvent) => {
-      if (!(e.target as HTMLElement | null)?.closest?.(`[data-action="${binding}"]`)) setBinding(null);
+      if (!(e.target as HTMLElement | null)?.closest?.(`[data-bind="${binding}"]`)) setBinding(null);
     };
     const onKey = (e: KeyboardEvent) => {
       e.preventDefault();
       e.stopPropagation();
       if (e.code === 'Escape') return setBinding(null);
       if (e.repeat || !e.code || e.code === 'Unidentified') return;
-      if (isReservedKey(e.code)) {
-        setBindNote(`${keyLabel(e.code)} is reserved by the game. Pick another key, or Esc to cancel.`);
-        return;
+      // Backspace / Delete clears an alternate.
+      if (alt && (e.code === 'Backspace' || e.code === 'Delete')) {
+        const keys2 = { ...s.keys2 };
+        delete keys2[id];
+        update({ keys2 });
+        return setBinding(null);
       }
-      const keys = { ...s.keys };
-      // Swap with whatever action already used that key (no dead bindings).
-      const clash = Object.entries(keys).find(([, k]) => k === e.code);
-      if (clash) keys[clash[0]] = keys[binding];
-      keys[binding] = e.code;
-      update({ keys });
+      const r = rebind(s.keys, s.keys2, id, alt, e.code);
+      if ('error' in r) return setBindNote(r.error);
+      update(r);
       setBinding(null);
+      setBindNote(fixedKeyNote(e.code));
     };
     window.addEventListener('keydown', onKey, true);
     window.addEventListener('mousedown', onDown, true);
@@ -154,8 +157,10 @@ export function SettingsPanel({ flow, compact, page, onTab }: { flow: Flow; comp
         // DEL: the focused key binding goes back to its default, otherwise the whole tab does.
         const focused = (document.activeElement as HTMLElement | null)?.dataset?.action;
         const a = ACTIONS.find((x) => x.id === focused);
-        if (a) update({ keys: { ...s.keys, ...Object.fromEntries(Object.entries(s.keys).filter(([, k]) => k === a.def).map(([id]) => [id, s.keys[a.id]])), [a.id]: a.def } });
-        else update(resetTab(tab));
+        const r = a ? rebind(s.keys, s.keys2, a.id, false, a.def) : null;
+        if (r) {
+          if (!('error' in r)) update(r);
+        } else update(resetTab(tab));
       }
     };
     window.addEventListener('keydown', onKey);
@@ -236,11 +241,13 @@ export function SettingsPanel({ flow, compact, page, onTab }: { flow: Flow; comp
                 <span className="ds-lbl">Alternate</span>
                 {ACTIONS.map((a) => (
                   <Fragment key={a.id}>
-                    <button type="button" className={`set-bind sbt-name ${binding === a.id ? 'listen' : ''} ${changed.has(a.id) ? 'changed' : ''}`} title={changed.has(a.id) ? `Default: ${keyLabel(a.def)} · DEL restores it` : undefined} aria-pressed={binding === a.id} data-testid={`bind-${a.id}`} data-action={a.id} onClick={() => setBinding(a.id)}>
+                    <button type="button" data-bind={a.id} className={`set-bind sbt-name ${binding === a.id ? 'listen' : ''} ${changed.has(a.id) ? 'changed' : ''}`} title={changed.has(a.id) ? `Default: ${keyLabel(a.def)} · DEL restores it` : undefined} aria-pressed={binding === a.id} data-testid={`bind-${a.id}`} data-action={a.id} onClick={() => setBinding(a.id)}>
                       <b>{a.label.replace(/ \(.*\)$/, '')}</b>
                     </button>
                     <span className={`sbt-key ${binding === a.id ? 'listen' : ''}`}><kbd>{binding === a.id ? 'PRESS A KEY…' : keyLabel(s.keys[a.id])}</kbd></span>
-                    <span className="sbt-alt"><kbd>{a.id === 'swap' && s.wheelSwap ? 'WHEEL' : ALTERNATE[a.id] ?? '—'}</kbd></span>
+                    <button type="button" className={`sbt-alt ${binding === `${a.id}:alt` ? 'listen' : ''}`} data-bind={`${a.id}:alt`} data-testid={`bind2-${a.id}`} title="Click to set an alternate key · Backspace clears it" onClick={() => setBinding(`${a.id}:alt`)}>
+                      <kbd>{binding === `${a.id}:alt` ? 'PRESS A KEY…' : s.keys2[a.id] ? keyLabel(s.keys2[a.id]) : a.id === 'swap' && s.wheelSwap ? 'WHEEL' : ALTERNATE[a.id] ?? '+'}</kbd>
+                    </button>
                   </Fragment>
                 ))}
               </div>
@@ -301,7 +308,7 @@ function resetTab(tab: Tab): Partial<Settings> {
   switch (tab) {
     case 'display': return { quality: d.quality, ...PRESETS[d.quality], fov: d.fov, renderer: d.renderer, adaptiveTarget: d.adaptiveTarget };
     case 'audio': return { volume: d.volume, sfxVolume: d.sfxVolume, ambienceVolume: d.ambienceVolume, uiVolume: d.uiVolume, combatCueVolume: d.combatCueVolume, musicVolume: d.musicVolume, muted: d.muted, muteInBackground: d.muteInBackground };
-    case 'controls': return { sensitivity: d.sensitivity, sensitivityY: d.sensitivityY, autoSprint: d.autoSprint, invertY: d.invertY, touchControls: d.touchControls, touchLook: d.touchLook, touchOpacity: d.touchOpacity, haptics: d.haptics, wheelSwap: d.wheelSwap, keys: { ...d.keys } };
+    case 'controls': return { keys2: {}, sensitivity: d.sensitivity, sensitivityY: d.sensitivityY, autoSprint: d.autoSprint, invertY: d.invertY, touchControls: d.touchControls, touchLook: d.touchLook, touchOpacity: d.touchOpacity, haptics: d.haptics, wheelSwap: d.wheelSwap, keys: { ...d.keys } };
     case 'interface': return { uiScale: d.uiScale, reticle: d.reticle, reticleSize: d.reticleSize, aimFeedback: d.aimFeedback, damageNumbers: d.damageNumbers, showFps: d.showFps, reticleColor: d.reticleColor, reticleOpacity: d.reticleOpacity, hudBacking: d.hudBacking };
     case 'access': return { colorblind: d.colorblind, reduceMotion: d.reduceMotion, shake: d.shake, reduceFlashing: d.reduceFlashing };
     default: return {};
@@ -323,7 +330,7 @@ function MouseAndTouch({ s, update }: { s: Settings; update: (p: Partial<Setting
       <Seg label="Vibration" help="A short buzz when the drone is hit (touch, where supported)" value={s.haptics ? 'on' : 'off'} options={[['off', 'Off'], ['on', 'On']]} onChange={(v) => update({ haptics: v === 'on' })} />
       <Slider label="Touch button opacity" min={0.2} max={1} step={0.05} value={s.touchOpacity} def={D.touchOpacity} fmt={pct} onChange={(v) => update({ touchOpacity: v })} />
       <InstallApp />
-      <span className="ds-meta">A key already in use swaps with the action that had it: a binding is never lost silently. DEL on a row restores its default; double-click a slider to reset it.</span>
+      <span className="ds-meta">A key already in use swaps with the action that had it: a binding is never lost silently. Click Alternate to add a second key (Backspace clears it). DEL on a row restores its default; double-click a slider to reset it.</span>
     </aside>
   );
 }

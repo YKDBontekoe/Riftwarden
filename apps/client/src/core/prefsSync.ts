@@ -18,7 +18,7 @@ export function syncedSettings(s: Settings): SyncedPrefs['settings'] {
   const out: SyncedPrefs['settings'] = {};
   for (const [k, v] of Object.entries(s) as [keyof Settings, Settings[keyof Settings]][]) {
     if (DEVICE_FIELDS.includes(k)) continue;
-    out[k] = k === 'keys' ? { ...(v as Record<string, string>) } : (v as string | number | boolean);
+    out[k] = k === 'keys' || k === 'keys2' ? { ...(v as Record<string, string>) } : (v as string | number | boolean);
   }
   return out;
 }
