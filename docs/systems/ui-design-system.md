@@ -19,6 +19,14 @@
   0.5..2× of horizontal, applied in `Player` to mouse and touch look), `muted`, `muteInBackground` (default on),
   `showFps`, `autoSprint` (sprint whenever moving forward; the dash key still dashes). Old saves load with the
   defaults.
+- **Settings sync** (`core/prefsSync.ts`, rules `progression/prefs.ts`): every settings change is recorded 1.5 s
+  later as a `setPrefs` op (skipped when nothing changed), so it syncs with the profile and replays on the server;
+  `save.prefs` (optional, sanitized, no version bump) holds a bounded copy stamped with the entry time. A newer copy
+  (another device, a first sign-in) is merged over the local settings and sanitized again; device options
+  (`DEVICE_FIELDS`: renderer, quality preset, shadows, particles, bloom, render scale, adaptive target, touch mode)
+  stay local. The radar toggle, inventory sort and comparison priority travel in `prefs.ui`. A profile without prefs
+  takes this device's. Off under `?test` unless `&prefs` (suites count journal entries). Tests:
+  `tests/prefs-sync.test.ts`.
 - **Settings page**: a slider with a default restores it on double-click (value turns ember while changed); the page
   reopens on the last tab (`riftwarden.settingsTab`, this device); Reset all settings in the footer is two clicks (arms
   for 4 s) and resets to the desktop or mobile defaults; DEL per tab now also resets adaptive quality, mute, vertical

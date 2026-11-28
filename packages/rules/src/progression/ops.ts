@@ -17,6 +17,7 @@ import { TOWER_SLOTS } from '../towers/components';
 const COMPONENT_SLOTS = ['barrel', 'core', 'cooling', 'mechanism', 'attachment'] as const;
 import { BUILD_OPS } from '../home/build/ops';
 import { TUTORIAL_OPS } from './tutorial';
+import { PREFS_OPS } from './prefs';
 import { allocateNode, respecTree } from './treeOps';
 import { lockedFamiliesOf, lockReason, lootLocks, opFeature, recipeFeature } from './unlocks';
 import { PINNACLE, warCacheItem, warCacheShards } from './spikes';
@@ -103,6 +104,7 @@ const DEFS: Record<string, OpDef> = {
   treeRespec: { args: [], run: (d, _a, tx) => TX.withTx(d, tx, () => respecTree(d) as never) },
   ...BUILD_OPS,
   ...TUTORIAL_OPS,
+  ...PREFS_OPS,
 };
 
 export type OpName = keyof typeof DEFS & string;

@@ -24,14 +24,15 @@ function loadPriority(): ComparisonPriority {
   }
 }
 
-const comparison = new Store({ priority: loadPriority() });
+/** Exported for preference sync (core/prefsSync.ts). */
+export const comparison = new Store({ priority: loadPriority() });
 const getPriority = () => comparison.get().priority;
 
 export function useComparisonPriority(): ComparisonPriority {
   return useSyncExternalStore(comparison.subscribe, getPriority);
 }
 
-function savePriority(priority: ComparisonPriority): void {
+export function savePriority(priority: ComparisonPriority): void {
   comparison.set({ priority });
   try {
     localStorage.setItem(PRIORITY_KEY, priority);

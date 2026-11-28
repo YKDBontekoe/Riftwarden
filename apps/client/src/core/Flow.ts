@@ -229,7 +229,12 @@ export class Flow {
     this.arena?.setEffectLoad(this.adaptive.current.effects);
   }
 
-  applySettings(s: Settings): void {
+  /** Records a settings change for profile sync (core/prefsSync.ts; a no-op until it starts). */
+  prefsPush: () => void = () => {};
+
+  /** `fromSync`: the change came from the profile (another device), so it is not recorded again. */
+  applySettings(s: Settings, fromSync = false): void {
+    if (!fromSync) this.prefsPush();
     const qualityChanged = s.quality !== this.settings.quality || s.shadows !== this.settings.shadows;
     this.settings = s;
     saveSettings(s);

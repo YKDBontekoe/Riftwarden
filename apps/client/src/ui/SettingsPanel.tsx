@@ -6,7 +6,7 @@ import { minimapStore, setMinimap } from './hud/minimap';
 import type { Flow } from '../core/Flow';
 import { InstallApp } from '../touch/MobileUi';
 import { AccountPanel } from '../account/AccountPanel';
-import { RETICLE_COLORS, changedBindings, exportSettings, importSettings, isReservedKey, keyLabel, ACTIONS, DEFAULT_SETTINGS, mobileDefaults, PRESETS, type Quality, type Settings } from '@riftwarden/game/core/settings';
+import { RETICLE_COLORS, changedBindings, isReservedKey, keyLabel, ACTIONS, DEFAULT_SETTINGS, mobileDefaults, PRESETS, type Quality, type Settings } from '@riftwarden/game/core/settings';
 import { isTouchDevice } from '../touch/touchMode';
 import { sfx } from '@riftwarden/game/audio/Sfx';
 import { RARITY_IDS } from '@riftwarden/rules/loot/rarity';
@@ -358,33 +358,6 @@ export function SettingsScreen({ flow, from, close }: { flow: Flow; from: string
     const t = window.setTimeout(() => setArmed(false), 4000);
     return () => window.clearTimeout(t);
   }, [armed]);
-  const [note, setNote] = useState<string | null>(null);
-  useEffect(() => {
-    if (!note) return;
-    const t = window.setTimeout(() => setNote(null), 3500);
-    return () => window.clearTimeout(t);
-  }, [note]);
-  // Settings travel between devices as a text block (they are not part of the synced profile).
-  const copySettings = () => {
-    const text = exportSettings(flow.settings);
-    void (navigator.clipboard?.writeText(text) ?? Promise.reject(new Error('no clipboard'))).then(
-      () => setNote('Settings copied: paste them on another device'),
-      () => window.prompt('Copy your settings:', text),
-    );
-  };
-  const pasteSettings = async () => {
-    let text: string | null = null;
-    try {
-      text = await navigator.clipboard.readText();
-    } catch {
-      text = window.prompt('Paste copied settings:');
-    }
-    const next = text ? importSettings(text, flow.settings) : null;
-    if (!next) return setNote(text ? 'That is not a copied settings block' : null);
-    flow.applySettings(next);
-    setGeneration((g) => g + 1);
-    setNote('Settings pasted');
-  };
   const resetAll = () => {
     if (!armed) return setArmed(true);
     flow.applySettings(structuredClone(isTouchDevice() ? mobileDefaults() : DEFAULT_SETTINGS));
@@ -414,9 +387,7 @@ export function SettingsScreen({ flow, from, close }: { flow: Flow; from: string
       </div>
       <div className="ds-bot">
         <button type="button" className={`ds-btn ${armed ? 'ds-danger' : ''}`} data-testid="settings-reset-all" onClick={resetAll}>{armed ? 'CLICK AGAIN TO RESET EVERYTHING' : 'RESET ALL SETTINGS'}</button>
-        <button type="button" className="ds-btn" data-testid="settings-copy" onClick={copySettings}>COPY</button>
-        <button type="button" className="ds-btn" data-testid="settings-paste" onClick={() => void pasteSettings()}>PASTE</button>
-        {note && <span className="ds-meta" role="status">{note}</span>}
+        <span className="ds-meta" data-testid="settings-sync-note">Controls, audio, interface and accessibility follow your profile; graphics stay on this device</span>
         <span className="ds-grow" />
         <Hint keys={['Q', 'R']}>Tabs</Hint>
         <Hint keys="DEL">Reset tab</Hint>

@@ -22,7 +22,7 @@ type ViewSort = Sort | 'impact';
 
 const SORTS: ViewSort[] = ['impact', 'rarity', 'level', 'newest', 'name'];
 
-const SORT_KEY = 'riftwarden.invSort';
+export const SORT_KEY = 'riftwarden.invSort';
 /** The sort order survives closing the inventory (this device). */
 function savedSort(): ViewSort {
   try {

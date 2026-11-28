@@ -2,6 +2,7 @@ import { unlockAllForTests } from './core/unlockWatch';
 import '@riftwarden/game/babylonSideEffects';
 import HavokPhysics from '@babylonjs/havok';
 import { startAccountSync } from './account/sync';
+import { startPrefsSync } from './core/prefsSync';
 import { refreshAccount } from './account/store';
 import havokWasmUrl from '@babylonjs/havok/lib/esm/HavokPhysics.wasm?url';
 import { createEngine } from './core/engine';
@@ -44,6 +45,8 @@ export async function boot(): Promise<void> {
   flow.devTools = params.has('dev') || params.has('test');
   // Accounts: sync the profile while signed in; restore the session at boot (automation opts in with &account).
   startAccountSync(flow);
+  // Settings ride along with the profile (automation opts in with &prefs: suites count journal entries).
+  if (!params.has('test') || params.has('prefs')) flow.prefsPush = startPrefsSync(flow);
   if (!params.has('test') || params.has('account')) void refreshAccount();
   if (params.has('classic')) flow.arenaMode = 'classic';
   if (params.has('endless')) flow.mapMode = false;
