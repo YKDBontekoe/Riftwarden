@@ -37,9 +37,12 @@ Cross-cutting limitations. System-specific gaps are listed under "Not done yet" 
 - Arc Conductor arcs stay untyped (`none`) damage.
 - A run closed mid-node is recorded as `interrupted` (secured rewards kept, unsecured lost); only map runs closed after a
   completed node resume, and online runs never resume.
-- No music yet.
+- Music is CC0 ambient/action loops plus procedural layers (`docs/systems/cc0-art-music.md`); the loops were chosen
+  by licence and metadata, not by ear, so the owner should audition and swap them in `assets-src/cc0.sources.json`.
 
 ## Trust
 
 - Solo runs simulate on the client; the server replays loot streams and ceilings (`runCheck.ts`) but solo Rift War
   reports and co-op airborne flags are trusted.
+
+- Yard floodlight masts and open-yard prop vignettes have no collision (visual only, like all scanned props): the drone and shots pass through them.

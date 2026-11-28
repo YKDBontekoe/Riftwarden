@@ -218,7 +218,7 @@ export function createRiftMaterial(scene: Scene, name: string, color: Color3, se
 }
 
 /** Downward cone of light on a wall: bright at the top, fading and widening. */
-function splashTexture(scene: Scene) {
+export function splashTexture(scene: Scene) {
   const W = 128;
   const H = 160;
   const { c, ctx } = canvas(W, H);

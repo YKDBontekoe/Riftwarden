@@ -1,4 +1,5 @@
 import { Color3 } from '@babylonjs/core/Maths/math.color';
+import { music } from '../../audio/Music';
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { sfx } from '../../audio/Sfx';
 import { speedFactor } from '@riftwarden/rules/combat/status';
@@ -191,6 +192,7 @@ export const colossusBehavior: Behavior = {
     cancel(a, ctx);
     ctx.alert('SIEGE COLOSSUS · STRUCTURAL FAILURE', 'white');
     sfx.play('bossRoar', { volume: 1, pitch: 0.6 });
+    music.sting('bossDown');
     return 3.4;
   },
   dying(e, dt, t, ctx) {

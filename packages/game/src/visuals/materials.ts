@@ -9,6 +9,7 @@ import { Texture } from '@babylonjs/core/Materials/Textures/texture';
 import { Color3 } from '@babylonjs/core/Maths/math.color';
 import { type Scene } from '@babylonjs/core/scene';
 import type { ArenaLayout } from '@riftwarden/rules/world/layout';
+import { applyScanDetail } from './scanDetail';
 import { floorSet, industrialSet, type PbrSet, rustSet, wallSet, wearSet, yardDeckSet } from './textures';
 
 /**
@@ -27,6 +28,10 @@ export interface Palette {
   floor: PBRMaterial;
   cyanGlow: PBRMaterial;
   cyanDim: PBRMaterial;
+  /** Architecture-only glows (arena and dressing), well below the gameplay accents: real plant has small indicators. */
+  decorCyan: PBRMaterial;
+  decorOrange: PBRMaterial;
+  decorBright: PBRMaterial;
   orangeGlow: PBRMaterial;
   orangeDim: PBRMaterial;
   redGlow: PBRMaterial;
@@ -210,6 +215,9 @@ export function createPalette(scene: Scene, high: boolean, indoor = false, layou
       }
     }
   }
+  // Scanned micro detail on painted and bare steel (box-projected every 2.5 m). Not on the white trims or enamel: the
+  // paint scan's streaks read as wood grain on a light or orange base (trims, enamel).
+  for (const m of [graphite, steel]) applyScanDetail(m, scene, 'painted-metal', 2.5, 0.45);
   for (const m of lit) m.environmentIntensity = indoor ? 1.15 : 0.89;
 
   return {
@@ -222,6 +230,9 @@ export function createPalette(scene: Scene, high: boolean, indoor = false, layou
     floor,
     cyanGlow: glow(scene, 'cyanGlow', [0.68, 1.49, 1.24]),
     cyanDim: glow(scene, 'cyanDim', [0.18, 0.45, 0.38]),
+    decorCyan: glow(scene, 'decorCyan', [0.08, 0.19, 0.16]),
+    decorOrange: glow(scene, 'decorOrange', [0.32, 0.055, 0.004]),
+    decorBright: glow(scene, 'decorBright', [0.1, 0.22, 0.19]),
     orangeGlow: glow(scene, 'orangeGlow', [2.9, 0.45, 0.03]),
     orangeDim: glow(scene, 'orangeDim', [0.75, 0.13, 0.01]),
     redGlow: glow(scene, 'redGlow', [2.6, 0.28, 0.12]),

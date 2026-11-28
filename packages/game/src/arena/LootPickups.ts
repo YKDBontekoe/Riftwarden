@@ -1,4 +1,5 @@
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { music } from '../audio/Music';
 import { PhysicsRaycastResult } from '@babylonjs/core/Physics/physicsRaycastResult';
 import { type PhysicsEngine as PhysicsEngineV2 } from '@babylonjs/core/Physics/v2/physicsEngine';
 import { type Scene } from '@babylonjs/core/scene';
@@ -64,6 +65,7 @@ export class LootPickups {
       sfx.play('lootDrop', { pitch: 0.8 + r.index * 0.12, volume: Math.max(0.5, a.volume), pan: a.pan });
     }
     uiEvents.emit('loot', { kind: 'drop', name: p.item.name, rarity: p.item.rarity, level: p.item.level, category: p.item.category, count: 1 });
+    if (r.index >= 4) music.sting('jackpot');
     if (r.index >= 4) uiEvents.emit('banner', { title: `${r.label.toUpperCase()} SIGNAL`, sub: p.item.name, tone: r.index >= 5 ? 'red' : 'orange' });
   }
 

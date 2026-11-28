@@ -101,7 +101,7 @@ export class PostFx {
 
     const p = new DefaultRenderingPipeline('pipe', true, scene, [camera]);
     this.pipeline = p;
-    p.samples = high ? 2 : 1;
+    p.samples = high ? 4 : 1; // crisper geometry edges on High (an FPS camera never rests, so TAA would stay off)
     p.fxaaEnabled = true;
     p.bloomEnabled = true;
     p.bloomThreshold = 1.0;

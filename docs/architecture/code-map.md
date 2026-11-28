@@ -98,6 +98,9 @@ apps/client/src/ui/statHelp.ts         one-line help text per stat key (tooltips
 apps/client/src/ui/DroneStats.tsx      drone configuration stat panel (score cards, per-stat source tooltips)
 packages/game/src/visuals/hqTextures.ts  HQ-only surface sets with emissive maps: deck plates (LED seam, grates), wall panels (lit recess band, hatch, stencils), ceiling tiles (light slots)
 packages/game/src/home/roomStyle.ts      accent colour + light tint per HQ room (room identity)                             [pure]
+packages/rules/src/world/propCatalog.ts   scanned CC0 prop species: footprint, roles (floor/deck/roof/wall/hq), orientation [pure]
+packages/rules/src/world/propPlan.ts      where arena props go per biome (wall-foot clusters, wall lamps, deck clusters, rooftop plant), own seed stream [pure]
+packages/rules/src/world/propVignettes.ts hand-authored wall-foot prop vignettes (stacks, tipped items) and their placement [pure]
 packages/rules/src/world/rubblePlan.ts    where arena rubble/wreckage goes (piles at wall bases + block corners, wall wrecks, deck scatter), kept off lanes/reactor/spawn/reserved/vents/ramps [pure]
 packages/game/src/visuals/arenaFloor.ts  arena floor zoning: reactor steel plaza + hazard border, wall gutters with grates, gate-mouth chevrons (8 mm inlays under decals 16 mm / lane lights 28 mm, not pickable)
 packages/game/src/visuals/riftMist.ts    RiftMist: additive noise vapour rolling out of each gate (floor + waist layers, orange open / grey sealed; Game.openGate lights it)
@@ -212,6 +215,20 @@ packages/game/src/core/settings.ts       versioned/validated localStorage settin
 packages/rules/src/world/layout.ts        ARENA data: boxes, ramps, lane routes, reactor, spawn [pure, single source of truth]
 packages/rules/src/world/geometry.ts      distance helpers                              [pure]
 packages/game/src/world/physicsGroups.ts Havok filter masks (ENV vs PLAYER)
+packages/game/src/visuals/propLibrary.ts  loads/instances scanned CC0 props (lazy glTF + WebP), pivot normalisation, shadow hook, footprint ray test
+packages/game/src/visuals/biomeSurfaces.ts scanned PBR surface sets per biome for ground / masonry / cladding / rust (+ parallax occlusion on high)
+packages/game/src/visuals/containerModel.ts real ISO container geometry (corrugation, doors, locking bars, castings) + stacked builder with scanned liveries
+packages/game/src/visuals/biomeLight.ts   per-biome exposure / fill / bounce / IBL / sun for the arena
+packages/game/src/visuals/substationModel.ts transformer-bay geometry for `block` solids (tank, radiators, bushings, conservator)
+packages/game/src/visuals/machineModel.ts  machinery bank geometry (enclosure, pump skids, header, cable tray, roof vessels)
+packages/game/src/visuals/groundRelief.ts visual ground relief field with gameplay fade mask [pure]
+packages/game/src/visuals/floorPlan.ts    floor detail plan: slab joints, patches, cracks, pools, spots, walkway paint [pure]
+packages/game/src/visuals/floorDetail.ts  builds the floor detail plan as relief-following overlays; exact ground-mesh height sampler
+packages/game/src/visuals/yardMast.ts     floodlight masts in the open yard with beams, light pools and overhead cables
+packages/game/src/visuals/contactGrime.ts contact shadow + grime / snow / soot strips along floor-wall seams (arena and HQ)
+packages/game/src/visuals/fixtureGlow.ts  fake light splashes, lenses and pools for wall-mounted prop fixtures
+packages/game/src/visuals/scanDetail.ts   scanned micro detail maps (Babylon detail map layout) for procedural sets
+packages/game/src/home/hqClutter.ts       HQ clutter candidates per room + picker (occupancy test injected) [pure]
 packages/game/src/visuals/arenaDressing.ts arena set dressing (wall services, partition detail, tunnel ribs, drains, industrial skyline): visual only, no collision, merged per material
 packages/game/src/visuals/arena.ts       builds arena meshes (merged per material, box-projected world UVs) + one static compound Havok body
 packages/game/src/visuals/kit.ts         unit-primitive model kit; one hidden source mesh per (shape, material), GPU instances everywhere
@@ -248,7 +265,10 @@ packages/game/src/defense/Turrets.ts     Sentinel targeting/aiming/firing
 packages/rules/src/waves/waves.ts         wave definitions + endless generator       [pure]
 packages/game/src/waves/WaveManager.ts   prep/combat/cleared lifecycle, spawn cap   [pure, hooks-based]
 packages/game/src/fx/Effects.ts          pooled tracers, debris, enemy projectiles, particle bursts, flash light, styled explosions (+ Fragments, Smolder)
-packages/game/src/audio/Sfx.ts           procedural WebAudio bank
+packages/game/src/audio/Sfx.ts           procedural WebAudio bank (+ music bus)
+packages/game/src/audio/musicPlan.ts     adaptive score decisions: track weights, layer levels, intensity, step patterns [pure]
+packages/game/src/audio/Music.ts         adaptive score runtime: CC0 loop crossfades, procedural pulse/drums/riser, stingers
+scripts/fetch-cc0.mjs                    CC0 asset fetch + licence check + conversion (manifest, docs/assets/credits.md)
 apps/client/src/ui/Market.tsx          M4 terminals: equipment exchange / module broker (buy, sell, exchange), reclamation, fabricator
 apps/client/src/ui/Engineering.tsx     M4 engineering workshop: MODULES (M3 ModuleBench) / AFFIXES / ENHANCE / COMPONENTS tabs
 apps/client/src/ui/economy.tsx         ResourceBar, CostLine, ConfirmButton, useTx (one tx at a time, fresh tx id, econ feedback event)

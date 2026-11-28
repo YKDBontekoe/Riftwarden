@@ -26,7 +26,20 @@ import { ArenaDressing, type DressingHost } from './arenaDressing';
 import { RubbleBuilder } from './rubble';
 import { ArenaFloor } from './arenaFloor';
 import { planRubble } from '@riftwarden/rules/world/rubblePlan';
-import { smoothLatheData } from './sculpt';
+import { planPropsDetailed } from '@riftwarden/rules/world/propPlan';
+import { configureProps, placeProps } from './propLibrary';
+import { applyBiomeSurfaces, scannedMaterial } from './biomeSurfaces';
+import { buildFixtureGlow } from './fixtureGlow';
+import { BIOME_LIGHT } from './biomeLight';
+import { GroundRelief } from './groundRelief';
+import { buildFloorDetail, GroundSurface } from './floorDetail';
+import { planFloor } from './floorPlan';
+import { buildYardMasts } from './yardMast';
+import { sculptGround } from './uv';
+import { buildContainerStack, containerLiveries } from './containerModel';
+import { buildMachineBank, machineRoofSlots } from './machineModel';
+import { buildRailings } from './railing';
+import { arenaGrimeFaces, buildContactGrime, buildStains, GRIME } from './contactGrime';
 
 interface GateVisual {
   lane: ReturnType<typeof createPathLight>;
@@ -57,9 +70,10 @@ export class ArenaBuilder {
   /** Every static render mesh (for environment capture). */
   readonly meshes: Mesh[] = [];
 
-  constructor(private scene: Scene, private pal: Palette, private layout: ArenaLayout) {
+  constructor(private scene: Scene, private pal: Palette, private layout: ArenaLayout, private high = true) {
     this.physicsShape = new PhysicsShapeContainer(scene);
-    this.relayLight = unlit(scene, 'relayBeacon', [0.24, 2.1, 1.75]);
+    // Tether beacons stay readable (gameplay) but no longer bloom like neon.
+    this.relayLight = unlit(scene, 'relayBeacon', [0.12, 1.0, 0.85]);
   }
 
   private add(mesh: Mesh, mat: Material, surface: string | null): void {
@@ -100,11 +114,19 @@ export class ArenaBuilder {
     const P = this.pal;
 
     // Floor
-    const span = Math.max(120, (L.half + 16) * 2);
-    const ground = MeshBuilder.CreateGround('ground', { width: span, height: span }, this.scene);
+    // A multiple of 12 m keeps the ground lattice on the 6 m slab grid, so relief steps land on the floor joints.
+    const span = Math.ceil(Math.max(120, (L.half + 16) * 2) / 12) * 12;
+    // Sculpted ground (groundRelief.ts): settled slabs, dips, drifts; flat wherever gameplay or other floor
+    // dressing touches it. The collider below stays the flat plane.
+    const sub = this.scene.getEngine() instanceof NullEngine ? 1 : Math.round(span / (this.high ? 0.6 : 1.2));
+    const ground = MeshBuilder.CreateGround('ground', { width: span, height: span, subdivisions: sub, updatable: false }, this.scene);
+    const relief = new GroundRelief(L);
+    if (sub > 1) sculptGround(ground, relief);
     ground.material = P.floor;
+    applyBiomeSurfaces(this.scene, P, L.biome ?? 'outpost', span, this.high);
     ground.receiveShadows = true;
     ground.metadata = { surface: 'floor' };
+    if (sub > 1) accelerateStaticPicking(ground); // ~100k vertices: every shot and placement pick tests it
     ground.freezeWorldMatrix();
     this.meshes.push(ground);
     this.collider(new Vector3(0, -0.5, 0), new Vector3(span, 1, span));
@@ -157,8 +179,21 @@ export class ArenaBuilder {
     }
     // Floor zoning: reactor plaza, wall gutters, gate chevrons (thin inlays under decals and lanes).
     new ArenaFloor({ scene: this.scene, add: (m, mat, s) => this.add(m, mat, s) }, this.pal, this.layout).build();
+    // Worked-yard detail: saw-cut joints, cracks, replaced slabs, standing water, oil spots, walkway paint.
+    const surface = new GroundSurface(relief, span, sub);
+    if (sub > 1) buildFloorDetail(this.scene, planFloor(L, (x, z) => relief.height(x, z)), L.biome ?? 'outpost', surface, BIOME_LIGHT[L.biome ?? 'outpost'].env * 0.55, (L.seed ?? 3) >>> 0);
     // Weathering: rubble piles, scattered debris and wreckage (visual only, planned off every lane).
-    new RubbleBuilder({ scene: this.scene, add: (m, mat, s) => this.add(m, mat, s) }, { concrete: P.debris, rust: P.rust, graphite: P.graphite, enamel: P.enamel }, true).build(planRubble(L));
+    const rubble = planRubble(L);
+    new RubbleBuilder({ scene: this.scene, add: (m, mat, s) => this.add(m, mat, s) }, { concrete: P.debris, rust: P.rust, graphite: P.graphite, enamel: P.steel }, true).build(rubble);
+    // Scanned CC0 props (drums, crates, rooftop plant): visual only, planned off lanes and rubble like the debris.
+    configureProps(this.scene, { lights: 8, environment: BIOME_LIGHT[L.biome ?? 'outpost'].env, albedo: 0.82 });
+    const { props, stains, masts } = planPropsDetailed(L, rubble);
+    if (!(this.scene.getEngine() instanceof NullEngine)) buildYardMasts(this.scene, P, masts, L.biome ?? 'outpost', surface, L.boxes);
+    buildStains(this.scene, stains, [0.05, 0.045, 0.04], 0.75, (L.seed ?? 5) >>> 0);
+    placeProps(new TransformNode('arenaProps', this.scene), props);
+    // Natural floor-to-wall seams: contact shadow, biome grime / snow drift / soot, wall staining.
+    buildContactGrime(this.scene, arenaGrimeFaces(L), GRIME[L.biome ?? 'outpost'], (L.seed ?? 11) >>> 0);
+    if (!(this.scene.getEngine() instanceof NullEngine)) buildFixtureGlow(this.scene, props.filter((p) => p.species === 'street-lamp' || p.species === 'security-light'), L.biome ?? 'outpost');
 
     this.merge();
 
@@ -194,63 +229,50 @@ export class ArenaBuilder {
     body.shape = shape;
   }
 
-  /** Thin concrete wall (mazes, chicanes, the bastion ring, pylons): kick plate, cap, ribs and a dim marker line. */
+  /**
+   * Thin concrete wall (mazes, chicanes, the bastion ring, pylons) built like precast panel walling: ~3 m panels
+   * with recessed joints, a slightly proud cap and a flush plinth, steel tie plates over the joints. No neon.
+   */
   private buildBarrier(b: Box): void {
     const P = this.pal;
     const [x0, , z0] = b.min;
     const [x1, y1, z1] = b.max;
     const alongX = x1 - x0 >= z1 - z0;
     const run = alongX ? x1 - x0 : z1 - z0;
-    this.box(x0, 0, z0, x1, y1 - 0.22, z1, P.concrete, 'wall');
-    this.box(x0 - 0.05, y1 - 0.22, z0 - 0.05, x1 + 0.05, y1, z1 + 0.05, P.graphite, 'wall');
-    this.box(x0 - 0.04, 0, z0 - 0.04, x1 + 0.04, 0.42, z1 + 0.04, P.graphite, 'wall');
-    if (run < 2.2) return; // pylons / bastion blocks: plain
-    // Steel ribs every ~3 m on both faces and a dim marker line under the cap (reads at distance and in the dark).
-    for (let t = 1.4; t < run - 0.6; t += 3.1) {
-      if (alongX) this.box(x0 + t - 0.12, 0.42, z0 - 0.09, x0 + t + 0.12, y1 - 0.22, z1 + 0.09, P.metal, 'wall');
-      else this.box(x0 - 0.09, 0.42, z0 + t - 0.12, x1 + 0.09, y1 - 0.22, z0 + t + 0.12, P.metal, 'wall');
+    const a0 = alongX ? x0 : z0;
+    // Core (collision-sized, the joints recess into it) and cap.
+    const seg = (s0: number, s1: number, y0: number, ya: number, grow: number, mat: Material) => alongX
+      ? this.box(s0, y0, z0 - grow, s1, ya, z1 + grow, mat, 'wall')
+      : this.box(x0 - grow, y0, s0, x1 + grow, ya, s1, mat, 'wall');
+    // Ends stay 4 mm short of the box: where two barriers meet in an L, an end face flush with the other
+    // wall's side face z-fights, and SSAO turned that seam into a black streak down the corner.
+    const e = 0.004;
+    seg(a0 + e, a0 + run - e, 0, y1, -0.04, P.steel); // dark backing, seen only in the joints
+    const panels = Math.max(1, Math.round(run / 3));
+    const w = run / panels;
+    for (let k = 0; k < panels; k++) {
+      const s0 = a0 + k * w + (k ? 0.025 : e);
+      const s1 = a0 + (k + 1) * w - (k < panels - 1 ? 0.025 : e);
+      seg(s0, s1, 0.06, y1 - 0.16, 0, P.concrete);
     }
-    if (alongX) this.box(x0 + 0.3, y1 - 0.5, z0 - 0.03, x1 - 0.3, y1 - 0.42, z1 + 0.03, P.orangeDim, null);
-    else this.box(x0 - 0.03, y1 - 0.5, z0 + 0.3, x1 + 0.03, y1 - 0.42, z1 - 0.3, P.orangeDim, null);
+    seg(a0 - 0.02, a0 + run + 0.02, y1 - 0.16, y1, 0.035, P.concrete); // cap
+    seg(a0 + e, a0 + run - e, 0, 0.06, 0.01, P.concrete); // plinth
+    if (run < 2.2) return;
+    // Tie plates across the joints, low and high.
+    for (let k = 1; k < panels; k++) {
+      const t = a0 + k * w;
+      for (const y of [0.45, y1 - 0.55]) seg(t - 0.09, t + 0.09, y, y + 0.16, 0.012, P.graphite);
+    }
   }
 
-  /** Shipping-container stack: one shell per 2.6 m level (colour per level), corrugation ribs, rails, door frame. */
+  private liveries: Material[] | null = null;
+  private lampDim: Material | null = null;
+  private drivePaint: Material | null = null;
+
+  /** Real ISO containers (containerModel.ts) over the collision box, one per level. */
   private buildContainer(b: Box): void {
-    const P = this.pal;
-    const [x0, , z0] = b.min;
-    const [x1, y1, z1] = b.max;
-    const alongX = x1 - x0 >= z1 - z0;
-    const run = alongX ? x1 - x0 : z1 - z0;
-    const levels = Math.max(1, Math.round(y1 / 2.6));
-    const lh = y1 / levels;
-    const mats = [P.rust, P.enamel, P.panel, P.graphite];
-    const hash = Math.abs(Math.round(x0 * 7.3 + z0 * 3.1));
-    for (let l = 0; l < levels; l++) {
-      const ya = l * lh;
-      const yb = ya + lh;
-      const top = l === levels - 1;
-      this.box(x0 + 0.04, ya + 0.04, z0 + 0.04, x1 - 0.04, yb - 0.04, z1 - 0.04, mats[(hash + l) % mats.length], top ? 'platform' : 'wall');
-      // Top / bottom rails along the long edges.
-      for (const y of [ya, yb - 0.14]) {
-        if (alongX) {
-          this.box(x0, y, z0, x1, y + 0.14, z0 + 0.12, P.graphite, 'wall');
-          this.box(x0, y, z1 - 0.12, x1, y + 0.14, z1, P.graphite, 'wall');
-        } else {
-          this.box(x0, y, z0, x0 + 0.12, y + 0.14, z1, P.graphite, 'wall');
-          this.box(x1 - 0.12, y, z0, x1, y + 0.14, z1, P.graphite, 'wall');
-        }
-      }
-      // Corrugation ribs on both long faces.
-      for (let t = 0.5; t < run - 0.3; t += 0.9) {
-        if (alongX) {
-          this.box(x0 + t - 0.07, ya + 0.16, z0 - 0.03, x0 + t + 0.07, yb - 0.16, z0 + 0.06, P.metal, 'wall');
-          this.box(x0 + t - 0.07, ya + 0.16, z1 - 0.06, x0 + t + 0.07, yb - 0.16, z1 + 0.03, P.metal, 'wall');
-        } else {
-          this.box(x0 - 0.03, ya + 0.16, z0 + t - 0.07, x0 + 0.06, yb - 0.16, z0 + t + 0.07, P.metal, 'wall');
-          this.box(x1 - 0.06, ya + 0.16, z0 + t - 0.07, x1 + 0.03, yb - 0.16, z0 + t + 0.07, P.metal, 'wall');
-        }
-      }
-    }
+    this.liveries ??= containerLiveries(this.scene, BIOME_LIGHT[this.layout.biome ?? 'outpost'].env);
+    buildContainerStack({ scene: this.scene, add: (m, mat, s) => this.add(m, mat, s) }, b, this.liveries, this.pal.steel);
   }
 
   /** Elevated walkway deck: buildable top, edge girders below, railings (with low colliders) and hazard edges. */
@@ -278,11 +300,11 @@ export class ArenaBuilder {
       }
       if (alongX) {
         this.box(x0, y1 + 0.98, Math.min(r0, r1), x1, y1 + 1.08, Math.max(r0, r1), P.metal, null);
-        this.box(x0, y1, Math.min(e, e + inward * 0.3), x1, y1 + 0.012, Math.max(e, e + inward * 0.3), P.orangeDim, null);
+        this.box(x0, y1, Math.min(e, e + inward * 0.3), x1, y1 + 0.012, Math.max(e, e + inward * 0.3), P.decorOrange, null);
         this.collider(new Vector3((x0 + x1) / 2, y1 + 0.55, (r0 + r1) / 2), new Vector3(x1 - x0, 1.1, 0.12));
       } else {
         this.box(Math.min(r0, r1), y1 + 0.98, z0, Math.max(r0, r1), y1 + 1.08, z1, P.metal, null);
-        this.box(Math.min(e, e + inward * 0.3), y1, z0, Math.max(e, e + inward * 0.3), y1 + 0.012, z1, P.orangeDim, null);
+        this.box(Math.min(e, e + inward * 0.3), y1, z0, Math.max(e, e + inward * 0.3), y1 + 0.012, z1, P.decorOrange, null);
         this.collider(new Vector3((r0 + r1) / 2, y1 + 0.55, (z0 + z1) / 2), new Vector3(0.12, 1.1, z1 - z0));
       }
     }
@@ -310,10 +332,11 @@ export class ArenaBuilder {
         };
         const [left, right] = trim(x0, x1);
         const [front, back] = trim(z0, z1);
-        this.box(left, y0, front, right, y1, back, P.steel, 'wall');
+        // Cast concrete tunnel walls (black steel read as a flat void in daylight).
+        this.box(left, y0, front, right, y1, back, P.concrete, 'wall');
         const extendX = right - left < back - front ? 0.045 : 0;
         const extendZ = extendX > 0 ? 0 : 0.045;
-        this.box(left - extendX, 2.0, front - extendZ, right + extendX, 2.15, back + extendZ, P.orangeDim, null);
+        this.box(left - extendX, 2.0, front - extendZ, right + extendX, 2.15, back + extendZ, P.decorOrange, null);
         break;
       }
       case 'platform': {
@@ -338,6 +361,7 @@ export class ArenaBuilder {
             fascia(x, 0.47, y1 - 1.04, 0.07, 0.13, 0.15, P.metal);
           }
         }
+        buildRailings({ box: (...a) => this.box(...a) }, b, this.layout.ramps, P.metal, P.enamel);
         break;
       }
       case 'relay': {
@@ -374,7 +398,7 @@ export class ArenaBuilder {
         this.box(x0, y0, z0, x1, y1, z1, P.panel, 'wall');
         this.box(x0 - 0.035, y0, z0, x1 + 0.035, y0 + 0.31, z1, P.graphite, null);
         this.box(x0 - 0.035, y1 - 0.32, z0, x1 + 0.035, y1, z1, P.steel, null);
-        this.box(x0 - 0.04, y1 - 0.29, z0 + 0.16, x1 + 0.04, y1 - 0.19, z1 - 0.16, P.cyanGlow, null);
+        this.box(x0 - 0.04, y1 - 0.29, z0 + 0.16, x1 + 0.04, y1 - 0.19, z1 - 0.16, P.decorBright, null);
         break;
       }
       case 'block':
@@ -390,37 +414,21 @@ export class ArenaBuilder {
         this.buildBridge(b);
         break;
       case 'machine': {
-        this.box(x0, y0, z0, x1, y1, z1, P.graphite, 'wall');
-        const capacitor = smoothLatheData([
-          [0.61, 0], [0.73, 0.10], [0.73, 0.28], [0.56, 0.39], [0.56, 1.01],
-          [0.71, 1.12], [0.71, 1.34], [0.59, 1.48], [0.35, 1.60],
-        ], 24);
+        // Real plant (machineModel.ts): enclosure, pump skids, header, cable tray, roof filter vessels.
         const alongX = x1 - x0 > z1 - z0;
-        const face = alongX ? z1 : x0 < 0 ? x1 : x0;
-        const side = alongX || x0 < 0 ? 1 : -1;
-        const n = 3;
-        for (let i = 0; i < n; i++) {
-          const f = (i + 0.5) / n;
-          const cx = alongX ? x0 + (x1 - x0) * f : (x0 + x1) / 2;
-          const cz = alongX ? (z0 + z1) / 2 : z0 + (z1 - z0) * f;
-          const c = new Mesh('cap', this.scene);
-          capacitor.applyToMesh(c);
-          c.position.set(cx, y1, cz);
-          this.add(c, P.metal, 'wall');
-          const ring = MeshBuilder.CreateTorus('capRing', { thickness: 0.08, diameter: 1.42, tessellation: 24 }, this.scene);
-          ring.position.set(cx, y1 + 1.2, cz);
-          this.add(ring, i % 2 ? P.cyanGlow : P.cyanDim, null);
+        const front = alongX || x0 < 0 ? 1 : -1;
+        this.lampDim ??= unlit(this.scene, 'statusLamp', [0.15, 0.9, 0.35]);
+        // Motors and pumps in blue-grey drive enamel, distinct from the enclosure paint.
+        this.drivePaint ??= scannedMaterial(this.scene, 'driveEnamel', 'cryo-casing', [0.42, 0.55, 0.72], 0.8, BIOME_LIGHT[this.layout.biome ?? 'outpost'].env);
+        buildMachineBank({ scene: this.scene, box: (...a) => this.box(...a), add: (m, mat, s) => this.add(m, mat, s) }, b, front, {
+          casing: P.graphite, steel: P.steel, metal: P.metal, guard: P.enamel, drive: this.drivePaint, cable: P.steel, lamp: this.lampDim,
+        });
+        // Gameplay colliders over the roof vessels (unchanged from the capacitor bank).
+        const run = alongX ? x1 - x0 : z1 - z0;
+        for (const a of machineRoofSlots(run)) {
+          const cx = alongX ? (x0 + x1) / 2 + a : (x0 + x1) / 2;
+          const cz = alongX ? (z0 + z1) / 2 : (z0 + z1) / 2 + a;
           this.collider(new Vector3(cx, y1 + 0.8, cz), new Vector3(1.5, 1.6, 1.5));
-          const slot = (w: number, y: number, height: number, near: number, far: number, mat: Material, surface: string | null) => {
-            const a = face + side * near;
-            const b = face + side * far;
-            if (alongX) this.box(cx - w, y, a, cx + w, y + height, b, mat, surface);
-            else this.box(Math.min(a, b), y, cz - w, Math.max(a, b), y + height, cz + w, mat, surface);
-          };
-          slot(1.13, 0.37, y1 - 0.63, -0.025, 0.12, P.metal, 'wall');
-          slot(0.95, 0.57, y1 - 1.1, 0.117, 0.17, P.panel, 'wall');
-          for (let j = 0; j < 4; j++) slot(0.81, 0.78 + j * 0.156, 0.062, 0.166, 0.218, P.graphite, 'wall');
-          slot(0.48, y1 - 0.8, 0.064, 0.17, 0.202, i === 1 ? P.cyanDim : P.orangeDim, null);
         }
         break;
       }
@@ -525,7 +533,7 @@ export class ArenaBuilder {
     const ring = MeshBuilder.CreateTorus('plaza', { diameter: 15, thickness: 0.12, tessellation: 64 }, this.scene);
     ring.position.y = 0.01;
     ring.scaling.y = 0.1;
-    this.add(ring, P.cyanDim, null);
+    this.add(ring, P.decorCyan, null);
   }
 
   private buildGates(decals: ArenaDecals): void {
@@ -538,7 +546,7 @@ export class ArenaBuilder {
       { id: 'south', pos: new Vector3(0, 0, -H), yaw: Math.PI },
     ];
     for (const f of frames) {
-      const lights = unlit(this.scene, `gateSignal:${f.id}`, [1.35, 0.36, 0.08], { twoSided: true });
+      const lights = unlit(this.scene, `gateSignal:${f.id}`, [0.42, 0.1, 0.025], { twoSided: true });
       const root = new TransformNode('gate', this.scene);
       root.position.copyFrom(f.pos);
       root.rotation.y = f.yaw;
@@ -546,7 +554,7 @@ export class ArenaBuilder {
         const m = createBeveledBox('gatePart', w, h, d, Math.min(w, h, d, 0.32) * 0.32, this.scene);
         m.rotation.y = f.yaw;
         m.position = Vector3.TransformCoordinates(new Vector3(x, y, z), root.getWorldMatrix());
-        this.add(m, mat, mat === lights || mat === P.orangeDim || mat === P.whiteGlow ? null : 'wall');
+        this.add(m, mat, mat === lights || mat === P.decorOrange || mat === P.whiteGlow ? null : 'wall');
         return m;
       };
       root.computeWorldMatrix(true);
@@ -620,7 +628,7 @@ export class ArenaBuilder {
       rotor.material = lights;
       const counterRotor = segmentedRing(this.scene, 'gateRotorInner', 3.19, 0.04, 20, 0.35);
       counterRotor.parent = frame;
-      counterRotor.material = P.orangeDim;
+      counterRotor.material = P.decorOrange;
       const lane = createPathLight(this.scene, `hostileLane:${f.id}`, this.layout.routes[f.id].points,
         this.layout.laneHalfWidth, new Color3(...biomeOf(this.layout).lane), true);
       this.gates.set(f.id, { lane, rotor, counterRotor, lights, charge: 0.4, flash: 0 });
@@ -646,7 +654,7 @@ export class ArenaBuilder {
       for (let i = -Math.floor((H - 8) / 32); i <= Math.floor((H - 8) / 32); i++) {
         const z = i * 32;
         this.gantryBeam(x, 11.39, z, 1.7, 1.4, 1.7, P.steel);
-        this.box(x - 0.88, 11.8, z - 0.88, x + 0.88, 11.94, z + 0.88, this.relayLight, null);
+        this.box(x - 0.88, 11.8, z - 0.88, x + 0.88, 11.94, z + 0.88, P.decorCyan, null); // hub status band, dim
         decals.socket(x, 11.25, z, 0.86, 0.86, 1.25);
       }
       for (let z = -H; z < H; z += 4) {
@@ -654,7 +662,7 @@ export class ArenaBuilder {
         brace.position.set(x, 12.73, z + 2);
         brace.rotation.x = (Math.round((z + H) / 4) % 2 === 0 ? 1 : -1) * Math.atan2(1.03, 4);
         this.add(brace, P.metal, null);
-        if (z % 12 === 0) this.box(x - 0.075, 12.01, z + 0.8, x + 0.075, 12.09, z + 1.6, P.cyanDim, null);
+        if (z % 12 === 0) this.box(x - 0.075, 12.01, z + 0.8, x + 0.075, 12.09, z + 1.6, P.decorCyan, null);
       }
     }
     for (const z of [-34, 36]) {
@@ -685,7 +693,7 @@ export class ArenaBuilder {
     }
     for (const [x, z] of [[-H - 1, -H - 1], [H + 1, -H - 1], [-H - 1, H + 1], [H + 1, H + 1]]) {
       this.box(x - 1.2, 0, z - 1.2, x + 1.2, 13, z + 1.2, P.graphite, null);
-      this.box(x - 1.25, 12.2, z - 1.25, x + 1.25, 12.5, z + 1.25, P.cyanGlow, null);
+      this.box(x - 1.25, 12.2, z - 1.25, x + 1.25, 12.5, z + 1.25, P.decorBright, null);
     }
   }
 

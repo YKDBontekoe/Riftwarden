@@ -4,6 +4,7 @@ import { Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { type AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh';
 import { type Mesh } from '@babylonjs/core/Meshes/mesh';
 import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
+import { boxProjectUVs } from '../visuals/uv';
 import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
 import { PhysicsMotionType } from '@babylonjs/core/Physics/v2/IPhysicsEnginePlugin';
 import { PhysicsBody } from '@babylonjs/core/Physics/v2/physicsBody';
@@ -95,6 +96,9 @@ export class ArenaDynamics {
     const m = createBeveledBox('dynPart', w, h, d, Math.min(0.045, Math.min(w, h, d) * 0.12), this.scene);
     m.parent = root;
     m.position.set(x, y, z);
+    // World-scale UVs (2.5 m tiles, baked at the closed pose): the bevelled box's 0..1 face UVs stretched the
+    // scanned plate across a 9 m leaf into a flat smear.
+    boxProjectUVs(m as Mesh, 2.5);
     m.material = mat;
     m.isPickable = !!surface;
     m.metadata = surface ? { surface, impact: 'alloy' } : null;
@@ -110,15 +114,16 @@ export class ArenaDynamics {
     const w = b.max[0] - b.min[0];
     const h = b.max[1] - b.min[1];
     const d = b.max[2] - b.min[2];
-    const hazard = unlit(this.scene, 'doorHazard', [1.9, 0.75, 0.08]);
-    const warn = unlit(this.scene, 'doorWarn', [0.6, 0.05, 0.02]);
+    // Hazard chevrons are paint, not light.
+    const hazard = P.enamel;
+    const warn = unlit(this.scene, 'doorWarn', [0.45, 0.04, 0.015]);
     this.warnLights.push({ mat: warn, on: () => this.door.some((m) => m.t > 0 && m.t < 1) });
     for (const side of [-1, 1]) {
       const root = new TransformNode('southDoorLeaf', this.scene);
       root.position.set(cx + side * w * 0.25, 0, cz);
       const meshes: AbstractMesh[] = [];
       meshes.push(this.part(root, w / 2, h, d * 0.7, 0, h / 2, 0, P.graphite, 'wall'));
-      for (let i = 0; i < 4; i++) meshes.push(this.part(root, w / 2 - 0.5, 1.4, d * 0.78, 0, 1.2 + i * 2.05, 0, P.white, 'wall'));
+      for (let i = 0; i < 4; i++) meshes.push(this.part(root, w / 2 - 0.5, 1.4, d * 0.78, 0, 1.2 + i * 2.05, 0, P.graphite, 'wall'));
       // chevrons on the inner face + leading edge light
       for (let i = 0; i < 5; i++) meshes.push(this.part(root, 0.5, 0.18, 0.05, side * -0.4 + side * i * -0.55 + side * 1.2, 0.5, d * 0.36 + 0.04, hazard, null));
       meshes.push(this.part(root, 0.12, h - 0.6, 0.06, -side * (w / 4 - 0.08), h / 2, d * 0.36 + 0.03, warn, null));

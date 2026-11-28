@@ -6,7 +6,7 @@
  *   frost: the drone moves 35% slower while low over it; ground enemies on it build chill (towers combo with it).
  *   slag:  scorches the drone while it skims low over it (12 / s); ground enemies on it burn (Molten ones do not).
  */
-import { type PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial';
+import { PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial';
 import { Color3 } from '@babylonjs/core/Maths/math.color';
 import { type Mesh } from '@babylonjs/core/Meshes/mesh';
 import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
@@ -14,7 +14,7 @@ import { type Scene } from '@babylonjs/core/scene';
 import type { Enemy } from '../enemies/EnemyManager';
 import type { Player } from '../player/Player';
 import { unlit } from '../visuals/materials';
-import { ringSprite } from '../visuals/textures';
+import { canvas, ringSprite, rng, toTexture } from '../visuals/textures';
 
 export const HAZARD = {
   frostSlow: 0.65,
@@ -63,7 +63,8 @@ export class Hazards {
     const ring = ringSprite(h.scene);
     this.mats = {
       frost: unlit(h.scene, 'hazFrost', [0.5, 0.85, 1.15], { additive: true, zOffset: -3 }),
-      slag: unlit(h.scene, 'hazSlag', [2.6, 0.7, 0.12], { additive: true, zOffset: -3 }),
+      // Molten pool: dark crust plates with glowing seams (a flat additive orange disc read as plastic).
+      slag: slagMaterial(h.scene),
     };
     this.rims = {
       frost: unlit(h.scene, 'hazFrostRim', [1.2, 1.9, 2.6], { tex: ring, opacity: ring, additive: true, zOffset: -4 }),
@@ -177,3 +178,39 @@ export class Hazards {
 }
 
 export const HAZARD_COLOR: Record<HazardKind, Color3> = { frost: new Color3(0.6, 0.9, 1.2), slag: new Color3(2.6, 0.7, 0.12) };
+
+/** Slag pool material: dark cooled crust broken into plates by glowing seams, fading out at the rim. */
+function slagMaterial(scene: Scene): PBRMaterial {
+  const N = 512;
+  const { c, ctx } = canvas(N);
+  const img = ctx.createImageData(N, N);
+  const r = rng(0x51a6);
+  const pts = Array.from({ length: 46 }, () => [r(), r()] as const);
+  for (let y = 0; y < N; y++)
+    for (let x = 0; x < N; x++) {
+      const u = x / N, v = y / N;
+      let f1 = 9, f2 = 9;
+      for (const [px, py] of pts) {
+        const d = Math.hypot(px - u, py - v);
+        if (d < f1) { f2 = f1; f1 = d; } else if (d < f2) f2 = d;
+      }
+      const seam = Math.max(0, 1 - (f2 - f1) / 0.022);
+      const glow = seam * seam;
+      const radial = Math.hypot(u - 0.5, v - 0.5) * 2;
+      const edge = Math.max(0, Math.min(1, (1 - radial) / 0.18));
+      // Crust: almost black with a dull red cast near the seams; seams white-hot to orange.
+      const heat = glow * (0.75 + 0.25 * Math.sin(u * 40 + v * 33));
+      const i = (y * N + x) * 4;
+      img.data[i] = Math.min(255, 18 + heat * 255 + seam * 40);
+      img.data[i + 1] = Math.min(255, 8 + heat * 130);
+      img.data[i + 2] = Math.min(255, 4 + heat * 30);
+      img.data[i + 3] = edge * 255;
+    }
+  ctx.putImageData(img, 0, 0);
+  const t = toTexture('slagPool', c, scene, { aniso: 4 });
+  t.hasAlpha = true;
+  const m = unlit(scene, 'hazSlag', [2.4, 1.6, 1.2], { tex: t, opacity: t, zOffset: -3 });
+  m.transparencyMode = PBRMaterial.PBRMATERIAL_ALPHABLEND;
+  m.useAlphaFromAlbedoTexture = false;
+  return m;
+}

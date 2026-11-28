@@ -1,4 +1,5 @@
 import type { NodeNet } from '../arena/RunNode';
+import { music } from '../audio/Music';
 import type { RunMapView } from '@riftwarden/rules/runmap/view';
 import { reachable } from '@riftwarden/rules/war/world';
 import type { WarState } from '@riftwarden/rules/war/state';
@@ -582,6 +583,7 @@ export class ClientGame extends Game {
     const flash = this.updateSky(dt);
     this.hurtFx = Math.max(this.player.hurtFlash, this.player.alive ? 0 : 0.8);
     this.mood.update(dt, this.moodInput());
+    music.update(dt, { scene: 'arena', phase: this.waves.phase, alive: this.enemies.active.length, tension: this.mood.cur.tension, chain: this.player.chain, ...this.moodInput() });
     this.motionFx();
     this.post.update(dt, k, this.hurtFx, flash);
     this.updateArenaVisuals(dt, hdt);

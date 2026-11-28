@@ -9,7 +9,7 @@ Pick checks by what you changed (the `verify` skill in `.claude/skills/verify/` 
 | Wire, sync, co-op | `pnpm test` (with DB), protocol suites | `cargo test` when the gateway is involved |
 | Rust (`crates/`) | `cargo fmt --check`, `cargo clippy --all-targets --locked -- -D warnings`, `cargo test --locked` | |
 | Shaders | `node --import tsx scripts/check-wgsl.mjs` | real-GPU look check (cannot be done headless) |
-| Client build, service worker, assets | `pnpm build` | `node scripts/e2e-pwa.cjs` after a build |
+| Client build, service worker, assets | `pnpm build` | `node scripts/e2e-pwa.cjs` after a build; `tests/asset-manifest.test.ts` for CC0 assets |
 
 Always: `pnpm lint` must not add warnings.
 
@@ -20,6 +20,9 @@ skip unless `RIFT_TEST_DATABASE_URL` is set. Boundary tests: `architecture.test.
 `save-surface.test.ts` (save barrel exports), `net-events.test.ts` (wire event tags on both sides), `docs.test.ts`
 (documentation links).
 `desktop-release.test.ts` checks first-release tag lookup, annotated tags, and remote lookup failures.
+`asset-manifest.test.ts` pins every third-party CC0 file to `assets/cc0/manifest.json` (licence, hash, budget); re-run
+`node scripts/fetch-cc0.mjs` after changing `assets-src/cc0.sources.json`. `prop-plan.test.ts` and `music.test.ts`
+cover the prop planner, HQ clutter and the adaptive score.
 `input.test.ts` covers browser pointer lock and the macOS native-capture lifecycle; real macOS input still requires a device check.
 The desktop Rust crate has a credentialed CORS preflight test: `cargo test --manifest-path apps/client/src-tauri/Cargo.toml --locked` (requires platform Tauri build dependencies).
 
@@ -64,6 +67,10 @@ construction-and-coop (`.github/workflows/ci.yml`).
 - e2e-m6 B6/B7/C4 fail identically on older commits (fast-pace speeds); C1 is timing-flaky under load.
 
 Details and older numbers: [`history.md`](history.md).
+
+- Arena palette materials take up to 14 lights; in SwiftShader that exceeds `GL_MAX_VERTEX_UNIFORM_BUFFERS (14)` for some
+  variants ("uniform block count exceeds"). This is the cause behind the known "no console errors" failures (e2e-m1 Z,
+  e2e-combat Z, e2e-polish "no page errors"); real GPUs report 14+ but should be checked.
 
 ## Driving the game from a test (`?test`)
 

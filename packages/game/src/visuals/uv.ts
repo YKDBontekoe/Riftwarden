@@ -1,5 +1,6 @@
 import { VertexBuffer } from '@babylonjs/core/Buffers/buffer';
 import { type Mesh } from '@babylonjs/core/Meshes/mesh';
+import { VertexData } from '@babylonjs/core/Meshes/mesh.vertexData';
 
 /**
  * Replace a (world-space, frozen) mesh's UVs with box projection: each vertex takes the
@@ -40,4 +41,17 @@ export function boxProjectUVs(mesh: Mesh, tile: number): void {
     uvs[i * 2 + 1] = v * inv;
   }
   mesh.setVerticesData(VertexBuffer.UVKind, uvs, false);
+}
+
+/** Displace a ground grid's vertices by a height field (local y = height(x, z)), then rebuild normals. */
+export function sculptGround(mesh: Mesh, relief: { height(x: number, z: number): number }): void {
+  const pos = mesh.getVerticesData(VertexBuffer.PositionKind);
+  const idx = mesh.getIndices();
+  if (!pos || !idx) return;
+  for (let i = 0; i < pos.length; i += 3) pos[i + 1] = relief.height(pos[i] + mesh.position.x, pos[i + 2] + mesh.position.z);
+  const normals: number[] = [];
+  VertexData.ComputeNormals(pos, idx, normals);
+  mesh.setVerticesData(VertexBuffer.PositionKind, pos, false);
+  mesh.setVerticesData(VertexBuffer.NormalKind, normals, false);
+  mesh.refreshBoundingInfo();
 }
