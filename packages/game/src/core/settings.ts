@@ -6,6 +6,8 @@ export type AdaptiveTarget = (typeof ADAPTIVE_TARGETS)[number];
 
 export interface Settings {
   sensitivity: number;
+  /** Vertical look speed relative to horizontal (0.5..2), for players who want slower pitch than yaw. */
+  sensitivityY: number;
   /** Invert vertical look (mouse and touch). */
   invertY: boolean;
   fov: number; // horizontal-ish degrees shown to the user (applied as vertical fov)
@@ -20,6 +22,12 @@ export interface Settings {
   combatCueVolume: number;
   /** Adaptive score (CC0 loops + procedural layers), relative to master. */
   musicVolume: number;
+  /** Mute everything without losing the mix. */
+  muted: boolean;
+  /** Fade the audio out while the window is hidden or unfocused. */
+  muteInBackground: boolean;
+  /** Small always-on frame-rate readout (F3 still opens the full stats). */
+  showFps: boolean;
   /** M7: interface scale (0.8..1.3). */
   uiScale: number;
   reticle: 'dynamic' | 'fixed' | 'dot';
@@ -93,6 +101,7 @@ export const PRESETS: Record<Quality, Pick<Settings, 'particles' | 'shadows' | '
 
 export const DEFAULT_SETTINGS: Settings = {
   sensitivity: 1,
+  sensitivityY: 1,
   invertY: false,
   fov: 90,
   quality: 'high',
@@ -102,6 +111,9 @@ export const DEFAULT_SETTINGS: Settings = {
   uiVolume: 0.8,
   combatCueVolume: 1,
   musicVolume: 0.6,
+  muted: false,
+  muteInBackground: true,
+  showFps: false,
   uiScale: 1,
   reticle: 'dynamic',
   reticleSize: 1,
@@ -156,6 +168,7 @@ export function sanitizeSettings(raw: unknown, version = VERSION): Settings {
   for (const { id } of ACTIONS) if (!keys[id]) keys[id] = available.shift()!;
   return {
     sensitivity: clampNum(r.sensitivity, 0.2, 3, DEFAULT_SETTINGS.sensitivity),
+    sensitivityY: clampNum(r.sensitivityY, 0.5, 2, DEFAULT_SETTINGS.sensitivityY),
     invertY: r.invertY === true,
     fov: clampNum(r.fov, 70, 110, DEFAULT_SETTINGS.fov),
     quality,
@@ -165,6 +178,9 @@ export function sanitizeSettings(raw: unknown, version = VERSION): Settings {
     uiVolume: clampNum(r.uiVolume, 0, 1, 0.8),
     combatCueVolume: clampNum(r.combatCueVolume, 0, 1, DEFAULT_SETTINGS.combatCueVolume),
     musicVolume: clampNum(r.musicVolume, 0, 1, DEFAULT_SETTINGS.musicVolume),
+    muted: r.muted === true,
+    muteInBackground: r.muteInBackground !== false,
+    showFps: r.showFps === true,
     uiScale: clampNum(r.uiScale, 0.8, 1.3, 1),
     reticle: pick(r.reticle, ['dynamic', 'fixed', 'dot'] as const, DEFAULT_SETTINGS.reticle),
     reticleSize: clampNum(r.reticleSize, 0.75, 1.5, DEFAULT_SETTINGS.reticleSize),
@@ -220,9 +236,40 @@ export function keyRemap(s: Settings): Map<string, string> {
   return m;
 }
 
+/** Readable names for codes that do not shorten to a single character (KeyW -> W, Digit1 -> 1 are handled below). */
+const KEY_NAMES: Record<string, string> = {
+  ShiftLeft: 'L-SHIFT', ShiftRight: 'R-SHIFT', ControlLeft: 'L-CTRL', ControlRight: 'R-CTRL', AltLeft: 'L-ALT', AltRight: 'R-ALT',
+  MetaLeft: 'L-CMD', MetaRight: 'R-CMD', Space: 'SPACE', Enter: 'ENTER', Tab: 'TAB', Backspace: 'BKSP', CapsLock: 'CAPS',
+  Escape: 'ESC', Delete: 'DEL', Insert: 'INS', Home: 'HOME', End: 'END', PageUp: 'PGUP', PageDown: 'PGDN',
+  ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', Backquote: '`', Minus: '-', Equal: '=', BracketLeft: '[',
+  BracketRight: ']', Backslash: '\\', Semicolon: ';', Quote: "'", Comma: ',', Period: '.', Slash: '/', IntlBackslash: '\\',
+  NumpadEnter: 'NUM ENTER', NumpadAdd: 'NUM +', NumpadSubtract: 'NUM -', NumpadMultiply: 'NUM *', NumpadDivide: 'NUM /',
+  NumpadDecimal: 'NUM .', ContextMenu: 'MENU',
+};
+
 export function keyLabel(code: string | undefined): string {
   if (!code) return '—';
-  return code.replace(/^Key/, '').replace(/^Digit/, '').replace('ShiftLeft', 'L-SHIFT').replace('ShiftRight', 'R-SHIFT').replace('ControlLeft', 'L-CTRL').replace('Space', 'SPACE').toUpperCase();
+  if (KEY_NAMES[code]) return KEY_NAMES[code];
+  const m = /^(?:Key|Digit)([A-Z0-9])$/.exec(code);
+  if (m) return m[1];
+  const num = /^Numpad([0-9])$/.exec(code);
+  if (num) return `NUM ${num[1]}`;
+  return code.toUpperCase();
+}
+
+/**
+ * Keys the game handles itself regardless of bindings: binding an action to one would make it fire twice or never
+ * (Escape pauses, Tab opens cargo, F3/F4/F10 are the stats, dev and tutorial keys).
+ */
+export const RESERVED_KEYS: readonly string[] = ['Escape', 'Tab', 'F3', 'F4', 'F10', 'F11', 'F12'];
+
+export function isReservedKey(code: string): boolean {
+  return RESERVED_KEYS.includes(code);
+}
+
+/** Actions whose binding differs from the default (the settings table marks them). */
+export function changedBindings(keys: Settings['keys']): Set<string> {
+  return new Set(ACTIONS.filter((a) => (keys[a.id] ?? a.def) !== a.def).map((a) => a.id));
 }
 
 /** Printed movement keys follow the same left-to-right order as the familiar WASD legend. */

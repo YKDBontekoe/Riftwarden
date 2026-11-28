@@ -18,6 +18,7 @@ import { RunMapScreen, StationScreen } from './RunMap';
 import { TouchControls } from '../touch/TouchControls';
 import { RotateHint, UpdateToast } from '../touch/MobileUi';
 import { DesktopUpdate } from '../desktop/DesktopUpdate';
+import { FpsReadout } from './FpsReadout';
 
 interface Props {
   getFlow: () => Flow | null;
@@ -29,6 +30,7 @@ const HOME_HUD_SCREENS = new Set(['home', 'terminal', 'paused', 'unlock']);
 export function App({ getFlow }: Props) {
   const screen = useHud((s) => s.screen);
   const location = useHud((s) => s.location);
+  const showFps = useHud((s) => s.combatUi.showFps === true);
   const flow = getFlow();
   const arena = flow?.arena ?? null;
   const home = flow?.home ?? null;
@@ -54,6 +56,7 @@ export function App({ getFlow }: Props) {
       {flow && ((screen === 'unlock' && location === 'home') || (screen === 'checkpoint' && location === 'arena')) && <UnlockCard flow={flow} />}
       {screen === 'transit' && <LoadingScreen />}
       {flow && <TouchControls flow={flow} />}
+      {flow && showFps && screen !== 'loading' && <FpsReadout flow={flow} />}
       <RotateHint />
       <UpdateToast flow={flow} />
       <DesktopUpdate flow={flow} />

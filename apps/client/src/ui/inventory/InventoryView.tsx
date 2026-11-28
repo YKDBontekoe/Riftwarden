@@ -22,6 +22,28 @@ type ViewSort = Sort | 'impact';
 
 const SORTS: ViewSort[] = ['impact', 'rarity', 'level', 'newest', 'name'];
 
+const SORT_KEY = 'riftwarden.invSort';
+/** The sort order survives closing the inventory (this device). */
+function savedSort(): ViewSort {
+  try {
+    const v = localStorage.getItem(SORT_KEY) as ViewSort | null;
+    return v && SORTS.includes(v) ? v : 'rarity';
+  } catch {
+    return 'rarity';
+  }
+}
+
+/** Keyboard list navigation (pure): arrows step, PageUp/PageDown jump a page, Home/End go to the ends. */
+export function navIndex(code: string, current: number, length: number, page = 8): number | null {
+  if (length <= 0) return null;
+  const i = Math.max(0, current);
+  const step: Record<string, number> = { ArrowDown: 1, ArrowUp: -1, PageDown: page, PageUp: -page };
+  if (code === 'Home') return 0;
+  if (code === 'End') return length - 1;
+  if (!(code in step)) return null;
+  return Math.min(length - 1, Math.max(0, i + step[code]));
+}
+
 const FILTERS: Filter[] = ['all', 'weapon', 'armor', 'shield', 'reactor', 'processor', 'accessory', 'ability', 'ultimate', 'module'];
 
 export function sortEntries(list: InvEntry[], sort: Sort): InvEntry[] {
@@ -69,7 +91,18 @@ export interface InventoryActions {
  */
 export function InventoryView({ entries, equipped, actions, extraFilter, header, lockedSlots = [] }: { entries: InvEntry[]; equipped: Record<SlotId, ItemInstance | null>; actions: InventoryActions; extraFilter?: boolean; header?: ReactNode; lockedSlots?: readonly SlotId[] }) {
   const [filter, setFilter] = useState<Filter>('all');
-  const [sort, setSort] = useState<ViewSort>('rarity');
+  const [sort, setSortState] = useState<ViewSort>(savedSort);
+  const setSort = (f: (x: ViewSort) => ViewSort) =>
+    setSortState((x) => {
+      const next = f(x);
+      try {
+        localStorage.setItem(SORT_KEY, next);
+      } catch {
+        /* private mode: session only */
+      }
+      return next;
+    });
+  const searchRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState('');
   const [upOnly, setUpOnly] = useState(false);
   const [sel, setSel] = useState<string | null>(null);
@@ -123,10 +156,16 @@ export function InventoryView({ entries, equipped, actions, extraFilter, header,
     const onKey = (ev: KeyboardEvent) => {
       if (ev.target instanceof HTMLInputElement) return;
       const { list: l, selected: cur, slot: sl, canChange } = stateRef.current;
-      if (ev.code === 'ArrowDown' || ev.code === 'ArrowUp') {
+      if (ev.code === 'Slash' && !ev.ctrlKey && !ev.metaKey) {
+        // "/" jumps to the search box, as in most list UIs.
         ev.preventDefault();
-        const i = Math.max(0, l.findIndex((e) => e.item.uid === cur?.item.uid));
-        const next = l[Math.min(l.length - 1, Math.max(0, i + (ev.code === 'ArrowDown' ? 1 : -1)))];
+        searchRef.current?.focus();
+        return;
+      }
+      const to = navIndex(ev.code, l.findIndex((e) => e.item.uid === cur?.item.uid), l.length);
+      if (to !== null) {
+        ev.preventDefault();
+        const next = l[to];
         if (next) {
           setSel(next.item.uid);
           setHover(null);
@@ -176,7 +215,24 @@ export function InventoryView({ entries, equipped, actions, extraFilter, header,
             )}
           </div>
           <div className="inv-search">
-            <input type="search" placeholder="Search name, rarity, stat…" value={query} onChange={(e) => setQuery(e.target.value)} data-testid="inv-search" />
+            <input
+              ref={searchRef}
+              type="search"
+              placeholder="Search name, rarity, stat…  ( / )"
+              aria-label="Search items"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                // Esc clears the search first, then leaves the box; arrows hand the keyboard back to the list.
+                if (e.key === 'Escape') {
+                  e.stopPropagation();
+                  e.nativeEvent.stopImmediatePropagation();
+                  if (query) setQuery('');
+                  else e.currentTarget.blur();
+                } else if (e.key === 'ArrowDown' || e.key === 'Enter') e.currentTarget.blur();
+              }}
+              data-testid="inv-search"
+            />
             <button className={`upg ds-chip ${upOnly ? 'on green' : ''}`} onClick={() => setUpOnly((v) => !v)} title="Show upgrades for the selected comparison priority" aria-pressed={upOnly}>
               ▲ UPGRADES ONLY <i>{upgrades}</i>
             </button>

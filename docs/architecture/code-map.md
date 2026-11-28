@@ -152,6 +152,8 @@ apps/client/src/ui/Coop.tsx, TeamHud.tsx, Construction.tsx, SettingsPanel.tsx, T
 scripts/e2e-coop-protocol.mjs M7: protocol suite with bot clients (scripts/bot.mjs) against a spawned server
 scripts/e2e-construction-coop.cjs M7: browser suite: G construction, H decorations, I station relocation, J blueprint progression, X real browser co-op
 apps/client/src/core/Flow.ts           session controller: Input, Profile, HQ <-> arena scene swaps, run lifecycle, debug API
+apps/client/src/core/windowState.ts    tab title from the HUD (windowTitle), background audio fade + mute (watchWindow / applyWindowSettings)
+apps/client/src/ui/FpsReadout.tsx       Settings > Interface > Frame rate corner readout
 packages/game/src/core/Game.ts           ONE survival run (arena world): scene/lights/pipeline, damage pipeline, checkpoints, HUD
 packages/game/src/home/HomeBase.ts       HQ world: scene, lights, Player reuse, station interaction, live station screens
 packages/game/src/home/HqBuilder.ts      HQ static shell from modular components (wall run, floor, ceiling, door frame, window...)

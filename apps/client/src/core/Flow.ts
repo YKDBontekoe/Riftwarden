@@ -38,6 +38,7 @@ import { generateArena } from '@riftwarden/rules/world/arenaGen';
 import { ARENA, type ArenaLayout } from '@riftwarden/rules/world/layout';
 import type { TransitInfo } from '@riftwarden/game/ui/store';
 import { setRarityPalette } from '@riftwarden/rules/loot/rarity';
+import { applyWindowSettings, watchWindow } from './windowState';
 
 /** A loaded location. Exactly one exists at a time. */
 interface World {
@@ -153,6 +154,7 @@ export class Flow {
     this.renderQuality = settings.quality;
     this.input = new Input(canvas);
     applyGlobalSettings(settings, this.input);
+    watchWindow(() => this.settings);
     this.profile = new Profile();
     this.war.reporter = this.profile.save.profile.id;
     this.war.localSeed = hashSeed(`war:${this.profile.save.profile.id}`) || 1;
@@ -799,11 +801,12 @@ export class Flow {
 /** Settings that live outside any world: key remapping, interface scale, colour accessibility. */
 export function applyGlobalSettings(s: Settings, input: Input): void {
   input.remap = keyRemap(s);
-  const { reticle, reticleSize, aimFeedback, damageNumbers, reduceMotion } = s;
-  hudStore.set({ bindings: s.keys, combatUi: { reticle, reticleSize, aimFeedback, damageNumbers, reduceMotion } });
+  const { reticle, reticleSize, aimFeedback, damageNumbers, reduceMotion, showFps } = s;
+  hudStore.set({ bindings: s.keys, combatUi: { reticle, reticleSize, aimFeedback, damageNumbers, reduceMotion, showFps } });
   if (typeof document !== 'undefined') {
     document.documentElement.style.setProperty('--ui-scale', String(s.uiScale));
     Object.assign(document.documentElement.dataset, { motion: s.reduceMotion ? 'reduced' : 'full', cvd: s.colorblind });
   }
   setRarityPalette(s.colorblind);
+  applyWindowSettings(s);
 }
