@@ -34,7 +34,7 @@ export function CommandTerminal({ flow, close }: { flow: Flow; close: () => void
   ];
   return (
     <Shell code="CC-00" title="COMMAND CONSOLE" sub={`Service record · ${save.profile.callsign}`} close={close} wide>
-      <div className="tabs term-tabs lo-tabs">
+      <div className="tabs term-tabs lo-tabs" data-tabkeys="own">
         <span className="ds-sh">Q</span>
         {CMD_TABS.map(([id, label]) => <button key={id} data-tab={id} className={tab === id ? 'on' : ''} onClick={() => setTab(id)}>{label}</button>)}
         <span className="ds-sh">R</span>

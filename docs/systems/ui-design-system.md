@@ -47,5 +47,12 @@
   thousands separators; cost chips say how much is left after a purchase or how far short you are (`spendNote`). An
   armed confirm button disarms after 10 s. The loot feed merges a repeat of its newest row into one row with ×N
   (`pushFeed`).
+- **Terminals** (`shell.tsx`): Q / R cycle any terminal's tab bar (hint in the footer; a bar marked
+  `data-tabkeys="own"` keeps its own handling: Command, Loadout); arrow keys move through a terminal's item grid
+  (`gridStep`: ←/→ one tile, ↑/↓ a row measured from the layout), except lists with their own keys
+  (`data-listkeys="own"`, the inventory view) and multi-select lists; Esc in a text box leaves the box before closing
+  the terminal.
+- **HQ station list**: each station shows a screen-relative arrow (`bearingArrow`) beside its distance.
 - **Tests**: `tests/settings-options.test.ts`, `key-bindings.test.ts`, `window-state.test.ts`, `ui-format.test.ts`,
-  `inventory-nav.test.ts`, `loot-feed.test.ts`, `upgrade-pick.test.ts`.
+  `inventory-nav.test.ts`, `loot-feed.test.ts`, `upgrade-pick.test.ts`,
+  `terminal-keys.test.ts`, `hq-bearing.test.ts`.

@@ -195,9 +195,9 @@ function BuyPane({ save, merchant, tx }: { save: SaveData; merchant: MerchantId;
               REQUEST NEW MANIFEST · <CostLine cost={{ credits: rc }} save={save} />
             </>
           }
-          confirm={`Replace the remaining stock for ${rc} credits?`}
+          confirm={`Replace the remaining stock for ${rc.toLocaleString()} credits?`}
           disabled={save.resources.credits < rc}
-          onConfirm={() => tx.run('buy', 'refreshMarket', [], (r) => `New manifest #${r.rotation} · −${r.price} credits`)}
+          onConfirm={() => tx.run('buy', 'refreshMarket', [], (r) => `New manifest #${r.rotation} · −${r.price.toLocaleString()} credits`)}
         />
       </div>
       <div className="inv-detail-col">
@@ -218,7 +218,7 @@ function BuyPane({ save, merchant, tx }: { save: SaveData; merchant: MerchantId;
               </div>
               <div>
                 <span className="ds-lbl">Storage</span>
-                <b className={bays < 1 ? 'bad' : ''}>{bays < 1 ? 'FULL' : `${bays} BAYS FREE`}</b>
+                <b className={bays < 1 ? 'bad' : ''}>{bays < 1 ? 'FULL' : `${bays} BAY${bays === 1 ? '' : 'S'} FREE`}</b>
               </div>
               {entry.sold ? (
                 <button disabled>SOLD</button>
@@ -227,10 +227,10 @@ function BuyPane({ save, merchant, tx }: { save: SaveData; merchant: MerchantId;
                   className="primary small term-primary"
                   testId="buy"
                   label={`BUY · ◈ ${price.toLocaleString()}`}
-                  confirm={`Buy ${item.name} for ${price} credits?`}
+                  confirm={`Buy ${item.name} for ${price.toLocaleString()} credits?`}
                   needConfirm={expensive}
                   disabled={price > save.resources.credits || bays < 1}
-                  onConfirm={() => tx.run('buy', 'buyItem', [merchant, entry.id], (r) => `Purchased ${r.item.name} · −${r.price} credits · now in storage`)}
+                  onConfirm={() => tx.run('buy', 'buyItem', [merchant, entry.id], (r) => `Purchased ${r.item.name} · −${r.price.toLocaleString()} credits · now in storage`)}
                 />
               )}
             </div>
@@ -335,7 +335,7 @@ function ExchangePane({ save, tx }: { save: SaveData; tx: Tx }) {
               ))}
               <span>{left} LEFT THIS MANIFEST</span>
             </div>
-            <button className="primary small" data-testid={`ex-${o.id}`} disabled={!left || save.resources.credits < o.price} onClick={() => tx.run('exchange', 'buyExchange', [o.id], (r) => `Received ${costText(r.give, '+')} · −${r.price} credits`)}>
+            <button className="primary small" data-testid={`ex-${o.id}`} disabled={!left || save.resources.credits < o.price} onClick={() => tx.run('exchange', 'buyExchange', [o.id], (r) => `Received ${costText(r.give, '+')} · −${r.price.toLocaleString()} credits`)}>
               BUY · ◈ {o.price}
             </button>
           </div>
@@ -550,7 +550,7 @@ export function FabricateTerminal({ flow, close }: { flow: Flow; close: () => vo
             {isItem && (
               <div>
                 <span className="ds-lbl">Storage</span>
-                <b className={bays < 1 ? 'bad' : ''}>{bays < 1 ? 'FULL' : `${bays} BAYS FREE`}</b>
+                <b className={bays < 1 ? 'bad' : ''}>{bays < 1 ? 'FULL' : `${bays} BAY${bays === 1 ? '' : 'S'} FREE`}</b>
               </div>
             )}
             {!unlock.ok ? (

@@ -70,9 +70,19 @@ export function HomeHud({ flow }: { flow: Flow }) {
 }
 
 /** Bottom left while roaming (canvas "HQ free roam"): the nearest open stations with their distance. */
+const ARROWS = ['↑', '↗', '→', '↘', '↓', '↙', '←', '↖'];
+
+/** Screen-relative arrow toward a point (pure): `dx`/`dz` from the player, `yaw` as the player faces (0 = +z). */
+export function bearingArrow(dx: number, dz: number, yaw: number): string {
+  const rel = Math.atan2(dx, dz) - yaw;
+  const a = Math.atan2(Math.sin(rel), Math.cos(rel));
+  return ARROWS[(Math.round(a / (Math.PI / 4)) + 8) % 8];
+}
+
 function stationDirectory(home: NonNullable<Flow['home']>, save: SaveData) {
   const p = home.player?.position;
-  const open: { id: string; title: string; dist: number }[] = [];
+  const yaw = home.player?.yaw ?? 0;
+  const open: { id: string; title: string; dist: number; arrow: string }[] = [];
   let offline = 0;
   for (const st of HQ_STATIONS) {
     const f = STATION_FEATURE[st.id];
@@ -83,7 +93,7 @@ function stationDirectory(home: NonNullable<Flow['home']>, save: SaveData) {
     // Relocated stations stand where the warden put them.
     const pose = save.base.stations?.[st.id];
     const [x, z] = pose ? [pose.x, pose.z] : st.pos;
-    open.push({ id: st.id, title: st.title, dist: p ? Math.hypot(x - p.x, z - p.z) : 0 });
+    open.push({ id: st.id, title: st.title, dist: p ? Math.hypot(x - p.x, z - p.z) : 0, arrow: p ? bearingArrow(x - p.x, z - p.z, yaw) : '' });
   }
   open.sort((a, b) => a.dist - b.dist);
   return { open, offline };
@@ -104,7 +114,7 @@ function StationList({ home, save }: { home: NonNullable<Flow['home']>; save: Sa
           <li key={s.id} className={i === 0 ? 'near' : ''}>
             <span className="ds-dia" aria-hidden="true" />
             <b>{s.title}</b>
-            <em>{s.dist < 4 ? 'here' : `${Math.round(s.dist)} m`}</em>
+            <em>{s.dist < 4 ? 'here' : <><span className="hs-dir" aria-hidden="true">{s.arrow}</span> {Math.round(s.dist)} m</>}</em>
           </li>
         ))}
       </ul>

@@ -34,7 +34,7 @@ export function ModuleBench({ flow, selW, setSelW }: { flow: Flow; selW: string 
 
   const run = (op: string, args: unknown[], okText: string, sound: 'install' | 'uninstall') => {
     const r = flow.profile.op(op, args) as EngineeringResult;
-    setMsg(r.ok ? { text: `${okText}${r.cost ? ` · −${r.cost} salvage` : ''}`, ok: true } : { text: r.reason, ok: false });
+    setMsg(r.ok ? { text: `${okText}${r.cost ? ` · −${r.cost.toLocaleString()} salvage` : ''}`, ok: true } : { text: r.reason, ok: false });
     sfx.play(r.ok ? sound : 'buildDeny');
     if (r.ok) uiEvents.emit('econ', { station: 'workshop', kind: 'module', delta: r.cost ? { salvage: -r.cost } : {} });
     setHover(null);

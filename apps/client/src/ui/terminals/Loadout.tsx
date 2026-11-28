@@ -100,7 +100,7 @@ export function LoadoutTerminal({ flow, close, initial = 'loadout' }: { flow: Fl
   };
   return (
     <Shell code="DC-02" title={tabs.find(([t]) => t === tab)![1].replace(/ \d.*$/, '').toUpperCase()} sub="Warden Mk-I · loadout, storage, statistics and presets" close={close} wide>
-      <div className="tabs term-tabs lo-tabs">
+      <div className="tabs term-tabs lo-tabs" data-tabkeys="own">
         <span className="ds-sh">Q</span>
         {tabs.map(([t, label]) => <button key={t} className={tab === t ? 'on' : ''} data-tab={t} onClick={() => setTab(t)}>{label}</button>)}
         <span className="ds-sh">R</span>

@@ -184,7 +184,7 @@ export function InventoryView({ entries, equipped, actions, extraFilter, header,
   const sortLabel = (x: ViewSort) => (x === 'impact' ? 'BEST FOR BUILD' : x.toUpperCase());
   const nextSort = () => setSort((x) => SORTS[(SORTS.indexOf(x) + 1) % SORTS.length]);
   return (
-    <div className="inv inv-ds">
+    <div className="inv inv-ds" data-listkeys="own">
       <div className="inv-slots">
         {SLOTS.map((s) => {
           const it = equipped[s.id];
