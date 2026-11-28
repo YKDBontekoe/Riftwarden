@@ -19,6 +19,7 @@ import { TouchControls } from '../touch/TouchControls';
 import { RotateHint, UpdateToast } from '../touch/MobileUi';
 import { DesktopUpdate } from '../desktop/DesktopUpdate';
 import { FpsReadout } from './FpsReadout';
+import { Captions } from './hud/Captions';
 
 interface Props {
   getFlow: () => Flow | null;
@@ -31,6 +32,7 @@ export function App({ getFlow }: Props) {
   const screen = useHud((s) => s.screen);
   const location = useHud((s) => s.location);
   const showFps = useHud((s) => s.combatUi.showFps === true);
+  const captions = useHud((s) => s.combatUi.captions === true);
   const flow = getFlow();
   const arena = flow?.arena ?? null;
   const home = flow?.home ?? null;
@@ -57,6 +59,7 @@ export function App({ getFlow }: Props) {
       {screen === 'transit' && <LoadingScreen />}
       {flow && <TouchControls flow={flow} />}
       {flow && showFps && screen !== 'loading' && <FpsReadout flow={flow} />}
+      {captions && <Captions />}
       <RotateHint />
       <UpdateToast flow={flow} />
       <DesktopUpdate flow={flow} />

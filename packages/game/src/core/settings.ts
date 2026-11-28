@@ -44,6 +44,8 @@ export interface Settings {
   /** Reticle colour (visibility on bright or busy scenes) and opacity (0.4..1). */
   reticleColor: ReticleColor;
   reticleOpacity: number;
+  /** Short on-screen captions for important sounds (accessibility; shown even when muted). */
+  captions: boolean;
   /** Photosensitivity: warnings hold steady instead of blinking, and full-screen hit and kill flashes are hidden. */
   reduceFlashing: boolean;
   /** Dark glass behind the HUD corners for readability over bright scenes. */
@@ -142,6 +144,7 @@ export const DEFAULT_SETTINGS: Settings = {
   reticleColor: 'white',
   reticleOpacity: 0.95,
   reduceFlashing: false,
+  captions: false,
   hudBacking: false,
   aimFeedback: true,
   damageNumbers: 'all',
@@ -226,6 +229,7 @@ export function sanitizeSettings(raw: unknown, version = VERSION): Settings {
     reticleColor: pick(r.reticleColor, RETICLE_COLORS, DEFAULT_SETTINGS.reticleColor),
     reticleOpacity: clampNum(r.reticleOpacity, 0.4, 1, DEFAULT_SETTINGS.reticleOpacity),
     reduceFlashing: r.reduceFlashing === true,
+    captions: r.captions === true,
     hudBacking: r.hudBacking === true,
     aimFeedback: r.aimFeedback !== false,
     damageNumbers: pick(r.damageNumbers, ['all', 'personal', 'off'] as const, DEFAULT_SETTINGS.damageNumbers),

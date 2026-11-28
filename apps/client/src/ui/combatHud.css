@@ -229,3 +229,8 @@ html[data-touch] .hud-hunt-rules { display: none; }
 /* Loot prompt: hold-to-collect hint when more than one drop is within reach. */
 .loot-prompt .lp-sweep { display: block; margin-top: 3px; font: 600 10px var(--mono, monospace); letter-spacing: 0.14em; color: var(--ds-muted, #b8b4aa); }
 .loot-prompt .lp-sweep kbd { font-size: 10px; padding: 0 4px; min-width: 0; }
+
+/* Settings > Accessibility > Sound captions: bottom centre, above the HUD corners, never takes input. */
+.sound-captions { position: fixed; left: 50%; bottom: 120px; transform: translateX(-50%); z-index: 55; display: flex; flex-direction: column; align-items: center; gap: 4px; pointer-events: none; }
+.sound-captions .sc-line { padding: 3px 10px; background: rgba(6, 8, 10, 0.72); color: #f4f1e8; font: 600 14px var(--font, sans-serif); letter-spacing: 0.02em; border-radius: 3px; }
+.sound-captions .sc-line b { color: var(--ds-ember); }

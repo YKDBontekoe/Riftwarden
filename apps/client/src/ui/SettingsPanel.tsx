@@ -286,6 +286,7 @@ export function SettingsPanel({ flow, compact, page, onTab }: { flow: Flow; comp
                 onChange={(v) => update({ colorblind: v })}
               />
               <Seg label="Reduce motion" help="Removes FOV kicks, camera roll and shake, lens aberration and most weapon bob" value={s.reduceMotion ? 'on' : 'off'} options={[['off', 'Off'], ['on', 'On']]} onChange={(v) => update({ reduceMotion: v === 'on' })} />
+              <Seg label="Sound captions" help="Important sounds appear as short captions with their direction, even when muted" value={s.captions ? 'on' : 'off'} options={[['off', 'Off'], ['on', 'On']]} onChange={(v) => update({ captions: v === 'on' })} />
               <Seg label="Reduce flashing" help="Warnings hold steady instead of blinking; full-screen hit and kill flashes are hidden" value={s.reduceFlashing ? 'on' : 'off'} options={[['off', 'Off'], ['on', 'On']]} onChange={(v) => update({ reduceFlashing: v === 'on' })} />
               <Slider label="Camera shake" help="Explosions, hits and the ultimate" min={0} max={1.5} step={0.05} value={s.shake} def={D.shake} fmt={pct} onChange={(v) => update({ shake: v })} />
             </>
@@ -311,7 +312,7 @@ function resetTab(tab: Tab): Partial<Settings> {
     case 'audio': return { volume: d.volume, sfxVolume: d.sfxVolume, ambienceVolume: d.ambienceVolume, uiVolume: d.uiVolume, combatCueVolume: d.combatCueVolume, musicVolume: d.musicVolume, muted: d.muted, muteInBackground: d.muteInBackground };
     case 'controls': return { keys2: {}, sensitivity: d.sensitivity, sensitivityY: d.sensitivityY, autoSprint: d.autoSprint, invertY: d.invertY, touchControls: d.touchControls, touchLook: d.touchLook, touchOpacity: d.touchOpacity, haptics: d.haptics, wheelSwap: d.wheelSwap, keys: { ...d.keys } };
     case 'interface': return { uiScale: d.uiScale, reticle: d.reticle, reticleSize: d.reticleSize, aimFeedback: d.aimFeedback, damageNumbers: d.damageNumbers, showFps: d.showFps, lootFilter: d.lootFilter, reticleColor: d.reticleColor, reticleOpacity: d.reticleOpacity, hudBacking: d.hudBacking };
-    case 'access': return { colorblind: d.colorblind, reduceMotion: d.reduceMotion, shake: d.shake, reduceFlashing: d.reduceFlashing };
+    case 'access': return { colorblind: d.colorblind, reduceMotion: d.reduceMotion, shake: d.shake, reduceFlashing: d.reduceFlashing, captions: d.captions };
     default: return {};
   }
 }

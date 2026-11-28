@@ -170,7 +170,7 @@ export interface CoopHud {
 
 export interface HudState {
   bindings: Settings['keys'];
-  combatUi: Pick<Settings, 'reticle' | 'reticleSize' | 'aimFeedback' | 'damageNumbers' | 'reduceMotion'> & { showFps?: boolean };
+  combatUi: Pick<Settings, 'reticle' | 'reticleSize' | 'aimFeedback' | 'damageNumbers' | 'reduceMotion'> & { showFps?: boolean; captions?: boolean };
   /** M7 onboarding card. */
   tutorial?: (import('@riftwarden/rules/progression/tutorial').TutorialStep & { index: number; total: number }) | null;
   coop?: CoopHud | null;

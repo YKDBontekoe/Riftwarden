@@ -806,8 +806,8 @@ export class Flow {
 /** Settings that live outside any world: key remapping, interface scale, colour accessibility. */
 export function applyGlobalSettings(s: Settings, input: Input): void {
   input.remap = keyRemap(s);
-  const { reticle, reticleSize, aimFeedback, damageNumbers, reduceMotion, showFps } = s;
-  hudStore.set({ bindings: s.keys, combatUi: { reticle, reticleSize, aimFeedback, damageNumbers, reduceMotion, showFps } });
+  const { reticle, reticleSize, aimFeedback, damageNumbers, reduceMotion, showFps, captions } = s;
+  hudStore.set({ bindings: s.keys, combatUi: { reticle, reticleSize, aimFeedback, damageNumbers, reduceMotion, showFps, captions } });
   if (typeof document !== 'undefined') {
     const root = document.documentElement;
     root.style.setProperty('--ui-scale', String(s.uiScale));

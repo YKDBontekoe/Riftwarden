@@ -556,7 +556,11 @@ export class Sfx {
     if (Math.random() < 0.3) this.noiseBurst(0.03, 0.05 * v, 6200, 3000, out, 'highpass', 1, Math.random() * 0.05);
   }
 
+  /** Sound captions (accessibility): called for every requested sound, even muted, with its stereo pan. */
+  onCaption: ((name: SfxName, pan: number) => void) | null = null;
+
   play(name: SfxName, o: PlayOpts = {}): void {
+    if (this.onCaption && this.suppress <= 0) this.onCaption(name, o.pan ?? 0);
     if (this.suppress > 0 || !this.ctx || this.ctx.state !== 'running' || this.outputLevel === 0) return;
     const ui = UI_SOUNDS.has(name);
     const cue = COMBAT_CUES.has(name);

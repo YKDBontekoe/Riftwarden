@@ -77,6 +77,11 @@
   menu the digits run the numbered item.
 - **First start** (`withOsPreferences`, `boot.tsx`): the OS reduced-motion preference turns on Reduce motion with no
   camera shake, and "more contrast" turns on the HUD backing; saved settings always win.
+- **Sound captions** (`hud/Captions.tsx`, Settings > Accessibility, off by default): `Sfx.onCaption` sees every
+  requested sound before the mute checks, so captions show even when muted; a curated list (`CAPTION_TEXT`: reactor
+  hit, alarm, boss roar, waves, overheat, ability / shield ready, damage, explosions, mortar, charge, slam, rare loot,
+  banking, tactical time) shows as `[text]` at the bottom centre with ◀ / ▶ from the stereo pan; a repeat within
+  1.5 s refreshes its line, at most four lines, each for 2.8 s. Tests: `tests/sound-captions.test.ts`.
 - **Low-hull tone** (`hud/hullCue.ts`): one alarm tone on entering the critical band (< 25%), re-armed above 40%.
 - **Co-op join box**: a pasted invite link becomes its room code (`codeFromPaste`); Enter joins.
 - **Deploy heads-up** (`storageWarning`, rules): within five bays of storage capacity the deploy terminal warns that
