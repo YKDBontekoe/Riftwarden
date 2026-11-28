@@ -74,6 +74,8 @@ export interface Settings {
   touchControls: 'auto' | 'on' | 'off';
   /** Touch look speed (0.3..3), on top of the mouse sensitivity. */
   touchLook: number;
+  /** Touch: vibrate on taking a hit (where the device supports it). */
+  haptics: boolean;
   /** Opacity of the touch buttons (0.2..1). */
   touchOpacity: number;
 }
@@ -148,6 +150,7 @@ export const DEFAULT_SETTINGS: Settings = {
   touchControls: 'auto',
   touchLook: 1,
   touchOpacity: 0.6,
+  haptics: true,
 };
 
 /** First start on a phone or tablet: the performance preset (no SSR/SSAO/shadows/MSAA) at a lower render scale. */
@@ -223,7 +226,13 @@ export function sanitizeSettings(raw: unknown, version = VERSION): Settings {
     touchControls: pick(r.touchControls, ['auto', 'on', 'off'] as const, 'auto'),
     touchLook: clampNum(r.touchLook, 0.3, 3, 1),
     touchOpacity: clampNum(r.touchOpacity, 0.2, 1, 0.6),
+    haptics: r.haptics !== false,
   };
+}
+
+/** First-start defaults that follow the OS accessibility preferences (reduced motion, more contrast). Pure. */
+export function withOsPreferences(base: Settings, os: { reducedMotion: boolean; moreContrast: boolean }): Settings {
+  return { ...base, ...(os.reducedMotion ? { reduceMotion: true, shake: 0 } : {}), ...(os.moreContrast ? { hudBacking: true } : {}) };
 }
 
 /** Stored settings, or `fallback` (default: DEFAULT_SETTINGS) when nothing was saved yet. */

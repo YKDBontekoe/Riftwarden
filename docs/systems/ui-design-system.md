@@ -60,8 +60,12 @@
   hint and run-map station prompt show the player's own keys instead of fixed letters.
 - **Menus** (`menuKey`): ↑/↓ or W/S (no key repeat, so a held movement key does not scroll), Home/End; on the main
   menu the digits run the numbered item.
+- **First start** (`withOsPreferences`, `boot.tsx`): the OS reduced-motion preference turns on Reduce motion with no
+  camera shake, and "more contrast" turns on the HUD backing; saved settings always win.
+- **Low-hull tone** (`hud/hullCue.ts`): one alarm tone on entering the critical band (< 25%), re-armed above 40%.
+- **Co-op join box**: a pasted invite link becomes its room code (`codeFromPaste`); Enter joins.
 - **HQ station list**: each station shows a screen-relative arrow (`bearingArrow`) beside its distance.
 - **Tests**: `tests/settings-options.test.ts`, `key-bindings.test.ts`, `window-state.test.ts`, `ui-format.test.ts`,
   `inventory-nav.test.ts`, `loot-feed.test.ts`, `upgrade-pick.test.ts`,
   `terminal-keys.test.ts`, `hq-bearing.test.ts`, `remembered.test.ts`, `loading-tips.test.ts`,
-  `menu-keys.test.ts`.
+  `menu-keys.test.ts`, `hull-cue.test.ts`, `coop-code.test.ts`, `haptics.test.ts`.

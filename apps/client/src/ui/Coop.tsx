@@ -38,6 +38,12 @@ function useNet(flow: Flow): NetState | null {
   return s;
 }
 
+/** A pasted code or a whole invite link (…#/join/CODE, ?join=CODE) as a join code (pure). */
+export function codeFromPaste(text: string): string {
+  const link = /join[/=]([A-Za-z0-9-]+)/i.exec(text);
+  return normalizeCode(link ? link[1] : text);
+}
+
 /** Join code from an invite link (#/join/CODE or ?join=CODE). */
 export function urlJoinCode(): string {
   return normalizeCode(inviteCode());
@@ -115,7 +121,21 @@ export function CoopPanel({ flow, compact }: { flow: Flow; compact?: boolean }) 
             CREATE SESSION
           </button>
           <div className="coop-join">
-            <input data-testid="coop-code" placeholder="JOIN CODE" maxLength={8} value={code} onChange={(e) => setCode(normalizeCode(e.target.value))} />
+            <input
+              data-testid="coop-code"
+              placeholder="JOIN CODE OR LINK"
+              aria-label="Join code or invite link"
+              value={code}
+              onChange={(e) => setCode(normalizeCode(e.target.value))}
+              onPaste={(e) => {
+                // An invite link pasted whole joins its room (the box keeps only the code).
+                e.preventDefault();
+                setCode(codeFromPaste(e.clipboardData.getData('text')));
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && code.length >= 5) flow.net?.send({ t: 'join', code });
+              }}
+            />
             <button data-testid="coop-join" disabled={code.length < 5} onClick={() => flow.net?.send({ t: 'join', code })}>
               JOIN
             </button>

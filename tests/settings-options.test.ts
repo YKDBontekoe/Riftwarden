@@ -1,6 +1,6 @@
 // Settings options: vertical look speed, mute, background mute and the frame-rate readout load and clamp safely.
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_SETTINGS, RETICLE_COLORS, RETICLE_HEX, sanitizeSettings } from '@riftwarden/game/core/settings';
+import { DEFAULT_SETTINGS, RETICLE_COLORS, RETICLE_HEX, sanitizeSettings, withOsPreferences } from '@riftwarden/game/core/settings';
 
 describe('settings: look, audio and readout options', () => {
   it('defaults keep old saves unchanged', () => {
@@ -29,3 +29,10 @@ describe('settings: reticle, flashing and HUD backing', () => {
   });
 });
 
+describe('first-start OS preferences', () => {
+  it('reduced motion turns off motion effects and shake; more contrast adds the HUD backing', () => {
+    expect(withOsPreferences(DEFAULT_SETTINGS, { reducedMotion: false, moreContrast: false })).toEqual(DEFAULT_SETTINGS);
+    expect(withOsPreferences(DEFAULT_SETTINGS, { reducedMotion: true, moreContrast: false })).toMatchObject({ reduceMotion: true, shake: 0, hudBacking: false });
+    expect(withOsPreferences(DEFAULT_SETTINGS, { reducedMotion: false, moreContrast: true })).toMatchObject({ reduceMotion: false, hudBacking: true });
+  });
+});
