@@ -57,7 +57,10 @@
   `?test`).
 - **Bound keys in text**: loading tips use `{action}` tokens (`fillKeys`), and the Loadout weapon note, cargo
   hint and run-map station prompt show the player's own keys instead of fixed letters.
+- **Menus** (`menuKey`): ↑/↓ or W/S (no key repeat, so a held movement key does not scroll), Home/End; on the main
+  menu the digits run the numbered item.
 - **HQ station list**: each station shows a screen-relative arrow (`bearingArrow`) beside its distance.
 - **Tests**: `tests/settings-options.test.ts`, `key-bindings.test.ts`, `window-state.test.ts`, `ui-format.test.ts`,
   `inventory-nav.test.ts`, `loot-feed.test.ts`, `upgrade-pick.test.ts`,
-  `terminal-keys.test.ts`, `hq-bearing.test.ts`, `remembered.test.ts`, `loading-tips.test.ts`.
+  `terminal-keys.test.ts`, `hq-bearing.test.ts`, `remembered.test.ts`, `loading-tips.test.ts`,
+  `menu-keys.test.ts`.
