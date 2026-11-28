@@ -1,6 +1,6 @@
 // Settings options: vertical look speed, mute, background mute and the frame-rate readout load and clamp safely.
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_SETTINGS, RETICLE_COLORS, RETICLE_HEX, sanitizeSettings, withOsPreferences } from '@riftwarden/game/core/settings';
+import { DEFAULT_SETTINGS, exportSettings, importSettings, RETICLE_COLORS, RETICLE_HEX, sanitizeSettings, withOsPreferences } from '@riftwarden/game/core/settings';
 
 describe('settings: look, audio and readout options', () => {
   it('defaults keep old saves unchanged', () => {
@@ -36,3 +36,23 @@ describe('first-start OS preferences', () => {
     expect(withOsPreferences(DEFAULT_SETTINGS, { reducedMotion: false, moreContrast: true })).toMatchObject({ reduceMotion: false, hudBacking: true });
   });
 });
+
+describe('settings copy and paste', () => {
+  it('round-trips everything but the device renderer', () => {
+    const mine = { ...DEFAULT_SETTINGS, fov: 104, reticleColor: 'green' as const, keys: { ...DEFAULT_SETTINGS.keys, jump: 'KeyV', dash: 'Space' }, renderer: 'webgpu' as const };
+    const other = { ...DEFAULT_SETTINGS, renderer: 'webgl' as const };
+    const got = importSettings(exportSettings(mine), other)!;
+    expect(got).toEqual({ ...mine, renderer: 'webgl' });
+  });
+  it('refuses anything that is not an exported block', () => {
+    expect(importSettings('hello', DEFAULT_SETTINGS)).toBeNull();
+    expect(importSettings('{"fov": 100}', DEFAULT_SETTINGS)).toBeNull();
+    expect(importSettings('', DEFAULT_SETTINGS)).toBeNull();
+  });
+  it('sanitizes pasted values', () => {
+    const got = importSettings(JSON.stringify({ 'riftwarden-settings': 2, data: { fov: 400, volume: -3 } }), DEFAULT_SETTINGS)!;
+    expect(got.fov).toBe(110);
+    expect(got.volume).toBe(0);
+  });
+});
+

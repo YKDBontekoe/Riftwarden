@@ -235,6 +235,28 @@ export function withOsPreferences(base: Settings, os: { reducedMotion: boolean; 
   return { ...base, ...(os.reducedMotion ? { reduceMotion: true, shake: 0 } : {}), ...(os.moreContrast ? { hudBacking: true } : {}) };
 }
 
+const EXPORT_TAG = 'riftwarden-settings';
+
+/** Settings as a shareable text block (Settings page > Copy settings). The renderer stays per device. */
+export function exportSettings(s: Settings): string {
+  const { renderer: _renderer, ...rest } = s;
+  return JSON.stringify({ [EXPORT_TAG]: VERSION, data: rest });
+}
+
+/**
+ * Settings from pasted text (pure): null unless it is an exported block. Every field goes through sanitizeSettings;
+ * the device's own renderer is kept.
+ */
+export function importSettings(text: string, current: Settings): Settings | null {
+  try {
+    const parsed = JSON.parse(text.trim()) as Record<string, unknown>;
+    if (!parsed || typeof parsed !== 'object' || typeof parsed[EXPORT_TAG] !== 'number' || !parsed.data || typeof parsed.data !== 'object') return null;
+    return { ...sanitizeSettings(parsed.data, parsed[EXPORT_TAG] as number), renderer: current.renderer };
+  } catch {
+    return null;
+  }
+}
+
 /** Stored settings, or `fallback` (default: DEFAULT_SETTINGS) when nothing was saved yet. */
 export function loadSettings(fallback: Settings = DEFAULT_SETTINGS): Settings {
   try {
