@@ -1,7 +1,9 @@
 // Drone configuration (final design "Loadout"): weapons and abilities left, build headlines centre, gear tiles right;
 // STATS tab = drone statistics with sources; PRESETS tab = saved configurations. Equipping happens at storage.
 import { keyLabel } from '@riftwarden/game/core/settings';
-import { slotLockReason } from '@riftwarden/rules/progression/unlocks';
+import { lockedSlots, slotLockReason } from '@riftwarden/rules/progression/unlocks';
+import { bestLoadoutSteps } from '@riftwarden/rules/loot/autoEquip';
+import { ConfirmButton } from '../economy';
 import { useEffect, useMemo, useState } from 'react';
 import { sfx } from '@riftwarden/game/audio/Sfx';
 import { fmtNum } from '@riftwarden/rules/combat/stats';
@@ -14,10 +16,10 @@ import { activeSetBonuses } from '@riftwarden/rules/loot/sets';
 import { getTier } from '@riftwarden/rules/progression/tiers';
 import { readiness, recommendedLevel } from '@riftwarden/rules/progression/riftLevel';
 import { type ItemInstance, type SlotId, SLOTS, getSlot } from '@riftwarden/rules/progression/items';
-import { equippedItem, type SaveData } from '@riftwarden/rules/progression/save';
+import { equippedItem, type SaveData, storedItems } from '@riftwarden/rules/progression/save';
 import { useSave } from '../useSave';
 import { Shell } from '../shell';
-import { useScore } from '../compare';
+import { useComparisonPriority, useScore, useScoreContext } from '../compare';
 import { savePower } from '../RiftLevel';
 import { ItemGlyph } from '../inventory/glyphs';
 import { ELEMENT_COLOR, Hint, rarityCls } from '../ds';
@@ -77,6 +79,19 @@ export function LoadoutTerminal({ flow, close, initial = 'loadout' }: { flow: Fl
     return w ? weaponSummary(w, score.stats) : null;
   };
   const selItem = equipped[sel];
+  // Equip best for the build: stored items that raise the score, applied one equip op per swap.
+  const priority = useComparisonPriority();
+  const scoreCtx = useScoreContext();
+  const bestSteps = useMemo(() => bestLoadoutSteps(all, storedItems(save), { locked: lockedSlots(save), priority, ctx: scoreCtx }), [all, save, priority, scoreCtx]);
+  const equipBest = () => {
+    let done = 0;
+    for (const st of bestSteps) {
+      if (!flow.profile.op('equipFromStorage', [st.uid, st.slot]).ok) break;
+      done++;
+    }
+    setMsg(done ? `Equipped ${done} item${done === 1 ? '' : 's'} for your build` : 'Nothing to change');
+    sfx.play(done ? 'equip' : 'buildDeny');
+  };
   const tabs: [Tab, string][] = [['loadout', 'Loadout'], ['storage', `Storage ${save.storage.uids.length} / ${save.storage.capacity}`], ['stats', 'Stats'], ['presets', 'Presets']];
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -169,6 +184,16 @@ export function LoadoutTerminal({ flow, close, initial = 'loadout' }: { flow: Fl
         })}
         {msg && <span className="term-msg ds-meta">{msg}</span>}
         <span className="ds-grow" />
+        {tab === 'loadout' && (
+          <ConfirmButton
+            className="ds-btn"
+            testId="equip-best"
+            disabled={!bestSteps.length}
+            label={bestSteps.length ? `EQUIP BEST FOR BUILD · ${bestSteps.length}` : 'BEST FOR BUILD · EQUIPPED'}
+            confirm={`Equip ${bestSteps.length} stored item${bestSteps.length === 1 ? '' : 's'} that raise your build score? Replaced items go to storage.`}
+            onConfirm={equipBest}
+          />
+        )}
         {tab === 'loadout' && selItem && !getSlot(sel).required && <Hint keys="X" onClick={() => mutate('unequipToStorage', [sel], 'Moved to storage', 'Storage full')}>Unequip {rarity(selItem.rarity).label.toLowerCase()} {getSlot(sel).label.toLowerCase()}</Hint>}
       </div>}
     </Shell>
