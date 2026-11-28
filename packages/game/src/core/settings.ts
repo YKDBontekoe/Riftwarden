@@ -12,6 +12,8 @@ export interface Settings {
   sensitivity: number;
   /** Vertical look speed relative to horizontal (0.5..2), for players who want slower pitch than yaw. */
   sensitivityY: number;
+  /** Run at sprint speed whenever moving forward, without holding the dash key (accessibility: no held key). */
+  autoSprint: boolean;
   /** Invert vertical look (mouse and touch). */
   invertY: boolean;
   fov: number; // horizontal-ish degrees shown to the user (applied as vertical fov)
@@ -113,6 +115,7 @@ export const PRESETS: Record<Quality, Pick<Settings, 'particles' | 'shadows' | '
 export const DEFAULT_SETTINGS: Settings = {
   sensitivity: 1,
   sensitivityY: 1,
+  autoSprint: false,
   invertY: false,
   fov: 90,
   quality: 'high',
@@ -185,6 +188,7 @@ export function sanitizeSettings(raw: unknown, version = VERSION): Settings {
     sensitivity: clampNum(r.sensitivity, 0.2, 3, DEFAULT_SETTINGS.sensitivity),
     sensitivityY: clampNum(r.sensitivityY, 0.5, 2, DEFAULT_SETTINGS.sensitivityY),
     invertY: r.invertY === true,
+    autoSprint: r.autoSprint === true,
     fov: clampNum(r.fov, 70, 110, DEFAULT_SETTINGS.fov),
     quality,
     volume: clampNum(r.volume, 0, 1, DEFAULT_SETTINGS.volume),

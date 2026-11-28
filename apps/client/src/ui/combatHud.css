@@ -225,3 +225,7 @@ html[data-touch] .hud-hunt-rules { display: none; }
 
 /* Prep countdown: the last five seconds turn ember and pulse. */
 .hud-prep.urgent .hp-time { color: var(--ds-ember); animation: blink 0.8s steps(2) infinite; }
+
+/* Loot prompt: hold-to-collect hint when more than one drop is within reach. */
+.loot-prompt .lp-sweep { display: block; margin-top: 3px; font: 600 10px var(--mono, monospace); letter-spacing: 0.14em; color: var(--ds-muted, #b8b4aa); }
+.loot-prompt .lp-sweep kbd { font-size: 10px; padding: 0 4px; min-width: 0; }

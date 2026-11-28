@@ -60,6 +60,7 @@ export function LootPrompt() {
           )}
           {t.expiring && <i className="bad"> · EXPIRES AFTER THIS WAVE</i>}
         </span>
+        {(t.nearby ?? 0) > 1 && !t.cargoFull && <span className="lp-sweep" data-testid="lp-sweep">HOLD <BoundKey action="use" /> · COLLECT ALL {t.nearby} IN REACH</span>}
       </div>
     </div>
   );

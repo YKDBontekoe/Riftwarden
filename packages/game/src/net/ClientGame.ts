@@ -557,7 +557,7 @@ export class ClientGame extends Game {
     const firing = this.updateWeapon(dt, controls);
     this.wfx.update(dt, this.player.camera.position);
     this.updateInspect(dt, controls);
-    this.updateLootTarget(controls);
+    this.updateLootTarget(controls, dt);
     this.loot.update(dt);
 
     // Replicated world.

@@ -10,6 +10,7 @@ import { LootField, type Pickup, PICKUP_RANGE } from '../loot/LootField';
 import { rarity } from '@riftwarden/rules/loot/rarity';
 import { uiEvents } from '../ui/store';
 import { ENV_QUERY } from '../world/physicsGroups';
+import { SWEEP_HOLD, sweepOrder } from '@riftwarden/rules/loot/sweep';
 
 /** What loot placement and targeting need from the arena (no Game import). */
 export interface LootHost {
@@ -32,6 +33,7 @@ const FWD = new Vector3();
  */
 export class LootPickups {
   private ray = new PhysicsRaycastResult();
+  private holdT = 0;
 
   constructor(private h: LootHost) {}
 
@@ -86,6 +88,39 @@ export class LootPickups {
     sfx.play('pickup', { pitch: 1 + r.index * 0.1, volume: 0.8 + r.index * 0.05 });
     this.h.loot.remove(p);
     uiEvents.emit('loot', { kind: 'pickup', name: p.item.name, rarity: p.item.rarity, level: p.item.level, category: p.item.category, count: 1 });
+  }
+
+  /**
+   * Hold use: once it has been held for SWEEP_HOLD s, collect every landed, unoccluded pickup within reach, best
+   * first, stopping at the first refusal (hold full). Returns how many were collected.
+   */
+  sweep(dt: number, held: boolean, eye: Vector3, collect: (p: Pickup) => boolean): number {
+    if (!held) {
+      this.holdT = 0;
+      return 0;
+    }
+    const before = this.holdT;
+    this.holdT += dt;
+    if (before >= SWEEP_HOLD || this.holdT < SWEEP_HOLD) return 0;
+    const loot = this.h.loot;
+    const near = loot.pickups.filter((p) => loot.landed(p) && !this.h.blocked(eye, p.focus));
+    const byId = new Map(near.map((p) => [p.id, p]));
+    const order = sweepOrder(near.map((p) => ({ id: p.id, x: p.focus.x, z: p.focus.z, rarityIndex: rarity(p.item.rarity).index, level: p.item.level })), eye.x, eye.z, PICKUP_RANGE);
+    let n = 0;
+    for (const id of order) {
+      if (!collect(byId.get(id)!)) break;
+      n++;
+    }
+    return n;
+  }
+
+  /** Pickups within reach right now (the prompt offers the sweep when there is more than one). */
+  nearby(eye: Vector3): number {
+    const loot = this.h.loot;
+    const r2 = PICKUP_RANGE * PICKUP_RANGE;
+    let n = 0;
+    for (const p of loot.pickups) if (loot.landed(p) && (p.focus.x - eye.x) ** 2 + (p.focus.z - eye.z) ** 2 <= r2) n++;
+    return n;
   }
 
   /** The landed pickup in the view cone within reach and not occluded, or null. */

@@ -301,7 +301,7 @@ function resetTab(tab: Tab): Partial<Settings> {
   switch (tab) {
     case 'display': return { quality: d.quality, ...PRESETS[d.quality], fov: d.fov, renderer: d.renderer, adaptiveTarget: d.adaptiveTarget };
     case 'audio': return { volume: d.volume, sfxVolume: d.sfxVolume, ambienceVolume: d.ambienceVolume, uiVolume: d.uiVolume, combatCueVolume: d.combatCueVolume, musicVolume: d.musicVolume, muted: d.muted, muteInBackground: d.muteInBackground };
-    case 'controls': return { sensitivity: d.sensitivity, sensitivityY: d.sensitivityY, invertY: d.invertY, touchControls: d.touchControls, touchLook: d.touchLook, touchOpacity: d.touchOpacity, wheelSwap: d.wheelSwap, keys: { ...d.keys } };
+    case 'controls': return { sensitivity: d.sensitivity, sensitivityY: d.sensitivityY, autoSprint: d.autoSprint, invertY: d.invertY, touchControls: d.touchControls, touchLook: d.touchLook, touchOpacity: d.touchOpacity, wheelSwap: d.wheelSwap, keys: { ...d.keys } };
     case 'interface': return { uiScale: d.uiScale, reticle: d.reticle, reticleSize: d.reticleSize, aimFeedback: d.aimFeedback, damageNumbers: d.damageNumbers, showFps: d.showFps, reticleColor: d.reticleColor, reticleOpacity: d.reticleOpacity, hudBacking: d.hudBacking };
     case 'access': return { colorblind: d.colorblind, reduceMotion: d.reduceMotion, shake: d.shake, reduceFlashing: d.reduceFlashing };
     default: return {};
@@ -317,6 +317,7 @@ function MouseAndTouch({ s, update }: { s: Settings; update: (p: Partial<Setting
       <Slider label="Vertical look speed" help="Relative to horizontal" testId="sens-y" min={0.5} max={2} step={0.05} value={s.sensitivityY} def={D.sensitivityY} fmt={(v) => `${v.toFixed(2)}×`} onChange={(v) => update({ sensitivityY: v })} />
       <Slider label="Touch look speed" testId="touch-look" min={0.3} max={3} step={0.05} value={s.touchLook} def={D.touchLook} fmt={(v) => `${v.toFixed(1)}×`} onChange={(v) => update({ touchLook: v })} />
       <Seg label="Invert vertical look" value={s.invertY ? 'on' : 'off'} options={[['off', 'Off'], ['on', 'On']]} onChange={(v) => update({ invertY: v === 'on' })} />
+      <Seg label="Auto-sprint" help="Run at full speed whenever you move forward; the dash key still dashes" value={s.autoSprint ? 'on' : 'off'} options={[['off', 'Off'], ['on', 'On']]} onChange={(v) => update({ autoSprint: v === 'on' })} />
       <Seg label="Scroll to swap weapons" value={s.wheelSwap ? 'on' : 'off'} options={[['off', 'Off'], ['on', 'On']]} onChange={(v) => update({ wheelSwap: v === 'on' })} />
       <Seg label="Touch controls" help="Auto turns on for touch screens" value={s.touchControls} options={[['auto', 'Auto'], ['on', 'On'], ['off', 'Off']]} onChange={(v) => update({ touchControls: v })} />
       <Slider label="Touch button opacity" min={0.2} max={1} step={0.05} value={s.touchOpacity} def={D.touchOpacity} fmt={pct} onChange={(v) => update({ touchOpacity: v })} />

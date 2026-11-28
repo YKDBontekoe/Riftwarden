@@ -17,7 +17,8 @@
 
 - **Settings fields** (`core/settings.ts`, optional + sanitized, no version bump): `sensitivityY` (vertical look speed
   0.5..2× of horizontal, applied in `Player` to mouse and touch look), `muted`, `muteInBackground` (default on),
-  `showFps`. Old saves load with the defaults.
+  `showFps`, `autoSprint` (sprint whenever moving forward; the dash key still dashes). Old saves load with the
+  defaults.
 - **Settings page**: a slider with a default restores it on double-click (value turns ember while changed); the page
   reopens on the last tab (`riftwarden.settingsTab`, this device); Reset all settings in the footer is two clicks (arms
   for 4 s) and resets to the desktop or mobile defaults; DEL per tab now also resets adaptive quality, mute, vertical

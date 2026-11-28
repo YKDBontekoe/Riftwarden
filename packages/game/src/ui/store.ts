@@ -129,6 +129,8 @@ export interface SurvivalHud {
 
 /** The pickup currently targeted in the arena (interaction prompt). */
 export interface LootTargetInfo {
+  /** Landed pickups within reach (holding use collects them all). */
+  nearby?: number;
   uid: string;
   name: string;
   rarity: string;
