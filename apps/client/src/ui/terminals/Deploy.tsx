@@ -1,4 +1,5 @@
 import { DeployMapPanel, ResumeCard } from '../DeployMap';
+import { plural } from '../format';
 import { useState } from 'react';
 import type { Flow } from '../../core/Flow';
 import { rarity } from '@riftwarden/rules/loot/rarity';
@@ -148,7 +149,7 @@ function TierBrief({ tier, save }: { tier: ThreatTier; save: SaveData }) {
     <div className="tier-facts">
       <div><b>{multiplier(tier.hpMult)}</b><span>Machine hull</span></div>
       <div><b>{tier.bossFirstWave}</b><span>First possible boss wave</span></div>
-      <div><b>{record?.bestWave ?? '—'}</b><span>Best wave · {record?.runs ?? 0} runs</span></div>
+      <div><b>{record?.bestWave ?? '—'}</b><span>Best wave · {plural(record?.runs ?? 0, 'run')}</span></div>
     </div>
     <details className="field-notes"><summary>Level modifiers</summary>
       <dl className="tier-modifiers">{modifiers.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>

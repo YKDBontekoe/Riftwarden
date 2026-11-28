@@ -56,7 +56,7 @@ export function TowerTech({ flow, save }: { flow: Flow; save: SaveData }) {
                 <button key={id} type="button" className={`tech-card tt-card s-${st} ${st === 'done' ? 'done' : ''} ${on ? 'ds-sel' : ''}`} data-testid={t ? `tech-${c.slot}-${id}` : undefined} aria-pressed={on} onClick={() => setPick({ slot: c.slot, id })}>
                   <b className="ds-d">{p.name}</b>
                   <span className="ds-meta">
-                    {st === 'starter' ? 'Starter part' : st === 'done' ? 'Researched' : st === 'locked' ? `Wave ${t!.tech.wave} needed` : `${t!.tech.credits} cr${t!.tech.components ? ` · ${t!.tech.components} comp` : ''}`}
+                    {st === 'starter' ? 'Starter part' : st === 'done' ? 'Researched' : st === 'locked' ? `Wave ${t!.tech.wave} needed` : `${t!.tech.credits.toLocaleString()} cr${t!.tech.components ? ` · ${t!.tech.components.toLocaleString()} comp` : ''}`}
                   </span>
                 </button>
               );
@@ -72,7 +72,7 @@ export function TowerTech({ flow, save }: { flow: Flow; save: SaveData }) {
           <span className="ds-meta">{archetypeOf(pick.slot, pick.id)}</span>
           {selTech && (
             <div className="ds-col">
-              <div className="ds-list-row"><span className="ds-grow">Credits</span><b className="ds-d">{selTech.tech.credits}</b><span className="ds-meta">have {save.resources.credits.toLocaleString()}</span></div>
+              <div className="ds-list-row"><span className="ds-grow">Credits</span><b className="ds-d">{selTech.tech.credits.toLocaleString()}</b><span className="ds-meta">have {save.resources.credits.toLocaleString()}</span></div>
               {!!selTech.tech.components && <div className="ds-list-row"><span className="ds-grow">Components</span><b className="ds-d">{selTech.tech.components}</b><span className="ds-meta">have {save.resources.components.toLocaleString()}</span></div>}
               <div className="ds-list-row"><span className="ds-grow">Best wave</span><b className={`ds-d ${best >= selTech.tech.wave ? 'ds-up' : 'ds-bad'}`}>{selTech.tech.wave} {best >= selTech.tech.wave ? '✓' : ''}</b><span className="ds-meta">you: {best}</span></div>
             </div>

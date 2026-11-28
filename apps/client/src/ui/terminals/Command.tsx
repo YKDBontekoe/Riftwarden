@@ -5,7 +5,7 @@ import type { Flow } from '../../core/Flow';
 import { getTier, type ThreatTier } from '@riftwarden/rules/progression/tiers';
 import { MILESTONES } from '@riftwarden/rules/survival/records';
 import { useSave } from '../useSave';
-import { fmtTime } from '../format';
+import { fmtTime, plural } from '../format';
 import { Shell } from '../shell';
 import { StationDirectory, WardenProgress } from '../Directory';
 import { useEffect, useState } from 'react';
@@ -89,7 +89,7 @@ export function CommandTerminal({ flow, close }: { flow: Flow; close: () => void
               <div key={h.id} className={`hist ds-list-row ${h.outcome}`}>
                 <span className="h-out ds-d">{h.outcome === 'returned' ? 'EXTRACTED' : h.outcome === 'defeat' ? 'REACTOR LOST' : h.outcome.toUpperCase()}</span>
                 <span>RL {h.tier}</span>
-                <span className="ds-grow ds-meta">{h.path?.length ? h.path.join(' › ') : `${h.kills} kills`}{h.bosses.length > 0 ? ` · ${h.bosses.length} boss${h.bosses.length > 1 ? 'es' : ''}` : ''}{h.elites > 0 ? ` · ${h.elites} elites` : ''}</span>
+                <span className="ds-grow ds-meta">{h.path?.length ? h.path.join(' › ') : plural(h.kills, 'kill')}{h.bosses.length > 0 ? ` · ${plural(h.bosses.length, 'boss', 'bosses')}` : ''}{h.elites > 0 ? ` · ${plural(h.elites, 'elite')}` : ''}</span>
                 <b className="ds-d" style={{ fontSize: 22 }}>W{h.finalWave}</b>
                 <span className="o">+{h.salvageSecured}</span>
                 {h.salvageLost > 0 && <span className="r">−{h.salvageLost}</span>}

@@ -6,7 +6,7 @@ import { minimapStore, setMinimap } from './hud/minimap';
 import type { Flow } from '../core/Flow';
 import { InstallApp } from '../touch/MobileUi';
 import { AccountPanel } from '../account/AccountPanel';
-import { changedBindings, isReservedKey, keyLabel, ACTIONS, DEFAULT_SETTINGS, mobileDefaults, PRESETS, type Quality, type Settings } from '@riftwarden/game/core/settings';
+import { RETICLE_COLORS, changedBindings, isReservedKey, keyLabel, ACTIONS, DEFAULT_SETTINGS, mobileDefaults, PRESETS, type Quality, type Settings } from '@riftwarden/game/core/settings';
 import { isTouchDevice } from '../touch/touchMode';
 import { sfx } from '@riftwarden/game/audio/Sfx';
 import { RARITY_IDS } from '@riftwarden/rules/loot/rarity';
@@ -254,6 +254,9 @@ export function SettingsPanel({ flow, compact, page, onTab }: { flow: Flow; comp
               <Slider label="Interface scale" help="Size of every menu and HUD element" min={0.8} max={1.3} step={0.05} value={s.uiScale} def={D.uiScale} fmt={pct} onChange={(v) => update({ uiScale: v })} />
               <Seg label="Reticle style" value={s.reticle} options={[['dynamic', 'Dynamic'], ['fixed', 'Fixed'], ['dot', 'Dot']]} onChange={(v) => update({ reticle: v })} />
               <Slider label="Reticle size" min={0.75} max={1.5} step={0.05} value={s.reticleSize} def={D.reticleSize} fmt={pct} onChange={(v) => update({ reticleSize: v })} />
+              <Seg label="Reticle colour" help="Pick one that stands out on bright sectors" value={s.reticleColor} options={RETICLE_COLORS.map((c) => [c, c[0].toUpperCase() + c.slice(1)])} onChange={(v) => update({ reticleColor: v })} />
+              <Slider label="Reticle opacity" min={0.4} max={1} step={0.05} value={s.reticleOpacity} def={D.reticleOpacity} fmt={pct} onChange={(v) => update({ reticleOpacity: v })} />
+              <Seg label="HUD backing" help="Dark glass behind the corner readouts for bright scenes" value={s.hudBacking ? 'on' : 'off'} options={[['off', 'Off'], ['on', 'On']]} onChange={(v) => update({ hudBacking: v === 'on' })} />
               <Seg label="Target indication" help="Mark targets, shields and weakpoints under the reticle" value={s.aimFeedback ? 'on' : 'off'} options={[['off', 'Off'], ['on', 'On']]} onChange={(v) => update({ aimFeedback: v === 'on' })} />
               <Seg label="Damage numbers" value={s.damageNumbers} options={[['all', 'All'], ['personal', 'My hits'], ['off', 'Off']]} onChange={(v) => update({ damageNumbers: v })} />
               <Seg label="Frame rate" help="A small FPS readout in the corner (F3 shows the full stats)" value={s.showFps ? 'on' : 'off'} options={[['off', 'Hidden'], ['on', 'Shown']]} onChange={(v) => update({ showFps: v === 'on' })} />
@@ -275,6 +278,7 @@ export function SettingsPanel({ flow, compact, page, onTab }: { flow: Flow; comp
                 onChange={(v) => update({ colorblind: v })}
               />
               <Seg label="Reduce motion" help="Removes FOV kicks, camera roll and shake, lens aberration and most weapon bob" value={s.reduceMotion ? 'on' : 'off'} options={[['off', 'Off'], ['on', 'On']]} onChange={(v) => update({ reduceMotion: v === 'on' })} />
+              <Seg label="Reduce flashing" help="Warnings hold steady instead of blinking; full-screen hit and kill flashes are hidden" value={s.reduceFlashing ? 'on' : 'off'} options={[['off', 'Off'], ['on', 'On']]} onChange={(v) => update({ reduceFlashing: v === 'on' })} />
               <Slider label="Camera shake" help="Explosions, hits and the ultimate" min={0} max={1.5} step={0.05} value={s.shake} def={D.shake} fmt={pct} onChange={(v) => update({ shake: v })} />
             </>
           )}
@@ -298,8 +302,8 @@ function resetTab(tab: Tab): Partial<Settings> {
     case 'display': return { quality: d.quality, ...PRESETS[d.quality], fov: d.fov, renderer: d.renderer, adaptiveTarget: d.adaptiveTarget };
     case 'audio': return { volume: d.volume, sfxVolume: d.sfxVolume, ambienceVolume: d.ambienceVolume, uiVolume: d.uiVolume, combatCueVolume: d.combatCueVolume, musicVolume: d.musicVolume, muted: d.muted, muteInBackground: d.muteInBackground };
     case 'controls': return { sensitivity: d.sensitivity, sensitivityY: d.sensitivityY, invertY: d.invertY, touchControls: d.touchControls, touchLook: d.touchLook, touchOpacity: d.touchOpacity, wheelSwap: d.wheelSwap, keys: { ...d.keys } };
-    case 'interface': return { uiScale: d.uiScale, reticle: d.reticle, reticleSize: d.reticleSize, aimFeedback: d.aimFeedback, damageNumbers: d.damageNumbers, showFps: d.showFps };
-    case 'access': return { colorblind: d.colorblind, reduceMotion: d.reduceMotion, shake: d.shake };
+    case 'interface': return { uiScale: d.uiScale, reticle: d.reticle, reticleSize: d.reticleSize, aimFeedback: d.aimFeedback, damageNumbers: d.damageNumbers, showFps: d.showFps, reticleColor: d.reticleColor, reticleOpacity: d.reticleOpacity, hudBacking: d.hudBacking };
+    case 'access': return { colorblind: d.colorblind, reduceMotion: d.reduceMotion, shake: d.shake, reduceFlashing: d.reduceFlashing };
     default: return {};
   }
 }

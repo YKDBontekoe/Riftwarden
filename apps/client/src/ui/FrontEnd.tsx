@@ -1,6 +1,6 @@
 // Front end (final UI design): main menu and pause menu. Menu rows on the left over the blurred world, an aside on
 // the right (live status, or the open sheet), currencies + breadcrumb on top, key hints + primary action at the bottom.
-import { fmtTime } from './format';
+import { fmtTime, plural } from './format';
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import type { Flow } from '../core/Flow';
 import { AccountPanel } from '../account/AccountPanel';
@@ -381,7 +381,7 @@ export function PauseMenu({ flow }: { flow: Flow }) {
       ) : inArena && run ? (
         <aside className="ds-abs ds-glass ds-cut ds-col" style={{ right: 44, top: 110, width: 440, padding: '22px 24px', gap: 12 }}>
           <span className="ds-h2">IF YOU LEAVE NOW</span>
-          <span className="ds-meta" data-testid="pause-run-stats">Deployed {fmtTime(run.duration)} · {run.kills.toLocaleString()} kill{run.kills === 1 ? '' : 's'}</span>
+          <span className="ds-meta" data-testid="pause-run-stats">Deployed {fmtTime(run.duration)} · {plural(run.kills, 'kill')}</span>
           <div className="ds-col">
             <div className="ds-list-row"><span className="ds-dot" style={{ background: 'var(--ds-up)' }} /><span className="ds-grow">{run.lastBankedWave > 0 ? `Banked at wave ${run.lastBankedWave}` : 'Gear you deployed with'}</span><b className="ds-up">kept</b></div>
             <div className="ds-list-row"><span className="ds-grow"><RiskTag>{at.toLocaleString()} salvage · {cargo} item{cargo === 1 ? '' : 's'}</RiskTag></span><b className="ds-bad">lost</b></div>

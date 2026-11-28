@@ -1,5 +1,5 @@
 // Run upgrade choice (three cards) and the in-run upgrade / buff badges.
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import type { Game } from '@riftwarden/game/core/Game';
 import { CATEGORY_LABEL, RARITY_COLOR, upgradeDef } from '@riftwarden/rules/roguelite/upgrades';
 import { useHud } from './useHud';
@@ -7,17 +7,32 @@ import { Backdrop, Crumb, ElementGem, ELEMENT_PATH, Gem } from './ds';
 
 // ------------------------------------------------------------------ upgrade selection
 
+/** Ignore picks this soon after the cards appear (ms). */
+const PICK_GUARD_MS = 400;
+
+/** Card index for a key: the number row or the numpad (pure). */
+export function pickIndex(code: string): number {
+  const m = /^(?:Digit|Numpad)([1-9])$/.exec(code);
+  return m ? Number(m[1]) - 1 : -1;
+}
+
 export function UpgradePanel({ game }: { game: Game }) {
   const offer = game.offer ?? [];
   const build = game.director.build;
   const coop = useHud((s) => s.coop);
   const waiting = coop?.offerChooser;
+  // The cards open mid-fight: a click or key already on its way (firing, the ability key) must not pick one.
+  const openedAt = useRef(performance.now());
+  const settled = () => game.input.forceCapture || performance.now() - openedAt.current > PICK_GUARD_MS;
+  const choose = (id: string) => {
+    if (settled()) game.chooseUpgrade(id);
+  };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const i = ['Digit1', 'Digit2', 'Digit3'].indexOf(e.code);
+      const i = pickIndex(e.code);
       if (!e.repeat && !waiting && i >= 0 && game.offer?.[i]) {
         e.preventDefault();
-        game.chooseUpgrade(game.offer[i].id);
+        if (game.input.forceCapture || performance.now() - openedAt.current > PICK_GUARD_MS) game.chooseUpgrade(game.offer[i].id);
       }
     };
     window.addEventListener('keydown', onKey);
@@ -51,7 +66,7 @@ export function UpgradePanel({ game }: { game: Game }) {
           const syn = owned.filter((p) => p.def!.id !== u.id && p.def!.tags.some((t) => u.tags.includes(t) && t !== u.category));
           const synTag = syn.length ? u.tags.find((t) => syn.some((p) => p.def!.tags.includes(t))) : null;
           return (
-            <button key={u.id} data-testid={`upgrade-card-${i}`} data-id={u.id} className="ucard ds-card" disabled={!!waiting} style={{ '--r': color } as React.CSSProperties} onClick={() => game.chooseUpgrade(u.id)}>
+            <button key={u.id} data-testid={`upgrade-card-${i}`} data-id={u.id} className="ucard ds-card" disabled={!!waiting} style={{ '--r': color } as React.CSSProperties} onClick={() => choose(u.id)}>
               <span className="ds-row" style={{ justifyContent: 'space-between', width: '100%' }}>
                 <span style={{ font: '700 13px var(--ds-d)', letterSpacing: '0.3em', color }}>{u.rarity.toUpperCase()}</span>
                 <span className="ds-k">{i + 1}</span>
@@ -97,7 +112,7 @@ export function RunBadges() {
   if (!m5) return null;
   return (
     <div className="m5-badges">
-      {m5.upgrades > 0 && <div className="m5-chip">▲ {m5.upgrades} UPGRADES <kbd>U</kbd></div>}
+      {m5.upgrades > 0 && <div className="m5-chip">▲ {m5.upgrades} UPGRADE{m5.upgrades === 1 ? '' : 'S'} <kbd>U</kbd></div>}
       {m5.buffs.map((b) => (
         <div key={b.name} className="m5-chip buff">{b.name}{b.stacks > 1 ? ` ×${b.stacks}` : ''} · {b.t.toFixed(0)}s</div>
       ))}

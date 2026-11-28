@@ -30,7 +30,7 @@ import { NetClient } from '@riftwarden/game/net/NetClient';
 import { sessionClient } from '../account/sync';
 import type { RunStart } from '@riftwarden/protocol/protocol';
 import type { RunResult } from '@riftwarden/rules/progression/run';
-import { keyRemap, type Settings, saveSettings } from '@riftwarden/game/core/settings';
+import { keyRemap, RETICLE_HEX, type Settings, saveSettings } from '@riftwarden/game/core/settings';
 import { FrameClock } from '@riftwarden/game/core/frameClock';
 import { AdaptiveQuality } from '@riftwarden/game/core/adaptiveQuality';
 import { hashRunSeed } from '@riftwarden/rules/roguelite/upgrades';
@@ -804,8 +804,11 @@ export function applyGlobalSettings(s: Settings, input: Input): void {
   const { reticle, reticleSize, aimFeedback, damageNumbers, reduceMotion, showFps } = s;
   hudStore.set({ bindings: s.keys, combatUi: { reticle, reticleSize, aimFeedback, damageNumbers, reduceMotion, showFps } });
   if (typeof document !== 'undefined') {
-    document.documentElement.style.setProperty('--ui-scale', String(s.uiScale));
-    Object.assign(document.documentElement.dataset, { motion: s.reduceMotion ? 'reduced' : 'full', cvd: s.colorblind });
+    const root = document.documentElement;
+    root.style.setProperty('--ui-scale', String(s.uiScale));
+    root.style.setProperty('--reticle-color', RETICLE_HEX[s.reticleColor]);
+    root.style.setProperty('--reticle-opacity', String(s.reticleOpacity));
+    Object.assign(root.dataset, { motion: s.reduceMotion ? 'reduced' : 'full', cvd: s.colorblind, flash: s.reduceFlashing ? 'reduced' : 'full', hudBacking: s.hudBacking ? 'on' : 'off' });
   }
   setRarityPalette(s.colorblind);
   applyWindowSettings(s);

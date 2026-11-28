@@ -168,7 +168,7 @@ export function MasteryGainToast() {
   if (!g) return null;
   return (
     <div className="fixed right-[26px] bottom-[176px] font-mono text-[11px] tracking-[0.14em] text-amber pointer-events-none [animation:rise_.18s_ease-out]" data-testid="mastery-gain">
-      +{g.xp} {(FAMILY_NAME[g.family as WeaponFamily] ?? g.family).toUpperCase()} MASTERY
+      +{g.xp.toLocaleString()} {(FAMILY_NAME[g.family as WeaponFamily] ?? g.family).toUpperCase()} MASTERY
     </div>
   );
 }

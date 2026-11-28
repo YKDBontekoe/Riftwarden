@@ -136,11 +136,11 @@ export function CenterPanel() {
           </div>
           <div className="stat-row">
             <div>
-              <b>{inspect.kills}</b>
+              <b>{inspect.kills.toLocaleString()}</b>
               <span>KILLS</span>
             </div>
             <div>
-              <b>{inspect.damage}</b>
+              <b>{Math.round(inspect.damage).toLocaleString()}</b>
               <span>DAMAGE</span>
             </div>
             <div>

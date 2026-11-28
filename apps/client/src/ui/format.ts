@@ -19,3 +19,8 @@ export function fmtBig(n: number): string {
   if (a >= 1e4) return `${(n / 1e3).toFixed(1)}k`;
   return String(Math.round(n));
 }
+
+/** "1 wave", "3 waves", "1 boss", "2 bosses": a count with its noun (localized digits). */
+export function plural(n: number, one: string, many = `${one}s`): string {
+  return `${n.toLocaleString()} ${n === 1 ? one : many}`;
+}

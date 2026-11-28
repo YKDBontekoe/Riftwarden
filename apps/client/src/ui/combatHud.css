@@ -215,3 +215,13 @@ html[data-touch] .hud-prep { top: 56px; zoom: 0.7; }
 .hud-threats .ht i { width: 0; height: 0; border-left: 9px solid transparent; border-right: 9px solid transparent; border-bottom: 14px solid #ff5a4a; filter: drop-shadow(0 0 6px rgba(255, 90, 74, 0.8)); }
 .hud-threats .ht b { font: 700 12px var(--ds-m); color: #ffd3cc; text-shadow: 0 1px 2px #000; }
 html[data-touch] .hud-hunt-rules { display: none; }
+
+/* Settings > Accessibility > Reduce flashing: warnings hold steady and full-screen flashes are hidden. */
+[data-flash='reduced'] :is(.combat-hud .bottom-left.low .hv-num, .label.warn, .heat-arc .fg.over, .radar-head .hot, .tactical.active .tac-label em, .boss-attack, .event-chip.incoming, .m5-chip.emp, .set-bind-table .sbt-key.listen kbd, .hud-prep.urgent .hp-time) { animation: none; }
+[data-flash='reduced'] :is(.kill-pulse, .damage-tint) { display: none; }
+
+/* Settings > Interface > HUD backing: dark glass behind the corner readouts over bright scenes. */
+[data-hud-backing='on'] .combat-hud :is(.hud-objective, .bottom-left, .bottom-right, .hud-prep) { background: rgba(6, 8, 10, 0.55); border-radius: 4px; padding: 8px 10px; backdrop-filter: blur(3px); }
+
+/* Prep countdown: the last five seconds turn ember and pulse. */
+.hud-prep.urgent .hp-time { color: var(--ds-ember); animation: blink 0.8s steps(2) infinite; }

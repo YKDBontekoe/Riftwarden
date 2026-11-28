@@ -2,6 +2,10 @@
 export type Quality = 'high' | 'medium' | 'low';
 export type Level3 = 'low' | 'medium' | 'high';
 export const ADAPTIVE_TARGETS = [0, 60, 120, 144] as const;
+export const RETICLE_COLORS = ['white', 'green', 'yellow', 'cyan', 'magenta'] as const;
+export type ReticleColor = (typeof RETICLE_COLORS)[number];
+/** CSS colour per reticle option (high-contrast picks that stay readable on the game's palettes). */
+export const RETICLE_HEX: Record<ReticleColor, string> = { white: '#ffffff', green: '#7dff6a', yellow: '#ffe14a', cyan: '#4ff2ff', magenta: '#ff5cf4' };
 export type AdaptiveTarget = (typeof ADAPTIVE_TARGETS)[number];
 
 export interface Settings {
@@ -32,6 +36,13 @@ export interface Settings {
   uiScale: number;
   reticle: 'dynamic' | 'fixed' | 'dot';
   reticleSize: number;
+  /** Reticle colour (visibility on bright or busy scenes) and opacity (0.4..1). */
+  reticleColor: ReticleColor;
+  reticleOpacity: number;
+  /** Photosensitivity: warnings hold steady instead of blinking, and full-screen hit and kill flashes are hidden. */
+  reduceFlashing: boolean;
+  /** Dark glass behind the HUD corners for readability over bright scenes. */
+  hudBacking: boolean;
   aimFeedback: boolean;
   damageNumbers: 'all' | 'personal' | 'off';
   wheelSwap: boolean;
@@ -117,6 +128,10 @@ export const DEFAULT_SETTINGS: Settings = {
   uiScale: 1,
   reticle: 'dynamic',
   reticleSize: 1,
+  reticleColor: 'white',
+  reticleOpacity: 0.95,
+  reduceFlashing: false,
+  hudBacking: false,
   aimFeedback: true,
   damageNumbers: 'all',
   wheelSwap: true,
@@ -184,6 +199,10 @@ export function sanitizeSettings(raw: unknown, version = VERSION): Settings {
     uiScale: clampNum(r.uiScale, 0.8, 1.3, 1),
     reticle: pick(r.reticle, ['dynamic', 'fixed', 'dot'] as const, DEFAULT_SETTINGS.reticle),
     reticleSize: clampNum(r.reticleSize, 0.75, 1.5, DEFAULT_SETTINGS.reticleSize),
+    reticleColor: pick(r.reticleColor, RETICLE_COLORS, DEFAULT_SETTINGS.reticleColor),
+    reticleOpacity: clampNum(r.reticleOpacity, 0.4, 1, DEFAULT_SETTINGS.reticleOpacity),
+    reduceFlashing: r.reduceFlashing === true,
+    hudBacking: r.hudBacking === true,
     aimFeedback: r.aimFeedback !== false,
     damageNumbers: pick(r.damageNumbers, ['all', 'personal', 'off'] as const, DEFAULT_SETTINGS.damageNumbers),
     wheelSwap: r.wheelSwap !== false,

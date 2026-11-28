@@ -47,10 +47,10 @@ export function StoragePanel({ flow }: { flow: Flow }) {
           remove: {
             label: (e) => {
               const y = dismantleYield(e.item);
-              return `DISMANTLE · +${y.salvage} SALVAGE${y.components ? ` · +${y.components} COMP` : ''}`;
+              return `DISMANTLE · +${y.salvage.toLocaleString()} SALVAGE${y.components ? ` · +${y.components.toLocaleString()} COMP` : ''}`;
             },
             allowed: (e) => e.status === 'stored' && !e.item.locked,
-            run: (uid) => void tx.run('dismantle', 'dismantleItems', [[uid]], (r) => `Dismantled · +${r.salvage} salvage${r.components ? ` · +${r.components} components` : ''}`),
+            run: (uid) => void tx.run('dismantle', 'dismantleItems', [[uid]], (r) => `Dismantled · +${r.salvage.toLocaleString()} salvage${r.components ? ` · +${r.components.toLocaleString()} components` : ''}`),
             confirm: 'Dismantle permanently?',
           },
           extra: (e) =>

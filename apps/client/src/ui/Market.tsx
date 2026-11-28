@@ -296,7 +296,7 @@ function SellPane({ save, modules, tx }: { save: SaveData; modules: boolean; tx:
                   testId="sell"
                   label={`SELL · +◈ ${sellPrice(item).toLocaleString()}`}
                   confirm={`Sell ${item.name} permanently?`}
-                  onConfirm={() => tx.run('sell', 'sellItems', [[item.uid]], (r) => `Sold for ${r.credits} credits${r.modulesReturned ? ` · ${r.modulesReturned} module(s) returned to storage` : ''}`)}
+                  onConfirm={() => tx.run('sell', 'sellItems', [[item.uid]], (r) => `Sold for ${r.credits.toLocaleString()} credits${r.modulesReturned ? ` · ${r.modulesReturned} module${r.modulesReturned === 1 ? '' : 's'} returned to storage` : ''}`)}
                 />
               )}
               {item.locked ? (
@@ -433,7 +433,7 @@ export function SalvageTerminal({ flow, close }: { flow: Flow; close: () => void
               confirm={`Destroy ${preview.count} item${preview.count === 1 ? '' : 's'} permanently for ${costText({ salvage: preview.salvage, components: preview.components }, '+')}?`}
               disabled={preview.count === 0}
               onConfirm={() => {
-                const res = tx.run('dismantle', 'dismantleItems', [valid], (r) => `Dismantled ${r.count} item${r.count === 1 ? '' : 's'} · +${r.salvage} salvage${r.components ? ` · +${r.components} components` : ''}`);
+                const res = tx.run('dismantle', 'dismantleItems', [valid], (r) => `Dismantled ${r.count} item${r.count === 1 ? '' : 's'} · +${r.salvage.toLocaleString()} salvage${r.components ? ` · +${r.components.toLocaleString()} components` : ''}`);
                 if (res) setPicked(new Set());
               }}
             />

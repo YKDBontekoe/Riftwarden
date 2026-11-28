@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState, type PointerEvent as RPointerEvent, type WheelEvent as RWheelEvent } from 'react';
+import { plural } from './format';
 import type { Flow } from '../core/Flow';
 import { STAT_DEFS, type StatKey } from '@riftwarden/rules/combat/stats';
 import { levelInfo, pointsAt, RING_EVERY, ringsAt } from '@riftwarden/rules/progression/level';
@@ -179,7 +180,7 @@ export function SkillTreeTerminal({ flow, close }: { flow: Flow; close: () => vo
           )}
           <TxMessage msg={msg} />
           <div className="lattice-totals">
-            <div className="[font:600_10px_var(--mono)] tracking-[0.16em] text-faint">TREE TOTAL ({st.allocated.length} nodes)</div>
+            <div className="[font:600_10px_var(--mono)] tracking-[0.16em] text-faint">TREE TOTAL ({plural(st.allocated.length, 'node')})</div>
             {totals.length === 0 && <small>Nothing allocated yet.</small>}
             <ul>
               {totals.map((m) => (

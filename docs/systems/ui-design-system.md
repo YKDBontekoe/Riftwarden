@@ -35,5 +35,17 @@
   Home/End go to the ends (`navIndex`).
 - **Pause menu**: "If you leave now" shows the time deployed and kills. `fmtTime` prints h:mm:ss from an hour and 0:00
   for bad input.
+- **Reticle and HUD readability**: reticle colour (`RETICLE_COLORS`, CSS `--reticle-color`) and opacity
+  (`--reticle-opacity`); HUD backing (`data-hud-backing`, glass behind the corner readouts); Reduce flashing
+  (`data-flash='reduced'`, Accessibility tab) stops the blinking warnings and hides the hit and kill full-screen
+  flashes (selector list in `combatHud.css`, extend it when adding a blinking warning). The prep countdown turns ember
+  and pulses in its last five seconds (`.hud-prep.urgent`).
+- **Choices that open mid-fight** (upgrade cards, checkpoint): number row or numpad (`pickIndex`); input in the first
+  400 ms after they appear is ignored (a click or a `1` weapon-draw already on its way), except under automation
+  (`forceCapture`).
+- **Wording**: `plural()` (`format.ts`) for counts ("1 kill", "2 bosses"); currencies and kill/damage counts use
+  thousands separators; cost chips say how much is left after a purchase or how far short you are (`spendNote`). An
+  armed confirm button disarms after 10 s. The loot feed merges a repeat of its newest row into one row with ×N
+  (`pushFeed`).
 - **Tests**: `tests/settings-options.test.ts`, `key-bindings.test.ts`, `window-state.test.ts`, `ui-format.test.ts`,
-  `inventory-nav.test.ts`.
+  `inventory-nav.test.ts`, `loot-feed.test.ts`, `upgrade-pick.test.ts`.

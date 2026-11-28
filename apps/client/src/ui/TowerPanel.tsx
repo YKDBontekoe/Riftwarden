@@ -87,7 +87,7 @@ export function TowerPanel({ game }: { game: Game }) {
             <div className="tp-stats">
               <div className="ds-col"><span className="ds-lbl">DPS</span><b className="ds-num">{info.st.dps.toFixed(0)}</b></div>
               <div className="ds-col"><span className="ds-lbl">Range</span><b className="ds-num">{info.st.range.toFixed(0)} m</b></div>
-              <div className="ds-col"><span className="ds-lbl">Kills</span><b className="ds-num">{info.kills}</b></div>
+              <div className="ds-col"><span className="ds-lbl">Kills</span><b className="ds-num">{info.kills.toLocaleString()}</b></div>
               <div className="ds-col"><span className="ds-lbl">Damage</span><b className="ds-num">{info.damage >= 1000 ? `${(info.damage / 1000).toFixed(1)}K` : info.damage}</b></div>
               <div className="ds-col"><span className="ds-lbl">Share</span><b className="ds-num">{totalDamage > 0 ? Math.round((info.damage / totalDamage) * 100) : 0}%</b></div>
             </div>

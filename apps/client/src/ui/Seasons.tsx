@@ -1,6 +1,7 @@
 // Seasons + leaderboards in the HQ (docs/design/progression-design.md §11): switch between the permanent and this month's
 // seasonal profile, the season rule and time left, the journey, archived seasons, and the boards (server profiles
 // only: guests never appear, solo runs were validated by the rules worker).
+import { plural } from './format';
 import { useEffect, useState } from 'react';
 import type { Flow } from '../core/Flow';
 import { JOURNEY, journeyDone, journeyTitle, seasonEnd, seasonOf, seasonRule } from '@riftwarden/rules/progression/seasons';
@@ -27,7 +28,7 @@ export function SeasonBar({ flow, save }: { flow: Flow; save: SaveData }) {
     <div className={`flex flex-wrap items-center gap-[10px] border p-[8px_12px] m-[0_0_12px] ${seasonal ? 'border-violet/60 bg-[rgb(170_120_255/0.08)]' : 'border-line'}`} data-testid="season-bar">
       <div className="grid">
         <span className="font-mono text-[10.5px] tracking-[0.14em] text-faint">{seasonal ? `SEASONAL PROFILE · SEASON ${id}` : 'PERMANENT PROFILE'}</span>
-        <span className="text-[13px]"><b>Season {id}</b> · {rule.name}: {rule.blurb} · <span className="text-muted">{daysLeft(id, now)} days left</span></span>
+        <span className="text-[13px]"><b>Season {id}</b> · {rule.name}: {rule.blurb} · <span className="text-muted">{plural(daysLeft(id, now), 'day')} left</span></span>
       </div>
       <div className="flex gap-[6px] ml-auto">
         {!started && (

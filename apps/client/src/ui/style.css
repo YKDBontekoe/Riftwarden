@@ -146,7 +146,7 @@ b.v { color: var(--violet); }
 
 /* crosshair */
 .crosshair { position: fixed; left: 50%; top: 50%; width: 0; height: 0; scale: var(--reticle-scale, 1); }
-.crosshair .ch { position: absolute; left: 0; top: 0; width: 2px; height: 8px; background: rgba(255, 255, 255, 0.95); box-shadow: 0 0 3px rgba(0, 0, 0, 0.9); transition: transform 0.05s linear; }
+.crosshair .ch { position: absolute; left: 0; top: 0; width: 2px; height: 8px; background: var(--reticle-color, #fff); opacity: var(--reticle-opacity, 0.95); box-shadow: 0 0 3px rgba(0, 0, 0, 0.9); transition: transform 0.05s linear; }
 .crosshair .ch.h { width: 8px; height: 2px; }
 .crosshair .dot { position: absolute; left: -1.5px; top: -1.5px; width: 3px; height: 3px; background: var(--cyan); border-radius: 50%; box-shadow: 0 0 6px var(--cyan); }
 .crosshair[data-reticle='dot'] .dot { left: -2px; top: -2px; width: 4px; height: 4px; box-shadow: 0 0 0 1px #081014, 0 0 5px #081014; }
@@ -768,6 +768,7 @@ button.mini.expand { border-color: var(--amber-dim); color: #ffe2b5; }
 @keyframes lfin { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: none; } }
 .lf-tag { display: block; font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.16em; color: var(--rc); }
 .lf-item.pickup .lf-tag { color: var(--amber); }
+.lf-item .lf-times { color: var(--rc); font-weight: 700; }
 .lf-item.full .lf-tag, .lf-item.expired .lf-tag { color: var(--red); }
 .lf-item b { display: block; font-family: var(--display); font-size: 14px; color: var(--rc); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lf-item.r-common b { color: var(--white); }

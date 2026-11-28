@@ -1,4 +1,5 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { plural } from './format';
 import type { Flow } from '../core/Flow';
 import type { Game } from '@riftwarden/game/core/Game';
 import { BLESSINGS, CURSES, isCombatKind, NODE_KINDS, type NodeKind } from '@riftwarden/rules/runmap/defs';
@@ -97,7 +98,7 @@ function SectorHeader({ node, view, war, lib }: { node: MapNode; view: RunMapVie
         <span className="ds-chip"><FieldIcon name={NODE_ICON[b.kind]} /> {b.actBoss ? 'CAPITAL' : `${NODE_KINDS[b.kind].name.toUpperCase()}`}</span>
       </div>
       <span className="ds-hero rm-name">{b.name.toUpperCase()}</span>
-      <span className="ds-meta">{b.waves ? `${b.waves[1] - b.waves[0] + 1} waves` : 'No waves · stations'} · {b.faction}{b.mods.length ? ` · ${b.mods.map((m) => m.name).join(' · ')}` : ''}{links ? ' · 1 link from you' : ''}</span>
+      <span className="ds-meta">{b.waves ? plural(b.waves[1] - b.waves[0] + 1, 'wave') : 'No waves · stations'} · {b.faction}{b.mods.length ? ` · ${b.mods.map((m) => m.name).join(' · ')}` : ''}{links ? ' · 1 link from you' : ''}</span>
       {b.waves && (
         <div className="rm-figs">
           <div className="ds-col"><span className="ds-lbl">Threat</span><span className="ds-num" style={{ color: intel.threat >= 4 ? '#ff8a7a' : intel.threat >= 3 ? '#ffd84d' : 'var(--ds-ink)' }}>{intel.threat}<small> / 5</small></span></div>
