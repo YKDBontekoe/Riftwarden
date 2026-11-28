@@ -15,3 +15,9 @@
 - **HQ**: storage terminal = shared `InventoryView` (filter by category, sort rarity/level/newest/name, detail, raw comparison + "drone stats if equipped" via the real stat pipeline, equip/unequip, scrap for salvage, +10 bays for salvage = first salvage sink). Drone configuration = slots, calculated stats, 3 saved presets (references into owned items; missing items skipped). Workshop became weapon engineering in M3 (see above).
 - **Modules** are `category: 'module'` items with `module {type, compatible, socketCost}` and at least one affix; `itemModifiers` returns nothing for them and the UI states they are inactive.
 - **Save v2**: `MIGRATIONS[1]` drops the unused `module` slot, adds `presets` and `storage.expansions`; `sanitizeItem` upgrades M1 items to the deterministic level-1 common roll (same 13 damage repeater), keeps unknown-base items (inert, unequippable), validates every number. Capacity = 50 + 10 × expansions.
+
+- **Equip best for build** (`rules/loot/autoEquip.ts`, Loadout terminal footer): a greedy search over stored items
+  takes the single swap that raises the build score most (`swapImpact`, the player's comparison priority and score
+  context, minimum weighted gain 0.005) until none is an upgrade; replaced items rejoin the pool. Locked slots are
+  skipped. The button names the number of swaps and confirms; each step is one `equipFromStorage` op (sync and
+  replay unchanged). 80 stored items score in about 0.1 s. Tests: `tests/auto-equip.test.ts`.

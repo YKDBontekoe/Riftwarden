@@ -594,7 +594,7 @@ export class HomeBase {
 
   applySettings(s: Settings): void {
     this.settings = s;
-    Object.assign(this.player, { sensitivity: s.sensitivity, invertY: s.invertY });
+    Object.assign(this.player, { sensitivity: s.sensitivity, sensitivityY: s.sensitivityY, invertY: s.invertY, autoSprint: s.autoSprint });
     const h = (s.fov * Math.PI) / 180;
     this.player.baseFov = 2 * Math.atan(Math.tan(h / 2) / (16 / 9));
     this.player.reduceMotion = s.reduceMotion;

@@ -1,6 +1,6 @@
 import { keyLabel } from '@riftwarden/game/core/settings';
 import { useHud } from './useHud';
-import { createContext, type ReactNode, useContext, useEffect } from 'react';
+import { createContext, type ReactNode, useContext, useEffect, useState } from 'react';
 import { RESOURCE_KEYS, type ResourceKey } from '@riftwarden/rules/economy/config';
 import { stationInfo } from '@riftwarden/rules/home/stationInfo';
 import { CURRENCIES, currencyTooltip } from '@riftwarden/rules/economy/currencies';
@@ -27,6 +27,20 @@ export function Shell({ code, title, sub, close, children, accent = 'cyan', wide
     const onKey = (e: KeyboardEvent) => {
       if (e.repeat) return;
       const typing = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
+      // Esc in a text box leaves the box first; the next Esc closes the terminal.
+      if (e.code === 'Escape' && typing) {
+        e.preventDefault();
+        (e.target as HTMLElement).blur();
+        return;
+      }
+      if ((e.code === 'KeyQ' || e.code === 'KeyR') && !typing && cycleTabs(e.code === 'KeyR' ? 1 : -1)) {
+        e.preventDefault();
+        return;
+      }
+      if (e.code.startsWith('Arrow') && !typing && stepList(e.code)) {
+        e.preventDefault();
+        return;
+      }
       if (e.code === 'Escape' || (e.code === useCode && !typing)) {
         e.preventDefault();
         close();
@@ -47,6 +61,9 @@ export function Shell({ code, title, sub, close, children, accent = 'cyan', wide
   }, [close, useCode]);
   const res = useContext(ShellResources);
   const name = info?.name ?? title;
+  // Q / R hint only where the terminal has a tab bar the shell drives.
+  const [hasTabs, setHasTabs] = useState(false);
+  useEffect(() => setHasTabs(!!tabBar()), [terminal]);
   return (
     <div className={`screen terminal-screen ds-scr acc-${accent}`}>
       <div className="ds-blur" />
@@ -86,6 +103,7 @@ export function Shell({ code, title, sub, close, children, accent = 'cyan', wide
           </span>
         )}
         <span className="ds-grow" />
+        {hasTabs && <span className="ds-hint" data-testid="term-tab-hint"><span className="ds-k">Q</span><span className="ds-k">R</span>TABS</span>}
         <button className="term-close ds-hint" onClick={close}>
           <span className="ds-k">{keyLabel(useCode)}</span><span className="ds-k">ESC</span>BACK
         </button>
@@ -95,3 +113,51 @@ export function Shell({ code, title, sub, close, children, accent = 'cyan', wide
   );
 }
 
+/** The terminal's first tab bar, unless it handles Q / R itself (`data-tabkeys="own"`). */
+function tabBar(): HTMLElement | null {
+  const bar = document.querySelector<HTMLElement>('.terminal-screen .term-body .tabs');
+  return bar && bar.dataset.tabkeys !== 'own' ? bar : null;
+}
+
+/** Step the tab bar by one (wrapping, skipping disabled tabs); false when there is none. */
+function cycleTabs(step: 1 | -1): boolean {
+  const bar = tabBar();
+  if (!bar) return false;
+  const tabs = [...bar.querySelectorAll<HTMLButtonElement>(':scope > button:not(:disabled)')];
+  if (tabs.length < 2) return false;
+  const at = tabs.findIndex((b) => b.classList.contains('on') || b.getAttribute('aria-pressed') === 'true');
+  const next = tabs[(Math.max(0, at) + step + tabs.length) % tabs.length];
+  next.click();
+  return true;
+}
+
+/** Grid navigation (pure): ←/→ step one tile, ↑/↓ one row of `cols`; clamped; null for other keys or an empty grid. */
+export function gridStep(index: number, count: number, cols: number, code: string): number | null {
+  if (count <= 0) return null;
+  const c = Math.max(1, cols);
+  const step: Record<string, number> = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -c, ArrowDown: c };
+  if (!(code in step)) return null;
+  if (index < 0) return 0;
+  return Math.min(count - 1, Math.max(0, index + step[code]));
+}
+
+/**
+ * Arrow keys move the selection in a terminal's item list (Market, Workshop, Storage). Lists that handle keys
+ * themselves (`data-listkeys="own"`, the shared inventory view) and multi-select lists (a click ticks a box) are left
+ * alone. Columns are measured from the layout (tiles on the first row).
+ */
+function stepList(code: string): boolean {
+  const lists = [...document.querySelectorAll<HTMLElement>('.terminal-screen .inv-list')].filter((l) => !l.closest('[data-listkeys="own"]') && !l.querySelector('.ic-check'));
+  const list = lists.find((l) => l.querySelector('.icard[aria-pressed="true"]')) ?? lists[0];
+  if (!list) return false;
+  const cards = [...list.querySelectorAll<HTMLButtonElement>('.icard')];
+  if (!cards.length) return false;
+  const top = cards[0].offsetTop;
+  const cols = cards.filter((c) => c.offsetTop === top).length;
+  const at = cards.findIndex((c) => c.getAttribute('aria-pressed') === 'true');
+  const to = gridStep(at, cards.length, cols, code);
+  if (to === null || to === at) return to !== null;
+  cards[to].click();
+  cards[to].scrollIntoView({ block: 'nearest' });
+  return true;
+}

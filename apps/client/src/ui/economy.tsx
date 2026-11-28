@@ -1,5 +1,5 @@
 import { visibleCurrencies } from '@riftwarden/rules/progression/unlocks';
-import { type ReactNode, useCallback, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { sfx } from '@riftwarden/game/audio/Sfx';
 import type { Flow } from '../core/Flow';
 import { type Cost, RESOURCE_KEYS, RESOURCE_LABEL, type ResourceKey } from '@riftwarden/rules/economy/config';
@@ -21,7 +21,7 @@ export function ResourceBar({ save, cost, compact }: { save: SaveData; cost?: Co
         const have = save.resources[k];
         const need = cost?.[k] ?? 0;
         return (
-          <div key={k} className={`res-chip ${RES_CLASS[k]} ${need > have ? 'short' : ''}`} title={currencyTooltip(k)} tabIndex={0} data-testid={`res-${k}`}>
+          <div key={k} className={`res-chip ${RES_CLASS[k]} ${need > have ? 'short' : ''}`} title={need > 0 ? `${currencyTooltip(k)}\n${spendNote(have, need)}` : currencyTooltip(k)} tabIndex={0} data-testid={`res-${k}`}>
             <i><CurrencyIcon k={k} /></i>
             <b>{have.toLocaleString()}</b>
             <span>{RESOURCE_LABEL[k].toUpperCase()}</span>
@@ -31,6 +31,11 @@ export function ResourceBar({ save, cost, compact }: { save: SaveData; cost?: Co
       })}
     </div>
   );
+}
+
+/** What a price leaves you with, or how far short you are (pure). */
+export function spendNote(have: number, need: number): string {
+  return need > have ? `Short by ${(need - have).toLocaleString()}` : `${(have - need).toLocaleString()} left after this`;
 }
 
 /** Inline cost readout; resources the player lacks are marked. */
@@ -44,7 +49,7 @@ export function CostLine({ cost, save, label }: { cost: Cost; save?: SaveData; l
         const need = cost[k] ?? 0;
         const short = !!save && save.resources[k] < need;
         return (
-          <span key={k} className={`cl ${RES_CLASS[k]} ${short ? 'short' : ''}`} title={short ? `${CURRENCIES[k].name}: have ${save!.resources[k].toLocaleString()}, need ${need.toLocaleString()}` : CURRENCIES[k].name}>
+          <span key={k} className={`cl ${RES_CLASS[k]} ${short ? 'short' : ''}`} title={short ? `${CURRENCIES[k].name}: have ${save!.resources[k].toLocaleString()}, need ${need.toLocaleString()} · ${(need - save!.resources[k]).toLocaleString()} more needed` : CURRENCIES[k].name}>
             <i><CurrencyIcon k={k} /></i>
             {short ? `${save!.resources[k].toLocaleString()}/${need.toLocaleString()}` : need.toLocaleString()}
           </span>
@@ -103,6 +108,12 @@ export function TxMessage({ msg }: { msg: Msg }) {
 /** Two-step button for destructive or expensive actions. */
 export function ConfirmButton({ label, confirm, onConfirm, disabled, className = '', needConfirm = true, testId }: { label: ReactNode; confirm: ReactNode; onConfirm: () => void; disabled?: boolean; className?: string; needConfirm?: boolean; testId?: string }) {
   const [armed, setArmed] = useState(false);
+  // An armed confirm row quietly disarms if it is left alone, so a later stray click cannot confirm it.
+  useEffect(() => {
+    if (!armed) return;
+    const t = window.setTimeout(() => setArmed(false), 10_000);
+    return () => window.clearTimeout(t);
+  }, [armed]);
   if (armed)
     return (
       <div className={`confirm-row ${className.includes('term-primary') ? 'term-primary-row' : ''}`}>

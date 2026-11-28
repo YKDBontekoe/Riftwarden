@@ -30,7 +30,7 @@ import { NetClient } from '@riftwarden/game/net/NetClient';
 import { sessionClient } from '../account/sync';
 import type { RunStart } from '@riftwarden/protocol/protocol';
 import type { RunResult } from '@riftwarden/rules/progression/run';
-import { keyRemap, type Settings, saveSettings } from '@riftwarden/game/core/settings';
+import { keyRemap, RETICLE_HEX, type Settings, saveSettings } from '@riftwarden/game/core/settings';
 import { FrameClock } from '@riftwarden/game/core/frameClock';
 import { AdaptiveQuality } from '@riftwarden/game/core/adaptiveQuality';
 import { hashRunSeed } from '@riftwarden/rules/roguelite/upgrades';
@@ -38,6 +38,7 @@ import { generateArena } from '@riftwarden/rules/world/arenaGen';
 import { ARENA, type ArenaLayout } from '@riftwarden/rules/world/layout';
 import type { TransitInfo } from '@riftwarden/game/ui/store';
 import { setRarityPalette } from '@riftwarden/rules/loot/rarity';
+import { applyWindowSettings, watchWindow } from './windowState';
 
 /** A loaded location. Exactly one exists at a time. */
 interface World {
@@ -153,6 +154,7 @@ export class Flow {
     this.renderQuality = settings.quality;
     this.input = new Input(canvas);
     applyGlobalSettings(settings, this.input);
+    watchWindow(() => this.settings);
     this.profile = new Profile();
     this.war.reporter = this.profile.save.profile.id;
     this.war.localSeed = hashSeed(`war:${this.profile.save.profile.id}`) || 1;
@@ -227,7 +229,12 @@ export class Flow {
     this.arena?.setEffectLoad(this.adaptive.current.effects);
   }
 
-  applySettings(s: Settings): void {
+  /** Records a settings change for profile sync (core/prefsSync.ts; a no-op until it starts). */
+  prefsPush: () => void = () => {};
+
+  /** `fromSync`: the change came from the profile (another device), so it is not recorded again. */
+  applySettings(s: Settings, fromSync = false): void {
+    if (!fromSync) this.prefsPush();
     const qualityChanged = s.quality !== this.settings.quality || s.shadows !== this.settings.shadows;
     this.settings = s;
     saveSettings(s);
@@ -799,11 +806,15 @@ export class Flow {
 /** Settings that live outside any world: key remapping, interface scale, colour accessibility. */
 export function applyGlobalSettings(s: Settings, input: Input): void {
   input.remap = keyRemap(s);
-  const { reticle, reticleSize, aimFeedback, damageNumbers, reduceMotion } = s;
-  hudStore.set({ bindings: s.keys, combatUi: { reticle, reticleSize, aimFeedback, damageNumbers, reduceMotion } });
+  const { reticle, reticleSize, aimFeedback, damageNumbers, reduceMotion, showFps, captions } = s;
+  hudStore.set({ bindings: s.keys, combatUi: { reticle, reticleSize, aimFeedback, damageNumbers, reduceMotion, showFps, captions } });
   if (typeof document !== 'undefined') {
-    document.documentElement.style.setProperty('--ui-scale', String(s.uiScale));
-    Object.assign(document.documentElement.dataset, { motion: s.reduceMotion ? 'reduced' : 'full', cvd: s.colorblind });
+    const root = document.documentElement;
+    root.style.setProperty('--ui-scale', String(s.uiScale));
+    root.style.setProperty('--reticle-color', RETICLE_HEX[s.reticleColor]);
+    root.style.setProperty('--reticle-opacity', String(s.reticleOpacity));
+    Object.assign(root.dataset, { motion: s.reduceMotion ? 'reduced' : 'full', cvd: s.colorblind, flash: s.reduceFlashing ? 'reduced' : 'full', hudBacking: s.hudBacking ? 'on' : 'off' });
   }
   setRarityPalette(s.colorblind);
+  applyWindowSettings(s);
 }

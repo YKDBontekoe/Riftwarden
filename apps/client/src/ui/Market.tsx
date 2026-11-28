@@ -10,6 +10,7 @@ import { rarity, RARITIES } from '@riftwarden/rules/loot/rarity';
 import { CATEGORY_LABEL, type Category, type ItemInstance } from '@riftwarden/rules/loot/types';
 import { defaultSlot, SLOTS, slotsFor } from '@riftwarden/rules/progression/items';
 import { swapImpact } from '@riftwarden/rules/loot/loadoutScore';
+import { downgradePicks } from '@riftwarden/rules/loot/dismantlePick';
 import { ImpactHeadline, ComparisonPriorityPicker, useComparisonPriority, useScore, useScoreContext } from './compare';
 import { type SaveData } from '@riftwarden/rules/progression/save';
 import { FAMILIES, SOCKET_LABEL } from '@riftwarden/rules/weapons/build';
@@ -21,6 +22,7 @@ import { CurrencyIcon } from './inventory/thumbs';
 import { FieldIcon } from './FieldIcon';
 import type { CurrencyKey } from '@riftwarden/rules/economy/currencies';
 import { Shell } from './shell';
+import { useRemembered } from './remembered';
 import { saveEntries, useEquipped } from './Terminals';
 
 const asEntry = (item: ItemInstance): InvEntry => ({ item, status: 'stored', equippedIn: null });
@@ -106,7 +108,7 @@ export function ModuleCompat({ save, module }: { save: SaveData; module: ItemIns
 export function MerchantTerminal({ flow, close, merchant }: { flow: Flow; close: () => void; merchant: MerchantId }) {
   const save = useSave(flow);
   const isModules = merchant === 'modules';
-  const [tab, setTab] = useState<'buy' | 'sell' | 'exchange'>('buy');
+  const [tab, setTab] = useRemembered<'buy' | 'sell' | 'exchange'>(`${merchant}.tab`, 'buy', (v) => v !== 'exchange' || isModules);
   const tx = useTx(flow, merchant === 'equipment' ? 'merchant' : 'modules');
   return (
     <Shell
@@ -195,9 +197,9 @@ function BuyPane({ save, merchant, tx }: { save: SaveData; merchant: MerchantId;
               REQUEST NEW MANIFEST · <CostLine cost={{ credits: rc }} save={save} />
             </>
           }
-          confirm={`Replace the remaining stock for ${rc} credits?`}
+          confirm={`Replace the remaining stock for ${rc.toLocaleString()} credits?`}
           disabled={save.resources.credits < rc}
-          onConfirm={() => tx.run('buy', 'refreshMarket', [], (r) => `New manifest #${r.rotation} · −${r.price} credits`)}
+          onConfirm={() => tx.run('buy', 'refreshMarket', [], (r) => `New manifest #${r.rotation} · −${r.price.toLocaleString()} credits`)}
         />
       </div>
       <div className="inv-detail-col">
@@ -218,7 +220,7 @@ function BuyPane({ save, merchant, tx }: { save: SaveData; merchant: MerchantId;
               </div>
               <div>
                 <span className="ds-lbl">Storage</span>
-                <b className={bays < 1 ? 'bad' : ''}>{bays < 1 ? 'FULL' : `${bays} BAYS FREE`}</b>
+                <b className={bays < 1 ? 'bad' : ''}>{bays < 1 ? 'FULL' : `${bays} BAY${bays === 1 ? '' : 'S'} FREE`}</b>
               </div>
               {entry.sold ? (
                 <button disabled>SOLD</button>
@@ -227,10 +229,10 @@ function BuyPane({ save, merchant, tx }: { save: SaveData; merchant: MerchantId;
                   className="primary small term-primary"
                   testId="buy"
                   label={`BUY · ◈ ${price.toLocaleString()}`}
-                  confirm={`Buy ${item.name} for ${price} credits?`}
+                  confirm={`Buy ${item.name} for ${price.toLocaleString()} credits?`}
                   needConfirm={expensive}
                   disabled={price > save.resources.credits || bays < 1}
-                  onConfirm={() => tx.run('buy', 'buyItem', [merchant, entry.id], (r) => `Purchased ${r.item.name} · −${r.price} credits · now in storage`)}
+                  onConfirm={() => tx.run('buy', 'buyItem', [merchant, entry.id], (r) => `Purchased ${r.item.name} · −${r.price.toLocaleString()} credits · now in storage`)}
                 />
               )}
             </div>
@@ -296,7 +298,7 @@ function SellPane({ save, modules, tx }: { save: SaveData; modules: boolean; tx:
                   testId="sell"
                   label={`SELL · +◈ ${sellPrice(item).toLocaleString()}`}
                   confirm={`Sell ${item.name} permanently?`}
-                  onConfirm={() => tx.run('sell', 'sellItems', [[item.uid]], (r) => `Sold for ${r.credits} credits${r.modulesReturned ? ` · ${r.modulesReturned} module(s) returned to storage` : ''}`)}
+                  onConfirm={() => tx.run('sell', 'sellItems', [[item.uid]], (r) => `Sold for ${r.credits.toLocaleString()} credits${r.modulesReturned ? ` · ${r.modulesReturned} module${r.modulesReturned === 1 ? '' : 's'} returned to storage` : ''}`)}
                 />
               )}
               {item.locked ? (
@@ -335,7 +337,7 @@ function ExchangePane({ save, tx }: { save: SaveData; tx: Tx }) {
               ))}
               <span>{left} LEFT THIS MANIFEST</span>
             </div>
-            <button className="primary small" data-testid={`ex-${o.id}`} disabled={!left || save.resources.credits < o.price} onClick={() => tx.run('exchange', 'buyExchange', [o.id], (r) => `Received ${costText(r.give, '+')} · −${r.price} credits`)}>
+            <button className="primary small" data-testid={`ex-${o.id}`} disabled={!left || save.resources.credits < o.price} onClick={() => tx.run('exchange', 'buyExchange', [o.id], (r) => `Received ${costText(r.give, '+')} · −${r.price.toLocaleString()} credits`)}>
               BUY · ◈ {o.price}
             </button>
           </div>
@@ -372,6 +374,21 @@ export function SalvageTerminal({ flow, close }: { flow: Flow; close: () => void
     });
   };
   const pickRarity = (rid: string) => setPicked(new Set([...valid, ...list.filter((e) => e.item.rarity === rid && !protectionReason(save, e.item.uid)).map((e) => e.item.uid)]));
+  // Build-aware: stored items that would lower the score in the slot they take (never the best of their kind).
+  const equipped = useEquipped(save);
+  const eqList = useMemo(() => SLOTS.map((s) => equipped[s.id]), [equipped]);
+  const base = useScore(eqList);
+  const ctx = useScoreContext();
+  const priority = useComparisonPriority();
+  const downgrades = useMemo(() => {
+    const cands = entries
+      .filter((e) => !e.equippedIn && e.item.category !== 'module' && !protectionReason(save, e.item.uid))
+      .map((e) => {
+        const s = defaultSlot(e.item.category, equipped);
+        return { item: e.item, verdict: s ? swapImpact(eqList, e.item, equipped[s], base, priority, SLOTS.findIndex((x) => x.id === s), ctx).verdict : null };
+      });
+    return downgradePicks(cands, save.items);
+  }, [entries, equipped, eqList, base, priority, ctx, save]);
   const cats = ['weapon', 'armor', 'shield', 'reactor', 'processor', 'accessory', 'ability', 'ultimate', 'module'] as Category[];
   return (
     <Shell code="RC-07" title="RECLAMATION PRESS" sub="Dismantle equipment into salvage and advanced components" close={close} wide accent="amber">
@@ -383,6 +400,9 @@ export function SalvageTerminal({ flow, close }: { flow: Flow; close: () => void
               ALL {r.label.toUpperCase()}
             </button>
           ))}
+          <button className="mini" data-testid="pick-downgrades" disabled={!downgrades.length} title="Stored items that would lower your build score in the slot they take; the best item of each kind is never picked" onClick={() => setPicked(new Set([...valid, ...downgrades]))}>
+            ALL DOWNGRADES · {downgrades.length}
+          </button>
           <button className="mini" onClick={() => setPicked(new Set())}>
             CLEAR
           </button>
@@ -414,7 +434,7 @@ export function SalvageTerminal({ flow, close }: { flow: Flow; close: () => void
           <div className="salv-preview">
             <div className="id-label">DISMANTLE PREVIEW · {preview.count} ITEM{preview.count === 1 ? '' : 'S'}</div>
             <div className="sp-yield">{preview.count ? <CostLine cost={{ salvage: preview.salvage, components: preview.components }} label="YIELD" /> : <span className="faint small">Select items on the left. Equipped and locked items are protected.</span>}</div>
-            {preview.modulesReturned > 0 && <div className="faint small">{preview.modulesReturned} installed module(s) return to storage intact.</div>}
+            {preview.modulesReturned > 0 && <div className="faint small">{preview.modulesReturned} installed module{preview.modulesReturned === 1 ? '' : 's'} return{preview.modulesReturned === 1 ? 's' : ''} to storage intact.</div>}
             <div className="sp-names">
               {valid.slice(0, 10).map((u) => {
                 const it = save.items.find((i) => i.uid === u)!;
@@ -433,7 +453,7 @@ export function SalvageTerminal({ flow, close }: { flow: Flow; close: () => void
               confirm={`Destroy ${preview.count} item${preview.count === 1 ? '' : 's'} permanently for ${costText({ salvage: preview.salvage, components: preview.components }, '+')}?`}
               disabled={preview.count === 0}
               onConfirm={() => {
-                const res = tx.run('dismantle', 'dismantleItems', [valid], (r) => `Dismantled ${r.count} item${r.count === 1 ? '' : 's'} · +${r.salvage} salvage${r.components ? ` · +${r.components} components` : ''}`);
+                const res = tx.run('dismantle', 'dismantleItems', [valid], (r) => `Dismantled ${r.count} item${r.count === 1 ? '' : 's'} · +${r.salvage.toLocaleString()} salvage${r.components ? ` · +${r.components.toLocaleString()} components` : ''}`);
                 if (res) setPicked(new Set());
               }}
             />
@@ -550,7 +570,7 @@ export function FabricateTerminal({ flow, close }: { flow: Flow; close: () => vo
             {isItem && (
               <div>
                 <span className="ds-lbl">Storage</span>
-                <b className={bays < 1 ? 'bad' : ''}>{bays < 1 ? 'FULL' : `${bays} BAYS FREE`}</b>
+                <b className={bays < 1 ? 'bad' : ''}>{bays < 1 ? 'FULL' : `${bays} BAY${bays === 1 ? '' : 'S'} FREE`}</b>
               </div>
             )}
             {!unlock.ok ? (

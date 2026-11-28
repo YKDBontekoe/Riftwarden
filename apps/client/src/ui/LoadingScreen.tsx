@@ -22,6 +22,7 @@ const BIOME_ART: Record<BiomeId, string> = { cryo: 'ls-art-cryo', foundry: 'ls-a
  * elements), the generated map in a glass frame on the right, load stages + tip along the bottom. */
 export function LoadingScreen() {
   const t = useHud((s) => s.transit);
+  const bindings = useHud((s) => s.bindings);
   const kind = t?.kind ?? 'hq';
   const [tipN, setTipN] = useState(() => Math.floor(Math.random() * 1000));
   useEffect(() => {
@@ -67,7 +68,7 @@ export function LoadingScreen() {
             ))}
           </ol>
           <span className="ds-grow" />
-          <span className="ls-tip ds-meta"><b style={{ color: 'var(--ds-ink)' }}>Tip: </b><span key={tipN}>{pickTip(kind === 'arena' ? 'arena' : 'hq', tipN)}</span></span>
+          <span className="ls-tip ds-meta"><b style={{ color: 'var(--ds-ink)' }}>Tip: </b><span key={tipN}>{pickTip(kind === 'arena' ? 'arena' : 'hq', tipN, bindings)}</span></span>
         </div>
         <Bar value={Math.min(1, (stage + 0.5) / labels.length)} color="#ff8a3d" height={3} />
       </div>

@@ -10,7 +10,7 @@ import { getTier } from '@riftwarden/rules/progression/tiers';
 import { uiEvents, type HudState } from '@riftwarden/game/ui/store';
 import { useHud } from '../useHud';
 import { BoundKey } from './widgets';
-import { LiveBar, LiveText, useLiveStyle } from './live';
+import { LiveBar, LiveText, useLive, useLiveStyle } from './live';
 import { ElementTag } from '../ElementTag';
 import { ELEMENT_COLOR } from '../ds';
 import { NODE_MODS } from '@riftwarden/rules/runmap/defs';
@@ -76,7 +76,8 @@ function DefenseObjective() {
       {node && (
         <span className="ds-row obj-chips" style={{ gap: 6, flexWrap: 'wrap' }}>
           <span className="ds-chip">{node.name}</span>
-          {node.mods?.slice(0, 2).map((m) => <span key={m} className="ds-chip">{NODE_MODS[m]?.name ?? m}</span>)}
+          {node.mods?.slice(0, 2).map((m) => <span key={m} className="ds-chip" title={NODE_MODS[m]?.text}>{NODE_MODS[m]?.name ?? m}</span>)}
+          {(node.mods?.length ?? 0) > 2 && <span className="ds-chip" title={node.mods!.slice(2).map((m) => `${NODE_MODS[m]?.name ?? m}: ${NODE_MODS[m]?.text ?? ''}`).join('\n')}>+{node.mods!.length - 2}</span>}
         </span>
       )}
     </div>
@@ -89,10 +90,12 @@ export function PrepClock() {
   const wave = useHud((s) => s.wave);
   const node = useHud((s) => s.node);
   const survival = useHud((s) => s.mode === 'survival');
+  // The last five seconds pulse ember so the wave never starts unannounced.
+  const box = useLive<HTMLDivElement, boolean>((s) => s.phase === 'prep' && s.phaseTimer > 0 && s.phaseTimer <= 5, (el, v) => el.classList.toggle('urgent', v));
   // Hubs and secured nodes hold the clock: nothing to count down there.
   if (phase !== 'prep' || (node && (!node.waves || node.complete))) return null;
   return (
-    <div className="hud-prep" data-testid="prep-clock">
+    <div className="hud-prep" data-testid="prep-clock" ref={box}>
       <span className="ds-lbl">Prep · wave {wave} next{survival ? ' · they will hunt you' : ''}</span>
       <LiveText as="b" className="hp-time" select={(s) => { const t = Math.max(0, Math.ceil(s.phaseTimer)); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`; }} />
       <span className="ds-hint"><BoundKey action="wave" />Call wave early · +2 cores per second</span>

@@ -13,13 +13,14 @@ import { powerGain } from '@riftwarden/rules/loot/feedback';
 import type { CurrencyKey } from '@riftwarden/rules/economy/currencies';
 import { useHud } from './useHud';
 import { useSave } from './useSave';
-import { fmtTime } from './format';
+import { fmtTime, plural } from './format';
 import { RunSummary } from './RunSummary';
 import { RunRecap } from './RunRecap';
 import { GearUpgrades } from './GearUpgrades';
 import { savePower } from './RiftLevel';
 import { ItemGlyph } from './inventory/glyphs';
 import { BoundKey } from './hud/widgets';
+import { pickIndex } from './Roguelite';
 import { BreakthroughScreen, useBreakthrough } from './Breakthrough';
 import { Backdrop, Bar, Crumb, Hint, Mark, pips, rarityCls, RiskTag } from './ds';
 import type { Category, ItemInstance } from '@riftwarden/rules/loot/types';
@@ -80,11 +81,14 @@ export function CheckpointPanel({ flow, game }: { flow: Flow; game: Game }) {
     void flow.returnHome().finally(() => setBusy(false));
   };
   const cont = () => (coop ? coop.vote(false) : void game.continueRun());
+  // 1 also draws the primary weapon: a press already under way as the panel opens must not choose for the player.
+  const [openedAt] = useState(() => performance.now());
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.repeat) return;
-      if (e.code === 'Digit1') { e.preventDefault(); cont(); }
-      else if (e.code === 'Digit2') { e.preventDefault(); home(); }
+      if (e.repeat || (!game.input.forceCapture && performance.now() - openedAt < 400)) return;
+      const i = pickIndex(e.code);
+      if (i === 0) { e.preventDefault(); cont(); }
+      else if (i === 1) { e.preventDefault(); home(); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -111,7 +115,7 @@ export function CheckpointPanel({ flow, game }: { flow: Flow; game: Game }) {
           ? <span className="ds-row ds-ov ds-up" style={{ gap: 10 }}>✓ Checkpoint secured · saved to your profile</span>
           : <span className="ds-row ds-ov ds-warn" style={{ gap: 10 }}>The save could not be written · rewards are held until the next save</span>}
         <span className="cp-title" style={{ font: "800 116px/0.85 var(--ds-d)" }}>WAVE {wave}</span>
-        <span className="ds-meta">Rift Level {tier.id} {tier.name} · {fmtTime(run.duration)} · {run.kills.toLocaleString()} kills</span>
+        <span className="ds-meta">Rift Level {tier.id} {tier.name} · {fmtTime(run.duration)} · {plural(run.kills, 'kill')}</span>
       </div>
       <div className="ds-abs" style={{ left: 140, right: 140, top: 268, display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', borderTop: '1px solid rgba(255,255,255,0.16)', borderBottom: '1px solid rgba(255,255,255,0.16)' }}>
         <Gain k="credits" value={run.creditsSecured} label="Credits" />

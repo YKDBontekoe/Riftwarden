@@ -1,6 +1,7 @@
 // Touch overlay: floating move stick (left), drag-to-look (right), a thumb cluster of actions, a top row of
 // menus and context buttons. Every control feeds the shared Input (virtual keys / mouse buttons / look / stick),
 // so the game logic is the same for keyboard, mouse and touch.
+import { useHurtHaptics } from './haptics';
 import { useEffect, useRef, useSyncExternalStore, type CSSProperties, type PointerEvent as RPointerEvent, type ReactNode } from 'react';
 import { knobOffset, lookDelta, stickVector, TOUCH } from '@riftwarden/game/core/touch';
 import type { Input } from '@riftwarden/game/core/Input';
@@ -243,6 +244,7 @@ export function TouchControls({ flow }: { flow: Flow }) {
   const arena = location === 'arena' && screen === 'playing' && !!flow.arena;
   const home = location === 'home' && screen === 'home' && !!flow.home;
   const shown = on && (arena || home);
+  useHurtHaptics(shown && arena && flow.settings.haptics);
   // Hidden with a thumb on the stick (a panel opened, the screen changed): centre the stick and forget the fingers.
   useEffect(() => {
     if (!shown) surface.reset();

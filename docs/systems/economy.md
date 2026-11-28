@@ -13,3 +13,7 @@
 - **Fabrication** (`economy/recipes.ts`): recipe (category, weapon family or module base) × quality grade (standard C-U, refined U-R +1 comp, superior R-E needs tier II, masterwork E-L needs tier III with luck 0.5 → ~10% legendary). Output = `generateItem` at `progressLevel`, source 'crafted', seed from `economy.crafts` counter. Exotics are never craftable; merchants cap at epic.
 - **HQ**: two new rooms from layout data (`market` east of storage, `reclaim` west of the drone bay; portals at x=±23/-21; sealed doors moved to the far walls), 4 new stations (`merchant`, `modules`, `salvage`, `fabricate`). Live displays: exchange wall bays mirror stock rarity/sold state, broker vault cores + exchange tanks, press hopper fill (log of salvage) and component cells. `uiEvents 'econ'` triggers `HomeBase.stationFx` (press stroke, fabricator glow, vault spin, calibration ring, sounds) and HUD resource deltas. Interior materials take 10 lights.
 - **Save v4**: `MIGRATIONS[3]` adds credits/components; sanitize generates the market/economy if missing and validates item engineering fields (`locked`, `enhance` capped by rarity, `rerolls`, `mods`, `affix.locked` with at least one affix unlocked).
+
+- **Reclamation quick-select** (`rules/loot/dismantlePick.ts`): next to ALL <rarity>, ALL DOWNGRADES selects the
+  stored, unlocked items whose build-aware verdict in the slot they would take is a downgrade, never the strongest
+  owned item of its kind (`isNewBest` against the rest). Tests: `tests/dismantle-pick.test.ts`.

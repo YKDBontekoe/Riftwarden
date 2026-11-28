@@ -66,7 +66,7 @@ export function UnlockBar({ save }: { save: SaveData }) {
     <div className="grid gap-[5px]" data-testid="rl-unlock">
       <div className="flex justify-between font-mono text-[11px] tracking-[0.08em] text-muted">
         <span>NEXT · RL {p.level}</span>
-        <span>{p.have}/{p.need} CHECKPOINTS ON RL {p.level - 1}</span>
+        <span>{p.have}/{p.need} CHECKPOINT{p.need === 1 ? '' : 'S'} ON RL {p.level - 1}</span>
       </div>
       <div className="h-[6px] bg-[rgb(255_255_255/0.08)] overflow-hidden" role="progressbar" aria-valuemin={0} aria-valuemax={p.need} aria-valuenow={p.have} aria-label={`Progress to Rift Level ${p.level}`}>
         <div className="h-full bg-cyan transition-[width] duration-500" style={{ width: `${Math.round(f * 100)}%` }} />

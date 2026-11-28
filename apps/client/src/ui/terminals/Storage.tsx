@@ -33,6 +33,7 @@ export function StoragePanel({ flow }: { flow: Flow }) {
     sfx.play(ok ? 'equip' : 'buildDeny');
   };
   const tx = useTx(flow, 'salvage');
+  const toggleLock = (e: InvEntry) => void tx.run('lock', 'setItemLock', [e.item.uid, !e.item.locked], () => (e.item.locked ? 'Unlocked' : 'Locked: protected from selling and dismantling'));
   return (
     <>
       <InventoryView
@@ -47,18 +48,21 @@ export function StoragePanel({ flow }: { flow: Flow }) {
           remove: {
             label: (e) => {
               const y = dismantleYield(e.item);
-              return `DISMANTLE · +${y.salvage} SALVAGE${y.components ? ` · +${y.components} COMP` : ''}`;
+              return `DISMANTLE · +${y.salvage.toLocaleString()} SALVAGE${y.components ? ` · +${y.components.toLocaleString()} COMP` : ''}`;
             },
             allowed: (e) => e.status === 'stored' && !e.item.locked,
-            run: (uid) => void tx.run('dismantle', 'dismantleItems', [[uid]], (r) => `Dismantled · +${r.salvage} salvage${r.components ? ` · +${r.components} components` : ''}`),
+            run: (uid) => void tx.run('dismantle', 'dismantleItems', [[uid]], (r) => `Dismantled · +${r.salvage.toLocaleString()} salvage${r.components ? ` · +${r.components.toLocaleString()} components` : ''}`),
             confirm: 'Dismantle permanently?',
           },
           extra: (e) =>
             e.status === 'stored' || e.status === 'equipped' ? (
-              <button className="ds-btn" onClick={() => void tx.run('lock', 'setItemLock', [e.item.uid, !e.item.locked], () => (e.item.locked ? 'Unlocked' : 'Locked: protected from selling and dismantling'))}>
-                {e.item.locked ? 'UNLOCK' : 'LOCK'}
+              <button className="ds-btn" title="L toggles the lock" onClick={() => toggleLock(e)}>
+                <span className="ds-k">L</span>{e.item.locked ? 'UNLOCK' : 'LOCK'}
               </button>
             ) : null,
+          toggleLock: (e) => {
+            if (e.status === 'stored' || e.status === 'equipped') toggleLock(e);
+          },
         }}
         header={
           <div className="storage-bar ds-row">

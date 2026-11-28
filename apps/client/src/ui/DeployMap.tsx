@@ -1,4 +1,5 @@
 import { type ReactNode, useCallback, useEffect, useState, useSyncExternalStore } from 'react';
+import { plural } from './format';
 import type { Flow } from '../core/Flow';
 import type { SaveData } from '@riftwarden/rules/progression/save';
 import { defaultEntry, findNode, liveNode, nodePlayable } from '@riftwarden/rules/war/world';
@@ -151,7 +152,7 @@ export function DeployMapPanel({ flow, save, entry, onEntry, aside }: { flow: Fl
           <div className="dm-records">
             <span>Most nodes <b>{rec?.bestNodes ?? 0}</b></span>
             <span>Capitals taken <b>{save.totals.actsCleared}</b></span>
-            {mode === 'survival' && <span data-testid="dm-survival-rec">Survival best <b>{rec?.survivalBestWave ?? 0} waves · {rec?.survivalBestNodes ?? 0} nodes</b></span>}
+            {mode === 'survival' && <span data-testid="dm-survival-rec">Survival best <b>{plural(rec?.survivalBestWave ?? 0, 'wave')} · {plural(rec?.survivalBestNodes ?? 0, 'node')}</b></span>}
           </div>
         </details>
         {paths.length > 0 && (

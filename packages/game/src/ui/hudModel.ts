@@ -39,6 +39,8 @@ export function hintFor(s: HintState, keys: Settings['keys'] = DEFAULT_SETTINGS.
 export interface LootTargetInput {
   item: { uid: string; name: string; rarity: string; level: number; category: string; uniqueId?: string; defId?: string; set?: SetId };
   droppedWave: number;
+  /** Landed pickups within reach (hold-to-collect hint). */
+  nearby?: number;
   /** Equipped items (set progress the pickup would bring: it replaces the item of its own slot). */
   worn?: readonly ({ uid: string; set?: SetId; category: string } | null | undefined)[];
   expiring: boolean;
@@ -55,6 +57,7 @@ export interface LootTargetInput {
 export function lootTargetInfo(i: LootTargetInput): LootTargetInfo {
   const cmp = i.item.category === 'module' ? null : i.equipped;
   return {
+    ...(i.nearby !== undefined ? { nearby: i.nearby } : {}),
     uid: i.item.uid,
     name: i.item.name,
     rarity: i.item.rarity,

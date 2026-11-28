@@ -215,3 +215,22 @@ html[data-touch] .hud-prep { top: 56px; zoom: 0.7; }
 .hud-threats .ht i { width: 0; height: 0; border-left: 9px solid transparent; border-right: 9px solid transparent; border-bottom: 14px solid #ff5a4a; filter: drop-shadow(0 0 6px rgba(255, 90, 74, 0.8)); }
 .hud-threats .ht b { font: 700 12px var(--ds-m); color: #ffd3cc; text-shadow: 0 1px 2px #000; }
 html[data-touch] .hud-hunt-rules { display: none; }
+
+/* Settings > Accessibility > Reduce flashing: warnings hold steady and full-screen flashes are hidden. */
+[data-flash='reduced'] :is(.combat-hud .bottom-left.low .hv-num, .label.warn, .heat-arc .fg.over, .radar-head .hot, .tactical.active .tac-label em, .boss-attack, .event-chip.incoming, .m5-chip.emp, .set-bind-table .sbt-key.listen kbd, .hud-prep.urgent .hp-time) { animation: none; }
+[data-flash='reduced'] :is(.kill-pulse, .damage-tint) { display: none; }
+
+/* Settings > Interface > HUD backing: dark glass behind the corner readouts over bright scenes. */
+[data-hud-backing='on'] .combat-hud :is(.hud-objective, .bottom-left, .bottom-right, .hud-prep) { background: rgba(6, 8, 10, 0.55); border-radius: 4px; padding: 8px 10px; backdrop-filter: blur(3px); }
+
+/* Prep countdown: the last five seconds turn ember and pulse. */
+.hud-prep.urgent .hp-time { color: var(--ds-ember); animation: blink 0.8s steps(2) infinite; }
+
+/* Loot prompt: hold-to-collect hint when more than one drop is within reach. */
+.loot-prompt .lp-sweep { display: block; margin-top: 3px; font: 600 10px var(--mono, monospace); letter-spacing: 0.14em; color: var(--ds-muted, #b8b4aa); }
+.loot-prompt .lp-sweep kbd { font-size: 10px; padding: 0 4px; min-width: 0; }
+
+/* Settings > Accessibility > Sound captions: bottom centre, above the HUD corners, never takes input. */
+.sound-captions { position: fixed; left: 50%; bottom: 120px; transform: translateX(-50%); z-index: 55; display: flex; flex-direction: column; align-items: center; gap: 4px; pointer-events: none; }
+.sound-captions .sc-line { padding: 3px 10px; background: rgba(6, 8, 10, 0.72); color: #f4f1e8; font: 600 14px var(--font, sans-serif); letter-spacing: 0.02em; border-radius: 3px; }
+.sound-captions .sc-line b { color: var(--ds-ember); }

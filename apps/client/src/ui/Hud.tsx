@@ -13,6 +13,7 @@ import { NodeChip } from './RunMap';
 import { useHud } from './useHud';
 import { useSyncExternalStore } from 'react';
 import { minimapStore } from './hud/minimap';
+import { useLowHullCue } from './hud/hullCue';
 export { Banner, Perf } from './hud/Panels';
 
 import { RangePanel } from './FiringRange';
@@ -21,6 +22,7 @@ export function Hud({ game }: { game: Game }) {
   const phase = useHud(s => s.phase);
   const build = useHud(s => s.buildMode);
   const radar = useSyncExternalStore(minimapStore.subscribe, minimapStore.get).on;
+  useLowHullCue();
   return (
     <div className={`hud combat-hud ${radar ? 'show-radar' : ''}${game.range ? ' in-range' : ''}`} data-phase={phase} data-build={build}>
       <Overlays />

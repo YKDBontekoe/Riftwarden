@@ -130,6 +130,10 @@ export class Player implements KitBody {
   /** Camera shake energy (0..1); shake amplitude is trauma squared. */
   trauma = 0;
   sensitivity = 1;
+  /** Settings: vertical look speed relative to horizontal. */
+  sensitivityY = 1;
+  /** Settings: sprint whenever moving forward (no held key). */
+  autoSprint = false;
   /** Settings: invert vertical look. */
   invertY = false;
   /** M7 accessibility: no FOV kicks, roll or camera shake. */
@@ -398,9 +402,10 @@ export class Player implements KitBody {
     if (controlsEnabled) {
       const k = 0.0022 * this.sensitivity;
       this.yaw += input.mouseDx * k;
-      this.pitch += input.mouseDy * k * (this.invertY ? -1 : 1);
+      const ky = k * this.sensitivityY;
+      this.pitch += input.mouseDy * ky * (this.invertY ? -1 : 1);
       this.lookDx = input.mouseDx * k;
-      this.lookDy = input.mouseDy * k;
+      this.lookDy = input.mouseDy * ky;
       this.pitch = Math.max(-1.52, Math.min(1.52, this.pitch));
     } else {
       this.lookDx = 0;
@@ -512,7 +517,7 @@ export class Player implements KitBody {
       this.fovKick = move.dashFov;
       sfx.play('dash');
     }
-    this.sprinting = active && (shiftHeld || input.stickSprint === true) && fz > 0 && this.dashT <= 0;
+    this.sprinting = active && (shiftHeld || this.autoSprint || input.stickSprint === true) && fz > 0 && this.dashT <= 0;
     const dashDt = Math.min(dt, this.dashT);
     if (kit?.velocity(dt, wx, wz, moveSpeedMult)) {
       // Slide / wall-run / grapple / pound own the velocity this frame.

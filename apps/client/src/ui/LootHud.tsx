@@ -60,14 +60,29 @@ export function LootPrompt() {
           )}
           {t.expiring && <i className="bad"> · EXPIRES AFTER THIS WAVE</i>}
         </span>
+        {(t.nearby ?? 0) > 1 && !t.cargoFull && <span className="lp-sweep" data-testid="lp-sweep">HOLD <BoundKey action="use" /> · COLLECT ALL {t.nearby} IN REACH</span>}
       </div>
     </div>
   );
 }
 
+export type FeedRow = LootEvent & { id: number; times: number };
+
+/**
+ * Add a loot event to the feed (pure): a repeat of the newest row (same kind and item) bumps its ×N count and keeps
+ * its place instead of stacking duplicates (pressing use on a full hold, a burst of identical drops). Max 5 rows.
+ */
+export function pushFeed(list: readonly FeedRow[], e: LootEvent, id: number): { list: FeedRow[]; merged: number | null } {
+  const last = list[list.length - 1];
+  if (last && last.kind === e.kind && last.name === e.name && last.level === e.level) {
+    return { list: [...list.slice(0, -1), { ...last, id, times: last.times + 1 }], merged: last.id };
+  }
+  return { list: [...list.slice(-4), { ...e, id, times: 1 }], merged: null };
+}
+
 /** Concise loot notifications (drops, pickups, full hold, expiry). */
 export function LootFeed() {
-  const [items, setItems] = useState<(LootEvent & { id: number })[]>([]);
+  const [items, setItems] = useState<FeedRow[]>([]);
   useEffect(() => {
     let id = 0;
     const timers = new Set<ReturnType<typeof setTimeout>>();
@@ -75,7 +90,8 @@ export function LootFeed() {
       // Common drops landing are visible in the world; only announce rare+ drops.
       if (e.kind === 'drop' && rarity(e.rarity).index < 2) return;
       const my = ++id;
-      setItems((l) => [...l.slice(-4), { ...e, id: my }]);
+      // A merged repeat takes a fresh id, so the old row's timer no longer removes it (its time restarts).
+      setItems((l) => pushFeed(l, e, my).list);
       const t = setTimeout(() => {
         timers.delete(t);
         setItems((l) => l.filter((x) => x.id !== my));
@@ -95,7 +111,7 @@ export function LootFeed() {
         return (
           <div key={e.id} className={`lf-item ${e.kind} r-${r.id}`} style={{ ['--rc' as string]: r.color }}>
             <span className="lf-tag"><FieldIcon name={e.kind === 'pickup' ? 'pickup' : itemIcon(e.category)} /> {tag}</span>
-            <b>{e.name}</b>
+            <b>{e.name}{e.times > 1 && <span className="lf-times"> ×{e.times}</span>}</b>
             {e.level > 0 && (
               <em>
                 LV {fmtNum(e.level)} · {cat(e.category)}
@@ -132,7 +148,7 @@ export function LootLabels({ game }: { game: Game }) {
       const viewportHeight = h.clientHeight;
       const prompt = target ? h.parentElement?.querySelector('.loot-prompt')?.getBoundingClientRect() : null;
       const near = game.loot.pickups
-        .filter((p) => p !== target && game.loot.landed(p))
+        .filter((p) => p !== target && game.loot.landed(p) && game.verdicts.passes(p.item, p.droppedWave, game.settings.lootFilter))
         .map((p) => ({ p, r: rarity(p.item.rarity), d: Math.hypot(p.focus.x - eye.x, p.focus.z - eye.z) }))
         .filter(({ d, r }) => d < 7 + r.index * 3.5)
         .sort((a, b) => a.d - b.d || b.r.index - a.r.index);
@@ -262,7 +278,7 @@ export function ArenaInventory({ game }: { game: Game }) {
       <ScoreCtx.Provider value={scoreCtx}>
         <section className="cargo-left inv-list">
           <span className="ds-row"><span className="ds-h3 ds-grow">FOUND THIS RUN</span><RiskTag>At risk until wave {checkpoint} · {found.length} / {inv.cargoCapacity}</RiskTag></span>
-          <div className="cargo-grid">{found.length ? found.map(tile) : <span className="ds-meta">Nothing found yet. Machines drop loot; walk over it and press E.</span>}</div>
+          <div className="cargo-grid">{found.length ? found.map(tile) : <span className="ds-meta">Nothing found yet. Machines drop loot; walk over it and press {keyLabel(game.settings.keys.use)}.</span>}</div>
           <span className="ds-h3">WORN · SAFE (CARRIED IN)</span>
           <div className="cargo-grid worn">{worn.map(tile)}</div>
           {kept.length > 0 && (

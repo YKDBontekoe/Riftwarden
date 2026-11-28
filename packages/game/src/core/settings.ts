@@ -1,11 +1,20 @@
 /** Versioned, validated settings persisted in localStorage. */
+import { LOOT_FILTERS, type LootFilter } from '@riftwarden/rules/loot/filter';
 export type Quality = 'high' | 'medium' | 'low';
 export type Level3 = 'low' | 'medium' | 'high';
 export const ADAPTIVE_TARGETS = [0, 60, 120, 144] as const;
+export const RETICLE_COLORS = ['white', 'green', 'yellow', 'cyan', 'magenta'] as const;
+export type ReticleColor = (typeof RETICLE_COLORS)[number];
+/** CSS colour per reticle option (high-contrast picks that stay readable on the game's palettes). */
+export const RETICLE_HEX: Record<ReticleColor, string> = { white: '#ffffff', green: '#7dff6a', yellow: '#ffe14a', cyan: '#4ff2ff', magenta: '#ff5cf4' };
 export type AdaptiveTarget = (typeof ADAPTIVE_TARGETS)[number];
 
 export interface Settings {
   sensitivity: number;
+  /** Vertical look speed relative to horizontal (0.5..2), for players who want slower pitch than yaw. */
+  sensitivityY: number;
+  /** Run at sprint speed whenever moving forward, without holding the dash key (accessibility: no held key). */
+  autoSprint: boolean;
   /** Invert vertical look (mouse and touch). */
   invertY: boolean;
   fov: number; // horizontal-ish degrees shown to the user (applied as vertical fov)
@@ -20,10 +29,27 @@ export interface Settings {
   combatCueVolume: number;
   /** Adaptive score (CC0 loops + procedural layers), relative to master. */
   musicVolume: number;
+  /** Mute everything without losing the mix. */
+  muted: boolean;
+  /** Fade the audio out while the window is hidden or unfocused. */
+  muteInBackground: boolean;
+  /** Which drops get world labels and are swept by hold-to-collect (rules/loot/filter.ts). */
+  lootFilter: LootFilter;
+  /** Small always-on frame-rate readout (F3 still opens the full stats). */
+  showFps: boolean;
   /** M7: interface scale (0.8..1.3). */
   uiScale: number;
   reticle: 'dynamic' | 'fixed' | 'dot';
   reticleSize: number;
+  /** Reticle colour (visibility on bright or busy scenes) and opacity (0.4..1). */
+  reticleColor: ReticleColor;
+  reticleOpacity: number;
+  /** Short on-screen captions for important sounds (accessibility; shown even when muted). */
+  captions: boolean;
+  /** Photosensitivity: warnings hold steady instead of blinking, and full-screen hit and kill flashes are hidden. */
+  reduceFlashing: boolean;
+  /** Dark glass behind the HUD corners for readability over bright scenes. */
+  hudBacking: boolean;
   aimFeedback: boolean;
   damageNumbers: 'all' | 'personal' | 'off';
   wheelSwap: boolean;
@@ -49,10 +75,14 @@ export interface Settings {
   renderer: 'webgl' | 'webgpu';
   /** M7: key bindings (action -> KeyboardEvent.code). */
   keys: Record<string, string>;
+  /** Alternate key per action (optional; never a key already used by a primary or another alternate). */
+  keys2: Record<string, string>;
   /** Touch controls: auto (touch screens), always on, or off. */
   touchControls: 'auto' | 'on' | 'off';
   /** Touch look speed (0.3..3), on top of the mouse sensitivity. */
   touchLook: number;
+  /** Touch: vibrate on taking a hit (where the device supports it). */
+  haptics: boolean;
   /** Opacity of the touch buttons (0.2..1). */
   touchOpacity: number;
 }
@@ -93,6 +123,8 @@ export const PRESETS: Record<Quality, Pick<Settings, 'particles' | 'shadows' | '
 
 export const DEFAULT_SETTINGS: Settings = {
   sensitivity: 1,
+  sensitivityY: 1,
+  autoSprint: false,
   invertY: false,
   fov: 90,
   quality: 'high',
@@ -102,9 +134,18 @@ export const DEFAULT_SETTINGS: Settings = {
   uiVolume: 0.8,
   combatCueVolume: 1,
   musicVolume: 0.6,
+  muted: false,
+  muteInBackground: true,
+  showFps: false,
+  lootFilter: 'all',
   uiScale: 1,
   reticle: 'dynamic',
   reticleSize: 1,
+  reticleColor: 'white',
+  reticleOpacity: 0.95,
+  reduceFlashing: false,
+  captions: false,
+  hudBacking: false,
   aimFeedback: true,
   damageNumbers: 'all',
   wheelSwap: true,
@@ -115,9 +156,11 @@ export const DEFAULT_SETTINGS: Settings = {
   adaptiveTarget: 60,
   renderer: 'webgl',
   keys: Object.fromEntries(ACTIONS.map((a) => [a.id, a.def])),
+  keys2: {},
   touchControls: 'auto',
   touchLook: 1,
   touchOpacity: 0.6,
+  haptics: true,
 };
 
 /** First start on a phone or tablet: the performance preset (no SSR/SSAO/shadows/MSAA) at a lower render scale. */
@@ -154,9 +197,20 @@ export function sanitizeSettings(raw: unknown, version = VERSION): Settings {
   }
   const available = ACTIONS.map(({ def }) => def).filter((key) => !used.has(key));
   for (const { id } of ACTIONS) if (!keys[id]) keys[id] = available.shift()!;
+  for (const id of Object.values(keys)) used.add(id);
+  const keys2: Record<string, string> = {};
+  const rk2 = (r.keys2 && typeof r.keys2 === 'object' ? r.keys2 : {}) as Record<string, unknown>;
+  for (const { id } of ACTIONS) {
+    const key = rk2[id];
+    if (typeof key !== 'string' || !/^[A-Za-z0-9]{2,20}$/.test(key) || used.has(key) || isReservedKey(key)) continue;
+    keys2[id] = key;
+    used.add(key);
+  }
   return {
     sensitivity: clampNum(r.sensitivity, 0.2, 3, DEFAULT_SETTINGS.sensitivity),
+    sensitivityY: clampNum(r.sensitivityY, 0.5, 2, DEFAULT_SETTINGS.sensitivityY),
     invertY: r.invertY === true,
+    autoSprint: r.autoSprint === true,
     fov: clampNum(r.fov, 70, 110, DEFAULT_SETTINGS.fov),
     quality,
     volume: clampNum(r.volume, 0, 1, DEFAULT_SETTINGS.volume),
@@ -165,9 +219,18 @@ export function sanitizeSettings(raw: unknown, version = VERSION): Settings {
     uiVolume: clampNum(r.uiVolume, 0, 1, 0.8),
     combatCueVolume: clampNum(r.combatCueVolume, 0, 1, DEFAULT_SETTINGS.combatCueVolume),
     musicVolume: clampNum(r.musicVolume, 0, 1, DEFAULT_SETTINGS.musicVolume),
+    muted: r.muted === true,
+    muteInBackground: r.muteInBackground !== false,
+    showFps: r.showFps === true,
+    lootFilter: pick(r.lootFilter, LOOT_FILTERS, 'all'),
     uiScale: clampNum(r.uiScale, 0.8, 1.3, 1),
     reticle: pick(r.reticle, ['dynamic', 'fixed', 'dot'] as const, DEFAULT_SETTINGS.reticle),
     reticleSize: clampNum(r.reticleSize, 0.75, 1.5, DEFAULT_SETTINGS.reticleSize),
+    reticleColor: pick(r.reticleColor, RETICLE_COLORS, DEFAULT_SETTINGS.reticleColor),
+    reticleOpacity: clampNum(r.reticleOpacity, 0.4, 1, DEFAULT_SETTINGS.reticleOpacity),
+    reduceFlashing: r.reduceFlashing === true,
+    captions: r.captions === true,
+    hudBacking: r.hudBacking === true,
     aimFeedback: r.aimFeedback !== false,
     damageNumbers: pick(r.damageNumbers, ['all', 'personal', 'off'] as const, DEFAULT_SETTINGS.damageNumbers),
     wheelSwap: r.wheelSwap !== false,
@@ -181,10 +244,17 @@ export function sanitizeSettings(raw: unknown, version = VERSION): Settings {
     adaptiveTarget: ADAPTIVE_TARGETS.includes(r.adaptiveTarget as AdaptiveTarget) ? (r.adaptiveTarget as AdaptiveTarget) : 60,
     renderer: pick(r.renderer, ['webgl', 'webgpu'] as const, 'webgl'),
     keys,
+    keys2,
     touchControls: pick(r.touchControls, ['auto', 'on', 'off'] as const, 'auto'),
     touchLook: clampNum(r.touchLook, 0.3, 3, 1),
     touchOpacity: clampNum(r.touchOpacity, 0.2, 1, 0.6),
+    haptics: r.haptics !== false,
   };
+}
+
+/** First-start defaults that follow the OS accessibility preferences (reduced motion, more contrast). Pure. */
+export function withOsPreferences(base: Settings, os: { reducedMotion: boolean; moreContrast: boolean }): Settings {
+  return { ...base, ...(os.reducedMotion ? { reduceMotion: true, shake: 0 } : {}), ...(os.moreContrast ? { hudBacking: true } : {}) };
 }
 
 /** Stored settings, or `fallback` (default: DEFAULT_SETTINGS) when nothing was saved yet. */
@@ -210,19 +280,87 @@ export function saveSettings(s: Settings): void {
 /** Physical key -> the default code the game logic listens for (key rebinding). */
 export function keyRemap(s: Settings): Map<string, string> {
   const m = new Map<string, string>();
-  const bound = new Set(ACTIONS.map((a) => s.keys[a.id] ?? a.def));
+  const alts = s.keys2 ?? {};
+  const bound = new Set([...ACTIONS.map((a) => s.keys[a.id] ?? a.def), ...Object.values(alts)]);
   for (const a of ACTIONS) {
     const k = s.keys[a.id] ?? a.def;
     if (k !== a.def) m.set(k, a.def);
   }
   // A default key nobody is bound to any more does nothing.
   for (const a of ACTIONS) if (!bound.has(a.def) && !m.has(a.def)) m.set(a.def, '__unbound');
+  // An alternate presses the action's default code too (sanitize keeps alternates off every primary key).
+  for (const a of ACTIONS) if (alts[a.id]) m.set(alts[a.id], a.def);
   return m;
 }
 
+/** Readable names for codes that do not shorten to a single character (KeyW -> W, Digit1 -> 1 are handled below). */
+const KEY_NAMES: Record<string, string> = {
+  ShiftLeft: 'L-SHIFT', ShiftRight: 'R-SHIFT', ControlLeft: 'L-CTRL', ControlRight: 'R-CTRL', AltLeft: 'L-ALT', AltRight: 'R-ALT',
+  MetaLeft: 'L-CMD', MetaRight: 'R-CMD', Space: 'SPACE', Enter: 'ENTER', Tab: 'TAB', Backspace: 'BKSP', CapsLock: 'CAPS',
+  Escape: 'ESC', Delete: 'DEL', Insert: 'INS', Home: 'HOME', End: 'END', PageUp: 'PGUP', PageDown: 'PGDN',
+  ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', Backquote: '`', Minus: '-', Equal: '=', BracketLeft: '[',
+  BracketRight: ']', Backslash: '\\', Semicolon: ';', Quote: "'", Comma: ',', Period: '.', Slash: '/', IntlBackslash: '\\',
+  NumpadEnter: 'NUM ENTER', NumpadAdd: 'NUM +', NumpadSubtract: 'NUM -', NumpadMultiply: 'NUM *', NumpadDivide: 'NUM /',
+  NumpadDecimal: 'NUM .', ContextMenu: 'MENU',
+};
+
 export function keyLabel(code: string | undefined): string {
   if (!code) return '—';
-  return code.replace(/^Key/, '').replace(/^Digit/, '').replace('ShiftLeft', 'L-SHIFT').replace('ShiftRight', 'R-SHIFT').replace('ControlLeft', 'L-CTRL').replace('Space', 'SPACE').toUpperCase();
+  if (KEY_NAMES[code]) return KEY_NAMES[code];
+  const m = /^(?:Key|Digit)([A-Z0-9])$/.exec(code);
+  if (m) return m[1];
+  const num = /^Numpad([0-9])$/.exec(code);
+  if (num) return `NUM ${num[1]}`;
+  return code.toUpperCase();
+}
+
+/**
+ * Keys the game handles itself regardless of bindings: binding an action to one would make it fire twice or never
+ * (Escape pauses, Tab opens cargo, F3/F4/F10 are the stats, dev and tutorial keys).
+ */
+export const RESERVED_KEYS: readonly string[] = ['Escape', 'Tab', 'F3', 'F4', 'F10', 'F11', 'F12'];
+
+export function isReservedKey(code: string): boolean {
+  return RESERVED_KEYS.includes(code);
+}
+
+/** Keys with a fixed use in the arena (tower part cycling, run build, upgrade offer): bindable, but binding one hides it. */
+export const FIXED_KEYS: Readonly<Record<string, string>> = { KeyC: 'tower weapon', KeyV: 'tower core', KeyN: 'tower modifier', KeyM: 'tower base', KeyU: 'run build overview', KeyY: 'accept upgrade offer' };
+
+/** A heads-up when a key also has a fixed use (pure), or null. */
+export function fixedKeyNote(code: string): string | null {
+  // Bound keys are remapped before the game reads them, so the fixed shortcut stops working (it is not doubled).
+  return FIXED_KEYS[code] ? `${keyLabel(code)} is also the ${FIXED_KEYS[code]} shortcut in the arena; that shortcut stops working while it is bound here.` : null;
+}
+
+/**
+ * Bind `code` to an action's primary or alternate key (pure). A primary that another action uses swaps with it (no
+ * binding is lost) and takes the key away from any alternate. An alternate refuses another action's primary (say so
+ * instead of a silent swap) and moves off another alternate. Returns the new maps or a reason.
+ */
+export function rebind(keys: Settings['keys'], keys2: Settings['keys2'], id: string, alt: boolean, code: string): { keys: Settings['keys']; keys2: Settings['keys2'] } | { error: string } {
+  if (isReservedKey(code)) return { error: `${keyLabel(code)} is reserved by the game. Pick another key, or Esc to cancel.` };
+  const k = { ...keys };
+  const k2 = { ...keys2 };
+  const altOwner = Object.entries(k2).find(([, c]) => c === code)?.[0];
+  if (!alt) {
+    const clash = Object.entries(k).find(([, c]) => c === code)?.[0];
+    if (clash && clash !== id) k[clash] = k[id];
+    k[id] = code;
+    if (altOwner) delete k2[altOwner];
+    return { keys: k, keys2: k2 };
+  }
+  if (k[id] === code) return { error: `${keyLabel(code)} is already this action's main key.` };
+  const owner = Object.entries(k).find(([, c]) => c === code)?.[0];
+  if (owner) return { error: `${keyLabel(code)} is the main key for ${ACTIONS.find((a) => a.id === owner)?.label.replace(/ \(.*\)$/, '') ?? owner}.` };
+  if (altOwner) delete k2[altOwner];
+  k2[id] = code;
+  return { keys: k, keys2: k2 };
+}
+
+/** Actions whose binding differs from the default (the settings table marks them). */
+export function changedBindings(keys: Settings['keys']): Set<string> {
+  return new Set(ACTIONS.filter((a) => (keys[a.id] ?? a.def) !== a.def).map((a) => a.id));
 }
 
 /** Printed movement keys follow the same left-to-right order as the familiar WASD legend. */

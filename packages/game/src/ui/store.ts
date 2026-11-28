@@ -129,6 +129,8 @@ export interface SurvivalHud {
 
 /** The pickup currently targeted in the arena (interaction prompt). */
 export interface LootTargetInfo {
+  /** Landed pickups within reach (holding use collects them all). */
+  nearby?: number;
   uid: string;
   name: string;
   rarity: string;
@@ -168,7 +170,7 @@ export interface CoopHud {
 
 export interface HudState {
   bindings: Settings['keys'];
-  combatUi: Pick<Settings, 'reticle' | 'reticleSize' | 'aimFeedback' | 'damageNumbers' | 'reduceMotion'>;
+  combatUi: Pick<Settings, 'reticle' | 'reticleSize' | 'aimFeedback' | 'damageNumbers' | 'reduceMotion'> & { showFps?: boolean; captions?: boolean };
   /** M7 onboarding card. */
   tutorial?: (import('@riftwarden/rules/progression/tutorial').TutorialStep & { index: number; total: number }) | null;
   coop?: CoopHud | null;

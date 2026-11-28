@@ -2,13 +2,14 @@ import { unlockAllForTests } from './core/unlockWatch';
 import '@riftwarden/game/babylonSideEffects';
 import HavokPhysics from '@babylonjs/havok';
 import { startAccountSync } from './account/sync';
+import { startPrefsSync } from './core/prefsSync';
 import { refreshAccount } from './account/store';
 import havokWasmUrl from '@babylonjs/havok/lib/esm/HavokPhysics.wasm?url';
 import { createEngine } from './core/engine';
 import { createRoot } from 'react-dom/client';
 import { Flow } from './core/Flow';
 import { debugApi } from './core/debugApi';
-import { loadSettings, mobileDefaults } from '@riftwarden/game/core/settings';
+import { DEFAULT_SETTINGS, loadSettings, mobileDefaults, withOsPreferences } from '@riftwarden/game/core/settings';
 import { immersiveStats, initTouch, isTouchDevice } from './touch/touchMode';
 import { simulatePwa } from './pwa';
 import { createAppRouter, Root } from './ui/router';
@@ -22,8 +23,11 @@ export async function boot(): Promise<void> {
   root.render(<Root router={createAppRouter(() => flow)} />);
 
   const canvas = document.getElementById('game') as HTMLCanvasElement;
-  // First start on a phone or tablet: the performance preset (stored settings always win).
-  const settings = loadSettings(isTouchDevice() ? mobileDefaults() : undefined);
+  // First start on a phone or tablet: the performance preset; reduced motion / more contrast follow the OS. Stored
+  // settings always win.
+  const media = (q: string) => typeof matchMedia === 'function' && matchMedia(q).matches;
+  const firstStart = withOsPreferences(isTouchDevice() ? mobileDefaults() : structuredClone(DEFAULT_SETTINGS), { reducedMotion: media('(prefers-reduced-motion: reduce)'), moreContrast: media('(prefers-contrast: more)') });
+  const settings = loadSettings(firstStart);
   const { engine, backend } = await createEngine(canvas, settings.renderer);
   const [havok] = await Promise.all([
     HavokPhysics({ locateFile: () => havokWasmUrl }),
@@ -41,6 +45,8 @@ export async function boot(): Promise<void> {
   flow.devTools = params.has('dev') || params.has('test');
   // Accounts: sync the profile while signed in; restore the session at boot (automation opts in with &account).
   startAccountSync(flow);
+  // Settings ride along with the profile (automation opts in with &prefs: suites count journal entries).
+  if (!params.has('test') || params.has('prefs')) flow.prefsPush = startPrefsSync(flow);
   if (!params.has('test') || params.has('account')) void refreshAccount();
   if (params.has('classic')) flow.arenaMode = 'classic';
   if (params.has('endless')) flow.mapMode = false;

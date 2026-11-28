@@ -12,3 +12,85 @@
 - **Trading** (protocol v14, unlock `trading` at Warden 15 + account 7 days old, checked by the gateway): `rules/economy/trade.ts` [pure] (gate, `tradeLock`: Ascended, `ItemInstance.bound` = pinnacle drops (set by `generateItem` for drop source `pinnacle`), starter uids; `offerProblem`; `tradeEntries`; `applyTrade` validate-then-apply incl. storage room and uid collisions; 10% credit tax). The sim worker's `TradeDesk` (`apps/worker/src/sim/trade.ts`) runs the window between two lobby members (open / offer / lock / unlock / confirm / cancel, 3 min timeout, any offer change unlocks both, dry-run of both sides before committing) and sends `SimTrade`; `sync::apply_trade` locks both profiles in uuid order, replays one trusted `{trade}` entry per side on log device `trade:<id>` (a repeat applies nothing), commits both or neither, then notifies devices + the worker (`SimTradeResult`). `sync.replay` refuses `trade` entries that are not trusted, so devices can never send one. UI: TRADE button per teammate in the lobby -> `ui/Trade.tsx`. Tests: `tests/trade.test.ts` (6), protocol suite section T (9). Not done: listings/async market (trades are live, lobby-only), trade history, a dedicated HQ trading-post station.
 - **Mockup QA pass** (every artboard compared side by side with the canvas at 1280x720): terminals are frameless (title in the crumb, sub + offline chip in the top bar); the main action of a terminal is docked bottom right (`.term-primary`, `data-key` chip, `data-enter` = Shell's Enter clicks it; `ConfirmButton` keeps its confirm row docked); HUD: prep countdown centred (`PrepClock`), survival objective (`HuntObjective`: machines hunting you, nearest, threat arrows), boss bar at the top centre (phase · name · encounter, phase ticks, attack + interrupt progress from `BossHud.interrupt`) with the objective moved below it; HQ roam station list; settings with key table + alternates, DEL resets a tab, invert-Y (`settings.invertY`); cargo = tile grids + compare (`.cargo-ds`); hub stations (anomaly/forge/vault) as cards; run map = sector header (badges, threat/clear time/liberation) + side drawer (R) + X extract; squad lobby full screen (`.lobby-screen`); construction top bar = crumb + resources + light/module counts; storage opens the drone bay on its Storage tab. **Deploy terminal, map runs** (`DeployMapPanel`, `dw-*`): planet (`GlobeView`: a lit procedural planet, 768x384 albedo + emissive canvases painted per war update: fbm rock, biome tint, territory wash + border by status, city lights / front fires, foundry lava, rift scar, polar caps; diamond pins + HTML labels projected per frame (`Globe labels`); texel directions follow Babylon's sphere UVs) + region tabs or sector map (M / `dw-view-sector`) on the left; region panel right: kicker, name, liberation, `LiveEvents` (distress / convoy / defense with timers + next corruption step; a row selects its sector), war order, mode, Rift Level picker + loot + pinnacle (`aside` from `DeployTerminal`), sector card, war report/records/codex in details; the classic deploy grid stays for non-map runs. QA tooling lives outside the repo (render mocks, capture, side-by-side pairs).
 - Restyled by tokens only (no new layout): seasons, lattice internals, touch overlay.
+
+## Settings and convenience features
+
+- **Settings fields** (`core/settings.ts`, optional + sanitized, no version bump): `sensitivityY` (vertical look speed
+  0.5..2× of horizontal, applied in `Player` to mouse and touch look), `muted`, `muteInBackground` (default on),
+  `showFps`, `autoSprint` (sprint whenever moving forward; the dash key still dashes). Old saves load with the
+  defaults.
+- **Settings sync** (`core/prefsSync.ts`, rules `progression/prefs.ts`): every settings change is recorded 1.5 s
+  later as a `setPrefs` op (skipped when nothing changed), so it syncs with the profile and replays on the server;
+  `save.prefs` (optional, sanitized, no version bump) holds a bounded copy stamped with the entry time. A newer copy
+  (another device, a first sign-in) is merged over the local settings and sanitized again; device options
+  (`DEVICE_FIELDS`: renderer, quality preset, shadows, particles, bloom, render scale, adaptive target, touch mode)
+  stay local. The radar toggle, inventory sort and comparison priority travel in `prefs.ui`. A profile without prefs
+  takes this device's. Off under `?test` unless `&prefs` (suites count journal entries). Tests:
+  `tests/prefs-sync.test.ts`.
+- **Settings page**: a slider with a default restores it on double-click (value turns ember while changed); the page
+  reopens on the last tab (`riftwarden.settingsTab`, this device); Reset all settings in the footer is two clicks (arms
+  for 4 s) and resets to the desktop or mobile defaults; DEL per tab now also resets adaptive quality, mute, vertical
+  look and the FPS readout. Key table: changed bindings carry an ember dot (tooltip names the default), reserved keys
+  (`RESERVED_KEYS`: Esc, Tab, F3, F4, F10, F11, F12) are refused with a note, a click elsewhere cancels listening.
+  Alternate keys (`settings.keys2`, `rebind`): clicking the Alternate cell binds a second key per action (Backspace
+  clears it; built-in MMB / RMB / wheel show when none is set). A main key that clashes swaps with the other action
+  and takes the key from any alternate; an alternate refuses another action's main key with a note and moves off
+  another alternate; sanitize drops alternates that clash with main keys, each other or reserved keys. Binding a key
+  with a fixed arena use (`FIXED_KEYS`: C / V / N / M tower parts, U, Y) shows a note that the fixed shortcut stops
+  working (keys are remapped before the game reads them).
+  `keyLabel` names every key (R-CTRL, L-ALT, arrows as ↑←↓→, NUM 7, punctuation) instead of printing raw codes.
+- **Window** (`core/windowState.ts`): the tab title follows the run (`Paused · Wave 7 · RL 3 · Riftwarden`, checkpoint,
+  preparing, reactor lost; plain outside a run). Audio fades out while the tab is hidden or the window loses focus
+  (`Sfx.setBackground`) and Mute silences the master bus (`Sfx.setMuted`) without touching the mix. Only a real blur
+  counts as unfocused, so headless suites keep their audio state.
+- **FPS readout** (`ui/FpsReadout.tsx`): Settings > Interface > Frame rate shows a small top-left counter (2 Hz,
+  coloured by 55/30 fps); F3 is still the full overlay.
+- **Inventory** (`inventory/InventoryView.tsx`): the sort order persists (`riftwarden.invSort`); `/` focuses search,
+  Esc in the box clears it then leaves it, Enter/↓ hand the keys back to the list; PageUp/PageDown jump 8 rows,
+  Home/End go to the ends (`navIndex`); in storage, L locks or unlocks the selected item (`actions.toggleLock`). The
+  keys live in `useInventoryKeys`.
+- **Pause menu**: "If you leave now" shows the time deployed and kills. `fmtTime` prints h:mm:ss from an hour and 0:00
+  for bad input.
+- **Reticle and HUD readability**: reticle colour (`RETICLE_COLORS`, CSS `--reticle-color`) and opacity
+  (`--reticle-opacity`); HUD backing (`data-hud-backing`, glass behind the corner readouts); Reduce flashing
+  (`data-flash='reduced'`, Accessibility tab) stops the blinking warnings and hides the hit and kill full-screen
+  flashes (selector list in `combatHud.css`, extend it when adding a blinking warning). The prep countdown turns ember
+  and pulses in its last five seconds (`.hud-prep.urgent`).
+- **Choices that open mid-fight** (upgrade cards, checkpoint): number row or numpad (`pickIndex`); input in the first
+  400 ms after they appear is ignored (a click or a `1` weapon-draw already on its way), except under automation
+  (`forceCapture`).
+- **Wording**: `plural()` (`format.ts`) for counts ("1 kill", "2 bosses"); currencies and kill/damage counts use
+  thousands separators; cost chips say how much is left after a purchase or how far short you are (`spendNote`). An
+  armed confirm button disarms after 10 s. The loot feed merges a repeat of its newest row into one row with ×N
+  (`pushFeed`).
+- **Terminals** (`shell.tsx`): Q / R cycle any terminal's tab bar (hint in the footer; a bar marked
+  `data-tabkeys="own"` keeps its own handling: Command, Loadout); arrow keys move through a terminal's item grid
+  (`gridStep`: ←/→ one tile, ↑/↓ a row measured from the layout), except lists with their own keys
+  (`data-listkeys="own"`, the inventory view) and multi-select lists; Esc in a text box leaves the box before closing
+  the terminal.
+- **Remembered views** (`remembered.ts`, `useRemembered`): Command, Workshop and the merchants reopen on the tab used
+  last this session (memory only; a value that is no longer valid, such as a locked tab, falls back; off under
+  `?test`).
+- **Bound keys in text**: loading tips use `{action}` tokens (`fillKeys`), and the Loadout weapon note, cargo
+  hint and run-map station prompt show the player's own keys instead of fixed letters.
+- **Menus** (`menuKey`): ↑/↓ or W/S (no key repeat, so a held movement key does not scroll), Home/End; on the main
+  menu the digits run the numbered item.
+- **First start** (`withOsPreferences`, `boot.tsx`): the OS reduced-motion preference turns on Reduce motion with no
+  camera shake, and "more contrast" turns on the HUD backing; saved settings always win.
+- **Sound captions** (`hud/Captions.tsx`, Settings > Accessibility, off by default): `Sfx.onCaption` sees every
+  requested sound before the mute checks, so captions show even when muted; a curated list (`CAPTION_TEXT`: reactor
+  hit, alarm, boss roar, waves, overheat, ability / shield ready, damage, explosions, mortar, charge, slam, rare loot,
+  banking, tactical time) shows as `[text]` at the bottom centre with ◀ / ▶ from the stereo pan; a repeat within
+  1.5 s refreshes its line, at most four lines, each for 2.8 s. Tests: `tests/sound-captions.test.ts`.
+- **Low-hull tone** (`hud/hullCue.ts`): one alarm tone on entering the critical band (< 25%), re-armed above 40%.
+- **Co-op join box**: a pasted invite link becomes its room code (`codeFromPaste`); Enter joins.
+- **Deploy heads-up** (`storageWarning`, rules): within five bays of storage capacity the deploy terminal warns that
+  banked finds may fill it (over capacity stays the deploy blocker).
+- **Node modifiers**: HUD and run-map node chips show modifier and curse names with their effect as a tooltip; more
+  than two HUD modifiers collapse into a `+N` chip.
+- **HQ station list**: each station shows a screen-relative arrow (`bearingArrow`) beside its distance.
+- **Tests**: `tests/settings-options.test.ts`, `key-bindings.test.ts`, `window-state.test.ts`, `ui-format.test.ts`,
+  `inventory-nav.test.ts`, `loot-feed.test.ts`, `upgrade-pick.test.ts`,
+  `terminal-keys.test.ts`, `hq-bearing.test.ts`, `remembered.test.ts`, `loading-tips.test.ts`,
+  `menu-keys.test.ts`, `hull-cue.test.ts`, `coop-code.test.ts`, `haptics.test.ts`,
+  `storage-warning.test.ts`.

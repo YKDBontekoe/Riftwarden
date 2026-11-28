@@ -1,5 +1,6 @@
 // Front end (final UI design): main menu and pause menu. Menu rows on the left over the blurred world, an aside on
 // the right (live status, or the open sheet), currencies + breadcrumb on top, key hints + primary action at the bottom.
+import { fmtTime, plural } from './format';
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import type { Flow } from '../core/Flow';
 import { AccountPanel } from '../account/AccountPanel';
@@ -122,8 +123,23 @@ export function WardenMark({ size = 58 }: { size?: number }) {
   );
 }
 
+/**
+ * Menu keys (pure): ↑/↓ or W/S move with wrap-around, Home/End jump to the ends, and with `numbers` a digit runs
+ * that item (the main menu shows 01, 02, ...). Returns the new selection and whether to run it, or null.
+ */
+export function menuKey(code: string, sel: number, count: number, numbers = false): { sel: number; run: boolean } | null {
+  if (count <= 0) return null;
+  if (code === 'ArrowDown' || code === 'KeyS') return { sel: (sel + 1) % count, run: false };
+  if (code === 'ArrowUp' || code === 'KeyW') return { sel: (sel - 1 + count) % count, run: false };
+  if (code === 'Home') return { sel: 0, run: false };
+  if (code === 'End') return { sel: count - 1, run: false };
+  const d = numbers ? /^(?:Digit|Numpad)([1-9])$/.exec(code) : null;
+  if (d && Number(d[1]) <= count) return { sel: Number(d[1]) - 1, run: true };
+  return null;
+}
+
 /** Up/down + Enter over a list of actions (menus). Ignored while typing. */
-function useMenuKeys(count: number, run: (i: number) => void, enabled = true): [number, (i: number) => void] {
+function useMenuKeys(count: number, run: (i: number) => void, enabled = true, numbers = false): [number, (i: number) => void] {
   const [sel, setSel] = useState(0);
   const ref = useRef({ sel, count, run });
   ref.current = { sel, count, run };
@@ -133,13 +149,18 @@ function useMenuKeys(count: number, run: (i: number) => void, enabled = true): [
       const t = e.target;
       if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement) return;
       const { sel: s, count: n, run: go } = ref.current;
-      if (e.code === 'ArrowDown') { e.preventDefault(); setSel((s + 1) % n); }
-      else if (e.code === 'ArrowUp') { e.preventDefault(); setSel((s - 1 + n) % n); }
-      else if (e.code === 'Enter' && !(t instanceof HTMLButtonElement)) { e.preventDefault(); go(s); }
+      // Held movement keys (W/S still down from walking) and digits must not auto-repeat through the menu.
+      if (e.repeat && (e.code.startsWith('Digit') || e.code === 'KeyW' || e.code === 'KeyS')) return;
+      const k = menuKey(e.code, s, n, numbers);
+      if (k) {
+        e.preventDefault();
+        setSel(k.sel);
+        if (k.run) go(k.sel);
+      } else if (e.code === 'Enter' && !(t instanceof HTMLButtonElement)) { e.preventDefault(); go(s); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [enabled]);
+  }, [enabled, numbers]);
   return [sel, setSel];
 }
 
@@ -176,7 +197,7 @@ export function MainMenu({ flow }: { flow: Flow }) {
     ...sections.map((s) => ({ id: s, title: MENU_SECTIONS[s], badge: s === 'account' && account.status === 'signedIn' ? 'SIGNED IN' : undefined, go: () => setTab(tab === s ? null : s) })),
   ];
   const all = [{ id: 'deploy', title: 'Deploy', go: () => void flow.enterHq() }, ...items];
-  const [sel, setSel] = useMenuKeys(all.length, (i) => all[i].go(), tab !== 'settings' && tab !== 'account');
+  const [sel, setSel] = useMenuKeys(all.length, (i) => all[i].go(), tab !== 'settings' && tab !== 'account', true);
   const close = useRef(setTab);
   close.current = setTab;
   useEffect(() => {
@@ -252,6 +273,7 @@ export function MainMenu({ flow }: { flow: Flow }) {
       </footer>
       <div className="ds-abs ds-row" style={{ right: 48, bottom: 34, gap: 22 }}>
         <Hint keys="↑↓">Navigate</Hint>
+        <Hint keys={`1–${Math.min(9, all.length)}`}>Jump</Hint>
         <Hint keys="ENTER">Select</Hint>
       </div>
       <div className="ds-grain" />
@@ -380,6 +402,7 @@ export function PauseMenu({ flow }: { flow: Flow }) {
       ) : inArena && run ? (
         <aside className="ds-abs ds-glass ds-cut ds-col" style={{ right: 44, top: 110, width: 440, padding: '22px 24px', gap: 12 }}>
           <span className="ds-h2">IF YOU LEAVE NOW</span>
+          <span className="ds-meta" data-testid="pause-run-stats">Deployed {fmtTime(run.duration)} · {plural(run.kills, 'kill')}</span>
           <div className="ds-col">
             <div className="ds-list-row"><span className="ds-dot" style={{ background: 'var(--ds-up)' }} /><span className="ds-grow">{run.lastBankedWave > 0 ? `Banked at wave ${run.lastBankedWave}` : 'Gear you deployed with'}</span><b className="ds-up">kept</b></div>
             <div className="ds-list-row"><span className="ds-grow"><RiskTag>{at.toLocaleString()} salvage · {cargo} item{cargo === 1 ? '' : 's'}</RiskTag></span><b className="ds-bad">lost</b></div>

@@ -1,4 +1,5 @@
 import { isSetId, SET_CATEGORIES } from '../../loot/sets';
+import { sanitizePrefs } from '../prefs';
 import { rolloverSeason } from '../seasons';
 import { PINNACLE, sanitizeCodex } from '../spikes';
 import { sanitizeMastery } from '../mastery';
@@ -535,6 +536,8 @@ export function sanitizeSave(raw: unknown, now = Date.now(), nested = false): { 
   data.base.blueprints = [...new Set(arr(base.blueprints).filter((b): b is string => typeof b === 'string' && pieceDef(b)?.unlock.by === 'merchant'))];
   data.base.owned = {};
   for (const [k, v] of Object.entries(obj(base.owned))) if (pieceDef(k)?.owned) data.base.owned[k] = int(v, 0, 0, 99);
+  const prefs = sanitizePrefs(r.prefs);
+  if (prefs) data.prefs = prefs;
   const tut = obj(r.tutorial);
   data.tutorial = { done: [...new Set(arr(tut.done).filter((x): x is string => typeof x === 'string').map((x) => x.slice(0, 24)))].slice(0, 40), skipped: tut.skipped === true };
   const fac = arr(base.facilities).filter((f): f is string => typeof f === 'string');

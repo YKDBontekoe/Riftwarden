@@ -1,7 +1,9 @@
+import { BoundKey } from './hud/widgets';
 import { type ReactNode, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { plural } from './format';
 import type { Flow } from '../core/Flow';
 import type { Game } from '@riftwarden/game/core/Game';
-import { BLESSINGS, CURSES, isCombatKind, NODE_KINDS, type NodeKind } from '@riftwarden/rules/runmap/defs';
+import { BLESSINGS, CURSES, isCombatKind, NODE_KINDS, NODE_MODS, type NodeKind } from '@riftwarden/rules/runmap/defs';
 import type { MapNode, SegmentEffect } from '@riftwarden/rules/runmap/map';
 import { findNode, liveNode, nodePlayable } from '@riftwarden/rules/war/world';
 import { regionLayout } from '@riftwarden/rules/war/regions';
@@ -97,7 +99,7 @@ function SectorHeader({ node, view, war, lib }: { node: MapNode; view: RunMapVie
         <span className="ds-chip"><FieldIcon name={NODE_ICON[b.kind]} /> {b.actBoss ? 'CAPITAL' : `${NODE_KINDS[b.kind].name.toUpperCase()}`}</span>
       </div>
       <span className="ds-hero rm-name">{b.name.toUpperCase()}</span>
-      <span className="ds-meta">{b.waves ? `${b.waves[1] - b.waves[0] + 1} waves` : 'No waves · stations'} · {b.faction}{b.mods.length ? ` · ${b.mods.map((m) => m.name).join(' · ')}` : ''}{links ? ' · 1 link from you' : ''}</span>
+      <span className="ds-meta">{b.waves ? plural(b.waves[1] - b.waves[0] + 1, 'wave') : 'No waves · stations'} · {b.faction}{b.mods.length ? ` · ${b.mods.map((m) => m.name).join(' · ')}` : ''}{links ? ' · 1 link from you' : ''}</span>
       {b.waves && (
         <div className="rm-figs">
           <div className="ds-col"><span className="ds-lbl">Threat</span><span className="ds-num" style={{ color: intel.threat >= 4 ? '#ff8a7a' : intel.threat >= 3 ? '#ffd84d' : 'var(--ds-ink)' }}>{intel.threat}<small> / 5</small></span></div>
@@ -556,12 +558,16 @@ export function NodeChip() {
         <div>
           <b>ACT {n.act} · {n.name.toUpperCase()}</b>
           <span>{n.waves ? `Waves ${n.waves[0]}–${n.waves[1]}` : 'Hub visit'}{n.complete ? ' · secured' : ''}{n.guardians !== null ? ` · ${n.guardians} guardians` : ''}</span>
-          {(n.mods.length > 0 || n.curses.length > 0) && <em>{[...n.mods.map((m) => m.replace('_', ' ')), ...n.curses.map((c) => `☠ ${CURSES[c].name}`)].join(' · ')}</em>}
+          {(n.mods.length > 0 || n.curses.length > 0) && (
+            <em title={[...n.mods.map((m) => `${NODE_MODS[m as keyof typeof NODE_MODS]?.name ?? m}: ${NODE_MODS[m as keyof typeof NODE_MODS]?.text ?? ''}`), ...n.curses.map((c) => `${CURSES[c].name}: ${CURSES[c].text}`)].join('\n')}>
+              {[...n.mods.map((m) => NODE_MODS[m as keyof typeof NODE_MODS]?.name ?? m.replace(/_/g, ' ')), ...n.curses.map((c) => `☠ ${CURSES[c].name}`)].join(' · ')}
+            </em>
+          )}
         </div>
       </div>
       {n.prompt && (
         <div className="node-prompt" data-testid="node-prompt">
-          <kbd>E</kbd>
+          <BoundKey action="use" />
           <div><b>{n.prompt.title}</b><span>{n.prompt.used ? 'Used' : n.prompt.sub}</span></div>
         </div>
       )}

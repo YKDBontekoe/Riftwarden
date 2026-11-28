@@ -128,6 +128,8 @@ export interface LoadoutPreset {
 
 export interface SaveData {
   version: number;
+  /** Settings and UI choices synced with the profile (progression/prefs.ts); absent until first changed. */
+  prefs?: import('../prefs').SyncedPrefs;
   profile: { id: string; callsign: string; createdAt: number; lastSavedAt: number };
   /** Persistent resources (M4: credits = trade currency, components = advanced components). */
   /** shards: rift shards (Ascended crafting); absent in older saves = 0 (sanitize fills it, no version bump). */

@@ -815,7 +815,7 @@ export class Game {
 
   applySettings(s: Settings): void {
     this.settings = s;
-    Object.assign(this.player, { sensitivity: s.sensitivity, invertY: s.invertY });
+    Object.assign(this.player, { sensitivity: s.sensitivity, sensitivityY: s.sensitivityY, invertY: s.invertY, autoSprint: s.autoSprint });
     // User FOV is horizontal at 16:9; convert to the vertical FOV Babylon uses.
     const h = (s.fov * Math.PI) / 180;
     this.player.baseFov = 2 * Math.atan(Math.tan(h / 2) / (16 / 9));
@@ -1015,10 +1015,11 @@ export class Game {
     return true;
   }
 
-  protected updateLootTarget(controls: boolean): void {
+  protected updateLootTarget(controls: boolean, dt = 0): void {
     const free = this.player.alive && !this.construction.active;
     this.lootTarget = free ? this.pickups.target(this.player.eye, (o) => this.player.forward(o)) : null;
     if (controls && this.lootTarget && this.input.pressed('KeyE')) this.collectPickup(this.lootTarget);
+    this.pickups.sweep(dt, controls && free && this.input.isDown('KeyE'), this.player.eye, (p) => this.collectPickup(p), (p) => this.verdicts.passes(p.item, p.droppedWave, this.settings.lootFilter));
   }
 
   /** Arena inventory (I / Tab). Inspection is always allowed; changes only in preparation. */
@@ -1455,7 +1456,7 @@ export class Game {
 
     // ---- inspect / recycle, loot
     this.updateInspect(dt, controls);
-    this.updateLootTarget(controls);
+    this.updateLootTarget(controls, dt);
     this.loot.update(dt);
     this.node?.update(dt, hdt, controls, controls && !this.lootTarget && input.pressed('KeyE'));
 
@@ -2349,6 +2350,7 @@ export class Game {
       lootTarget = lootTargetInfo({
         item: lt.item,
         droppedWave: lt.droppedWave,
+        nearby: this.pickups.nearby(this.player.eye, (p) => this.verdicts.passes(p.item, p.droppedWave, this.settings.lootFilter)),
         expiring: lt.expiring,
         cargoFull: this.inventory.cargoFull,
         equipped: cur ? { name: cur.name, level: cur.level, rarity: cur.rarity } : null,

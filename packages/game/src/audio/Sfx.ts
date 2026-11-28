@@ -94,6 +94,13 @@ export class Sfx {
   private noise!: AudioBuffer;
   private lastPlay = new Map<SfxName, number>();
   private volume = 0.7;
+  private muted = false;
+  private background = false;
+
+  /** Master gain actually applied: the volume setting unless muted or faded out in the background. */
+  get outputLevel(): number {
+    return this.muted || this.background ? 0 : this.volume;
+  }
 
   init(): void {
     if (this.ctx) {
@@ -105,7 +112,7 @@ export class Sfx {
     const ctx = new Ctx();
     this.ctx = ctx;
     this.master = ctx.createGain();
-    this.master.gain.value = this.volume;
+    this.master.gain.value = this.outputLevel;
     this.filter = ctx.createBiquadFilter();
     this.filter.type = 'lowpass';
     this.filter.frequency.value = 20000;
@@ -188,7 +195,7 @@ export class Sfx {
 
   /** Rolling thunder; `delay` approximates the distance to the strike. */
   thunder(delay = 0.6): void {
-    if (!this.ctx || this.ctx.state !== 'running' || this.volume === 0 || this.mix.amb === 0) return;
+    if (!this.ctx || this.ctx.state !== 'running' || this.outputLevel === 0 || this.mix.amb === 0) return;
     const ctx = this.ctx;
     const t = ctx.currentTime + delay;
     const src = ctx.createBufferSource();
@@ -212,7 +219,24 @@ export class Sfx {
 
   setVolume(v: number): void {
     this.volume = v;
-    if (this.ctx) this.master.gain.setTargetAtTime(v, this.ctx.currentTime, 0.02);
+    this.applyLevel(0.02);
+  }
+
+  /** Settings > Audio > Mute: silences everything and keeps the mix for later. */
+  setMuted(m: boolean): void {
+    this.muted = m;
+    this.applyLevel(0.02);
+  }
+
+  /** Window hidden or unfocused (with Settings > Mute in background): a soft fade, not a cut. */
+  setBackground(b: boolean): void {
+    if (this.background === b) return;
+    this.background = b;
+    this.applyLevel(b ? 0.15 : 0.08);
+  }
+
+  private applyLevel(tau: number): void {
+    if (this.ctx) this.master.gain.setTargetAtTime(this.outputLevel, this.ctx.currentTime, tau);
   }
 
   /** M7: category mix (effects, interface, ambience). */
@@ -532,8 +556,12 @@ export class Sfx {
     if (Math.random() < 0.3) this.noiseBurst(0.03, 0.05 * v, 6200, 3000, out, 'highpass', 1, Math.random() * 0.05);
   }
 
+  /** Sound captions (accessibility): called for every requested sound, even muted, with its stereo pan. */
+  onCaption: ((name: SfxName, pan: number) => void) | null = null;
+
   play(name: SfxName, o: PlayOpts = {}): void {
-    if (this.suppress > 0 || !this.ctx || this.ctx.state !== 'running' || this.volume === 0) return;
+    if (this.onCaption && this.suppress <= 0) this.onCaption(name, o.pan ?? 0);
+    if (this.suppress > 0 || !this.ctx || this.ctx.state !== 'running' || this.outputLevel === 0) return;
     const ui = UI_SOUNDS.has(name);
     const cue = COMBAT_CUES.has(name);
     const v = o.volume ?? 1;
