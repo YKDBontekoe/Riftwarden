@@ -10,6 +10,7 @@ import { rarity, RARITIES } from '@riftwarden/rules/loot/rarity';
 import { CATEGORY_LABEL, type Category, type ItemInstance } from '@riftwarden/rules/loot/types';
 import { defaultSlot, SLOTS, slotsFor } from '@riftwarden/rules/progression/items';
 import { swapImpact } from '@riftwarden/rules/loot/loadoutScore';
+import { downgradePicks } from '@riftwarden/rules/loot/dismantlePick';
 import { ImpactHeadline, ComparisonPriorityPicker, useComparisonPriority, useScore, useScoreContext } from './compare';
 import { type SaveData } from '@riftwarden/rules/progression/save';
 import { FAMILIES, SOCKET_LABEL } from '@riftwarden/rules/weapons/build';
@@ -373,6 +374,21 @@ export function SalvageTerminal({ flow, close }: { flow: Flow; close: () => void
     });
   };
   const pickRarity = (rid: string) => setPicked(new Set([...valid, ...list.filter((e) => e.item.rarity === rid && !protectionReason(save, e.item.uid)).map((e) => e.item.uid)]));
+  // Build-aware: stored items that would lower the score in the slot they take (never the best of their kind).
+  const equipped = useEquipped(save);
+  const eqList = useMemo(() => SLOTS.map((s) => equipped[s.id]), [equipped]);
+  const base = useScore(eqList);
+  const ctx = useScoreContext();
+  const priority = useComparisonPriority();
+  const downgrades = useMemo(() => {
+    const cands = entries
+      .filter((e) => !e.equippedIn && e.item.category !== 'module' && !protectionReason(save, e.item.uid))
+      .map((e) => {
+        const s = defaultSlot(e.item.category, equipped);
+        return { item: e.item, verdict: s ? swapImpact(eqList, e.item, equipped[s], base, priority, SLOTS.findIndex((x) => x.id === s), ctx).verdict : null };
+      });
+    return downgradePicks(cands, save.items);
+  }, [entries, equipped, eqList, base, priority, ctx, save]);
   const cats = ['weapon', 'armor', 'shield', 'reactor', 'processor', 'accessory', 'ability', 'ultimate', 'module'] as Category[];
   return (
     <Shell code="RC-07" title="RECLAMATION PRESS" sub="Dismantle equipment into salvage and advanced components" close={close} wide accent="amber">
@@ -384,6 +400,9 @@ export function SalvageTerminal({ flow, close }: { flow: Flow; close: () => void
               ALL {r.label.toUpperCase()}
             </button>
           ))}
+          <button className="mini" data-testid="pick-downgrades" disabled={!downgrades.length} title="Stored items that would lower your build score in the slot they take; the best item of each kind is never picked" onClick={() => setPicked(new Set([...valid, ...downgrades]))}>
+            ALL DOWNGRADES · {downgrades.length}
+          </button>
           <button className="mini" onClick={() => setPicked(new Set())}>
             CLEAR
           </button>
@@ -415,7 +434,7 @@ export function SalvageTerminal({ flow, close }: { flow: Flow; close: () => void
           <div className="salv-preview">
             <div className="id-label">DISMANTLE PREVIEW · {preview.count} ITEM{preview.count === 1 ? '' : 'S'}</div>
             <div className="sp-yield">{preview.count ? <CostLine cost={{ salvage: preview.salvage, components: preview.components }} label="YIELD" /> : <span className="faint small">Select items on the left. Equipped and locked items are protected.</span>}</div>
-            {preview.modulesReturned > 0 && <div className="faint small">{preview.modulesReturned} installed module(s) return to storage intact.</div>}
+            {preview.modulesReturned > 0 && <div className="faint small">{preview.modulesReturned} installed module{preview.modulesReturned === 1 ? '' : 's'} return{preview.modulesReturned === 1 ? 's' : ''} to storage intact.</div>}
             <div className="sp-names">
               {valid.slice(0, 10).map((u) => {
                 const it = save.items.find((i) => i.uid === u)!;
