@@ -64,8 +64,13 @@
   camera shake, and "more contrast" turns on the HUD backing; saved settings always win.
 - **Low-hull tone** (`hud/hullCue.ts`): one alarm tone on entering the critical band (< 25%), re-armed above 40%.
 - **Co-op join box**: a pasted invite link becomes its room code (`codeFromPaste`); Enter joins.
+- **Deploy heads-up** (`storageWarning`, rules): within five bays of storage capacity the deploy terminal warns that
+  banked finds may fill it (over capacity stays the deploy blocker).
+- **Node modifiers**: HUD and run-map node chips show modifier and curse names with their effect as a tooltip; more
+  than two HUD modifiers collapse into a `+N` chip.
 - **HQ station list**: each station shows a screen-relative arrow (`bearingArrow`) beside its distance.
 - **Tests**: `tests/settings-options.test.ts`, `key-bindings.test.ts`, `window-state.test.ts`, `ui-format.test.ts`,
   `inventory-nav.test.ts`, `loot-feed.test.ts`, `upgrade-pick.test.ts`,
   `terminal-keys.test.ts`, `hq-bearing.test.ts`, `remembered.test.ts`, `loading-tips.test.ts`,
-  `menu-keys.test.ts`, `hull-cue.test.ts`, `coop-code.test.ts`, `haptics.test.ts`.
+  `menu-keys.test.ts`, `hull-cue.test.ts`, `coop-code.test.ts`, `haptics.test.ts`,
+  `storage-warning.test.ts`.

@@ -5,7 +5,7 @@ import type { Flow } from '../../core/Flow';
 import { rarity } from '@riftwarden/rules/loot/rarity';
 import { ARENA } from '@riftwarden/rules/world/layout';
 import { SLOTS } from '@riftwarden/rules/progression/items';
-import { deployBlocker, equippedItem, type SaveData } from '@riftwarden/rules/progression/save';
+import { deployBlocker, equippedItem, type SaveData, storageWarning } from '@riftwarden/rules/progression/save';
 import { CHECKPOINT_INTERVAL, getTier, type ThreatTier } from '@riftwarden/rules/progression/tiers';
 import { LevelLootCard, RiftLevelPicker, savePower, UnlockBar, WipeNotice } from '../RiftLevel';
 import { PinnacleCard } from '../Spikes';
@@ -24,6 +24,7 @@ export function DeployTerminal({ flow, close }: { flow: Flow; close: () => void 
   const selected = getTier(Math.min(save.threat.selected, save.threat.unlocked));
   const weapon = equippedItem(save, 'weapon');
   const blocker = deployBlocker(save);
+  const storageNote = blocker ? null : storageWarning(save);
   const gearCount = SLOTS.filter((s) => save.loadout[s.id]).length;
   const [entry, setEntry] = useState<string | null>(null);
   const deploy = () => {
@@ -76,6 +77,7 @@ export function DeployTerminal({ flow, close }: { flow: Flow; close: () => void 
               <PinnacleCard flow={flow} save={save} rl={selected.id} busy={busy} onDeploy={pinnacle} />
               <UnlockBar save={save} />
               {blocker && <div className="deploy-block">{blocker}</div>}
+              {storageNote && <div className="deploy-warn" data-testid="deploy-storage-warn">{storageNote}</div>}
             </div>
           } />
           {deployButton}
@@ -101,6 +103,7 @@ export function DeployTerminal({ flow, close }: { flow: Flow; close: () => void 
             <b style={weapon ? { color: rarity(weapon.rarity).color } : undefined}>{weapon?.name.toUpperCase() ?? 'NO WEAPON'}</b>
           </div>
           {blocker && <div className="deploy-block">{blocker}</div>}
+          {storageNote && <div className="deploy-warn" data-testid="deploy-storage-warn">{storageNote}</div>}
         </div>
         <div className="tier-col">
           <div className="col-label">SELECT RIFT LEVEL</div>

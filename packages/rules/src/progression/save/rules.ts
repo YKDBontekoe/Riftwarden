@@ -333,6 +333,17 @@ export function storageOverCapacity(data: SaveData): boolean {
   return data.storage.uids.length > data.storage.capacity;
 }
 
+/**
+ * Heads-up before a run (pure): storage this close to capacity can go over it when the run's finds are banked, which
+ * then blocks the next deployment until items are scrapped. Null when there is room or deployment is already blocked.
+ */
+export function storageWarning(data: { storage: { uids: readonly string[]; capacity: number } }, margin = 5): string | null {
+  const used = data.storage.uids.length;
+  const cap = data.storage.capacity;
+  if (used > cap || cap - used > margin) return null;
+  return `Storage ${used}/${cap}: banked finds may fill it. Scrap or sell spares first to keep deploying.`;
+}
+
 /** Deployment rules: a weapon equipped and storage within capacity. */
 export function deployBlocker(data: SaveData): string | null {
   if (!fitsSlot(equippedItem(data, 'weapon'), 'weapon')) return 'No primary weapon equipped';

@@ -76,7 +76,8 @@ function DefenseObjective() {
       {node && (
         <span className="ds-row obj-chips" style={{ gap: 6, flexWrap: 'wrap' }}>
           <span className="ds-chip">{node.name}</span>
-          {node.mods?.slice(0, 2).map((m) => <span key={m} className="ds-chip">{NODE_MODS[m]?.name ?? m}</span>)}
+          {node.mods?.slice(0, 2).map((m) => <span key={m} className="ds-chip" title={NODE_MODS[m]?.text}>{NODE_MODS[m]?.name ?? m}</span>)}
+          {(node.mods?.length ?? 0) > 2 && <span className="ds-chip" title={node.mods!.slice(2).map((m) => `${NODE_MODS[m]?.name ?? m}: ${NODE_MODS[m]?.text ?? ''}`).join('\n')}>+{node.mods!.length - 2}</span>}
         </span>
       )}
     </div>

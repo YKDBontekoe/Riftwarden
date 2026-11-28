@@ -3,7 +3,7 @@ import { type ReactNode, useCallback, useEffect, useMemo, useState, useSyncExter
 import { plural } from './format';
 import type { Flow } from '../core/Flow';
 import type { Game } from '@riftwarden/game/core/Game';
-import { BLESSINGS, CURSES, isCombatKind, NODE_KINDS, type NodeKind } from '@riftwarden/rules/runmap/defs';
+import { BLESSINGS, CURSES, isCombatKind, NODE_KINDS, NODE_MODS, type NodeKind } from '@riftwarden/rules/runmap/defs';
 import type { MapNode, SegmentEffect } from '@riftwarden/rules/runmap/map';
 import { findNode, liveNode, nodePlayable } from '@riftwarden/rules/war/world';
 import { regionLayout } from '@riftwarden/rules/war/regions';
@@ -558,7 +558,11 @@ export function NodeChip() {
         <div>
           <b>ACT {n.act} · {n.name.toUpperCase()}</b>
           <span>{n.waves ? `Waves ${n.waves[0]}–${n.waves[1]}` : 'Hub visit'}{n.complete ? ' · secured' : ''}{n.guardians !== null ? ` · ${n.guardians} guardians` : ''}</span>
-          {(n.mods.length > 0 || n.curses.length > 0) && <em>{[...n.mods.map((m) => m.replace('_', ' ')), ...n.curses.map((c) => `☠ ${CURSES[c].name}`)].join(' · ')}</em>}
+          {(n.mods.length > 0 || n.curses.length > 0) && (
+            <em title={[...n.mods.map((m) => `${NODE_MODS[m as keyof typeof NODE_MODS]?.name ?? m}: ${NODE_MODS[m as keyof typeof NODE_MODS]?.text ?? ''}`), ...n.curses.map((c) => `${CURSES[c].name}: ${CURSES[c].text}`)].join('\n')}>
+              {[...n.mods.map((m) => NODE_MODS[m as keyof typeof NODE_MODS]?.name ?? m.replace(/_/g, ' ')), ...n.curses.map((c) => `☠ ${CURSES[c].name}`)].join(' · ')}
+            </em>
+          )}
         </div>
       </div>
       {n.prompt && (
