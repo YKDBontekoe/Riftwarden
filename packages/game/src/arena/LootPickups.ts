@@ -92,9 +92,10 @@ export class LootPickups {
 
   /**
    * Hold use: once it has been held for SWEEP_HOLD s, collect every landed, unoccluded pickup within reach, best
-   * first, stopping at the first refusal (hold full). Returns how many were collected.
+   * first, stopping at the first refusal (hold full); drops the loot filter hides are left. Returns how many were
+   * collected.
    */
-  sweep(dt: number, held: boolean, eye: Vector3, collect: (p: Pickup) => boolean): number {
+  sweep(dt: number, held: boolean, eye: Vector3, collect: (p: Pickup) => boolean, wants: (p: Pickup) => boolean = () => true): number {
     if (!held) {
       this.holdT = 0;
       return 0;
@@ -103,7 +104,7 @@ export class LootPickups {
     this.holdT += dt;
     if (before >= SWEEP_HOLD || this.holdT < SWEEP_HOLD) return 0;
     const loot = this.h.loot;
-    const near = loot.pickups.filter((p) => loot.landed(p) && !this.h.blocked(eye, p.focus));
+    const near = loot.pickups.filter((p) => loot.landed(p) && wants(p) && !this.h.blocked(eye, p.focus));
     const byId = new Map(near.map((p) => [p.id, p]));
     const order = sweepOrder(near.map((p) => ({ id: p.id, x: p.focus.x, z: p.focus.z, rarityIndex: rarity(p.item.rarity).index, level: p.item.level })), eye.x, eye.z, PICKUP_RANGE);
     let n = 0;
@@ -115,11 +116,11 @@ export class LootPickups {
   }
 
   /** Pickups within reach right now (the prompt offers the sweep when there is more than one). */
-  nearby(eye: Vector3): number {
+  nearby(eye: Vector3, wants: (p: Pickup) => boolean = () => true): number {
     const loot = this.h.loot;
     const r2 = PICKUP_RANGE * PICKUP_RANGE;
     let n = 0;
-    for (const p of loot.pickups) if (loot.landed(p) && (p.focus.x - eye.x) ** 2 + (p.focus.z - eye.z) ** 2 <= r2) n++;
+    for (const p of loot.pickups) if (loot.landed(p) && (p.focus.x - eye.x) ** 2 + (p.focus.z - eye.z) ** 2 <= r2 && wants(p)) n++;
     return n;
   }
 

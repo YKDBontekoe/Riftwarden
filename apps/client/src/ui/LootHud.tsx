@@ -148,7 +148,7 @@ export function LootLabels({ game }: { game: Game }) {
       const viewportHeight = h.clientHeight;
       const prompt = target ? h.parentElement?.querySelector('.loot-prompt')?.getBoundingClientRect() : null;
       const near = game.loot.pickups
-        .filter((p) => p !== target && game.loot.landed(p))
+        .filter((p) => p !== target && game.loot.landed(p) && game.verdicts.passes(p.item, p.droppedWave, game.settings.lootFilter))
         .map((p) => ({ p, r: rarity(p.item.rarity), d: Math.hypot(p.focus.x - eye.x, p.focus.z - eye.z) }))
         .filter(({ d, r }) => d < 7 + r.index * 3.5)
         .sort((a, b) => a.d - b.d || b.r.index - a.r.index);

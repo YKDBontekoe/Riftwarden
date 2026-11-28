@@ -266,6 +266,7 @@ export function SettingsPanel({ flow, compact, page, onTab }: { flow: Flow; comp
               <Seg label="HUD backing" help="Dark glass behind the corner readouts for bright scenes" value={s.hudBacking ? 'on' : 'off'} options={[['off', 'Off'], ['on', 'On']]} onChange={(v) => update({ hudBacking: v === 'on' })} />
               <Seg label="Target indication" help="Mark targets, shields and weakpoints under the reticle" value={s.aimFeedback ? 'on' : 'off'} options={[['off', 'Off'], ['on', 'On']]} onChange={(v) => update({ aimFeedback: v === 'on' })} />
               <Seg label="Damage numbers" value={s.damageNumbers} options={[['all', 'All'], ['personal', 'My hits'], ['off', 'Off']]} onChange={(v) => update({ damageNumbers: v })} />
+              <Seg label="Loot filter" help="Which drops get world labels and are swept up when you hold use. Upgrades, new bests, uniques and legendary+ always show" value={s.lootFilter} options={[['all', 'All'], ['uncommon', 'Uncommon+'], ['rare', 'Rare+'], ['epic', 'Epic+'], ['upgrades', 'Upgrades']]} onChange={(v) => update({ lootFilter: v })} />
               <Seg label="Frame rate" help="A small FPS readout in the corner (F3 shows the full stats)" value={s.showFps ? 'on' : 'off'} options={[['off', 'Hidden'], ['on', 'Shown']]} onChange={(v) => update({ showFps: v === 'on' })} />
               <MinimapToggle />
               <TutorialToggle flow={flow} />
@@ -309,7 +310,7 @@ function resetTab(tab: Tab): Partial<Settings> {
     case 'display': return { quality: d.quality, ...PRESETS[d.quality], fov: d.fov, renderer: d.renderer, adaptiveTarget: d.adaptiveTarget };
     case 'audio': return { volume: d.volume, sfxVolume: d.sfxVolume, ambienceVolume: d.ambienceVolume, uiVolume: d.uiVolume, combatCueVolume: d.combatCueVolume, musicVolume: d.musicVolume, muted: d.muted, muteInBackground: d.muteInBackground };
     case 'controls': return { keys2: {}, sensitivity: d.sensitivity, sensitivityY: d.sensitivityY, autoSprint: d.autoSprint, invertY: d.invertY, touchControls: d.touchControls, touchLook: d.touchLook, touchOpacity: d.touchOpacity, haptics: d.haptics, wheelSwap: d.wheelSwap, keys: { ...d.keys } };
-    case 'interface': return { uiScale: d.uiScale, reticle: d.reticle, reticleSize: d.reticleSize, aimFeedback: d.aimFeedback, damageNumbers: d.damageNumbers, showFps: d.showFps, reticleColor: d.reticleColor, reticleOpacity: d.reticleOpacity, hudBacking: d.hudBacking };
+    case 'interface': return { uiScale: d.uiScale, reticle: d.reticle, reticleSize: d.reticleSize, aimFeedback: d.aimFeedback, damageNumbers: d.damageNumbers, showFps: d.showFps, lootFilter: d.lootFilter, reticleColor: d.reticleColor, reticleOpacity: d.reticleOpacity, hudBacking: d.hudBacking };
     case 'access': return { colorblind: d.colorblind, reduceMotion: d.reduceMotion, shake: d.shake, reduceFlashing: d.reduceFlashing };
     default: return {};
   }

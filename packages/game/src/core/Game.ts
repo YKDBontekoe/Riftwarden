@@ -1019,7 +1019,7 @@ export class Game {
     const free = this.player.alive && !this.construction.active;
     this.lootTarget = free ? this.pickups.target(this.player.eye, (o) => this.player.forward(o)) : null;
     if (controls && this.lootTarget && this.input.pressed('KeyE')) this.collectPickup(this.lootTarget);
-    this.pickups.sweep(dt, controls && free && this.input.isDown('KeyE'), this.player.eye, (p) => this.collectPickup(p));
+    this.pickups.sweep(dt, controls && free && this.input.isDown('KeyE'), this.player.eye, (p) => this.collectPickup(p), (p) => this.verdicts.passes(p.item, p.droppedWave, this.settings.lootFilter));
   }
 
   /** Arena inventory (I / Tab). Inspection is always allowed; changes only in preparation. */
@@ -2350,7 +2350,7 @@ export class Game {
       lootTarget = lootTargetInfo({
         item: lt.item,
         droppedWave: lt.droppedWave,
-        nearby: this.pickups.nearby(this.player.eye),
+        nearby: this.pickups.nearby(this.player.eye, (p) => this.verdicts.passes(p.item, p.droppedWave, this.settings.lootFilter)),
         expiring: lt.expiring,
         cargoFull: this.inventory.cargoFull,
         equipped: cur ? { name: cur.name, level: cur.level, rarity: cur.rarity } : null,

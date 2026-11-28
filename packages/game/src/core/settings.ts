@@ -1,4 +1,5 @@
 /** Versioned, validated settings persisted in localStorage. */
+import { LOOT_FILTERS, type LootFilter } from '@riftwarden/rules/loot/filter';
 export type Quality = 'high' | 'medium' | 'low';
 export type Level3 = 'low' | 'medium' | 'high';
 export const ADAPTIVE_TARGETS = [0, 60, 120, 144] as const;
@@ -32,6 +33,8 @@ export interface Settings {
   muted: boolean;
   /** Fade the audio out while the window is hidden or unfocused. */
   muteInBackground: boolean;
+  /** Which drops get world labels and are swept by hold-to-collect (rules/loot/filter.ts). */
+  lootFilter: LootFilter;
   /** Small always-on frame-rate readout (F3 still opens the full stats). */
   showFps: boolean;
   /** M7: interface scale (0.8..1.3). */
@@ -132,6 +135,7 @@ export const DEFAULT_SETTINGS: Settings = {
   muted: false,
   muteInBackground: true,
   showFps: false,
+  lootFilter: 'all',
   uiScale: 1,
   reticle: 'dynamic',
   reticleSize: 1,
@@ -215,6 +219,7 @@ export function sanitizeSettings(raw: unknown, version = VERSION): Settings {
     muted: r.muted === true,
     muteInBackground: r.muteInBackground !== false,
     showFps: r.showFps === true,
+    lootFilter: pick(r.lootFilter, LOOT_FILTERS, 'all'),
     uiScale: clampNum(r.uiScale, 0.8, 1.3, 1),
     reticle: pick(r.reticle, ['dynamic', 'fixed', 'dot'] as const, DEFAULT_SETTINGS.reticle),
     reticleSize: clampNum(r.reticleSize, 0.75, 1.5, DEFAULT_SETTINGS.reticleSize),

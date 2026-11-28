@@ -1,6 +1,8 @@
 // "Is this better?" for the pickup the drone is aiming at: NEW BEST against everything owned (profile + run cargo),
 // the build-aware swap verdict against the slot it would fill, and the item level against the level's baseline.
 // Computed once per targeted item (cached by uid), so the 20 Hz HUD never re-scores a loadout.
+import { type LootFilter, passesLootFilter } from '@riftwarden/rules/loot/filter';
+import { rarity } from '@riftwarden/rules/loot/rarity';
 import { bestKey, bestPowers, isNewBest, levelDelta } from '@riftwarden/rules/loot/feedback';
 import { type ScoreContext, swapImpact, type Verdict } from '@riftwarden/rules/loot/loadoutScore';
 import type { ItemInstance } from '@riftwarden/rules/loot/types';
@@ -33,6 +35,13 @@ export class LootVerdicts {
   /** Inventory changed: verdicts against the loadout and the best owned items may differ now. */
   reset(): void {
     this.cache.clear();
+  }
+
+  /** Whether a drop passes the player's loot filter (labels and hold-to-collect). */
+  passes(item: ItemInstance, droppedWave: number, filter: LootFilter): boolean {
+    if (filter === 'all') return true;
+    const v = this.of(item, droppedWave);
+    return passesLootFilter(filter, rarity(item.rarity).index, { upgrade: v.verdict === 'upgrade', newBest: v.newBest, unique: !!item.uniqueId });
   }
 
   of(item: ItemInstance, droppedWave: number): LootVerdict {
