@@ -33,7 +33,8 @@
   coloured by 55/30 fps); F3 is still the full overlay.
 - **Inventory** (`inventory/InventoryView.tsx`): the sort order persists (`riftwarden.invSort`); `/` focuses search,
   Esc in the box clears it then leaves it, Enter/↓ hand the keys back to the list; PageUp/PageDown jump 8 rows,
-  Home/End go to the ends (`navIndex`).
+  Home/End go to the ends (`navIndex`); in storage, L locks or unlocks the selected item (`actions.toggleLock`). The
+  keys live in `useInventoryKeys`.
 - **Pause menu**: "If you leave now" shows the time deployed and kills. `fmtTime` prints h:mm:ss from an hour and 0:00
   for bad input.
 - **Reticle and HUD readability**: reticle colour (`RETICLE_COLORS`, CSS `--reticle-color`) and opacity

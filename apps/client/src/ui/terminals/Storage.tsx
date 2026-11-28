@@ -33,6 +33,7 @@ export function StoragePanel({ flow }: { flow: Flow }) {
     sfx.play(ok ? 'equip' : 'buildDeny');
   };
   const tx = useTx(flow, 'salvage');
+  const toggleLock = (e: InvEntry) => void tx.run('lock', 'setItemLock', [e.item.uid, !e.item.locked], () => (e.item.locked ? 'Unlocked' : 'Locked: protected from selling and dismantling'));
   return (
     <>
       <InventoryView
@@ -55,10 +56,13 @@ export function StoragePanel({ flow }: { flow: Flow }) {
           },
           extra: (e) =>
             e.status === 'stored' || e.status === 'equipped' ? (
-              <button className="ds-btn" onClick={() => void tx.run('lock', 'setItemLock', [e.item.uid, !e.item.locked], () => (e.item.locked ? 'Unlocked' : 'Locked: protected from selling and dismantling'))}>
-                {e.item.locked ? 'UNLOCK' : 'LOCK'}
+              <button className="ds-btn" title="L toggles the lock" onClick={() => toggleLock(e)}>
+                <span className="ds-k">L</span>{e.item.locked ? 'UNLOCK' : 'LOCK'}
               </button>
             ) : null,
+          toggleLock: (e) => {
+            if (e.status === 'stored' || e.status === 'equipped') toggleLock(e);
+          },
         }}
         header={
           <div className="storage-bar ds-row">

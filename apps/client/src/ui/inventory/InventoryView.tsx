@@ -81,6 +81,8 @@ export interface InventoryActions {
   remove?: { label: (e: InvEntry) => string; allowed: (e: InvEntry) => boolean; run: (uid: string) => void; confirm: string };
   /** Extra per-item controls (e.g. lock toggle). */
   extra?: (e: InvEntry) => ReactNode;
+  /** L on the selected entry (storage: lock / unlock). */
+  toggleLock?: (e: InvEntry) => void;
 }
 
 /**
@@ -149,37 +151,15 @@ export function InventoryView({ entries, equipped, actions, extraFilter, header,
   }, [entries]);
   const upgrades = useMemo(() => [...impacts.values()].filter((i) => i.verdict === 'upgrade').length, [impacts]);
 
-  // Keyboard: arrows move the selection, Enter equips (ignored while typing in the search box).
-  const stateRef = useRef({ list, selected, slot, canChange: actions.canChange });
-  stateRef.current = { list, selected, slot, canChange: actions.canChange };
-  useEffect(() => {
-    const onKey = (ev: KeyboardEvent) => {
-      if (ev.target instanceof HTMLInputElement) return;
-      const { list: l, selected: cur, slot: sl, canChange } = stateRef.current;
-      if (ev.code === 'Slash' && !ev.ctrlKey && !ev.metaKey) {
-        // "/" jumps to the search box, as in most list UIs.
-        ev.preventDefault();
-        searchRef.current?.focus();
-        return;
-      }
-      const to = navIndex(ev.code, l.findIndex((e) => e.item.uid === cur?.item.uid), l.length);
-      if (to !== null) {
-        ev.preventDefault();
-        const next = l[to];
-        if (next) {
-          setSel(next.item.uid);
-          setHover(null);
-          setConfirm(null);
-          listRef.current?.querySelector(`[data-uid="${next.item.uid}"]`)?.scrollIntoView({ block: 'nearest' });
-        }
-      } else if (ev.code === 'Enter' && cur && !cur.equippedIn && canChange && cur.item.category !== 'module' && baseDef(cur.item.defId)) {
-        ev.preventDefault();
-        actions.equip(cur.item.uid, sl ?? undefined);
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [actions]);
+  useInventoryKeys({ list, selected, slot, canChange: actions.canChange }, actions, {
+    focusSearch: () => searchRef.current?.focus(),
+    select: (uid) => {
+      setSel(uid);
+      setHover(null);
+      setConfirm(null);
+      listRef.current?.querySelector(`[data-uid="${uid}"]`)?.scrollIntoView({ block: 'nearest' });
+    },
+  });
 
   const sortLabel = (x: ViewSort) => (x === 'impact' ? 'BEST FOR BUILD' : x.toUpperCase());
   const nextSort = () => setSort((x) => SORTS[(SORTS.indexOf(x) + 1) % SORTS.length]);
@@ -346,4 +326,40 @@ export function InventoryView({ entries, equipped, actions, extraFilter, header,
       </div>
     </div>
   );
+}
+
+/**
+ * Inventory keyboard (ignored while typing in the search box): arrows / PageUp / PageDown / Home / End move the
+ * selection, Enter equips, L toggles the lock (where the caller supports it), "/" jumps to the search box.
+ */
+function useInventoryKeys(state: { list: InvEntry[]; selected: InvEntry | null; slot: SlotId | null; canChange: boolean }, actions: InventoryActions, ui: { focusSearch: () => void; select: (uid: string) => void }): void {
+  const ref = useRef({ state, ui });
+  ref.current = { state, ui };
+  useEffect(() => {
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.target instanceof HTMLInputElement) return;
+      const { list: l, selected: cur, slot: sl, canChange } = ref.current.state;
+      if (ev.code === 'KeyL' && cur && actions.toggleLock && !ev.repeat) {
+        ev.preventDefault();
+        actions.toggleLock(cur);
+        return;
+      }
+      if (ev.code === 'Slash' && !ev.ctrlKey && !ev.metaKey) {
+        ev.preventDefault();
+        ref.current.ui.focusSearch();
+        return;
+      }
+      const to = navIndex(ev.code, l.findIndex((e) => e.item.uid === cur?.item.uid), l.length);
+      if (to !== null) {
+        ev.preventDefault();
+        const next = l[to];
+        if (next) ref.current.ui.select(next.item.uid);
+      } else if (ev.code === 'Enter' && cur && !cur.equippedIn && canChange && cur.item.category !== 'module' && baseDef(cur.item.defId)) {
+        ev.preventDefault();
+        actions.equip(cur.item.uid, sl ?? undefined);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [actions]);
 }
