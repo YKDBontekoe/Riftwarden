@@ -34,6 +34,7 @@ import { BIOME_LIGHT } from './biomeLight';
 import { GroundRelief } from './groundRelief';
 import { buildFloorDetail, GroundSurface } from './floorDetail';
 import { planFloor } from './floorPlan';
+import { buildYardMasts } from './yardMast';
 import { sculptGround } from './uv';
 import { buildContainerStack, containerLiveries } from './containerModel';
 import { buildMachineBank, machineRoofSlots } from './machineModel';
@@ -179,13 +180,15 @@ export class ArenaBuilder {
     // Floor zoning: reactor plaza, wall gutters, gate chevrons (thin inlays under decals and lanes).
     new ArenaFloor({ scene: this.scene, add: (m, mat, s) => this.add(m, mat, s) }, this.pal, this.layout).build();
     // Worked-yard detail: saw-cut joints, cracks, replaced slabs, standing water, oil spots, walkway paint.
-    if (sub > 1) buildFloorDetail(this.scene, planFloor(L, (x, z) => relief.height(x, z)), L.biome ?? 'outpost', new GroundSurface(relief, span, sub), BIOME_LIGHT[L.biome ?? 'outpost'].env * 0.55, (L.seed ?? 3) >>> 0);
+    const surface = new GroundSurface(relief, span, sub);
+    if (sub > 1) buildFloorDetail(this.scene, planFloor(L, (x, z) => relief.height(x, z)), L.biome ?? 'outpost', surface, BIOME_LIGHT[L.biome ?? 'outpost'].env * 0.55, (L.seed ?? 3) >>> 0);
     // Weathering: rubble piles, scattered debris and wreckage (visual only, planned off every lane).
     const rubble = planRubble(L);
     new RubbleBuilder({ scene: this.scene, add: (m, mat, s) => this.add(m, mat, s) }, { concrete: P.debris, rust: P.rust, graphite: P.graphite, enamel: P.steel }, true).build(rubble);
     // Scanned CC0 props (drums, crates, rooftop plant): visual only, planned off lanes and rubble like the debris.
     configureProps(this.scene, { lights: 8, environment: BIOME_LIGHT[L.biome ?? 'outpost'].env, albedo: 0.82 });
-    const { props, stains } = planPropsDetailed(L, rubble);
+    const { props, stains, masts } = planPropsDetailed(L, rubble);
+    if (!(this.scene.getEngine() instanceof NullEngine)) buildYardMasts(this.scene, P, masts, L.biome ?? 'outpost', surface, L.boxes);
     buildStains(this.scene, stains, [0.05, 0.045, 0.04], 0.75, (L.seed ?? 5) >>> 0);
     placeProps(new TransformNode('arenaProps', this.scene), props);
     // Natural floor-to-wall seams: contact shadow, biome grime / snow drift / soot, wall staining.

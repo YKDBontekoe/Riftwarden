@@ -129,11 +129,15 @@ dielectric; black steel is lifted and set to metallic 0.25.
   barrel, three-high pallet stacks, tyre piles, generator bays, dumpsters, gas bottles, parked cars, pipe stores, fire
   corners) at inside corners first, then at irregular 6-15 m gaps, mirrored and turned slightly off the wall line,
   each with a ragged ground stain (`contactGrime.ts` `buildStains`); props take an optional `tilt` (lying items rest
-  on their side), wall-mounted lamps every other bay, deck clusters
+  on their side), open-yard vignettes in the big empty stretches (11 m cells, any orientation, clear of solids by their
+  radius and of tower pads), barrier runs and small clutter at the lane edges (outside every lane by 0.45 m plus the
+  item radius, so the routes read as roads) and up to `MAX_YARD_MASTS` = 12 floodlight masts (`visuals/yardMast.ts`:
+  plinth, tapered pole, conduit, lamp head with six housings, lamp-beam shader cones, ground-following light pool,
+  sagging cables to the nearest mast or roof edge). These passes run last, so earlier rolls never shift, wall-mounted lamps every other bay, deck clusters
   on the long sides of blocks / machinery / containers, rooftop plant (air-con, ducts, cabinets, searchlights). Every
   floor prop passes the rubble plan's `spotBlocked` (lanes with margin, reactor, spawn, reserved, vents, ramps, inside
   solids) and keeps clear of rubble. Per-biome recipes (foundry fire barrels and gas, cryo crates and cars, outpost
-  drums and barriers). Cap `MAX_ARENA_PROPS` = 160.
+  drums and barriers). Cap `MAX_ARENA_PROPS` = 400 (instanced: about 6% more draw calls than at 160).
 - Wall lamps get fake light (`visuals/fixtureGlow.ts`): additive splash down the wall, glowing lens, floor pool, one
   merged mesh each, coloured per biome. No real lights (budget).
 - HQ clutter (`home/hqClutter.ts`, pure): per room, seeded wall slots offer small clusters (tool chests, shelves, boxes,

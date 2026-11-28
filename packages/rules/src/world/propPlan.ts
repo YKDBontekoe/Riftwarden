@@ -1,8 +1,8 @@
 import { mulberry32 } from '../combat/damage';
-import { distToBoxXZ } from './geometry';
+import { distToBoxXZ, distToPolyline } from './geometry';
 import type { ArenaLayout, Box } from './layout';
 import { PROP_SPECIES, type PropPlacement, propRadius, type PropSpecies } from './propCatalog';
-import { type RubbleSpot, spotBlocked } from './rubblePlan';
+import { planPads, type RubbleSpot, spotBlocked } from './rubblePlan';
 import { placeVignette, VIGNETTES, vignetteExtent } from './propVignettes';
 
 /** Vignettes per biome (wall-foot story clusters). */
@@ -32,7 +32,17 @@ export interface PropStain {
  */
 export const PROP_SEED = 0xa55e7;
 /** Upper bound on placed props per arena (instances; one draw call per part and species). */
-export const MAX_ARENA_PROPS = 160;
+export const MAX_ARENA_PROPS = 400;
+/** Floodlight masts in the open yard (tall verticals; built by the arena, not scanned props). */
+export const MAX_YARD_MASTS = 12;
+
+/** A floodlight mast standing in open yard: base centre, height and the yaw its lamp head faces. */
+export interface YardMast {
+  x: number;
+  z: number;
+  h: number;
+  yaw: number;
+}
 
 type Biome = NonNullable<ArenaLayout['biome']>;
 
@@ -124,7 +134,7 @@ export function planProps(L: ArenaLayout, rubble: readonly RubbleSpot[] = [], se
 }
 
 /** Props plus the ground stains under their vignettes. */
-export function planPropsDetailed(L: ArenaLayout, rubble: readonly RubbleSpot[] = [], seed = (L.seed ?? 0) ^ PROP_SEED): { props: PropPlacement[]; stains: PropStain[] } {
+export function planPropsDetailed(L: ArenaLayout, rubble: readonly RubbleSpot[] = [], seed = (L.seed ?? 0) ^ PROP_SEED): { props: PropPlacement[]; stains: PropStain[]; masts: YardMast[] } {
   const rand = mulberry32(seed >>> 0);
   const out: PropPlacement[] = [];
   const taken: Taken[] = rubble.map((s) => ({ x: s.x, z: s.z, r: s.r * 0.8 }));
@@ -276,5 +286,82 @@ export function planPropsDetailed(L: ArenaLayout, rubble: readonly RubbleSpot[] 
       if (species === 'aircon-unit' && rand() < 0.5) out.push({ species: 'searchlight', x: wide ? x + width / 2 + 0.4 : x, y: b.max[1], z: wide ? z : z + width / 2 + 0.4, yaw: rand() * Math.PI * 2, scale: 2.2 });
     }
   }
-  return { props: out, stains };
+  // Open yard: the big empty stretches between solids get free-standing vignettes (any orientation) and a few
+  // tall floodlight masts, so the deck reads as a used yard at every distance, not only along its walls. Last
+  // pass, so every roll above is unchanged; kept off tower pads as well (the player builds there).
+  const pads = planPads(L);
+  const open = (x: number, z: number, r: number) =>
+    free(x, z, r) && pads.every((p) => Math.hypot(p.x - x, p.z - z) > p.half * 1.6 + r) &&
+    [...L.boxes, ...L.barriers].every((b) => b.kind === 'reactor' || distToBoxXZ(x, z, b) > r);
+  const masts: YardMast[] = [];
+  const H = L.half - 6;
+  const cell = 11;
+  const cells: [number, number][] = [];
+  for (let x = -H; x <= H; x += cell) for (let z = -H; z <= H; z += cell) cells.push([x + (rand() - 0.5) * 5, z + (rand() - 0.5) * 5]);
+  for (const [x, z] of cells) {
+    if (full()) break;
+    const roll = rand();
+    // Masts: tall, sparse, at least 26 m apart; they need a wide clear disc so they never crowd a structure.
+    if (roll < 0.3 && masts.length < MAX_YARD_MASTS && open(x, z, 2) && masts.every((m) => Math.hypot(m.x - x, m.z - z) > 20)) {
+      masts.push({ x, z, h: 11 + rand() * 4, yaw: Math.atan2(-x, -z) + (rand() - 0.5) * 0.8 });
+      taken.push({ x, z, r: 1.4 });
+      continue;
+    }
+    if (roll > 0.72) continue;
+    const v = VIGNETTES[names[Math.floor(rand() * names.length)]];
+    const ext = vignetteExtent(v);
+    const r = Math.max((ext.u1 - ext.u0) / 2, ext.depth / 2) + 0.4;
+    const cx = x, cz = z;
+    if (!open(cx, cz, r + 1.2)) continue;
+    const yaw = rand() * Math.PI * 2;
+    const dir: [number, number] = [Math.cos(yaw), -Math.sin(yaw)];
+    const outward: [number, number] = [Math.sin(yaw), Math.cos(yaw)];
+    // Anchor so the group's centre lands on the cell point.
+    const mu = (ext.u0 + ext.u1) / 2, mv = ext.depth / 2;
+    const ax = cx - dir[0] * mu - outward[0] * mv, az = cz - dir[1] * mu - outward[1] * mv;
+    const cluster = taken.length;
+    for (const p of placeVignette(v, ax, az, dir, outward, yaw, 0)) put(p.species, p.x, p.y, p.z, p.yaw, p.scale, p.tilt);
+    taken.splice(cluster, taken.length - cluster, { x: cx, z: cz, r });
+    stains.push({ x: cx, z: cz, r: r * 1.1 });
+  }
+  // Lane edges: barrier runs and small clutter right at the edge of the enemy lanes (outside the lane, never in
+  // it), so the routes read as roads through a yard rather than empty strips. Items must clear every lane.
+  const hw = L.laneHalfWidth;
+  const edgeFree = (x: number, z: number, r: number) =>
+    Object.values(L.routes).every((rt) => distToPolyline(x, z, rt.points) > hw + 0.45 + r) &&
+    !spotBlocked({ ...L, routes: {} } as ArenaLayout, x, z, r) && pads.every((p) => Math.hypot(p.x - x, p.z - z) > p.half * 1.6 + r) &&
+    taken.every((t) => Math.hypot(t.x - x, t.z - z) > t.r + r) &&
+    [...L.boxes, ...L.barriers].every((b) => b.kind === 'reactor' || distToBoxXZ(x, z, b) > r + 0.3);
+  const edgeSets: PropSpecies[][] = L.biome === 'foundry'
+    ? [['road-barrier', 'road-barrier'], ['barrel-steel', 'barrel-red'], ['lpg-tank'], ['fire-barrel']]
+    : L.biome === 'cryo'
+      ? [['road-barrier', 'road-barrier', 'road-barrier'], ['crate-plastic'], ['utility-box'], ['barrel-steel']]
+      : [['road-barrier', 'road-barrier', 'road-barrier'], ['barrel-red', 'tyre'], ['tyre', 'tyre'], ['crate-plastic', 'jerrycan'], ['trash-can']];
+  for (const rt of Object.values(L.routes)) {
+    const pts = rt.points;
+    for (let i = 0; i < pts.length - 1 && !full(); i++) {
+      const a = pts[i], b = pts[i + 1];
+      const len = Math.hypot(b.x - a.x, b.z - a.z);
+      if (len < 4) continue;
+      const dx = (b.x - a.x) / len, dz = (b.z - a.z) / len;
+      for (let t = 2 + rand() * 5; t < len - 2 && !full(); t += 7 + rand() * 8) {
+        if (rand() > 0.55) continue;
+        const side = rand() < 0.5 ? -1 : 1;
+        const set = edgeSets[Math.floor(rand() * edgeSets.length)];
+        let u = t;
+        for (const species of set) {
+          const [w, , d] = PROP_SPECIES[species].size;
+          const r = propRadius(species);
+          const off = hw + 0.5 + d / 2 + rand() * 0.25;
+          const x = a.x + dx * u - dz * side * off, z = a.z + dz * u + dx * side * off;
+          if (u > len - 1 || !edgeFree(x, z, r * 0.7)) break;
+          // Long side along the lane, a little skewed like barriers someone dragged into place.
+          const yaw = Math.atan2(dx, dz) + Math.PI / 2 + (PROP_SPECIES[species].longZ ? Math.PI / 2 : 0) + (rand() - 0.5) * 0.25;
+          put(species, x, 0, z, yaw);
+          u += w + 0.12 + rand() * 0.2;
+        }
+      }
+    }
+  }
+  return { props: out, stains, masts };
 }

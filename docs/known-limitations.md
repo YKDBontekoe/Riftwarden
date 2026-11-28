@@ -44,3 +44,5 @@ Cross-cutting limitations. System-specific gaps are listed under "Not done yet" 
 
 - Solo runs simulate on the client; the server replays loot streams and ceilings (`runCheck.ts`) but solo Rift War
   reports and co-op airborne flags are trusted.
+
+- Yard floodlight masts and open-yard prop vignettes have no collision (visual only, like all scanned props): the drone and shots pass through them.

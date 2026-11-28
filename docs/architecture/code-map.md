@@ -224,6 +224,7 @@ packages/game/src/visuals/machineModel.ts  machinery bank geometry (enclosure, p
 packages/game/src/visuals/groundRelief.ts visual ground relief field with gameplay fade mask [pure]
 packages/game/src/visuals/floorPlan.ts    floor detail plan: slab joints, patches, cracks, pools, spots, walkway paint [pure]
 packages/game/src/visuals/floorDetail.ts  builds the floor detail plan as relief-following overlays; exact ground-mesh height sampler
+packages/game/src/visuals/yardMast.ts     floodlight masts in the open yard with beams, light pools and overhead cables
 packages/game/src/visuals/contactGrime.ts contact shadow + grime / snow / soot strips along floor-wall seams (arena and HQ)
 packages/game/src/visuals/fixtureGlow.ts  fake light splashes, lenses and pools for wall-mounted prop fixtures
 packages/game/src/visuals/scanDetail.ts   scanned micro detail maps (Babylon detail map layout) for procedural sets

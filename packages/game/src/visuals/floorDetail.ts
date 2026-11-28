@@ -230,9 +230,9 @@ const PATCH: Record<BiomeId, { set: SurfaceSetId; tint: [number, number, number]
 };
 
 const POOL: Record<BiomeId, { color: [number, number, number]; rough: number }> = {
-  outpost: { color: [0.03, 0.03, 0.032], rough: 0.16 },
+  outpost: { color: [0.07, 0.075, 0.08], rough: 0.22 },
   cryo: { color: [0.42, 0.52, 0.6], rough: 0.09 },
-  foundry: { color: [0.03, 0.022, 0.016], rough: 0.3 },
+  foundry: { color: [0.07, 0.055, 0.045], rough: 0.3 },
 };
 
 /** Build every floor detail layer for one arena (skipped on the headless engine). */
@@ -296,7 +296,7 @@ export function buildFloorDetail(scene: Scene, plan: FloorPlan, biome: BiomeId, 
     water.albedoColor = new Color3(...w.color);
     water.metallic = 0;
     water.roughness = w.rough;
-    water.environmentIntensity = environment * (biome === 'foundry' ? 0.35 : 0.8);
+    water.environmentIntensity = environment * (biome === 'cryo' ? 0.8 : 0.5);
     water.usePhysicalLightFalloff = false;
     water.maxSimultaneousLights = 8;
     water.backFaceCulling = false;
@@ -312,3 +312,10 @@ function outline(p: FloorRect): FloorSeg[] {
   return k.map((a, i) => ({ x0: a[0], z0: a[1], x1: k[(i + 1) % 4][0], z1: k[(i + 1) % 4][1] }));
 }
 
+
+/** Square sheets (side 2r, 0..1 UVs) that follow the ground, merged into one mesh: soft light pools and the like. */
+export function groundSheets(scene: Scene, name: string, spots: readonly { x: number; z: number; r: number; rot?: number }[], lift: number, ground: GroundSurface, mat: PBRMaterial): Mesh | null {
+  const b = fresh();
+  for (const s of spots) sheet(b, s.x, s.z, s.r * 2, s.r * 2, s.rot ?? 0, lift, ground);
+  return mesh(scene, name, b, mat);
+}

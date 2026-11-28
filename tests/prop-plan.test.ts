@@ -3,7 +3,9 @@ import { generateArena } from '@riftwarden/rules/world/arenaGen';
 import { distToPolyline } from '@riftwarden/rules/world/geometry';
 import { ARENA } from '@riftwarden/rules/world/layout';
 import { PROP_SPECIES, propRadius } from '@riftwarden/rules/world/propCatalog';
-import { MAX_ARENA_PROPS, planProps } from '@riftwarden/rules/world/propPlan';
+import { MAX_ARENA_PROPS, MAX_YARD_MASTS, planProps, planPropsDetailed } from '@riftwarden/rules/world/propPlan';
+import { planPads } from '@riftwarden/rules/world/rubblePlan';
+import { distToBoxXZ } from '@riftwarden/rules/world/geometry';
 import { planRubble } from '@riftwarden/rules/world/rubblePlan';
 import { clutterCandidates, pickClutter } from '@riftwarden/game/home/hqClutter';
 import { HQ_PORTALS, HQ_ROOMS, HQ_STATIONS } from '@riftwarden/rules/home/layout';
@@ -30,6 +32,21 @@ describe('arena prop plan', () => {
         expect(Math.hypot(p.x - L.playerSpawn.x, p.z - L.playerSpawn.z)).toBeGreaterThan(4);
         expect(Math.abs(p.x)).toBeLessThan(L.half);
         expect(Math.abs(p.z)).toBeLessThan(L.half);
+      }
+    }
+  });
+
+  it('stands yard masts in open floor, apart, off lanes, pads and solids', () => {
+    for (const L of layouts.slice(1)) {
+      const { masts } = planPropsDetailed(L, planRubble(L));
+      expect(masts.length).toBeGreaterThan(2);
+      expect(masts.length).toBeLessThanOrEqual(MAX_YARD_MASTS);
+      for (const m of masts) {
+        for (const route of Object.values(L.routes)) expect(distToPolyline(m.x, m.z, route.points)).toBeGreaterThan(L.laneHalfWidth + 2);
+        for (const p of planPads(L)) expect(Math.hypot(p.x - m.x, p.z - m.z)).toBeGreaterThan(p.half * 1.6);
+        for (const b of L.boxes) if (b.kind !== 'reactor') expect(distToBoxXZ(m.x, m.z, b)).toBeGreaterThan(1.5);
+        for (const o of masts) if (o !== m) expect(Math.hypot(o.x - m.x, o.z - m.z)).toBeGreaterThan(20);
+        expect(m.h).toBeGreaterThan(10);
       }
     }
   });
