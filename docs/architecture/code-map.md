@@ -154,6 +154,7 @@ scripts/e2e-construction-coop.cjs M7: browser suite: G construction, H decoratio
 apps/client/src/core/Flow.ts           session controller: Input, Profile, HQ <-> arena scene swaps, run lifecycle, debug API
 apps/client/src/core/windowState.ts    tab title from the HUD (windowTitle), background audio fade + mute (watchWindow / applyWindowSettings)
 apps/client/src/ui/FpsReadout.tsx       Settings > Interface > Frame rate corner readout
+apps/client/src/ui/remembered.ts        useRemembered: session memory for a terminal's tab and similar views
 packages/game/src/core/Game.ts           ONE survival run (arena world): scene/lights/pipeline, damage pipeline, checkpoints, HUD
 packages/game/src/home/HomeBase.ts       HQ world: scene, lights, Player reuse, station interaction, live station screens
 packages/game/src/home/HqBuilder.ts      HQ static shell from modular components (wall run, floor, ceiling, door frame, window...)

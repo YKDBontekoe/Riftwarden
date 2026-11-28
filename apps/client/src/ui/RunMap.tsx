@@ -1,3 +1,4 @@
+import { BoundKey } from './hud/widgets';
 import { type ReactNode, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { plural } from './format';
 import type { Flow } from '../core/Flow';
@@ -562,7 +563,7 @@ export function NodeChip() {
       </div>
       {n.prompt && (
         <div className="node-prompt" data-testid="node-prompt">
-          <kbd>E</kbd>
+          <BoundKey action="use" />
           <div><b>{n.prompt.title}</b><span>{n.prompt.used ? 'Used' : n.prompt.sub}</span></div>
         </div>
       )}

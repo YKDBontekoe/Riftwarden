@@ -1,6 +1,7 @@
 import { MasteryBench } from './Mastery';
 import { lockReason, unlockDef } from '@riftwarden/rules/progression/unlocks';
 import { useMemo, useState } from 'react';
+import { useRemembered } from './remembered';
 import { fmtNum, formatModifier, STAT_DEFS } from '@riftwarden/rules/combat/stats';
 import type { Flow } from '../core/Flow';
 import { ascendBlock, ascendItem } from '@riftwarden/rules/loot/ascend';
@@ -47,7 +48,7 @@ const TAB_FEATURE: Record<Tab, string> = { modules: 'station:modules', affixes: 
 export function EngineeringTerminal({ flow, close }: { flow: Flow; close: () => void }) {
   const save = useSave(flow);
   // Open on the first tab the warden can use (modules unlock at RL 3; enhancement at RL 2).
-  const [tab, setTab] = useState<Tab>(() => (['modules', 'enhance', 'affixes', 'components', 'towers'] as Tab[]).find((t) => !lockReason(save, TAB_FEATURE[t])) ?? 'mastery');
+  const [tab, setTab] = useRemembered<Tab>('workshop.tab', () => (['modules', 'enhance', 'affixes', 'components', 'towers'] as Tab[]).find((t) => !lockReason(save, TAB_FEATURE[t])) ?? 'mastery', (v) => v in TAB_FEATURE && !lockReason(save, TAB_FEATURE[v as Tab]));
   const [selW, setSelW] = useState<string | null>(() => save.loadout.weapon);
   const locked = lockReason(save, TAB_FEATURE[tab]);
   // The subtitle names only the benches that are online (staged unlocks).

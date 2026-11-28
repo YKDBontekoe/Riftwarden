@@ -52,7 +52,12 @@
   (`gridStep`: ←/→ one tile, ↑/↓ a row measured from the layout), except lists with their own keys
   (`data-listkeys="own"`, the inventory view) and multi-select lists; Esc in a text box leaves the box before closing
   the terminal.
+- **Remembered views** (`remembered.ts`, `useRemembered`): Command, Workshop and the merchants reopen on the tab used
+  last this session (memory only; a value that is no longer valid, such as a locked tab, falls back; off under
+  `?test`).
+- **Bound keys in text**: loading tips use `{action}` tokens (`fillKeys`), and the Loadout weapon note, cargo
+  hint and run-map station prompt show the player's own keys instead of fixed letters.
 - **HQ station list**: each station shows a screen-relative arrow (`bearingArrow`) beside its distance.
 - **Tests**: `tests/settings-options.test.ts`, `key-bindings.test.ts`, `window-state.test.ts`, `ui-format.test.ts`,
   `inventory-nav.test.ts`, `loot-feed.test.ts`, `upgrade-pick.test.ts`,
-  `terminal-keys.test.ts`, `hq-bearing.test.ts`.
+  `terminal-keys.test.ts`, `hq-bearing.test.ts`, `remembered.test.ts`, `loading-tips.test.ts`.

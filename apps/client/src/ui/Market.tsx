@@ -21,6 +21,7 @@ import { CurrencyIcon } from './inventory/thumbs';
 import { FieldIcon } from './FieldIcon';
 import type { CurrencyKey } from '@riftwarden/rules/economy/currencies';
 import { Shell } from './shell';
+import { useRemembered } from './remembered';
 import { saveEntries, useEquipped } from './Terminals';
 
 const asEntry = (item: ItemInstance): InvEntry => ({ item, status: 'stored', equippedIn: null });
@@ -106,7 +107,7 @@ export function ModuleCompat({ save, module }: { save: SaveData; module: ItemIns
 export function MerchantTerminal({ flow, close, merchant }: { flow: Flow; close: () => void; merchant: MerchantId }) {
   const save = useSave(flow);
   const isModules = merchant === 'modules';
-  const [tab, setTab] = useState<'buy' | 'sell' | 'exchange'>('buy');
+  const [tab, setTab] = useRemembered<'buy' | 'sell' | 'exchange'>(`${merchant}.tab`, 'buy', (v) => v !== 'exchange' || isModules);
   const tx = useTx(flow, merchant === 'equipment' ? 'merchant' : 'modules');
   return (
     <Shell

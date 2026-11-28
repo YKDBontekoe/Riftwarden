@@ -1,5 +1,6 @@
 // Drone configuration (final design "Loadout"): weapons and abilities left, build headlines centre, gear tiles right;
 // STATS tab = drone statistics with sources; PRESETS tab = saved configurations. Equipping happens at storage.
+import { keyLabel } from '@riftwarden/game/core/settings';
 import { slotLockReason } from '@riftwarden/rules/progression/unlocks';
 import { useEffect, useMemo, useState } from 'react';
 import { sfx } from '@riftwarden/game/audio/Sfx';
@@ -110,7 +111,7 @@ export function LoadoutTerminal({ flow, close, initial = 'loadout' }: { flow: Fl
       {tab === 'loadout' && (
         <div className="lo-grid">
           <div className="ds-col lo-weapons">
-            <span className="ds-lbl">Weapons · Z swaps in the field</span>
+            <span className="ds-lbl">Weapons · {keyLabel(flow.settings.keys.swap)} swaps in the field</span>
             {weaponTile('weapon', 150)}
             {weaponTile('weapon2', 116)}
             <span className="ds-lbl" style={{ marginTop: 4 }}>Abilities</span>

@@ -277,7 +277,7 @@ export function ArenaInventory({ game }: { game: Game }) {
       <ScoreCtx.Provider value={scoreCtx}>
         <section className="cargo-left inv-list">
           <span className="ds-row"><span className="ds-h3 ds-grow">FOUND THIS RUN</span><RiskTag>At risk until wave {checkpoint} · {found.length} / {inv.cargoCapacity}</RiskTag></span>
-          <div className="cargo-grid">{found.length ? found.map(tile) : <span className="ds-meta">Nothing found yet. Machines drop loot; walk over it and press E.</span>}</div>
+          <div className="cargo-grid">{found.length ? found.map(tile) : <span className="ds-meta">Nothing found yet. Machines drop loot; walk over it and press {keyLabel(game.settings.keys.use)}.</span>}</div>
           <span className="ds-h3">WORN · SAFE (CARRIED IN)</span>
           <div className="cargo-grid worn">{worn.map(tile)}</div>
           {kept.length > 0 && (

@@ -1,12 +1,17 @@
-/** Loading-screen tips: short, actionable, grouped by where they apply. Pure data + a seeded picker. */
+/**
+ * Loading-screen tips: short, actionable, grouped by where they apply. Pure data + a seeded picker. `{action}` tokens
+ * name the player's current key for that action (rebinding updates the tips).
+ */
+import { keyLabel, type Settings } from '@riftwarden/game/core/settings';
+
 export const TIPS = {
   arena: [
     'Towers block ground enemies. Wall off a lane and they re-route, or breach the cheapest tower in the way.',
-    'Wrecked towers stop firing and stop blocking. Inspect one and press F to rebuild it between waves.',
+    'Wrecked towers stop firing and stop blocking. Inspect one and press {repair} to rebuild it between waves.',
     'Forward rifts open inside the sector: watch the radar for orange rings near your defenses.',
     'Rush drones, jammers and artillery fly over towers. Mazes only slow the ground crews.',
-    'Call a wave early with G: every skipped second pays 2 cores.',
-    'Aim for the mint rings and press R or middle mouse to grapple. Jump from a transfer deck alongside a striped girder to wall-run across the lane.',
+    'Call a wave early with {wave}: every skipped second pays 2 cores.',
+    'Aim for the mint rings and press {grapple} or middle mouse to grapple. Jump from a transfer deck alongside a striped girder to wall-run across the lane.',
     'Dash, jump and boost chain: carried momentum keeps you near 30 m/s.',
     'Kills refund dash charge. Chain kills within 2.5 s for RAMPAGE and OVERDRIVE.',
     'Tactical time slows hostiles only, and lets you refit and repair towers mid-wave.',
@@ -27,7 +32,12 @@ export const TIPS = {
   ],
 } as const;
 
-export function pickTip(kind: keyof typeof TIPS, n: number): string {
+export function pickTip(kind: keyof typeof TIPS, n: number, keys?: Settings['keys']): string {
   const list = TIPS[kind];
-  return list[((n % list.length) + list.length) % list.length];
+  return fillKeys(list[((n % list.length) + list.length) % list.length], keys);
+}
+
+/** Replace `{action}` tokens with the bound key's label (unknown tokens stay as written). */
+export function fillKeys(text: string, keys?: Settings['keys']): string {
+  return text.replace(/\{([a-z]+)\}/g, (all, id: string) => (keys?.[id] ? keyLabel(keys[id]) : all));
 }

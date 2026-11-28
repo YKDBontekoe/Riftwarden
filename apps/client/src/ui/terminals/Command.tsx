@@ -8,14 +8,15 @@ import { useSave } from '../useSave';
 import { fmtTime, plural } from '../format';
 import { Shell } from '../shell';
 import { StationDirectory, WardenProgress } from '../Directory';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
+import { useRemembered } from '../remembered';
 
 type CmdTab = 'record' | 'history' | 'progress' | 'season' | 'stations';
 const CMD_TABS: [CmdTab, string][] = [['record', 'Service record'], ['history', 'History'], ['progress', 'Milestones · codex'], ['season', 'Season'], ['stations', 'Stations']];
 
 export function CommandTerminal({ flow, close }: { flow: Flow; close: () => void }) {
   const save = useSave(flow);
-  const [tab, setTab] = useState<CmdTab>('record');
+  const [tab, setTab] = useRemembered<CmdTab>('command.tab', 'record', (v) => CMD_TABS.some(([id]) => id === v));
   const savedAt = flow.profile.store.get().savedAt || save.profile.lastSavedAt;
   const t = save.totals;
   useEffect(() => {
@@ -27,7 +28,7 @@ export function CommandTerminal({ flow, close }: { flow: Flow; close: () => void
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [tab]);
+  }, [tab, setTab]);
   const totals: [string, string][] = [
     ['Operations', t.runs.toLocaleString()], ['Extracted', t.returned.toLocaleString()], ['Reactor lost', t.defeated.toLocaleString()],
     ['Hostiles', t.kills.toLocaleString()], ['Bosses · elites', `${t.bossesDefeated} · ${t.elitesDefeated}`], ['Salvage secured', t.salvageSecured.toLocaleString()],
